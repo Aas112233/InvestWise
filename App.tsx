@@ -1,0 +1,280 @@
+
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+import Dashboard from './components/Dashboard';
+import Members from './components/Members';
+import Deposits from './components/Deposits';
+import RequestDeposit from './components/RequestDeposit';
+import ProjectManagement from './components/ProjectManagement';
+import FundsManagement from './components/FundsManagement';
+import Transactions from './components/Transactions';
+import Expenses from './components/Expenses';
+import Analysis from './components/Analysis';
+import Reports from './components/Reports';
+import Settings from './components/Settings';
+import Login from './components/Login';
+import AIAdvisorSidebar from './components/AIAdvisorSidebar';
+import Forbidden from './components/Forbidden';
+import NotFound from './components/NotFound';
+import { User, AppScreen, AccessLevel } from './types';
+import { Language } from './i18n/translations';
+import { GlobalStateProvider } from './context/GlobalStateContext';
+import { Sparkles } from 'lucide-react';
+import { authService, isNetworkError } from './services/api';
+import ConnectionBanner from './components/ConnectionBanner';
+
+const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => void; isLoading: boolean }> = ({ user, setUser, isLoading }) => {
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [lang, setLang] = useState<Language>('en');
+  const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  const handleLogin = (loggedUser: User) => {
+    setUser(loggedUser);
+    localStorage.setItem('userInfo', JSON.stringify(loggedUser));
+    navigate('/dashboard');
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('userInfo');
+    setUser(null);
+    navigate('/login');
+  };
+
+  const toggleTheme = () => setIsDarkMode(!isDarkMode);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#F8FAFC] dark:bg-[#111814]">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-semibold">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // App Shell (Sidebar + Header)
+  const AppShell = ({ children }: { children: React.ReactNode }) => {
+    if (!user) return null; // Should be safeguarded by Route logic, but for types.
+
+    return (
+      <div className="flex h-screen w-full bg-[#F8FAFC] dark:bg-[#111814] overflow-hidden transition-colors duration-300">
+        <Sidebar lang={lang} currentUser={user} />
+        <div className="flex-1 flex flex-col min-w-0 relative">
+          <ConnectionBanner />
+          <Header
+            user={user}
+            onLogout={handleLogout}
+            isDarkMode={isDarkMode}
+            toggleTheme={toggleTheme}
+            lang={lang}
+            setLang={setLang}
+          />
+          <main className="flex-1 overflow-y-auto p-10">
+            <div className="max-w-[1600px] mx-auto pb-20">
+              {children}
+            </div>
+          </main>
+
+          <button
+            onClick={() => setIsAISidebarOpen(true)}
+            className="fixed bottom-10 right-10 w-20 h-20 bg-dark dark:bg-brand text-white dark:text-dark rounded-[2.5rem] shadow-2xl shadow-brand/20 flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-[90]"
+          >
+            <div className="absolute inset-0 bg-brand/20 rounded-[2.5rem] animate-ping group-hover:animate-none opacity-40"></div>
+            <Sparkles size={32} strokeWidth={3} className="relative z-10" />
+          </button>
+
+          <AIAdvisorSidebar
+            isOpen={isAISidebarOpen}
+            onClose={() => setIsAISidebarOpen(false)}
+            lang={lang}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  // Route Guard Component
+  const ProtectedRoute = ({ children, requiredScreen }: { children: React.ReactNode; requiredScreen?: AppScreen }) => {
+    if (!user) {
+      return <Navigate to="/login" replace />;
+    }
+
+    // Role-Based Access Control Check
+    if (requiredScreen) {
+      const userPermission = user.permissions?.[requiredScreen];
+      if (userPermission === AccessLevel.NONE) {
+        return (
+          <AppShell>
+            <Forbidden />
+          </AppShell>
+        );
+      }
+    }
+
+    return <AppShell>{children}</AppShell>;
+  };
+
+  return (
+    <Routes>
+      {/* Public Route */}
+      <Route
+        path="/login"
+        element={user ? <Navigate to="/dashboard" replace /> : <Login onLogin={handleLogin} lang={lang} />}
+      />
+
+      {/* Root Redirect */}
+      <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
+
+      {/* Protected Routes */}
+      <Route path="/dashboard" element={
+        <ProtectedRoute requiredScreen={AppScreen.DASHBOARD}>
+          <Dashboard isDarkMode={isDarkMode} lang={lang} />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/members" element={
+        <ProtectedRoute requiredScreen={AppScreen.MEMBERS}>
+          <Members />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/deposits" element={
+        <ProtectedRoute requiredScreen={AppScreen.DEPOSITS}>
+          <Deposits />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/request-deposit" element={
+        <ProtectedRoute requiredScreen={AppScreen.REQUEST_DEPOSIT}>
+          <RequestDeposit />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/transactions" element={
+        <ProtectedRoute requiredScreen={AppScreen.TRANSACTIONS}>
+          <Transactions />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/expenses" element={
+        <ProtectedRoute requiredScreen={AppScreen.EXPENSES}>
+          <Expenses />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/projects" element={
+        <ProtectedRoute requiredScreen={AppScreen.PROJECT_MANAGEMENT}>
+          <ProjectManagement />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/funds" element={
+        <ProtectedRoute requiredScreen={AppScreen.FUNDS_MANAGEMENT}>
+          <FundsManagement />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/analysis" element={
+        <ProtectedRoute requiredScreen={AppScreen.ANALYSIS}>
+          <Analysis />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/reports" element={
+        <ProtectedRoute requiredScreen={AppScreen.REPORTS}>
+          <Reports />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/settings" element={
+        <ProtectedRoute requiredScreen={AppScreen.SETTINGS}>
+          <Settings currentUser={user} />
+        </ProtectedRoute>
+      } />
+
+      {/* 404 Route */}
+      <Route path="*" element={
+        user ? (
+          <AppShell>
+            <NotFound />
+          </AppShell>
+        ) : (
+          <Navigate to="/login" replace />
+        )
+      } />
+    </Routes>
+  );
+};
+
+
+
+const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Securely restore user session
+  useEffect(() => {
+    const hydrateAuth = async () => {
+      const storedUser = localStorage.getItem('userInfo');
+      if (storedUser) {
+        try {
+          // Verify with backend instead of trusting local storage
+          const profile = await authService.getProfile();
+          setUser(profile);
+        } catch (error: any) {
+          console.error("Session check failed:", error);
+
+          if (error.response?.status === 401) {
+            // Token is invalid/expired
+            localStorage.removeItem('userInfo');
+            setUser(null);
+          } else if (isNetworkError(error) || (error.response?.status >= 500)) {
+            // Network/Server error - assume offline and use cached creds
+            console.warn("Network unreachable, restoring cached session");
+            try {
+              const cached = JSON.parse(storedUser);
+              setUser(cached);
+            } catch (e) {
+              localStorage.removeItem('userInfo');
+              setUser(null);
+            }
+          } else {
+            // For other errors, default to safe fallback (maybe API changed but token is valid?)
+            // We'll preserve session to be safe unless it's definitely unauthorized.
+            try {
+              const cached = JSON.parse(storedUser);
+              setUser(cached);
+            } catch (e) {
+              setUser(null);
+            }
+          }
+        }
+      }
+      setIsLoading(false);
+    };
+
+    hydrateAuth();
+  }, []);
+
+  return (
+    <GlobalStateProvider user={user}>
+      <Router>
+        <AppContent user={user} setUser={setUser} isLoading={isLoading} />
+      </Router>
+    </GlobalStateProvider>
+  );
+};
+
+export default App;
