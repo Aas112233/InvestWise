@@ -1,0 +1,178 @@
+import axios from 'axios';
+
+const api = axios.create({
+    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    timeout: 30000,
+});
+
+api.interceptors.request.use(
+    (config) => {
+        const userInfo = localStorage.getItem('userInfo');
+        if (userInfo) {
+            try {
+                const { token } = JSON.parse(userInfo);
+                if (token) {
+                    config.headers.Authorization = `Bearer ${token}`;
+                }
+            } catch (error) {
+                console.error('Failed to parse user info:', error);
+            }
+        }
+        return config;
+    },
+    (error) => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        // Only logout on confirmed 401 Unauthorized
+        if (error.response?.status === 401) {
+            console.warn('Unauthorized access - logging out');
+            localStorage.removeItem('userInfo');
+            window.location.href = '/login';
+        }
+
+        const message = error.response?.data?.message || error.message || 'An error occurred';
+
+        // Enhance error object with network status info if applicable
+        if (!error.response) {
+            error.isNetworkError = true;
+        }
+
+        return Promise.reject(error);
+    }
+);
+
+export const isNetworkError = (error: any): boolean => {
+    return !error.response ||
+        error.code === 'ERR_NETWORK' ||
+        error.code === 'ECONNABORTED' ||
+        error.message.includes('Network Error');
+};
+
+export const authService = {
+    login: async (email: string, password: string) => {
+        const { data } = await api.post('/auth/login', { email, password });
+        if (data.token) {
+            localStorage.setItem('userInfo', JSON.stringify(data));
+        }
+        return data;
+    },
+    register: async (userData: any) => {
+        const { data } = await api.post('/auth/register', userData);
+        return data;
+    },
+    getProfile: async () => {
+        const { data } = await api.get('/auth/profile');
+        return data;
+    },
+};
+
+export const memberService = {
+    getAll: async () => {
+        const { data } = await api.get('/members');
+        return data;
+    },
+    create: async (memberData: any) => {
+        const { data } = await api.post('/members', memberData);
+        return data;
+    },
+    update: async (id: string, memberData: any) => {
+        const { data } = await api.put(`/members/${id}`, memberData);
+        return data;
+    },
+    delete: async (id: string) => {
+        const { data } = await api.delete(`/members/${id}`);
+        return data;
+    }
+};
+
+export const projectService = {
+    getAll: async () => {
+        const { data } = await api.get('/projects');
+        return data;
+    },
+    create: async (projectData: any) => {
+        const { data } = await api.post('/projects', projectData);
+        return data;
+    },
+    update: async (id: string, projectData: any) => {
+        const { data } = await api.put(`/projects/${id}`, projectData);
+        return data;
+    },
+    addUpdate: async (id: string, updateData: any) => {
+        const { data } = await api.post(`/projects/${id}/updates`, updateData);
+        return data;
+    },
+    delete: async (id: string) => {
+        const { data } = await api.delete(`/projects/${id}`);
+        return data;
+    }
+};
+
+export const fundService = {
+    getAll: async () => {
+        const { data } = await api.get('/funds');
+        return data;
+    },
+    create: async (fundData: any) => {
+        const { data } = await api.post('/funds', fundData);
+        return data;
+    },
+    update: async (id: string, fundData: any) => {
+        const { data } = await api.put(`/funds/${id}`, fundData);
+        return data;
+    }
+};
+
+export const financeService = {
+    getTransactions: async () => {
+        const { data } = await api.get('/finance/transactions');
+        return data;
+    },
+    addDeposit: async (depositData: any) => {
+        const { data } = await api.post('/finance/deposits', depositData);
+        return data;
+    },
+    approveDeposit: async (id: string) => {
+        const { data } = await api.put(`/finance/deposits/${id}/approve`);
+        return data;
+    },
+    addExpense: async (expenseData: any) => {
+        const { data } = await api.post('/finance/expenses', expenseData);
+        return data;
+    },
+    deleteTransaction: async (id: string) => {
+        const { data } = await api.delete(`/finance/transactions/${id}`);
+        return data;
+    }
+};
+
+export const reportService = {
+    getAll: async () => {
+        const { data } = await api.get('/reports');
+        return data;
+    },
+    create: async (reportData: any) => {
+        const { data } = await api.post('/reports', reportData);
+        return data;
+    },
+    delete: async (id: string) => {
+        const { data } = await api.delete(`/reports/${id}`);
+        return data;
+    },
+    download: async (type: string, format: string, fiscalMonth: string) => {
+        const response = await api.get(`/reports/generate/${encodeURIComponent(type)}/${format}`, {
+            params: { fiscalMonth },
+            responseType: 'blob',
+            timeout: 60000
+        });
+        return response.data;
+    }
+};
+
+export default api;
