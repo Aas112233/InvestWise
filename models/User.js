@@ -34,8 +34,7 @@ const userSchema = mongoose.Schema(
             type: String,
         },
         memberId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Member',
+            type: String,
         }
     },
     {

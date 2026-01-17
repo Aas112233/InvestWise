@@ -11,7 +11,7 @@ const seedAdmin = async () => {
 
         // Check if admin already exists
         let admin = await User.findOne({ email: 'admin@investwise.com' });
-        
+
         // Full permissions for all modules
         const fullPermissions = {
             DASHBOARD: 'WRITE',
@@ -25,7 +25,8 @@ const seedAdmin = async () => {
             ANALYSIS: 'WRITE',
             REPORTS: 'WRITE',
             SETTINGS: 'WRITE',
-            GOALS: 'WRITE'
+            GOALS: 'WRITE',
+            DIVIDENDS: 'WRITE'
         };
 
         if (admin) {
