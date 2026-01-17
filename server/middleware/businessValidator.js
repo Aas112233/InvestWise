@@ -2,10 +2,10 @@ import { body } from 'express-validator';
 import { validate } from './validator.js';
 
 export const projectValidation = [
-    body('name').trim().notEmpty().withMessage('Project name is required'),
+    body('title').trim().notEmpty().withMessage('Project title is required'),
     body('description').optional().trim(),
-    body('budget').isNumeric().withMessage('Budget must be a number'),
-    body('status').optional().isIn(['Planning', 'In Progress', 'Completed', 'On Hold']).withMessage('Invalid status'),
+    body('budget').optional().isNumeric().withMessage('Budget must be a number'),
+    body('status').optional().isIn(['In Progress', 'Completed', 'Review']).withMessage('Invalid status'),
     validate
 ];
 

@@ -70,6 +70,22 @@ export const authService = {
         const { data } = await api.get('/auth/profile');
         return data;
     },
+    getAllUsers: async () => {
+        const { data } = await api.get('/auth/users');
+        return data;
+    },
+    updateUser: async (id: string, data: any) => {
+        const { data: responseData } = await api.put(`/auth/users/${id}`, data);
+        return responseData;
+    },
+    deleteUser: async (id: string) => {
+        const { data } = await api.delete(`/auth/users/${id}`);
+        return data;
+    },
+    updateUserPassword: async (id: string, password: any) => {
+        const { data } = await api.put(`/auth/users/${id}/password`, { password });
+        return data;
+    },
 };
 
 export const memberService = {
@@ -149,6 +165,14 @@ export const financeService = {
     deleteTransaction: async (id: string) => {
         const { data } = await api.delete(`/finance/transactions/${id}`);
         return data;
+    },
+    distributeDividends: async (dividendData: any) => {
+        const { data } = await api.post('/finance/dividends', dividendData, { timeout: 60000 });
+        return data;
+    },
+    transferEquity: async (transferData: any) => {
+        const { data } = await api.post('/finance/equity/transfer', transferData, { timeout: 60000 });
+        return data;
     }
 };
 
@@ -168,6 +192,13 @@ export const reportService = {
     download: async (type: string, format: string, fiscalMonth: string) => {
         const response = await api.get(`/reports/generate/${encodeURIComponent(type)}/${format}`, {
             params: { fiscalMonth },
+            responseType: 'blob',
+            timeout: 60000
+        });
+        return response.data;
+    },
+    generate: async (type: string, queryString: string) => {
+        const response = await api.get(`/reports/generate/${encodeURIComponent(type)}?${queryString}`, {
             responseType: 'blob',
             timeout: 60000
         });

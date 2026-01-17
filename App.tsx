@@ -15,6 +15,7 @@ import Analysis from './components/Analysis';
 import Reports from './components/Reports';
 import Settings from './components/Settings';
 import Login from './components/Login';
+import DividendManagement from './components/DividendManagement';
 import AIAdvisorSidebar from './components/AIAdvisorSidebar';
 import Forbidden from './components/Forbidden';
 import NotFound from './components/NotFound';
@@ -146,61 +147,67 @@ const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => voi
 
       <Route path="/members" element={
         <ProtectedRoute requiredScreen={AppScreen.MEMBERS}>
-          <Members />
+          <Members lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/deposits" element={
         <ProtectedRoute requiredScreen={AppScreen.DEPOSITS}>
-          <Deposits />
+          <Deposits lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/request-deposit" element={
         <ProtectedRoute requiredScreen={AppScreen.REQUEST_DEPOSIT}>
-          <RequestDeposit />
+          <RequestDeposit lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/transactions" element={
         <ProtectedRoute requiredScreen={AppScreen.TRANSACTIONS}>
-          <Transactions />
+          <Transactions lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/expenses" element={
         <ProtectedRoute requiredScreen={AppScreen.EXPENSES}>
-          <Expenses />
+          <Expenses lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/projects" element={
         <ProtectedRoute requiredScreen={AppScreen.PROJECT_MANAGEMENT}>
-          <ProjectManagement />
+          <ProjectManagement lang={lang} />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/dividends" element={
+        <ProtectedRoute requiredScreen={AppScreen.DIVIDENDS}>
+          <DividendManagement lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/funds" element={
         <ProtectedRoute requiredScreen={AppScreen.FUNDS_MANAGEMENT}>
-          <FundsManagement />
+          <FundsManagement lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/analysis" element={
         <ProtectedRoute requiredScreen={AppScreen.ANALYSIS}>
-          <Analysis />
+          <Analysis lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/reports" element={
         <ProtectedRoute requiredScreen={AppScreen.REPORTS}>
-          <Reports />
+          <Reports lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/settings" element={
         <ProtectedRoute requiredScreen={AppScreen.SETTINGS}>
-          <Settings currentUser={user} />
+          <Settings currentUser={user} lang={lang} />
         </ProtectedRoute>
       } />
 

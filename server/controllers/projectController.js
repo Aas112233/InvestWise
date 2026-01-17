@@ -40,27 +40,38 @@ const createProject = asyncHandler(async (req, res) => {
         category,
         description,
         initialInvestment,
+        budget,
+        expectedRoi,
         totalShares,
         startDate,
         completionDate,
-        involveMembers,
+        involvedMembers,
+        projectFundHandler
     } = req.body;
 
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
+        // Calculate ownership percentages
+        const processedMembers = (involvedMembers || []).map(m => ({
+            ...m,
+            ownershipPercentage: totalShares > 0 ? (m.sharesInvested / totalShares) * 100 : 0
+        }));
+
         // 1. Create the Project Object first (to get ID)
-        // We use an array for create with session, returns array
         const projects = await Project.create([{
             title,
             category,
             description,
             initialInvestment,
+            budget: budget || initialInvestment,
+            expectedRoi: expectedRoi || 0,
             totalShares,
             startDate,
             completionDate,
-            involvedMembers: involveMembers || [],
+            projectFundHandler,
+            involvedMembers: processedMembers,
             currentFundBalance: initialInvestment || 0,
             updates: []
         }], { session });
@@ -86,16 +97,24 @@ const createProject = asyncHandler(async (req, res) => {
         // 3. Handle Initial Investment (Funding)
         if (initialInvestment > 0) {
             // Find legacy primary or DEPOSIT fund
+            // Find an active Primary/Deposit fund with enough balance to source the initial investment
             const sourceFund = await Fund.findOne({
                 type: { $in: ['Primary', 'DEPOSIT'] },
-                status: 'ACTIVE'
-            }).sort({ createdAt: 1 }).session(session);
+                status: 'ACTIVE',
+                balance: { $gte: Number(initialInvestment) }
+            }).session(session);
 
             if (!sourceFund) {
-                throw new Error('No Active Primary/Deposit Fund found to source the initial investment.');
-            }
-            if (sourceFund.balance < initialInvestment) {
-                throw new Error(`Insufficient funds in ${sourceFund.name} (Balance: ${sourceFund.balance})`);
+                // Determine the best available fund for a descriptive error message
+                const bestFund = await Fund.findOne({
+                    type: { $in: ['Primary', 'DEPOSIT'] },
+                    status: 'ACTIVE'
+                }).sort({ balance: -1 }).session(session);
+
+                if (!bestFund) {
+                    throw new Error('No Active Primary/Deposit Fund found to source the initial investment.');
+                }
+                throw new Error(`Venture Authorization Failed: Insufficient liquidity in enterprise reserves. Required: BDT ${Number(initialInvestment).toLocaleString()}, Highest available fund (${bestFund.name}) only has BDT ${bestFund.balance.toLocaleString()}.`);
             }
 
             // Debit Source
@@ -139,8 +158,9 @@ const createProject = asyncHandler(async (req, res) => {
 
     } catch (error) {
         await session.abortTransaction();
+        console.error('Project Creation Error:', error.message, '| Body:', JSON.stringify(req.body));
         res.status(400);
-        throw new Error(error.message || 'Project creation with automatic funding failed');
+        throw new Error(error.message || 'Project creation failed');
     } finally {
         session.endSession();
     }
@@ -179,36 +199,30 @@ const deleteProject = asyncHandler(async (req, res) => {
         throw new Error('Project not found');
     }
 
-    // Check for associated financial transactions
-    const transactionCount = await Transaction.countDocuments({ projectId: req.params.id });
-    if (transactionCount > 0) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        // 1. Delete associated Transactions linked to this project
+        await Transaction.deleteMany({ projectId: req.params.id }).session(session);
+
+        // 2. Delete the auto-generated Fund linked to this project
+        if (project.linkedFundId) {
+            await Fund.findByIdAndDelete(project.linkedFundId).session(session);
+        }
+
+        // 3. Finally delete the project record
+        await project.deleteOne({ session });
+
+        await session.commitTransaction();
+        res.json({ message: 'Project and all associated financial records purged successfully.' });
+    } catch (error) {
+        await session.abortTransaction();
         res.status(400);
-        throw new Error(`Cannot delete project. It has ${transactionCount} linked financial transactions. Delete them first.`);
+        throw new Error(`Purge Failed: ${error.message}`);
+    } finally {
+        session.endSession();
     }
-
-    // Check if project has internal updates history that implies financial activity
-    // (Although transactions should cover this, updates might be legacy or separate)
-    if (project.updates && project.updates.length > 0) {
-        // We could force clearing updates, but updates are usually part of the project document.
-        // However, if updates involve money, we should be careful.
-        // Let's assume strictness: if it has significant history, block it.
-        // Or, since updates are sub-documents, deleting the project deletes them.
-        // The user said "connected data". Updates are *internal* data so physically they delete with the project.
-        // But "Transactions" are external connected data.
-        // We already checked Transactions above.
-    }
-
-    // Check if there are members involved with non-zero shares?
-    // If members have shares, those shares represent value.
-    // If we delete the project, those member shares vanish?
-    // We should probably check if `currentFundBalance` > 0 or `totalShares` > 0
-    if (project.currentFundBalance > 0) {
-        res.status(400);
-        throw new Error('Cannot delete project with remaining fund balance. Liquidate funds first.');
-    }
-
-    await project.deleteOne();
-    res.json({ message: 'Project removed' });
 });
 
 // @desc    Add update to project (earning/expense)
@@ -228,8 +242,10 @@ const addProjectUpdate = asyncHandler(async (req, res) => {
 
         if (type === 'Earning') {
             project.currentFundBalance += Number(amount);
+            project.totalEarnings += Number(amount);
         } else if (type === 'Expense') {
             project.currentFundBalance -= Number(amount);
+            project.totalExpenses += Number(amount);
         }
 
         project.updates.push(update);

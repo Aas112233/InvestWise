@@ -1,17 +1,22 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, Search, Filter, X, Calendar, User, Briefcase, CreditCard, ChevronUp, ChevronDown, Download, Layers, Trash2, Loader2, RefreshCw } from 'lucide-react';
-import { Expense, Member, Project } from '../types';
+import { Expense, Member, Project, AccessLevel, AppScreen } from '../types';
 import Toast, { ToastType } from './Toast';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { financeService } from '../services/api';
 import ExportMenu from './ExportMenu';
 import { formatCurrency } from '../utils/formatters';
+import { Language, t } from '../i18n/translations';
 
 type SortKey = keyof Expense;
 
-const Expenses: React.FC = () => {
-  const { expenses: globalExpenses, members: globalMembers, projects: globalProjects, funds: globalFunds, addExpense, refreshTransactions } = useGlobalState();
+interface ExpensesProps {
+  lang: Language;
+}
+
+const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
+  const { expenses: globalExpenses, members: globalMembers, projects: globalProjects, funds: globalFunds, addExpense, refreshTransactions, currentUser } = useGlobalState();
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
   useEffect(() => {
@@ -177,12 +182,12 @@ const Expenses: React.FC = () => {
       <div className="flex items-end justify-between px-2">
         <div>
           <nav className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2 uppercase tracking-widest">
-            <span>FINANCIALS</span>
+            <span>{t('nav.operations', lang)}</span>
             <span className="opacity-30">/</span>
-            <span className="text-brand">EXPENSES</span>
+            <span className="text-brand">{t('nav.expenses', lang)}</span>
           </nav>
           <div className="flex items-center gap-4">
-            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">Operational Burn</h1>
+            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('nav.expenses', lang)}</h1>
             <button
               onClick={handleRefresh}
               className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 transition-all ${refreshing ? 'animate-spin' : ''}`}
@@ -206,130 +211,137 @@ const Expenses: React.FC = () => {
             ]}
             fileName={`expenses_${new Date().toISOString().split('T')[0]}`}
             title="Operational Expenses Report"
+            targetId="expenses-snapshot-target"
           />
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20"
-          >
-            <Plus size={20} strokeWidth={3} /> Record Expense
-          </button>
+          {currentUser?.permissions[AppScreen.EXPENSES] === AccessLevel.WRITE && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20"
+            >
+              <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-white dark:bg-[#1A221D] p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5">
-          <p className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Cumulative Outflow</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-6xl font-black text-dark dark:text-white tracking-tighter leading-none">{formatCurrency(totalExpenses)}</span>
-            <span className="text-xl font-black text-rose-500 tracking-tight">Debited</span>
+      <div id="expenses-snapshot-target" className="space-y-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-white dark:bg-[#1A221D] p-8 lg:p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5">
+            <p className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Cumulative Outflow</p>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className={`font-black text-dark dark:text-white tracking-tighter leading-none ${formatCurrency(totalExpenses).length > 12 ? 'text-3xl sm:text-4xl' : 'text-4xl sm:text-5xl'}`}>{formatCurrency(totalExpenses)}</span>
+              <span className="text-xl font-black text-rose-500 tracking-tight">Debited</span>
+            </div>
           </div>
-        </div>
-        <div className="bg-dark dark:bg-[#1A221D] p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between">
-          <p className="text-[11px] font-black text-gray-300 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Expense Count</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-7xl font-black text-brand tracking-tighter leading-none uppercase">{expenses.length}</span>
-            <span className="text-xl font-black text-white/40 tracking-tight">Records</span>
+          <div className="bg-dark dark:bg-[#1A221D] p-8 lg:p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between">
+            <p className="text-[11px] font-black text-gray-300 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Expense Count</p>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="text-4xl sm:text-5xl font-black text-brand tracking-tighter leading-none uppercase">{expenses.length}</span>
+              <span className="text-xl font-black text-white/40 tracking-tight">Records</span>
+            </div>
           </div>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5">
-        <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between gap-6">
-          <div className="relative flex-1 max-w-lg">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by ID, Category, Member or Reason..."
-              className="w-full bg-gray-50/50 dark:bg-[#111814] pl-14 pr-6 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/5 focus:ring-2 focus:ring-dark dark:focus:ring-brand text-sm font-bold transition-all text-dark dark:text-white"
-            />
-          </div>
-          <button className="p-4 bg-gray-50 dark:bg-white/5 rounded-2xl text-gray-500 dark:text-gray-400 hover:text-dark dark:hover:text-white transition-colors">
-            <Filter size={20} />
-          </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-50/30 dark:bg-white/5">
-                <th onClick={() => handleSort('id')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  <div className="flex items-center gap-2">EXP REF <SortIcon column="id" /></div>
-                </th>
-                <th onClick={() => handleSort('date')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  <div className="flex items-center gap-2">DATE <SortIcon column="date" /></div>
-                </th>
-                <th onClick={() => handleSort('category')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  <div className="flex items-center gap-2">CATEGORY <SortIcon column="category" /></div>
-                </th>
-                <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">REASON & ENTITY</th>
-                <th onClick={() => handleSort('amount')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  <div className="flex items-center justify-end gap-2">AMOUNT <SortIcon column="amount" /></div>
-                </th>
-                <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  ACTIONS
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-white/5">
-              {filteredAndSortedExpenses.map((exp) => (
-                <tr key={exp.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
-                  <td className="px-10 py-6">
-                    <span className="text-[10px] font-black text-brand uppercase tracking-tighter">#{exp.id.substring(0, 8)}...</span>
-                  </td>
-                  <td className="px-10 py-6">
-                    <span className="text-xs font-bold text-gray-400">{new Date(exp.date).toLocaleDateString()}</span>
-                  </td>
-                  <td className="px-10 py-6">
-                    <span className="inline-block px-3 py-1 rounded-lg bg-gray-50 dark:bg-white/5 text-[10px] font-black uppercase text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-white/5">
-                      {exp.category}
-                    </span>
-                  </td>
-                  <td className="px-10 py-6">
-                    <div className="flex flex-col">
-                      <p className="font-black text-dark dark:text-white text-sm leading-none mb-1">{exp.reason}</p>
-                      <div className="flex items-center gap-2">
-                        {exp.memberName && (
-                          <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1">
-                            <User size={10} className="text-brand" /> {exp.memberName}
-                          </p>
-                        )}
-                        {exp.projectName && (
-                          <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1">
-                            <Briefcase size={10} /> {exp.projectName}
-                          </p>
-                        )}
+        <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5">
+          <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between gap-6">
+            <div className="relative flex-1 max-w-lg">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by ID, Category, Member or Reason..."
+                className="w-full bg-gray-50/50 dark:bg-[#111814] pl-14 pr-6 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/5 focus:ring-2 focus:ring-dark dark:focus:ring-brand text-sm font-bold transition-all text-dark dark:text-white"
+              />
+            </div>
+            <button className="p-4 bg-gray-50 dark:bg-white/5 rounded-2xl text-gray-500 dark:text-gray-400 hover:text-dark dark:hover:text-white transition-colors">
+              <Filter size={20} />
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-50/30 dark:bg-white/5">
+                  <th onClick={() => handleSort('id')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    <div className="flex items-center gap-2">EXP REF <SortIcon column="id" /></div>
+                  </th>
+                  <th onClick={() => handleSort('date')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    <div className="flex items-center gap-2">DATE <SortIcon column="date" /></div>
+                  </th>
+                  <th onClick={() => handleSort('category')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    <div className="flex items-center gap-2">CATEGORY <SortIcon column="category" /></div>
+                  </th>
+                  <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">REASON & ENTITY</th>
+                  <th onClick={() => handleSort('amount')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-2">AMOUNT <SortIcon column="amount" /></div>
+                  </th>
+                  <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    ACTIONS
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                {filteredAndSortedExpenses.map((exp) => (
+                  <tr key={exp.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
+                    <td className="px-10 py-6">
+                      <span className="text-[10px] font-black text-brand uppercase tracking-tighter">#{exp.id.substring(0, 8)}...</span>
+                    </td>
+                    <td className="px-10 py-6">
+                      <span className="text-xs font-bold text-gray-400">{new Date(exp.date).toLocaleDateString()}</span>
+                    </td>
+                    <td className="px-10 py-6">
+                      <span className="inline-block px-3 py-1 rounded-lg bg-gray-50 dark:bg-white/5 text-[10px] font-black uppercase text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-white/5">
+                        {exp.category}
+                      </span>
+                    </td>
+                    <td className="px-10 py-6">
+                      <div className="flex flex-col">
+                        <p className="font-black text-dark dark:text-white text-sm leading-none mb-1">{exp.reason}</p>
+                        <div className="flex items-center gap-2">
+                          {exp.memberName && (
+                            <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1">
+                              <User size={10} className="text-brand" /> {exp.memberName}
+                            </p>
+                          )}
+                          {exp.projectName && (
+                            <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1">
+                              <Briefcase size={10} /> {exp.projectName}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-lg tracking-tighter">
-                    BDT {exp.amount.toLocaleString()}
-                  </td>
-                  <td className="px-10 py-6 text-right">
-                    <button
-                      onClick={(e) => handleDelete(e, exp.id)}
-                      disabled={!!processingId}
-                      className={`p-2 rounded-xl border transition-all ${processingId === exp.id
-                        ? 'bg-red-50 border-red-100 cursor-wait'
-                        : 'bg-transparent border-transparent text-gray-300 hover:text-red-500 hover:bg-red-50 hover:border-red-100'
-                        }`}
-                      title="Archive Expense"
-                    >
-                      {processingId === exp.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {filteredAndSortedExpenses.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-10 py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-xs">
-                    No expense records found in this category
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    </td>
+                    <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-lg tracking-tighter">
+                      BDT {exp.amount.toLocaleString()}
+                    </td>
+                    <td className="px-10 py-6 text-right">
+                      {currentUser?.permissions[AppScreen.EXPENSES] === AccessLevel.WRITE && (
+                        <button
+                          onClick={(e) => handleDelete(e, exp.id)}
+                          disabled={!!processingId}
+                          className={`p-2 rounded-xl border transition-all ${processingId === exp.id
+                            ? 'bg-red-50 border-red-100 cursor-wait'
+                            : 'bg-transparent border-transparent text-gray-300 hover:text-red-500 hover:bg-red-50 hover:border-red-100'
+                            }`}
+                          title="Archive Expense"
+                        >
+                          {processingId === exp.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {filteredAndSortedExpenses.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-10 py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-xs">
+                      Clean slate. No operational expenses discovered.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

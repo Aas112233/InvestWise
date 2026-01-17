@@ -7,11 +7,16 @@ import { financeService } from '../services/api';
 import Toast, { ToastType } from './Toast';
 import ExportMenu from './ExportMenu';
 import { formatCurrency } from '../utils/formatters';
+import { Language, t } from '../i18n/translations';
 
 type SortKey = keyof Transaction | 'member';
 type SortOrder = 'asc' | 'desc';
 
-const Transactions: React.FC = () => {
+interface TransactionsProps {
+  lang: Language;
+}
+
+const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
   const { transactions, refreshTransactions } = useGlobalState();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('All');
@@ -155,12 +160,12 @@ const Transactions: React.FC = () => {
       <div className="flex items-end justify-between px-2">
         <div>
           <nav className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2 uppercase tracking-widest">
-            <span>FINANCIALS</span>
+            <span>{t('nav.operations', lang)}</span>
             <span className="opacity-30">/</span>
-            <span className="text-brand">LEDGER</span>
+            <span className="text-brand">{t('nav.transactions', lang)}</span>
           </nav>
           <div className="flex items-center gap-4">
-            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">Global Transactions</h1>
+            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('nav.transactions', lang)}</h1>
             <button
               onClick={handleRefresh}
               className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 transition-all ${refreshing ? 'animate-spin' : ''}`}
@@ -174,144 +179,147 @@ const Transactions: React.FC = () => {
           columns={exportColumns}
           fileName={`transactions_${new Date().toISOString().split('T')[0]}`}
           title="Global Transactions Report"
+          targetId="ledger-snapshot-target"
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-white dark:bg-[#1A221D] p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5 transition-all">
-          <p className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Total Liquidity Inflow</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-6xl font-black text-dark dark:text-white tracking-tighter leading-none">BDT {totalInflow.toLocaleString()}</span>
-            <span className="text-xl font-black text-emerald-500 tracking-tight">Received</span>
+      <div id="ledger-snapshot-target" className="space-y-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-white dark:bg-[#1A221D] p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5 transition-all">
+            <p className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Total Liquidity Inflow</p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-6xl font-black text-dark dark:text-white tracking-tighter leading-none">BDT {totalInflow.toLocaleString()}</span>
+              <span className="text-xl font-black text-emerald-500 tracking-tight">Received</span>
+            </div>
           </div>
-        </div>
-        <div className="bg-dark dark:bg-[#1A221D] p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between transition-all">
-          <p className="text-[11px] font-black text-gray-300 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Total Assets Deployed</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-6xl font-black text-brand tracking-tighter leading-none uppercase">BDT {totalOutflow.toLocaleString()}</span>
-            <span className="text-xl font-black text-white/40 tracking-tight">Invested/Spent</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5">
-        <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between gap-6 flex-wrap">
-          <div className="relative flex-1 min-w-[300px]">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by ID, Description or Member..."
-              className="w-full bg-gray-50/50 dark:bg-[#111814] pl-14 pr-6 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/5 focus:ring-2 focus:ring-dark dark:focus:ring-brand text-sm font-bold transition-all dark:text-white placeholder:text-gray-400"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="appearance-none bg-gray-50/50 dark:bg-[#111814] pl-6 pr-10 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/5 focus:ring-2 focus:ring-dark dark:focus:ring-brand text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400"
-              >
-                <option value="All">All Types</option>
-                <option value="Deposit">Deposit</option>
-                <option value="Expense">Expense</option>
-                <option value="Investment">Investment</option>
-                <option value="Withdrawal">Withdrawal</option>
-                <option value="Earning">Earning</option>
-              </select>
-              <Filter size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <div className="bg-dark dark:bg-[#1A221D] p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between transition-all">
+            <p className="text-[11px] font-black text-gray-300 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Total Assets Deployed</p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-6xl font-black text-brand tracking-tighter leading-none uppercase">BDT {totalOutflow.toLocaleString()}</span>
+              <span className="text-xl font-black text-white/40 tracking-tight">Invested/Spent</span>
             </div>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-50/30 dark:bg-white/5">
-                <th onClick={() => handleSort('id')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  <div className="flex items-center gap-2">TX REF <SortIcon column="id" /></div>
-                </th>
-                <th onClick={() => handleSort('date')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  <div className="flex items-center gap-2">DATE <SortIcon column="date" /></div>
-                </th>
-                <th onClick={() => handleSort('type')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  <div className="flex items-center gap-2">TYPE <SortIcon column="type" /></div>
-                </th>
-                <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">DESCRIPTION</th>
-                <th onClick={() => handleSort('amount')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  <div className="flex items-center justify-end gap-2">VALUATION <SortIcon column="amount" /></div>
-                </th>
-                <th onClick={() => handleSort('status')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  <div className="flex items-center justify-end gap-2">STATUS <SortIcon column="status" /></div>
-                </th>
-                <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                  ACTIONS
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-white/5">
-              {filteredAndSortedTransactions.map((tx) => (
-                <tr key={tx.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
-                  <td className="px-10 py-6">
-                    <span className="text-[10px] font-black text-brand uppercase tracking-tighter" title={tx.id}>#{tx.id.substring(0, 8)}...</span>
-                  </td>
-                  <td className="px-10 py-6">
-                    <span className="text-xs font-bold text-gray-400">{new Date(tx.date).toLocaleDateString()}</span>
-                  </td>
-                  <td className="px-10 py-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 rounded-xl bg-gray-50 dark:bg-white/5">
-                        {getTypeIcon(tx.type)}
+        <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5">
+          <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between gap-6 flex-wrap">
+            <div className="relative flex-1 min-w-[300px]">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by ID, Description or Member..."
+                className="w-full bg-gray-50/50 dark:bg-[#111814] pl-14 pr-6 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/5 focus:ring-2 focus:ring-dark dark:focus:ring-brand text-sm font-bold transition-all dark:text-white placeholder:text-gray-400"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="appearance-none bg-gray-50/50 dark:bg-[#111814] pl-6 pr-10 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/5 focus:ring-2 focus:ring-dark dark:focus:ring-brand text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400"
+                >
+                  <option value="All">All Types</option>
+                  <option value="Deposit">Deposit</option>
+                  <option value="Expense">Expense</option>
+                  <option value="Investment">Investment</option>
+                  <option value="Withdrawal">Withdrawal</option>
+                  <option value="Earning">Earning</option>
+                </select>
+                <Filter size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-50/30 dark:bg-white/5">
+                  <th onClick={() => handleSort('id')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    <div className="flex items-center gap-2">TX REF <SortIcon column="id" /></div>
+                  </th>
+                  <th onClick={() => handleSort('date')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    <div className="flex items-center gap-2">DATE <SortIcon column="date" /></div>
+                  </th>
+                  <th onClick={() => handleSort('type')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    <div className="flex items-center gap-2">TYPE <SortIcon column="type" /></div>
+                  </th>
+                  <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">DESCRIPTION</th>
+                  <th onClick={() => handleSort('amount')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-2">VALUATION <SortIcon column="amount" /></div>
+                  </th>
+                  <th onClick={() => handleSort('status')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-2">STATUS <SortIcon column="status" /></div>
+                  </th>
+                  <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    ACTIONS
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                {filteredAndSortedTransactions.map((tx) => (
+                  <tr key={tx.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
+                    <td className="px-10 py-6">
+                      <span className="text-[10px] font-black text-brand uppercase tracking-tighter" title={tx.id}>#{tx.id.substring(0, 8)}...</span>
+                    </td>
+                    <td className="px-10 py-6">
+                      <span className="text-xs font-bold text-gray-400">{new Date(tx.date).toLocaleDateString()}</span>
+                    </td>
+                    <td className="px-10 py-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-gray-50 dark:bg-white/5">
+                          {getTypeIcon(tx.type)}
+                        </div>
+                        <span className="text-xs font-black dark:text-white uppercase tracking-wider">{tx.type}</span>
                       </div>
-                      <span className="text-xs font-black dark:text-white uppercase tracking-wider">{tx.type}</span>
-                    </div>
-                  </td>
-                  <td className="px-10 py-6">
-                    <div className="flex flex-col">
-                      <p className="font-black text-dark dark:text-white text-sm leading-none mb-1">{tx.description}</p>
-                      {((tx as any).memberId || tx.member) && (
-                        <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">
-                          Partner: {(tx as any).memberId?.name || tx.member}
-                        </p>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-lg tracking-tighter">
-                    BDT {tx.amount.toLocaleString()}
-                  </td>
-                  <td className="px-10 py-6 text-right">
-                    <span className={`inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${tx.status === 'Success' || tx.status as any === 'Completed' ? 'bg-emerald-500/10 text-emerald-500' :
-                      tx.status === 'Processing' || tx.status as any === 'Pending' ? 'bg-amber-400/10 text-amber-500' :
-                        'bg-rose-500/10 text-rose-500'
-                      }`}>
-                      {tx.status}
-                    </span>
-                  </td>
-                  <td className="px-10 py-6 text-right">
-                    <button
-                      onClick={() => handleDelete(tx.id)}
-                      disabled={!!processingId}
-                      className={`p-2 rounded-xl border transition-all ${processingId === tx.id
-                        ? 'bg-red-50 border-red-100 cursor-wait'
-                        : 'bg-transparent border-transparent text-gray-300 hover:text-red-500 hover:bg-red-50 hover:border-red-100'
-                        }`}
-                      title="Archive Transaction"
-                    >
-                      {processingId === tx.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {filteredAndSortedTransactions.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-10 py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-xs">
-                    No matching transactions discovered in the archive
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    </td>
+                    <td className="px-10 py-6">
+                      <div className="flex flex-col">
+                        <p className="font-black text-dark dark:text-white text-sm leading-none mb-1">{tx.description}</p>
+                        {((tx as any).memberId || tx.member) && (
+                          <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">
+                            Partner: {(tx as any).memberId?.name || tx.member}
+                          </p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-lg tracking-tighter">
+                      BDT {tx.amount.toLocaleString()}
+                    </td>
+                    <td className="px-10 py-6 text-right">
+                      <span className={`inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${tx.status === 'Success' || tx.status as any === 'Completed' ? 'bg-emerald-500/10 text-emerald-500' :
+                        tx.status === 'Processing' || tx.status as any === 'Pending' ? 'bg-amber-400/10 text-amber-500' :
+                          'bg-rose-500/10 text-rose-500'
+                        }`}>
+                        {tx.status}
+                      </span>
+                    </td>
+                    <td className="px-10 py-6 text-right">
+                      <button
+                        onClick={() => handleDelete(tx.id)}
+                        disabled={!!processingId}
+                        className={`p-2 rounded-xl border transition-all ${processingId === tx.id
+                          ? 'bg-red-50 border-red-100 cursor-wait'
+                          : 'bg-transparent border-transparent text-gray-300 hover:text-red-500 hover:bg-red-50 hover:border-red-100'
+                          }`}
+                        title="Archive Transaction"
+                      >
+                        {processingId === tx.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredAndSortedTransactions.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-10 py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-xs">
+                      No matching transactions discovered in the archive
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

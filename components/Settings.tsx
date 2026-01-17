@@ -9,14 +9,16 @@ import {
 import { User as UserType, AccessLevel, AppScreen } from '../types';
 import { useGlobalState } from '../context/GlobalStateContext';
 import Toast, { ToastType } from './Toast';
+import { Language, t } from '../i18n/translations';
 
 import { Member } from '../types';
 
 interface SettingsProps {
   currentUser: UserType | null;
+  lang: Language;
 }
 
-const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
+const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
   const { systemUsers, members, updateMember, updateUserPermissions, updateUserPassword, deleteUser } = useGlobalState();
   const [activeTab, setActiveTab] = useState<'General' | 'Security' | 'Financial' | 'System' | 'Users' | 'Profiles'>('General');
   const [selectedAuditUser, setSelectedAuditUser] = useState<string | null>(null);
@@ -60,19 +62,35 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
     });
   };
 
-  const handleTogglePermission = (userId: string, screen: AppScreen, level: AccessLevel) => {
-    updateUserPermissions(userId, screen, level);
-    showNotification(`Permissions updated for ${screen}.`);
-  };
-
-  const handleResetPassword = (userId: string) => {
-    if (!newPassword || newPassword.length < 4) {
-      showNotification("Please enter a valid password (min 4 chars).", "error");
+  const handleTogglePermission = async (userId: string, screen: AppScreen, level: AccessLevel) => {
+    if (currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE) {
+      showNotification("Insufficient privileges to modify permissions", "error");
       return;
     }
-    updateUserPassword(userId, newPassword);
-    setNewPassword('');
-    showNotification("Credentials updated successfully.");
+    try {
+      await updateUserPermissions(userId, screen, level);
+      showNotification(`Permissions updated for ${screen}.`);
+    } catch (e) {
+      showNotification("Failed to update permission", "error");
+    }
+  };
+
+  const handleResetPassword = async (userId: string) => {
+    if (currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE) {
+      showNotification("Insufficient privileges to reset credentials", "error");
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      showNotification("Please enter a valid password (min 6 chars).", "error");
+      return;
+    }
+    try {
+      await updateUserPassword(userId, newPassword);
+      setNewPassword('');
+      showNotification("Credentials updated successfully.");
+    } catch (e) {
+      showNotification("Failed to reset password", "error");
+    }
   };
 
   const tabItems = [
@@ -85,11 +103,16 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
   ];
 
   const modulesToConfigure = [
+    AppScreen.DASHBOARD,
     AppScreen.MEMBERS,
     AppScreen.DEPOSITS,
+    AppScreen.REQUEST_DEPOSIT,
     AppScreen.PROJECT_MANAGEMENT,
     AppScreen.EXPENSES,
     AppScreen.FUNDS_MANAGEMENT,
+    AppScreen.DIVIDENDS,
+    AppScreen.ANALYSIS,
+    AppScreen.REPORTS,
     AppScreen.SETTINGS
   ];
 
@@ -100,11 +123,11 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
       <div className="flex items-end justify-between px-2">
         <div>
           <nav className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2 uppercase tracking-widest">
-            <span>ADMINISTRATION</span>
+            <span>{t('nav.strategy', lang)}</span>
             <span className="opacity-30">/</span>
-            <span className="text-brand">CORE SETTINGS</span>
+            <span className="text-brand">{t('nav.settings', lang)}</span>
           </nav>
-          <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">System Configuration</h1>
+          <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('nav.settings', lang)}</h1>
         </div>
       </div>
 
@@ -217,11 +240,12 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
                                         {[AccessLevel.NONE, AccessLevel.READ, AccessLevel.WRITE].map(level => (
                                           <td key={level} className="py-4 px-2 text-center">
                                             <button
+                                              disabled={currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE}
                                               onClick={() => handleTogglePermission(user.id, module, level)}
                                               className={`w-9 h-9 rounded-xl mx-auto flex items-center justify-center transition-all ${user.permissions[module] === level
                                                 ? 'bg-dark dark:bg-brand text-white dark:text-dark shadow-lg'
-                                                : 'bg-gray-100 dark:bg-white/5 text-gray-300 dark:text-gray-700 hover:text-brand'
-                                                }`}
+                                                : 'bg-gray-100 dark:bg-white/5 text-gray-300 dark:text-gray-700'
+                                                } ${currentUser.permissions[AppScreen.SETTINGS] === AccessLevel.WRITE ? 'hover:text-brand' : 'opacity-50 cursor-not-allowed'}`}
                                             >
                                               {user.permissions[module] === level ? <Check size={14} strokeWidth={4} /> : <div className="w-1 h-1 rounded-full bg-current"></div>}
                                             </button>
@@ -243,15 +267,17 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">New Login Password</label>
                                     <div className="flex gap-4">
                                       <input
+                                        disabled={currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE}
                                         type="password"
                                         value={newPassword}
                                         onChange={(e) => setNewPassword(e.target.value)}
-                                        placeholder="Set new passphrase..."
-                                        className="flex-1 bg-gray-50 dark:bg-dark px-6 py-4 rounded-2xl border border-transparent focus:border-brand outline-none font-bold text-dark dark:text-white text-sm"
+                                        placeholder={currentUser.permissions[AppScreen.SETTINGS] === AccessLevel.WRITE ? "Set new passphrase..." : "Read-only access"}
+                                        className={`flex-1 bg-gray-50 dark:bg-dark px-6 py-4 rounded-2xl border border-transparent focus:border-brand outline-none font-bold text-dark dark:text-white text-sm ${currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE ? 'opacity-50 cursor-not-allowed' : ''}`}
                                       />
                                       <button
+                                        disabled={currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE}
                                         onClick={() => handleResetPassword(user.id)}
-                                        className="bg-dark dark:bg-brand text-white dark:text-dark px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                                        className={`bg-dark dark:bg-brand text-white dark:text-dark px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all flex items-center gap-2 ${currentUser.permissions[AppScreen.SETTINGS] === AccessLevel.WRITE ? 'hover:scale-105 active:scale-95' : 'opacity-50 cursor-not-allowed'}`}
                                       >
                                         <Key size={14} /> Reset
                                       </button>
@@ -267,8 +293,15 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
                                   <p className="text-xs font-bold text-dark dark:text-white uppercase">{user.lastLogin}</p>
                                 </div>
                                 <button
-                                  onClick={() => deleteUser(user.id)}
-                                  className="flex items-center gap-2 px-6 py-3 bg-rose-500/10 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all border border-rose-500/20"
+                                  disabled={currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE}
+                                  onClick={async () => {
+                                    if (currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE) return;
+                                    if (window.confirm(`Are you sure you want to revoke access for ${user.name}?`)) {
+                                      await deleteUser(user.id);
+                                      showNotification(`Access revoked for ${user.name}`);
+                                    }
+                                  }}
+                                  className={`flex items-center gap-2 px-6 py-3 bg-rose-500/10 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-rose-500/20 ${currentUser.permissions[AppScreen.SETTINGS] === AccessLevel.WRITE ? 'hover:bg-rose-500 hover:text-white' : 'opacity-50 cursor-not-allowed'}`}
                                 >
                                   <Trash2 size={14} /> Revoke Authorization
                                 </button>

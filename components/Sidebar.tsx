@@ -34,6 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
       case AppScreen.REPORTS: return '/reports';
       case AppScreen.SETTINGS: return '/settings';
       case AppScreen.GOALS: return '/goals';
+      case AppScreen.DIVIDENDS: return '/dividends';
       default: return '/dashboard';
     }
   };

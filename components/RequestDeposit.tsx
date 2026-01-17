@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Filter, X, Calendar, User, CheckSquare, Square, ChevronLeft, ChevronRight, Edit2, Trash2, CheckCircle, RefreshCw, Loader2 } from 'lucide-react';
-import { Deposit } from '../types';
+import { Deposit, AccessLevel, AppScreen } from '../types';
 import Toast, { ToastType } from './Toast';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { financeService } from '../services/api';
 import { formatCurrency } from '../utils/formatters';
+import { Language, t } from '../i18n/translations';
 
 const SHARE_WORTH = 1000;
 const MONTHS = [
@@ -13,8 +14,12 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December"
 ];
 
-const RequestDeposit: React.FC = () => {
-  const { members: globalMembers, deposits: globalDeposits, funds, refreshTransactions } = useGlobalState();
+interface RequestDepositProps {
+  lang: Language;
+}
+
+const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
+  const { members: globalMembers, deposits: globalDeposits, funds, refreshTransactions, currentUser } = useGlobalState();
   const [requests, setRequests] = useState<Deposit[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -252,12 +257,12 @@ const RequestDeposit: React.FC = () => {
       <div className="flex items-end justify-between px-2">
         <div>
           <nav className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2 uppercase tracking-widest">
-            <span>OPERATIONS</span>
+            <span>{t('nav.operations', lang)}</span>
             <span className="opacity-30">/</span>
-            <span className="text-brand">DEPOSITS</span>
+            <span className="text-brand">{t('nav.requestDeposit', lang)}</span>
           </nav>
           <div className="flex items-center gap-4">
-            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">Deposit Requests</h1>
+            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('nav.requestDeposit', lang)}</h1>
             <button
               onClick={handleRefresh}
               className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 transition-all ${refreshing ? 'animate-spin' : ''}`}
@@ -266,9 +271,11 @@ const RequestDeposit: React.FC = () => {
             </button>
           </div>
         </div>
-        <button onClick={() => handleOpenModal()} className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20">
-          <Plus size={20} strokeWidth={3} /> Create Request
-        </button>
+        {currentUser?.permissions[AppScreen.REQUEST_DEPOSIT] === AccessLevel.WRITE && (
+          <button onClick={() => handleOpenModal()} className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20">
+            <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -351,20 +358,26 @@ const RequestDeposit: React.FC = () => {
                   </td>
                   <td className="px-10 py-6 text-right">
                     <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
-                      <button
-                        onClick={(e) => handleApprove(e, req.id)}
-                        disabled={!!processingId}
-                        title="Approve Request"
-                        className={`p-3 rounded-2xl border transition-all ${processingId === req.id ? 'bg-gray-100 border-gray-200 cursor-wait' : 'bg-brand/10 text-brand border-brand/20 hover:bg-brand hover:text-dark'}`}
-                      >
-                        {processingId === req.id ? <span className="animate-pulse">...</span> : <CheckCircle size={16} strokeWidth={3} />}
-                      </button>
-                      <button onClick={() => handleOpenModal(req)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-dark dark:hover:text-brand hover:border-brand transition-all">
-                        <Edit2 size={16} />
-                      </button>
-                      <button onClick={() => handleDelete(req.id)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30 transition-all">
-                        <Trash2 size={16} />
-                      </button>
+                      {currentUser?.permissions[AppScreen.DEPOSITS] === AccessLevel.WRITE && (
+                        <button
+                          onClick={(e) => handleApprove(e, req.id)}
+                          disabled={!!processingId}
+                          title="Approve Request"
+                          className={`p-3 rounded-2xl border transition-all ${processingId === req.id ? 'bg-gray-100 border-gray-200 cursor-wait' : 'bg-brand/10 text-brand border-brand/20 hover:bg-brand hover:text-dark'}`}
+                        >
+                          {processingId === req.id ? <span className="animate-pulse">...</span> : <CheckCircle size={16} strokeWidth={3} />}
+                        </button>
+                      )}
+                      {currentUser?.permissions[AppScreen.REQUEST_DEPOSIT] === AccessLevel.WRITE && (
+                        <>
+                          <button onClick={() => handleOpenModal(req)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-dark dark:hover:text-brand hover:border-brand transition-all">
+                            <Edit2 size={16} />
+                          </button>
+                          <button onClick={() => handleDelete(req.id)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30 transition-all">
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

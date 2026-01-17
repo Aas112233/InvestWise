@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import { Plus, Search, Filter, Archive, Wallet, ArrowUpRight, ArrowDownRight, FolderOpen, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
-import { Fund } from '../types';
+import { Fund, AccessLevel, AppScreen } from '../types';
 import { useGlobalState } from '../context/GlobalStateContext';
 import ExportMenu from './ExportMenu';
 import Toast, { ToastType } from './Toast';
 import { formatCurrency } from '../utils/formatters';
+import { Language, t } from '../i18n/translations';
 
-const FundsManagement: React.FC = () => {
-  const { funds, addFund, updateFund, refreshFunds } = useGlobalState();
+interface FundsManagementProps {
+  lang: Language;
+}
+
+const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
+  const { funds, addFund, updateFund, refreshFunds, currentUser } = useGlobalState();
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -85,12 +90,12 @@ const FundsManagement: React.FC = () => {
       <div className="flex items-end justify-between px-2">
         <div>
           <nav className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2 uppercase tracking-widest">
-            <span>FINANCIALS</span>
+            <span>{t('nav.strategy', lang)}</span>
             <span className="opacity-30">/</span>
-            <span className="text-brand">LIQUIDITY</span>
+            <span className="text-brand">{t('nav.fundsMgmt', lang)}</span>
           </nav>
           <div className="flex items-center gap-4">
-            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">Fund Management</h1>
+            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('nav.fundsMgmt', lang)}</h1>
             <button
               onClick={handleRefresh}
               className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 transition-all ${refreshing ? 'animate-spin' : ''}`}
@@ -114,20 +119,24 @@ const FundsManagement: React.FC = () => {
             fileName={`funds_${new Date().toISOString().split('T')[0]}`}
             title="Liquidity Funds Report"
           />
-          <button onClick={handleOpenModal} className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20">
-            <Plus size={20} strokeWidth={3} /> Create Fund
-          </button>
+          {currentUser?.permissions[AppScreen.FUNDS_MANAGEMENT] === AccessLevel.WRITE && (
+            <button onClick={handleOpenModal} className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20">
+              <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
+            </button>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {activeFunds.map(fund => (
           <div key={fund.id} className="group relative bg-white dark:bg-[#1A221D] p-8 rounded-[3rem] border border-gray-100 dark:border-white/5 hover:border-brand/20 transition-all card-shadow overflow-hidden">
-            <div className="absolute top-0 right-0 p-8 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button onClick={() => handleArchive(fund)} className="p-2 bg-gray-50 dark:bg-white/5 rounded-full text-gray-400 hover:text-red-500 transition-colors" title="Archive Fund">
-                <Archive size={16} />
-              </button>
-            </div>
+            {currentUser?.permissions[AppScreen.FUNDS_MANAGEMENT] === AccessLevel.WRITE && (
+              <div className="absolute top-0 right-0 p-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => handleArchive(fund)} className="p-2 bg-gray-50 dark:bg-white/5 rounded-full text-gray-400 hover:text-red-500 transition-colors" title="Archive Fund">
+                  <Archive size={16} />
+                </button>
+              </div>
+            )}
 
             <div className="flex items-start justify-between mb-8">
               <div className={`p-4 rounded-2xl ${fund.type === 'PROJECT' ? 'bg-purple-500/10 text-purple-500' : fund.type === 'DEPOSIT' || fund.type === 'Primary' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-blue-500/10 text-blue-500'}`}>
@@ -154,8 +163,8 @@ const FundsManagement: React.FC = () => {
 
             <div className="pt-6 border-t border-gray-50 dark:border-white/5">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Current Balance</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-black text-dark dark:text-white tracking-tighter">
+              <div className="flex items-baseline gap-1 flex-wrap">
+                <span className={`font-black text-dark dark:text-white tracking-tighter ${formatCurrency(fund.balance).length > 14 ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'}`}>
                   {formatCurrency(fund.balance)}
                 </span>
               </div>

@@ -1,8 +1,9 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { Download, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, Image as ImageIcon, ChevronDown, Check, Loader2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+import html2canvas from 'html2canvas';
 
 interface Column {
     header: string;
@@ -14,11 +15,13 @@ interface ExportMenuProps {
     data: any[];
     columns: Column[];
     fileName: string;
-    title?: string; // For the PDF title
+    title?: string;
+    targetId?: string; // ID of the element to capture for JPEG
 }
 
-const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title }) => {
+const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title, targetId }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [exporting, setExporting] = useState<string | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -36,7 +39,6 @@ const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title 
         return data.map(item => {
             const row: Record<string, any> = {};
             columns.forEach(col => {
-                // Handle nested keys like 'member.name' if necessary, though simpler to rely on passed 'key' matching data or 'format'
                 let val = item[col.key];
                 if (col.format) {
                     val = col.format(item);
@@ -47,106 +49,186 @@ const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title 
         });
     };
 
-    const handleExportCSV = () => {
-        const formattedData = getFormattedData();
-        if (formattedData.length === 0) return;
+    const handleExportExcel = () => {
+        setExporting('excel');
+        try {
+            const formattedData = getFormattedData();
+            const worksheet = XLSX.utils.json_to_sheet(formattedData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
 
-        const headers = columns.map(c => c.header);
-        const csvContent = [
-            headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','), // Quote headers
-            ...formattedData.map(row =>
-                headers.map(header => {
-                    const val = row[header] === null || row[header] === undefined ? '' : String(row[header]);
-                    return `"${val.replace(/"/g, '""')}"`;
-                }).join(',')
-            )
-        ].join('\n');
+            // Auto-size columns
+            const maxWidths = columns.map(col => {
+                const headerLen = col.header.length;
+                const dataMaxLen = formattedData.reduce((max, row) => Math.max(max, String(row[col.header] || "").length), 0);
+                return { wch: Math.max(headerLen, dataMaxLen) + 2 };
+            });
+            worksheet['!cols'] = maxWidths;
 
-        // Add Byte Order Mark (BOM) for Excel UTF-8 compatibility
-        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        if (link.download !== undefined) {
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', `${fileName}.csv`);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            XLSX.writeFile(workbook, `${fileName}.xlsx`);
+        } catch (error) {
+            console.error('Excel Export Failed:', error);
+        } finally {
+            setExporting(null);
+            setIsOpen(false);
         }
-        setIsOpen(false);
     };
 
     const handleExportPDF = () => {
-        const formattedData = getFormattedData();
-        const headers = columns.map(c => c.header);
-        const rows = formattedData.map(row => headers.map(h => row[h]));
+        setExporting('pdf');
+        try {
+            const formattedData = getFormattedData();
+            const headers = columns.map(c => c.header);
+            const rows = formattedData.map(row => headers.map(h => row[h]));
 
-        const doc = new jsPDF();
+            const doc = new jsPDF({
+                orientation: 'landscape',
+                unit: 'mm',
+                format: 'a4'
+            });
 
-        // Add title
-        if (title) {
-            doc.setFontSize(16);
-            doc.setTextColor(40); // Darker text
-            doc.text(title, 14, 20);
+            // Set Brand Font Styling
+            doc.setFontSize(22);
+            doc.setTextColor(26, 34, 29); // #1A221D
+            if (title) {
+                doc.text(title.toUpperCase(), 14, 20);
+            }
 
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`, 14, 28);
+            doc.setFontSize(9);
+            doc.setTextColor(150);
+            doc.text(`INVESTWISE ENTERPRISE SYSTEMS | GENERATED: ${new Date().toLocaleString()}`, 14, 28);
+
+            autoTable(doc, {
+                head: [headers],
+                body: rows,
+                startY: 35,
+                theme: 'grid',
+                styles: {
+                    fontSize: 8,
+                    cellPadding: 4,
+                    valign: 'middle',
+                    font: 'helvetica'
+                },
+                headStyles: {
+                    fillColor: [26, 34, 29],
+                    textColor: [204, 255, 0], // Brand Neon
+                    fontStyle: 'bold',
+                    lineWidth: 0.1
+                },
+                alternateRowStyles: {
+                    fillColor: [245, 248, 245]
+                }
+            });
+
+            doc.save(`${fileName}.pdf`);
+        } catch (error) {
+            console.error('PDF Export Failed:', error);
+        } finally {
+            setExporting(null);
+            setIsOpen(false);
+        }
+    };
+
+    const handleExportJPEG = async () => {
+        if (!targetId) {
+            alert("Visual Capture target not specified for this view.");
+            return;
         }
 
-        autoTable(doc, {
-            head: [headers],
-            body: rows,
-            startY: title ? 35 : 15, // Adjusted margin
-            theme: 'grid',
-            styles: {
-                fontSize: 8,
-                cellPadding: 3,
-                valign: 'middle'
-            },
-            headStyles: {
-                fillColor: [41, 128, 185],
-                textColor: 255,
-                fontStyle: 'bold'
-            },
-            columnStyles: {
-                // Optional: add wrapping if needed, but autoTable handles it mostly
-            }
-        });
+        setExporting('jpeg');
+        try {
+            const element = document.getElementById(targetId);
+            if (!element) throw new Error("Target element not found");
 
-        doc.save(`${fileName}.pdf`);
-        setIsOpen(false);
+            const canvas = await html2canvas(element, {
+                backgroundColor: '#f9fafb',
+                scale: 2, // Higher resolution
+                logging: false,
+                useCORS: true
+            });
+
+            const link = document.createElement('a');
+            link.download = `${fileName}.jpg`;
+            link.href = canvas.toDataURL('image/jpeg', 0.9);
+            link.click();
+        } catch (error) {
+            console.error('JPEG Export Failed:', error);
+        } finally {
+            setExporting(null);
+            setIsOpen(false);
+        }
     };
 
     return (
         <div className="relative" ref={menuRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="bg-white dark:bg-[#1A221D] text-dark dark:text-white border border-gray-100 dark:border-white/5 px-6 py-4 rounded-[2rem] font-black text-[11px] uppercase flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-white/10 transition-all shadow-sm"
+                className="bg-white dark:bg-[#1A221D] text-dark dark:text-white border border-gray-100 dark:border-white/5 px-6 py-4 rounded-[2rem] font-black text-[11px] uppercase flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-white/10 transition-all shadow-sm group"
             >
-                <Download size={16} />
-                <span>Export</span>
+                <Download size={16} className="group-hover:translate-y-0.5 transition-transform" />
+                <span>Export Report</span>
                 <ChevronDown size={14} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isOpen && (
-                <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-[#1A221D] rounded-2xl border border-gray-100 dark:border-white/10 shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
-                    <div className="p-2">
+                <div className="absolute top-full right-0 mt-3 w-64 bg-white dark:bg-[#1A221D] rounded-[2rem] border border-gray-100 dark:border-white/10 shadow-2xl overflow-hidden z-[100] animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="p-3 space-y-1">
+                        <p className="px-4 py-2 text-[9px] font-black text-gray-400 uppercase tracking-widest">Select Format</p>
+
                         <button
-                            onClick={handleExportCSV}
-                            className="w-full text-left px-4 py-3 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-3 text-sm font-bold text-gray-600 dark:text-gray-300 transition-colors"
+                            onClick={handleExportExcel}
+                            disabled={!!exporting}
+                            className="w-full text-left px-4 py-4 rounded-2xl hover:bg-emerald-50 dark:hover:bg-emerald-500/10 flex items-center justify-between group transition-all"
                         >
-                            <FileSpreadsheet size={16} className="text-emerald-500" />
-                            <span>As Excel (CSV)</span>
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                                    <FileSpreadsheet size={18} />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-sm font-black text-dark dark:text-white uppercase tracking-tight">Excel Spreadsheet</span>
+                                    <span className="text-[10px] font-bold text-gray-400">Native .xlsx format</span>
+                                </div>
+                            </div>
+                            {exporting === 'excel' ? <Loader2 size={16} className="animate-spin text-emerald-500" /> : <Download size={14} className="opacity-0 group-hover:opacity-100 text-emerald-500" />}
                         </button>
+
                         <button
                             onClick={handleExportPDF}
-                            className="w-full text-left px-4 py-3 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-3 text-sm font-bold text-gray-600 dark:text-gray-300 transition-colors"
+                            disabled={!!exporting}
+                            className="w-full text-left px-4 py-4 rounded-2xl hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center justify-between group transition-all"
                         >
-                            <FileText size={16} className="text-rose-500" />
-                            <span>As PDF</span>
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400">
+                                    <FileText size={18} />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-sm font-black text-dark dark:text-white uppercase tracking-tight">PDF Document</span>
+                                    <span className="text-[10px] font-bold text-gray-400">Professional Report</span>
+                                </div>
+                            </div>
+                            {exporting === 'pdf' ? <Loader2 size={16} className="animate-spin text-rose-500" /> : <Download size={14} className="opacity-0 group-hover:opacity-100 text-rose-500" />}
                         </button>
+
+                        <button
+                            onClick={handleExportJPEG}
+                            disabled={!!exporting || !targetId}
+                            className={`w-full text-left px-4 py-4 rounded-2xl flex items-center justify-between group transition-all ${!targetId ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-500/10'}`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400">
+                                    <ImageIcon size={18} />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-sm font-black text-dark dark:text-white uppercase tracking-tight">JPEG Image</span>
+                                    <span className="text-[10px] font-bold text-gray-400">Visual Snapshot</span>
+                                </div>
+                            </div>
+                            {exporting === 'jpeg' ? <Loader2 size={16} className="animate-spin text-blue-500" /> : <Download size={14} className="opacity-0 group-hover:opacity-100 text-blue-500" />}
+                        </button>
+                    </div>
+
+                    <div className="bg-gray-50/50 dark:bg-white/5 px-6 py-3 border-t border-gray-100 dark:border-white/5">
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest text-center">Standard ISO Export Protocol</p>
                     </div>
                 </div>
             )}

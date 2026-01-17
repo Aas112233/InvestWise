@@ -38,6 +38,9 @@ interface GlobalState {
   refreshProjects: () => Promise<void>;
   refreshFunds: () => Promise<void>;
   refreshTransactions: () => Promise<void>;
+  refreshData: () => Promise<void>;
+  distributeDividends: (data: any) => Promise<void>;
+  transferEquity: (data: any) => Promise<void>;
   transactions: Transaction[];
 }
 
@@ -81,9 +84,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       const latency = Date.now() - start;
 
       if (connectionStatus !== 'online') {
-        // We just came back online
         setConnectionStatus('online');
-        // We could trigger a refetch here if needed
       }
       setLastOnlineAt(Date.now());
       if (latency > 1000) setConnectionStatus('degraded');
@@ -94,21 +95,16 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       } else if (error.response?.status >= 500) {
         setConnectionStatus('degraded');
       } else {
-        // 404 or other errors might still mean we are connected but endpoint is wrong?
-        // Assume online if we got a response (even 404), but maybe degraded logic?
         setConnectionStatus('online');
       }
     }
   };
 
   useEffect(() => {
-    checkConnection(); // Initial check
+    checkConnection();
     const interval = setInterval(checkConnection, 60000);
-
-    // Also check on window focus
     const handleFocus = () => checkConnection();
     window.addEventListener('focus', handleFocus);
-
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
@@ -163,7 +159,20 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     } catch (e: any) { console.error("Fetch transactions failed", e); }
   };
 
-  // Initial Fetch
+  const fetchSystemUsers = async () => {
+    if (!user || (user.role !== 'Administrator' && user.role !== 'Manager')) return;
+    try {
+      const data = await authService.getAllUsers();
+      const standardized = data.map((u: any) => ({
+        ...u,
+        id: u._id || u.id
+      }));
+      setSystemUsers(standardized);
+    } catch (e: any) {
+      console.error("Fetch users failed", e);
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
     if (connectionStatus === 'online') {
@@ -171,6 +180,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       fetchProjects();
       fetchFunds();
       fetchTransactions();
+      if (user.role === 'Administrator' || user.role === 'Manager') {
+        fetchSystemUsers();
+      }
     }
   }, [user, connectionStatus]);
 
@@ -182,9 +194,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     try {
       const newItem = await memberService.create(m);
       setMembers(prev => [newItem, ...prev]);
-      fetchMembers(); // Revalidate
+      fetchMembers();
     } catch (e: any) {
-      console.error(e);
       setLastError({ message: e.message || 'Failed to add member', type: 'error' });
       throw e;
     }
@@ -197,12 +208,10 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     }
     try {
       const updated = await memberService.update(m.id, m);
-      // @ts-ignore
       const standardized = { ...updated, id: updated._id || updated.id };
       setMembers(prev => prev.map(item => item.id === m.id ? standardized : item));
       fetchMembers();
     } catch (e: any) {
-      console.error(e);
       setLastError({ message: e.message || 'Failed to update member', type: 'error' });
       throw e;
     }
@@ -218,7 +227,6 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       setMembers(prev => prev.filter(m => m.id !== id));
       fetchMembers();
     } catch (e: any) {
-      console.error(e);
       setLastError({ message: e.message || 'Failed to delete member', type: 'error' });
       throw e;
     }
@@ -231,16 +239,15 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     }
     try {
       const newItem = await projectService.create(p);
-      // @ts-ignore
       const standardized = { ...newItem, id: newItem._id || newItem.id };
       setProjects(prev => [standardized, ...prev]);
       fetchProjects();
-      fetchFunds(); // Refresh funds as a new Project Fund is auto-created
+      fetchFunds();
     } catch (e: any) {
-      console.error(e);
       setLastError({ message: e.message || 'Failed to add project', type: 'error' });
     }
   };
+
   const addDeposit = async (d: Deposit) => {
     if (connectionStatus === 'offline') {
       setLastError({ message: 'Cannot add deposit while offline.', type: 'warning' });
@@ -248,11 +255,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     }
     try {
       const primaryFund = funds.find(f => f.type === 'Primary');
-
-      if (!primaryFund) {
-        throw new Error("Primary Fund not found. Cannot process deposit.");
-      }
-
+      if (!primaryFund) throw new Error("Primary Fund not found.");
       const payload = {
         memberId: d.memberId,
         amount: d.amount,
@@ -261,15 +264,11 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
         date: d.date,
         shareNumber: d.shareNumber
       };
-
       await financeService.addDeposit(payload);
-      const newItem = { ...d, status: 'Completed' };
-      setDeposits(prev => [newItem as Deposit, ...prev]);
       fetchTransactions();
-      fetchFunds(); // Deposits update funds
-      fetchMembers(); // Deposits update member contributions
+      fetchFunds();
+      fetchMembers();
     } catch (e: any) {
-      console.error(e);
       setLastError({ message: e.message || 'Failed to add deposit', type: 'error' });
       throw e;
     }
@@ -281,9 +280,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       return;
     }
     try {
-      // Use provided sourceFund as ID, or fallback to Primary Fund
       const targetFundId = e.sourceFund || funds.find(f => f.type === 'Primary')?.id;
-
       const payload = {
         amount: e.amount,
         fundId: targetFundId,
@@ -295,10 +292,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       };
       await financeService.addExpense(payload);
       fetchTransactions();
-      fetchFunds(); // Expenses reduce funds
-      fetchProjects(); // Expenses update project balances
+      fetchFunds();
+      fetchProjects();
     } catch (err: any) {
-      console.error(err);
       setLastError({ message: err.message || 'Failed to add expense', type: 'error' });
     }
   };
@@ -310,12 +306,10 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     }
     try {
       const updated = await projectService.update(p.id, p);
-      // @ts-ignore
       const standardized = { ...updated, id: updated._id || updated.id };
       setProjects(prev => prev.map(item => item.id === p.id ? standardized : item));
       fetchProjects();
     } catch (e: any) {
-      console.error(e);
       setLastError({ message: e.message || 'Failed to update project', type: 'error' });
     }
   };
@@ -327,12 +321,10 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     }
     try {
       const updatedProject = await projectService.addUpdate(projectId, update);
-      // @ts-ignore
       const standardized = { ...updatedProject, id: updatedProject._id || updatedProject.id };
       setProjects(prev => prev.map(item => item.id === projectId ? standardized : item));
       fetchProjects();
     } catch (e: any) {
-      console.error(e);
       setLastError({ message: e.message || 'Failed to add project update', type: 'error' });
     }
   };
@@ -347,8 +339,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       setProjects(prev => prev.filter(p => p.id !== id));
       fetchProjects();
     } catch (e: any) {
-      console.error(e);
       setLastError({ message: e.message || 'Failed to delete project', type: 'error' });
+      throw e;
     }
   };
 
@@ -358,11 +350,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       return;
     }
     try {
-      // @ts-ignore - Backend expects specific fields, frontend Fund interface might have extra/less
       await fundService.create(f);
       fetchFunds();
     } catch (e: any) {
-      console.error(e);
       setLastError({ message: e.message || 'Failed to create fund', type: 'error' });
       throw e;
     }
@@ -375,12 +365,10 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     }
     try {
       const updated = await fundService.update(f.id, f);
-      // @ts-ignore
       const standardized = { ...updated, id: updated._id || updated.id };
       setFunds(prev => prev.map(item => item.id === f.id ? standardized : item));
       fetchFunds();
     } catch (e: any) {
-      console.error(e);
       setLastError({ message: e.message || 'Failed to update fund', type: 'error' });
     }
   };
@@ -391,42 +379,77 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       return;
     }
     try {
-      if (!u.password) {
-        throw new Error("Password is required for system user creation");
-      }
+      if (!u.password) throw new Error("Password is required");
+      const initialPermissions = u.permissions && Object.keys(u.permissions).length > 0
+        ? u.permissions
+        : getDefaultPermissions(u.role);
+
       const payload = {
         name: u.name,
         email: u.email,
         password: u.password,
-        role: u.role
+        role: u.role,
+        memberId: u.memberId,
+        permissions: initialPermissions
       };
+
       const newUser = await authService.register(payload);
-      const userWithPermissions = {
-        ...newUser,
-        permissions: getDefaultPermissions(u.role)
-      };
-      setSystemUsers(prev => [...prev, userWithPermissions]);
+      const standardized = { ...newUser, id: newUser._id || newUser.id };
+      setSystemUsers(prev => [...prev, standardized]);
+      fetchSystemUsers();
     } catch (e: any) {
-      console.error('Failed to create system user:', e);
       setLastError({ message: e.message || 'Failed to create user', type: 'error' });
       throw e;
     }
   };
 
-  const updateUserPermissions = (userId: string, screen: AppScreen, level: AccessLevel) => {
-    // This looks local only too in original code?
-    setSystemUsers(prev => prev.map(u =>
-      u.id === userId ? { ...u, permissions: { ...u.permissions, [screen]: level } } : u
-    ));
+  const updateUserPermissions = async (userId: string, screen: AppScreen, level: AccessLevel) => {
+    try {
+      const userToUpdate = systemUsers.find(u => u.id === userId);
+      if (!userToUpdate) return;
+
+      const updatedPermissions = { ...userToUpdate.permissions, [screen]: level };
+      await authService.updateUser(userId, { permissions: updatedPermissions });
+
+      setSystemUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions: updatedPermissions } : u));
+    } catch (e: any) {
+      setLastError({ message: 'Failed to update user permissions', type: 'error' });
+    }
   };
 
-  const updateUserPassword = (userId: string, newPass: string) => {
-    setSystemUsers(prev => prev.map(u =>
-      u.id === userId ? { ...u, password: newPass } : u
-    ));
+  const updateUserPassword = async (userId: string, newPass: string) => {
+    try {
+      await authService.updateUserPassword(userId, newPass);
+      setLastError({ message: 'Password updated successfully', type: 'warning' });
+    } catch (e: any) {
+      setLastError({ message: 'Failed to reset password', type: 'error' });
+      throw e;
+    }
   };
 
-  const deleteUser = (userId: string) => setSystemUsers(prev => prev.filter(u => u.id !== userId));
+  const deleteUser = async (userId: string) => {
+    try {
+      await authService.deleteUser(userId);
+      setSystemUsers(prev => prev.filter(u => u.id !== userId));
+      setLastError({ message: 'User access revoked', type: 'warning' });
+    } catch (e: any) {
+      setLastError({ message: 'Failed to revoke access', type: 'error' });
+    }
+  };
+
+  const refreshData = async () => {
+    await Promise.all([fetchMembers(), fetchProjects(), fetchFunds(), fetchTransactions(), fetchSystemUsers()]);
+  };
+
+  const distributeDividends = async (data: any) => {
+    await financeService.distributeDividends(data);
+    await refreshData();
+  };
+
+  const transferEquity = async (data: any) => {
+    await financeService.transferEquity(data);
+    await refreshData();
+  };
 
   return (
     <GlobalStateContext.Provider value={{
@@ -435,7 +458,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       addFund, updateFund,
       addSystemUser, updateUserPermissions, updateUserPassword, deleteUser,
       connectionStatus, lastOnlineAt, checkConnection, lastError, clearError,
-      refreshMembers: fetchMembers, refreshProjects: fetchProjects, refreshFunds: fetchFunds, refreshTransactions: fetchTransactions
+      refreshMembers: fetchMembers, refreshProjects: fetchProjects, refreshFunds: fetchFunds, refreshTransactions: fetchTransactions,
+      refreshData, distributeDividends, transferEquity
     }}>
       {children}
     </GlobalStateContext.Provider>

@@ -1,53 +1,44 @@
-
-import React, { useState, useEffect } from 'react';
-import { 
-  FileText, Download, Calendar, Filter, Search, 
-  ChevronRight, ArrowRight, CheckCircle2, Clock, 
-  FileSpreadsheet, FileJson, FileBarChart, PieChart,
+import React, { useState } from 'react';
+import {
+  FileText, Calendar, Clock,
+  FileBarChart, PieChart,
   Users, Briefcase, Landmark, ShieldCheck, Activity,
-  Trash2, ExternalLink
+  Award, Projector, Wallet, TrendingUp, Receipt
 } from 'lucide-react';
 import Toast, { ToastType } from './Toast';
 import { reportService } from '../services/api';
+import ExportMenu from './ExportMenu';
+import { useGlobalState } from '../context/GlobalStateContext';
+import { Language, t } from '../i18n/translations';
 
-type ReportType = 'Member Contribution' | 'Project Performance' | 'Expense Audit' | 'Funds Summary' | 'ROI Analysis';
+type ReportType = 'Member Contribution' | 'Project Performance' | 'Expense Audit' | 'Funds Summary' | 'ROI Analysis' | 'Dividend Report' | 'Stakeholder Statement' | 'Venture Growth Matrix' | 'Revenue Analytics' | 'Interest Accruals' | 'Comprehensive Master Ledger' | 'Project Specific Ledger' | 'Member Specific Ledger' | 'Project Expense Audit' | 'Member Deposit History';
 type ExportFormat = 'PDF' | 'Excel' | 'JSON';
+type PeriodType = 'Monthly' | 'Quarterly' | 'Yearly' | 'Custom';
+type ReportCategory = 'Ledger' | 'Deposits' | 'Incomes' | 'Expenses' | 'Projects';
 
-interface GeneratedReport {
-  _id?: string;
-  id?: string;
-  name: string;
-  type: ReportType;
-  date?: string;
-  createdAt?: string;
-  size: string;
-  format: ExportFormat;
-  content?: string;
+interface ReportsProps {
+  lang: Language;
 }
 
-const Reports: React.FC = () => {
-  const [activeType, setActiveType] = useState<ReportType>('Member Contribution');
+const Reports: React.FC<ReportsProps> = ({ lang }) => {
+  const { members, projects } = useGlobalState();
+  const [activeTab, setActiveTab] = useState<ReportCategory>('Ledger');
+  const [activeType, setActiveType] = useState<ReportType>('Comprehensive Master Ledger');
   const [format, setFormat] = useState<ExportFormat>('PDF');
-  const [fiscalMonth, setFiscalMonth] = useState('2026-03');
+  const [periodType, setPeriodType] = useState<PeriodType>('Monthly');
+  const [fiscalMonth, setFiscalMonth] = useState(new Date().toISOString().substring(0, 7));
+  const [startDate, setStartDate] = useState(new Date().toISOString().substring(0, 10));
+  const [endDate, setEndDate] = useState(new Date().toISOString().substring(0, 10));
+  const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear().toString());
+  const [fiscalQuarter, setFiscalQuarter] = useState('Q1');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedMemberId, setSelectedMemberId] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [history, setHistory] = useState<GeneratedReport[]>([]);
   const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
     isVisible: false,
     message: '',
     type: 'success',
   });
-
-  useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        const reports = await reportService.getAll();
-        setHistory(reports);
-      } catch (error) {
-        console.error('Failed to fetch reports:', error);
-      }
-    };
-    fetchReports();
-  }, []);
 
   const showNotification = (message: string, type: ToastType = 'success') => {
     setToast({ isVisible: true, message, type });
@@ -66,252 +57,295 @@ const Reports: React.FC = () => {
 
   const handleGenerateReport = async () => {
     setIsGenerating(true);
-    
+
     try {
-      const fileName = `${activeType.replace(/\s+/g, '_')}_${fiscalMonth}.${format.toLowerCase() === 'excel' ? 'xlsx' : format.toLowerCase()}`;
-      
-      const blob = await reportService.download(activeType, format, fiscalMonth);
-      
+      let periodValue = '';
+      if (periodType === 'Monthly') periodValue = fiscalMonth;
+      else if (periodType === 'Quarterly') periodValue = `${fiscalYear}-${fiscalQuarter}`;
+      else if (periodType === 'Yearly') periodValue = fiscalYear;
+      else periodValue = `${startDate}_to_${endDate}`;
+
+      const params = new URLSearchParams({
+        format,
+        period: periodType,
+        date: periodValue
+      });
+
+      if (selectedProjectId) params.append('projectId', selectedProjectId);
+      if (selectedMemberId) params.append('memberId', selectedMemberId);
+
+      const fileName = `${activeType.replace(/\s+/g, '_')}_${periodValue}.${format.toLowerCase() === 'excel' ? 'xlsx' : format.toLowerCase()}`;
+      const blob = await reportService.generate(activeType, params.toString());
+
       const reportData = {
         name: fileName,
         type: activeType,
         size: `${(blob.size / (1024 * 1024)).toFixed(1)} MB`,
         format: format,
-        fiscalMonth: fiscalMonth
+        fiscalMonth: periodValue
       };
 
-      const newReport = await reportService.create(reportData);
-      setHistory([newReport, ...history]);
+      await reportService.create(reportData);
       triggerDownload(fileName, blob);
       showNotification(`${activeType} report generated and downloaded.`, 'success');
     } catch (error) {
       showNotification('Failed to generate report', 'error');
     }
-    
+
     setIsGenerating(false);
   };
 
-  const handleDeleteHistory = async (id: string) => {
-    try {
-      await reportService.delete(id);
-      setHistory(history.filter(h => (h._id || h.id) !== id));
-      showNotification("Report archive entry removed.");
-    } catch (error) {
-      showNotification('Failed to delete report', 'error');
-    }
-  };
-
   const reportConfigs = [
-    { type: 'Member Contribution', icon: <Users size={20} />, desc: 'Detailed breakdown of all member deposits and share holdings.' },
-    { type: 'Project Performance', icon: <Briefcase size={20} />, desc: 'ROI tracking, milestone status, and project fund health.' },
-    { type: 'Expense Audit', icon: <Activity size={20} />, desc: 'Complete historical log of all operational and project expenditures.' },
-    { type: 'Funds Summary', icon: <Landmark size={20} />, desc: 'Analysis of primary, project, and reserve fund distributions.' },
-    { type: 'ROI Analysis', icon: <PieChart size={20} />, desc: 'Strategic predictive modeling of venture returns over time.' },
+    // Ledger
+    { type: 'Comprehensive Master Ledger', category: 'Ledger', icon: <Activity size={20} />, desc: 'Universal "In-Out" data log. Includes all transactions, deposits, and expenditures in a single audit line.' },
+    { type: 'Project Specific Ledger', category: 'Ledger', icon: <Briefcase size={20} />, desc: 'Narrow-focus financial history for a specific active or legacy project.' },
+    { type: 'Member Specific Ledger', category: 'Ledger', icon: <Users size={20} />, desc: 'Individual data mining of all financial interactions for a single stakeholder.' },
+    { type: 'Stakeholder Statement', category: 'Ledger', icon: <FileText size={20} />, desc: 'Individual partner financial activities and balance certification.' },
+    { type: 'Funds Summary', category: 'Ledger', icon: <Landmark size={20} />, desc: 'Analysis of primary, project, and reserve fund distributions.' },
+    { type: 'Dividend Report', category: 'Ledger', icon: <Award size={20} />, desc: 'Calculated profit distributions and equity payouts per stakeholder.' },
+
+    // Deposits
+    { type: 'Member Contribution', category: 'Deposits', icon: <Users size={20} />, desc: 'Detailed breakdown of all member deposits and share holdings.' },
+    { type: 'Member Deposit History', category: 'Deposits', icon: <Wallet size={20} />, desc: 'Timeline extraction of all capital injections for a selected member.' },
+
+    // Incomes
+    { type: 'Revenue Analytics', category: 'Incomes', icon: <TrendingUp size={20} />, desc: 'Consolidated view of all revenue streams and project returns.' },
+    { type: 'Interest Accruals', category: 'Incomes', icon: <TrendingUp size={20} />, desc: 'Tracking of interest earned from bank placements and holdings.' },
+
+    // Expenses
+    { type: 'Expense Audit', category: 'Expenses', icon: <Receipt size={20} />, desc: 'Complete historical log of all operational and project expenditures.' },
+    { type: 'Project Expense Audit', category: 'Expenses', icon: <Receipt size={20} />, desc: 'Granular expenditure log narrowed down to a specific venture.' },
+
+    // Projects
+    { type: 'Project Performance', category: 'Projects', icon: <Briefcase size={20} />, desc: 'ROI tracking, milestone status, and project fund health.' },
+    { type: 'ROI Analysis', category: 'Projects', icon: <PieChart size={20} />, desc: 'Strategic predictive modeling of venture returns over time.' },
+    { type: 'Venture Growth Matrix', category: 'Projects', icon: <Projector size={20} />, desc: 'Comparative analysis of growth across all active and legacy ventures.' },
   ];
 
+  const categories: { id: ReportCategory; icon: React.ReactNode }[] = [
+    { id: 'Ledger', icon: <FileBarChart size={16} /> },
+    { id: 'Deposits', icon: <Wallet size={16} /> },
+    { id: 'Incomes', icon: <TrendingUp size={16} /> },
+    { id: 'Expenses', icon: <Activity size={16} /> },
+    { id: 'Projects', icon: <Briefcase size={16} /> },
+  ];
+
+  const filteredConfigs = reportConfigs.filter(cfg => cfg.category === activeTab);
+
   return (
-    <div className="space-y-10 animate-in fade-in duration-500">
-      <Toast 
-        isVisible={toast.isVisible} 
-        message={toast.message} 
-        type={toast.type} 
-        onClose={() => setToast({ ...toast, isVisible: false })} 
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <Toast
+        isVisible={toast.isVisible}
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast({ ...toast, isVisible: false })}
       />
 
-      <div className="flex items-end justify-between px-2">
-        <div>
-          <nav className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2 uppercase tracking-widest">
-            <span>STRATEGY</span>
+      <div className="flex items-center justify-between px-2">
+        <div className="flex items-center gap-4">
+          <div className="w-1.5 h-8 bg-brand rounded-full"></div>
+          <h1 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('nav.reports', lang)}</h1>
+          <nav className="text-[10px] font-black text-gray-400 flex items-center gap-2 uppercase tracking-widest ml-4 opacity-50 border-l border-gray-200 dark:border-white/10 pl-4 h-4">
+            <span>{t('nav.strategy', lang)}</span>
             <span className="opacity-30">/</span>
-            <span className="text-brand">AUDIT REPORTS</span>
+            <span className="text-brand">{t('nav.reports', lang)}</span>
           </nav>
-          <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">Intelligence Engine</h1>
         </div>
+        <ExportMenu
+          data={reportConfigs}
+          columns={[
+            { header: 'Category', key: 'category' },
+            { header: 'Template', key: 'type' },
+            { header: 'Description', key: 'desc' }
+          ]}
+          fileName={`reporting_templates_${new Date().toISOString().split('T')[0]}`}
+          title="Intelligence Template Catalog"
+          targetId="reports-config-capture"
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        {/* Left: Configuration */}
-        <div className="lg:col-span-2 space-y-10">
-          <div className="bg-white dark:bg-[#1A221D] p-12 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-32 bg-brand/5 rounded-full -mr-10 -mt-10 blur-3xl group-hover:scale-110 transition-transform duration-[2s]"></div>
-            
-            <div className="relative z-10">
-              <div className="mb-10">
-                <h3 className="text-3xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none mb-3">Report Parameters</h3>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Configure your data extraction protocol</p>
+      <div id="reports-config-capture" className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Col: Settings */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="bg-white dark:bg-[#1A221D] p-6 rounded-[2rem] card-shadow border border-gray-100 dark:border-white/5 h-full">
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+              <div className="w-1 h-1 rounded-full bg-brand"></div>
+              Extraction Protocol
+            </h4>
+
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Period Selection</label>
+                <div className="grid grid-cols-2 gap-2 bg-gray-50 dark:bg-[#111814] p-1 rounded-xl ring-1 ring-gray-100 dark:ring-white/10">
+                  {(['Monthly', 'Quarterly', 'Yearly', 'Custom'] as PeriodType[]).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setPeriodType(p)}
+                      className={`py-2.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${periodType === p ? 'bg-dark dark:bg-brand text-white dark:text-dark shadow-md' : 'text-gray-400'}`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest px-1">Fiscal Period</label>
-                    <div className="relative">
-                      <input 
-                        type="month" 
-                        value={fiscalMonth}
-                        onChange={(e) => setFiscalMonth(e.target.value)}
-                        className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-sm font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand outline-none transition-all"
-                      />
-                      <Calendar className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                    </div>
+              <div className="space-y-3">
+                {periodType === 'Monthly' && (
+                  <div className="relative">
+                    <input type="month" value={fiscalMonth} onChange={(e) => setFiscalMonth(e.target.value)} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3.5 rounded-xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-xs font-bold text-dark dark:text-white outline-none" />
+                    <Calendar className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                   </div>
-                  <div className="space-y-3">
-                    <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest px-1">Export Format</label>
-                    <div className="flex gap-2 bg-gray-50 dark:bg-[#111814] p-1 rounded-2xl ring-1 ring-gray-100 dark:ring-white/10">
-                      {(['PDF', 'Excel', 'JSON'] as ExportFormat[]).map(f => (
-                        <button 
-                          key={f}
-                          onClick={() => setFormat(f)}
-                          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${format === f ? 'bg-dark dark:bg-brand text-white dark:text-dark shadow-lg' : 'text-gray-400'}`}
-                        >
-                          {f}
-                        </button>
-                      ))}
-                    </div>
+                )}
+                {periodType === 'Quarterly' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <select value={fiscalYear} onChange={e => setFiscalYear(e.target.value)} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3.5 rounded-xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-xs font-bold text-dark dark:text-white outline-none">
+                      {['2023', '2024', '2025', '2026'].map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                    <select value={fiscalQuarter} onChange={e => setFiscalQuarter(e.target.value)} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3.5 rounded-xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-xs font-bold text-dark dark:text-white outline-none">
+                      {['Q1', 'Q2', 'Q3', 'Q4'].map(q => <option key={q} value={q}>{q}</option>)}
+                    </select>
                   </div>
-                </div>
-
-                <div className="space-y-4">
-                  <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest px-1">Intelligence Template</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {reportConfigs.map((cfg) => (
-                      <button
-                        key={cfg.type}
-                        onClick={() => setActiveType(cfg.type as ReportType)}
-                        className={`text-left p-6 rounded-3xl border transition-all flex items-start gap-4 ${
-                          activeType === cfg.type 
-                          ? 'bg-brand/10 border-brand/40 shadow-xl' 
-                          : 'bg-white dark:bg-white/5 border-gray-100 dark:border-white/5 hover:border-brand/20'
-                        }`}
-                      >
-                        <div className={`p-3 rounded-2xl ${activeType === cfg.type ? 'bg-brand text-dark' : 'bg-gray-50 dark:bg-dark text-gray-400'}`}>
-                          {cfg.icon}
-                        </div>
-                        <div>
-                          <p className={`text-sm font-black uppercase tracking-tight mb-1 ${activeType === cfg.type ? 'text-dark dark:text-brand' : 'text-gray-500 dark:text-white'}`}>{cfg.type}</p>
-                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-relaxed">{cfg.desc}</p>
-                        </div>
-                      </button>
-                    ))}
+                )}
+                {periodType === 'Yearly' && (
+                  <select value={fiscalYear} onChange={e => setFiscalYear(e.target.value)} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3.5 rounded-xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-xs font-bold text-dark dark:text-white outline-none">
+                    {['2023', '2024', '2025', '2026'].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                )}
+                {periodType === 'Custom' && (
+                  <div className="grid grid-cols-1 gap-3">
+                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3.5 rounded-xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-xs font-bold text-dark dark:text-white outline-none" />
+                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3.5 rounded-xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-xs font-bold text-dark dark:text-white outline-none" />
                   </div>
-                </div>
-
-                <button 
-                  onClick={handleGenerateReport}
-                  disabled={isGenerating}
-                  className="w-full bg-dark dark:bg-brand text-white dark:text-dark py-6 rounded-3xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-4 hover:scale-[1.02] active:scale-95 transition-all shadow-2xl shadow-brand/20 disabled:opacity-50"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Clock className="animate-spin" size={20} /> Encrypting Strategic Ledger...
-                    </>
-                  ) : (
-                    <>
-                      <FileBarChart size={20} /> Generate & Download Report
-                    </>
-                  )}
-                </button>
+                )}
               </div>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-brand p-10 rounded-[4rem] text-dark shadow-2xl shadow-brand/20">
-               <ShieldCheck size={40} strokeWidth={3} className="mb-6 opacity-40" />
-               <h4 className="text-3xl font-black tracking-tighter leading-none mb-3">Compliance Ready</h4>
-               <p className="text-xs font-black uppercase tracking-widest opacity-60">System health: 100% Verified</p>
-               <div className="mt-8 pt-8 border-t border-dark/10 flex justify-between items-center">
-                  <p className="text-[10px] font-black uppercase tracking-widest">Last system sweep</p>
-                  <p className="text-sm font-black uppercase">Just Now</p>
-               </div>
-            </div>
-            <div className="bg-dark p-10 rounded-[4rem] text-white shadow-2xl">
-               <Activity size={40} strokeWidth={3} className="text-brand mb-6 opacity-40" />
-               <h4 className="text-3xl font-black tracking-tighter leading-none mb-3">Live Streaming</h4>
-               <p className="text-xs font-black uppercase tracking-widest text-brand/60">Data sync: 12ms latency</p>
-               <div className="mt-8 pt-8 border-t border-white/10 flex justify-between items-center">
-                  <p className="text-[10px] font-black uppercase tracking-widest">Global Vault Status</p>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-brand animate-pulse"></div>
-                    <p className="text-sm font-black uppercase">Secure</p>
-                  </div>
-               </div>
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Export Architecture</label>
+                <div className="flex gap-2 bg-gray-50 dark:bg-[#111814] p-1 rounded-xl ring-1 ring-gray-100 dark:ring-white/10">
+                  {(['PDF', 'Excel', 'JSON'] as ExportFormat[]).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setFormat(f)}
+                      className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${format === f ? 'bg-dark dark:bg-brand text-white dark:text-dark shadow-md' : 'text-gray-400'}`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dynamic Context Filters */}
+              {(activeType.includes('Project') || activeType === 'Project Expense Audit') && (
+                <div className="space-y-3 animate-in slide-in-from-left duration-300">
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Active Project Focus</label>
+                  <select
+                    value={selectedProjectId}
+                    onChange={e => setSelectedProjectId(e.target.value)}
+                    className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3.5 rounded-xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-xs font-bold text-dark dark:text-white outline-none"
+                  >
+                    <option value="">Select Target Project</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {(activeType.includes('Member') || activeType === 'Member Deposit History') && (
+                <div className="space-y-3 animate-in slide-in-from-left duration-300">
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Member Entity Filter</label>
+                  <select
+                    value={selectedMemberId}
+                    onChange={e => setSelectedMemberId(e.target.value)}
+                    className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3.5 rounded-xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-xs font-bold text-dark dark:text-white outline-none"
+                  >
+                    <option value="">Select Target Member</option>
+                    {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Right: History */}
-        <div className="lg:col-span-1 space-y-10">
-          <div className="bg-white dark:bg-[#1A221D] p-10 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5 h-full">
-            <div className="flex items-center justify-between mb-10">
-              <h4 className="text-xl font-black text-dark dark:text-white uppercase tracking-tighter">Generation Archive</h4>
-              <FileSpreadsheet className="text-brand" size={24} />
-            </div>
-
-            <div className="space-y-6 max-h-[800px] overflow-y-auto pr-2 custom-scrollbar">
-              {history.map((rpt) => (
-                <div key={rpt._id || rpt.id} className="p-6 bg-gray-50 dark:bg-[#111814] rounded-3xl border border-gray-100 dark:border-white/5 group hover:border-brand/40 transition-all">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-3">
-                       <div className="p-2.5 bg-white dark:bg-dark rounded-xl shadow-sm">
-                          {rpt.format === 'PDF' && <FileText size={18} className="text-rose-500" />}
-                          {rpt.format === 'Excel' && <FileSpreadsheet size={18} className="text-emerald-500" />}
-                          {rpt.format === 'JSON' && <FileJson size={18} className="text-blue-500" />}
-                       </div>
-                       <div className="min-w-0">
-                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 truncate">{rpt.type}</p>
-                          <p className="text-xs font-black text-dark dark:text-white uppercase truncate max-w-[140px]">{rpt.name}</p>
-                       </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button 
-                        onClick={async () => {
-                          try {
-                            const blob = await reportService.download(rpt.type, rpt.format, rpt.fiscalMonth || '');
-                            triggerDownload(rpt.name, blob);
-                          } catch (error) {
-                            showNotification('Failed to download report', 'error');
-                          }
-                        }}
-                        className="p-2 text-gray-300 hover:text-brand transition-colors"
-                        title="Download"
-                      >
-                        <Download size={18} />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteHistory(rpt._id || rpt.id || '')}
-                        className="p-2 text-gray-300 hover:text-rose-500 transition-colors"
-                        title="Remove"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-white/5">
-                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{rpt.createdAt ? new Date(rpt.createdAt).toISOString().split('T')[0] : rpt.date}</span>
-                    <span className="text-[9px] font-black text-brand uppercase tracking-widest">{rpt.size}</span>
-                  </div>
-                </div>
-              ))}
-              {history.length === 0 && (
-                <div className="py-12 text-center">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">No reports archived yet</p>
-                </div>
-              )}
-              <button className="w-full py-5 border-2 border-dashed border-gray-200 dark:border-white/10 rounded-3xl text-[10px] font-black text-gray-400 uppercase tracking-widest hover:border-brand hover:text-brand transition-all">
-                Access Cold Storage
+        {/* Right Col: Templates Selection */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
+          <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => {
+                  setActiveTab(cat.id);
+                  const firstOfType = reportConfigs.find(cfg => cfg.category === cat.id);
+                  if (firstOfType) setActiveType(firstOfType.type as ReportType);
+                }}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === cat.id
+                  ? 'bg-dark dark:bg-brand text-white dark:text-dark shadow-lg'
+                  : 'bg-white dark:bg-white/5 text-gray-400 hover:bg-gray-50 dark:hover:bg-white/10'
+                  }`}
+              >
+                {cat.icon}
+                {cat.id}
               </button>
-            </div>
+            ))}
+          </div>
 
-            <div className="mt-12 p-8 bg-dark rounded-[3rem] text-center relative overflow-hidden">
-               <div className="absolute inset-0 bg-brand/5 blur-2xl"></div>
-               <p className="relative z-10 text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-4">Autonomous Auditing</p>
-               <h5 className="relative z-10 text-xl font-black text-white uppercase tracking-tighter leading-none mb-6">Schedule Recurring Reports</h5>
-               <button className="relative z-10 w-full py-4 bg-brand text-dark rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all">
-                 Configure Scheduler
-               </button>
+          <div className="bg-white dark:bg-[#1A221D] p-8 rounded-[2rem] card-shadow border border-gray-100 dark:border-white/5 flex-grow relative overflow-hidden flex flex-col justify-center">
+            <div className="absolute top-0 right-0 p-24 bg-brand/5 rounded-full -mr-10 -mt-10 blur-3xl"></div>
+
+            <div className="relative z-10 space-y-8">
+              <div className="space-y-4">
+                <label className="text-[11px] font-black text-gray-500 uppercase tracking-[0.2em] px-1">Select Module Protocol:</label>
+                <div className="relative group">
+                  <select
+                    value={activeType}
+                    onChange={(e) => setActiveType(e.target.value as ReportType)}
+                    className="w-full bg-gray-50 dark:bg-[#111814] px-8 py-6 rounded-2xl border-none ring-2 ring-gray-100 dark:ring-white/10 text-lg font-black text-dark dark:text-white focus:ring-4 focus:ring-brand outline-none transition-all appearance-none cursor-pointer"
+                  >
+                    {filteredConfigs.map((cfg) => (
+                      <option key={cfg.type} value={cfg.type} className="bg-white dark:bg-[#1A221D] text-dark dark:text-white py-2">
+                        {cfg.type.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-8 top-1/2 -translate-y-1/2 pointer-events-none group-hover:scale-110 transition-transform">
+                    <FileText className="text-brand" size={24} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-brand/5 p-6 rounded-2xl border border-brand/10">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-brand text-dark rounded-xl shadow-lg ring-4 ring-brand/20">
+                    {reportConfigs.find(c => c.type === activeType)?.icon}
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-black text-dark dark:text-brand uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                      Template Logic
+                      <div className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse"></div>
+                    </h5>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-relaxed">
+                      {reportConfigs.find(c => c.type === activeType)?.desc}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+
+          <button
+            onClick={handleGenerateReport}
+            disabled={isGenerating}
+            className="w-full bg-dark dark:bg-brand text-white dark:text-dark py-5 rounded-[1.5rem] font-black text-[11px] uppercase tracking-[0.3em] flex items-center justify-center gap-3 hover:scale-[1.01] active:scale-[0.98] transition-all shadow-xl shadow-brand/10 disabled:opacity-50"
+          >
+            {isGenerating ? (
+              <>
+                <Clock className="animate-spin" size={16} /> Encryption In Progress...
+              </>
+            ) : (
+              <>
+                <FileBarChart size={16} /> Finalize Intelligence Protocol
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>
