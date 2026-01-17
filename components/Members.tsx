@@ -5,6 +5,7 @@ import { Member, User, AccessLevel, AppScreen } from '../types';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { memberService } from '../services/api';
 import Toast, { ToastType } from './Toast';
+import { Language, t } from '../i18n/translations';
 
 const SHARE_VALUE = 1000;
 
@@ -24,8 +25,12 @@ import { formatCurrency } from '../utils/formatters';
 
 // ... existing imports
 
-const Members: React.FC = () => {
-  const { members, addMember, deleteMember, addSystemUser, deposits, projects, refreshMembers } = useGlobalState();
+interface MembersProps {
+  lang: Language;
+}
+
+const Members: React.FC<MembersProps> = ({ lang }) => {
+  const { members, addMember, updateMember, deleteMember, addSystemUser, systemUsers, refreshMembers, currentUser } = useGlobalState();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [createUserAccess, setCreateUserAccess] = useState(false);
@@ -80,16 +85,20 @@ const Members: React.FC = () => {
   const handleOpenModal = (member?: Member) => {
     if (member) {
       setEditingMember(member);
+      const linkedUser = systemUsers.find(u => u.memberId === member.memberId);
+
       setFormData({
-        ...formData, // Keep existing structure
+        ...formData,
         name: member.name,
         phone: member.phone,
         email: member.email,
         role: member.role,
         shares: member.shares.toString(),
         memberId: member.memberId,
+        userRole: linkedUser?.role || 'Investor',
+        password: ''
       });
-      setCreateUserAccess(!!member.hasUserAccess);
+      setCreateUserAccess(!!member.hasUserAccess || !!linkedUser);
     } else {
       setEditingMember(null);
       setFormData({
@@ -110,6 +119,38 @@ const Members: React.FC = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingMember(null);
+    setCreateUserAccess(false);
+    setFormData({
+      name: '',
+      phone: '',
+      email: '',
+      role: 'Associate Member',
+      shares: '0',
+      memberId: '',
+      password: '',
+      userRole: 'Investor'
+    });
+  };
+
+  const createSystemAccess = async (member: Member) => {
+    const newUser: User = {
+      id: `user-${Date.now()}`,
+      memberId: member.memberId,
+      name: member.name,
+      email: member.email,
+      role: formData.userRole,
+      avatar: member.avatar,
+      lastLogin: 'Never',
+      password: formData.password,
+      permissions: {} as any
+    };
+
+    try {
+      await addSystemUser(newUser);
+      showNotification(`Partner ${member.name} successfully onboarded with system access.`);
+    } catch (err: any) {
+      showNotification(`Member created but failed to provision portal: ${err.message}`, "error");
+    }
   };
 
   const executeSubmit = async () => {
@@ -123,59 +164,36 @@ const Members: React.FC = () => {
         phone: formData.phone,
         email: formData.email,
         role: formData.role,
-        shares: sharesNum,
-        totalContributed: sharesNum * SHARE_VALUE,
+        shares: editingMember ? editingMember.shares : sharesNum,
+        totalContributed: editingMember ? editingMember.totalContributed : (sharesNum * SHARE_VALUE),
         lastActive: 'Just now',
-        avatar: `https://picsum.photos/seed/${formData.name}/100/100`,
+        avatar: editingMember?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.name}`,
         status: 'active',
         hasUserAccess: createUserAccess
       };
 
       if (!editingMember) {
-        addMember(newMember);
+        await addMember(newMember);
 
-        // System User Logic
         if (createUserAccess) {
-          const newUser: User = {
-            id: `user-${Date.now()}`,
-            memberId: newMember.memberId,
-            name: newMember.name,
-            email: newMember.email,
-            role: formData.userRole,
-            avatar: newMember.avatar,
-            lastLogin: 'Never',
-            password: formData.password,
-            permissions: {} as any
-          };
-
-          try {
-            await addSystemUser(newUser);
-            showNotification(`Partner ${formData.name} successfully onboarded with system access.`);
-          } catch (err) {
-            showNotification("Failed to create system access. Member created without login.", "error");
-          }
+          await createSystemAccess(newMember);
         } else {
           showNotification(`Partner ${formData.name} successfully onboarded.`);
         }
       } else {
-        // Update Logic (Assuming updateMember exists in context, but using addMember/mock for now as per original code or context limitations)
-        // Note: original code only had console.log for update or similar. Context has addMember. 
-        // For now, we simulate update or handle it if context supports it. 
-        // Assuming context might not have updateMember exposed in `Members.tsx` props above, checking...
-        // `useGlobalState` returns `addMember`. It doesn't seem to return `updateMember` in the destructuring in line 22 of original file.
-        // Wait, checking original file line 22: `const { members, addMember, addSystemUser... }`.
-        // So basic update is missing in frontend integration?
-        // The original handleSubmit just showed notification "updated successfully" but didn't actually call an update function?
-        // Ah, line 137 in original: `showNotification...`. It didn't call backend!
-        // I should probably fix that too, but for now focus on the CONFIRMATION aspect.
-        showNotification(`Partner ${formData.name} updated successfully.`);
+        await updateMember(newMember);
+
+        if (createUserAccess && !editingMember.hasUserAccess) {
+          await createSystemAccess(newMember);
+        } else {
+          showNotification(`Partner ${formData.name} updated successfully.`);
+        }
       }
 
       handleCloseModal();
       closeDialog();
-    } catch (err) {
-      showNotification("Failed to process partner data.", "error");
-      closeDialog();
+    } catch (err: any) {
+      showNotification(err.message || "Failed to process partner data.", "error");
     }
   };
 
@@ -245,7 +263,7 @@ const Members: React.FC = () => {
             <span className="text-brand">Stakeholders</span>
           </nav>
           <div className="flex items-center gap-4">
-            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">Members & Access</h1>
+            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('nav.members', lang)}</h1>
             <button
               onClick={handleRefresh}
               className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 transition-all ${refreshing ? 'animate-spin' : ''}`}
@@ -263,92 +281,108 @@ const Members: React.FC = () => {
               { header: 'Phone', key: 'phone' },
               { header: 'Role', key: 'role' },
               { header: 'Shares', key: 'shares' },
-              { header: 'Total Contributed', key: 'totalContributed', format: (m: any) => formatCurrency(m.totalContributed) },
+              { header: 'Contribution', key: 'totalContributed', format: (m: any) => `BDT ${m.totalContributed.toLocaleString()}` },
               { header: 'Access', key: 'hasUserAccess', format: (m: any) => m.hasUserAccess ? 'Yes' : 'No' }
             ]}
             fileName={`members_${new Date().toISOString().split('T')[0]}`}
-            title="Member Directory"
+            title="Stakeholder Register"
+            targetId="members-snapshot-target"
           />
-          <button onClick={() => handleOpenModal()} className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20">
-            <Plus size={20} strokeWidth={3} /> Create Member
-          </button>
+          {currentUser?.permissions[AppScreen.MEMBERS] === AccessLevel.WRITE && (
+            <button
+              onClick={() => handleOpenModal()}
+              className="bg-dark dark:bg-brand text-white dark:text-dark px-8 py-4 rounded-[2rem] font-black text-[11px] uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-xl shadow-brand/10"
+            >
+              <Plus size={18} />
+              <span>{t('common.add', lang)}</span>
+            </button>
+          )}
         </div>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-white dark:bg-[#1A221D] p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5">
-          <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-4">Total Partners</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-7xl font-black text-dark dark:text-white tracking-tighter leading-none">{members.length}</span>
-            <span className="text-xl font-black text-brand tracking-tight">Vested</span>
+      <div id="members-snapshot-target" className="space-y-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-white dark:bg-[#1A221D] p-8 lg:p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5">
+            <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-4">Total Partners</p>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="text-4xl sm:text-5xl lg:text-7xl font-black text-dark dark:text-white tracking-tighter leading-none">{members.length}</span>
+              <span className="text-xl font-black text-brand tracking-tight">Vested</span>
+            </div>
           </div>
-        </div>
-        <div className="bg-dark p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between">
-          <p className="text-[11px] font-black text-white/30 uppercase tracking-widest mb-4">Cumulative Pool</p>
-          <span className="text-5xl font-black text-brand tracking-tighter leading-tight uppercase">{formatCurrency(totalPool)}</span>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5">
-        <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between gap-6">
-          <div className="relative flex-1 max-w-lg">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input type="text" placeholder="Filter members..." className="w-full bg-gray-50 dark:bg-[#111814] pl-14 pr-6 py-4 rounded-2xl border-none outline-none text-sm font-bold dark:text-white" />
+          <div className="bg-dark p-8 lg:p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between">
+            <p className="text-[11px] font-black text-white/30 uppercase tracking-widest mb-4">Cumulative Pool</p>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className={`font-black text-brand tracking-tighter leading-tight uppercase ${formatCurrency(totalPool).length > 12 ? 'text-3xl sm:text-4xl' : 'text-4xl sm:text-5xl'}`}>{formatCurrency(totalPool)}</span>
+            </div>
           </div>
         </div>
 
-        <div className="overflow-x-auto px-2">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-50/30 dark:bg-white/5 text-[11px] font-black text-gray-500 uppercase tracking-widest">
-                <th className="px-10 py-6 text-left">Partner Identity</th>
-                <th className="px-10 py-6 text-left">Member ID</th>
-                <th className="px-10 py-6 text-left">Contact Info</th>
-                <th className="px-10 py-6 text-center">System Access</th>
-                <th className="px-10 py-6 text-right">Valuation</th>
-                <th className="px-10 py-6 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-white/5">
-              {members.map((member, index) => (
-                <tr key={member.id || member.memberId || `member-${index}`} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
-                  <td className="px-10 py-6">
-                    <div className="flex items-center gap-5">
-                      <img src={member.avatar} className="w-14 h-14 rounded-2xl grayscale group-hover:grayscale-0 transition-all duration-500" alt="" />
-                      <div>
-                        <p className="font-black text-dark dark:text-white text-lg leading-none mb-1 group-hover:text-brand transition-colors">{member.name}</p>
-                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{member.role}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-10 py-6 font-mono text-sm font-black text-dark dark:text-brand">#{member.memberId}</td>
-                  <td className="px-10 py-6 text-xs font-black text-dark dark:text-gray-300">{member.phone}</td>
-                  <td className="px-10 py-6 text-center">
-                    {member.hasUserAccess ? (
-                      <span className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-xl text-[10px] font-black uppercase tracking-widest">
-                        <UserCheck size={12} /> Active User
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest opacity-30">No Access</span>
-                    )}
-                  </td>
-                  <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-xl tracking-tighter">
-                    BDT {member.totalContributed.toLocaleString()}
-                  </td>
-                  <td className="px-10 py-6 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => handleOpenModal(member)} className="p-3 bg-gray-50 dark:bg-white/5 rounded-xl text-gray-400 hover:text-brand transition-colors">
-                        <Edit2 size={18} />
-                      </button>
-                      <button onClick={() => handleDeleteClick(member)} className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl text-rose-400 hover:text-rose-600 transition-colors">
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
+        <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5">
+          <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between gap-6">
+            <div className="relative flex-1 max-w-lg">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input type="text" placeholder="Filter members..." className="w-full bg-gray-50 dark:bg-[#111814] pl-14 pr-6 py-4 rounded-2xl border-none outline-none text-sm font-bold dark:text-white" />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto px-2">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-50/30 dark:bg-white/5 text-[11px] font-black text-gray-500 uppercase tracking-widest">
+                  <th className="px-10 py-6 text-left">Partner Identity</th>
+                  <th className="px-10 py-6 text-left">Member ID</th>
+                  <th className="px-10 py-6 text-left">Contact Info</th>
+                  <th className="px-10 py-6 text-center">System Access</th>
+                  <th className="px-10 py-6 text-right">Valuation</th>
+                  <th className="px-10 py-6 text-right">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                {members.map((member, index) => (
+                  <tr key={member.id || member.memberId || `member-${index}`} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
+                    <td className="px-10 py-6">
+                      <div className="flex items-center gap-5">
+                        <img src={member.avatar} className="w-14 h-14 rounded-2xl grayscale group-hover:grayscale-0 transition-all duration-500" alt="" />
+                        <div>
+                          <p className="font-black text-dark dark:text-white text-lg leading-none mb-1 group-hover:text-brand transition-colors">{member.name}</p>
+                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{member.role}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-10 py-6 font-mono text-sm font-black text-dark dark:text-brand">#{member.memberId}</td>
+                    <td className="px-10 py-6 text-xs font-black text-dark dark:text-gray-300">{member.phone}</td>
+                    <td className="px-10 py-6 text-center">
+                      {(member.hasUserAccess || systemUsers.some(u => u.memberId === member.memberId)) ? (
+                        <span className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 shadow-sm shadow-emerald-500/5 transition-all hover:scale-105">
+                          <ShieldCheck size={12} strokeWidth={3} /> {t('common.authorizedBadge', lang)}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 px-4 py-2 bg-gray-500/5 text-gray-400 rounded-xl text-[10px] font-black uppercase tracking-widest border border-gray-500/10 opacity-40 transition-all hover:opacity-60">
+                          <Lock size={12} /> {t('common.restrictedBadge', lang)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-xl tracking-tighter">
+                      BDT {member.totalContributed.toLocaleString()}
+                    </td>
+                    <td className="px-10 py-6 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {currentUser?.permissions[AppScreen.MEMBERS] === AccessLevel.WRITE && (
+                          <>
+                            <button onClick={() => handleOpenModal(member)} className="p-3 bg-gray-50 dark:bg-white/5 rounded-xl text-gray-400 hover:text-brand transition-colors">
+                              <Edit2 size={18} />
+                            </button>
+                            <button onClick={() => handleDeleteClick(member)} className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl text-rose-400 hover:text-rose-600 transition-colors">
+                              <Trash2 size={18} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -409,7 +443,7 @@ const Members: React.FC = () => {
                       <div>
                         <h4 className={`text-xs font-black uppercase tracking-widest ${createUserAccess ? 'text-dark dark:text-brand' : 'text-gray-500'}`}>System Access Control</h4>
                         <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-                          {createUserAccess ? 'Portal Access Enabled' : 'No Portal Access'}
+                          {systemUsers.some(u => u.memberId === formData.memberId) ? 'Portal Access Active' : createUserAccess ? 'Portal Access Enabled' : 'No Portal Access'}
                         </p>
                       </div>
                     </div>
@@ -439,16 +473,16 @@ const Members: React.FC = () => {
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-1">
-                            {editingMember && editingMember.hasUserAccess ? 'Reset Password' : 'Login Password'}
+                            {systemUsers.some(u => u.memberId === formData.memberId) ? 'Reset Password' : 'Login Password'}
                           </label>
                           <div className="relative">
                             <input
-                              required={!editingMember || (editingMember && !editingMember.hasUserAccess)}
+                              required={!systemUsers.some(u => u.memberId === formData.memberId)}
                               type="password"
                               minLength={6}
                               value={formData.password}
                               onChange={e => setFormData({ ...formData, password: e.target.value })}
-                              placeholder={editingMember && editingMember.hasUserAccess ? "Leave empty to keep" : "Min 6 chars"}
+                              placeholder={systemUsers.some(u => u.memberId === formData.memberId) ? "Leave empty to keep" : "Min 6 chars"}
                               className="w-full bg-white dark:bg-dark px-4 py-3 pl-10 rounded-2xl border-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand text-xs placeholder:text-gray-400"
                             />
                             <Key size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -456,7 +490,6 @@ const Members: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Role Preview Badge */}
                       <div className="bg-white/50 dark:bg-white/5 p-3 rounded-xl flex items-start gap-3">
                         <Info size={14} className="text-brand shrink-0 mt-0.5" />
                         <div>
@@ -488,6 +521,7 @@ const Members: React.FC = () => {
           </div>
         </div>
       )}
+
       <ActionDialog
         isOpen={dialog.isOpen}
         type={dialog.type || 'confirm'}

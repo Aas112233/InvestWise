@@ -11,6 +11,7 @@ export enum AppScreen {
   ANALYSIS = 'ANALYSIS',
   REPORTS = 'REPORTS',
   GOALS = 'GOALS',
+  DIVIDENDS = 'DIVIDENDS',
   SETTINGS = 'SETTINGS'
 }
 
@@ -55,6 +56,7 @@ export interface ProjectMemberParticipation {
   memberId: string;
   memberName: string;
   sharesInvested: number;
+  ownershipPercentage?: number;
 }
 
 export interface ProjectUpdateRecord {
@@ -71,14 +73,19 @@ export interface Project {
   category: string;
   description: string;
   initialInvestment: number;
+  budget: number;
+  expectedRoi: number;
   totalShares: number;
   involvedMembers: ProjectMemberParticipation[];
   status: 'In Progress' | 'Completed' | 'Review';
+  health: 'Stable' | 'At Risk' | 'Critical';
   startDate: string;
   completionDate?: string;
   projectFundHandler: string;
   linkedFundId?: string;
   currentFundBalance: number;
+  totalEarnings: number;
+  totalExpenses: number;
   updates: ProjectUpdateRecord[];
   projectedReturn?: string;
 }
@@ -121,12 +128,37 @@ export interface Deposit {
 export interface Transaction {
   id: string;
   date: string;
-  type: 'Deposit' | 'Withdrawal' | 'Investment' | 'Expense' | 'Earning';
+  type: 'Deposit' | 'Withdrawal' | 'Investment' | 'Expense' | 'Earning' | 'Dividend' | 'Equity-Transfer';
   amount: number;
   member?: string;
+  memberId?: string;
   projectId?: string;
   description: string;
-  status: 'Success' | 'Processing' | 'Failed';
+  status: 'Success' | 'Processing' | 'Failed' | 'Completed';
+}
+
+export interface DividendDistribution {
+  id: string;
+  type: 'Project' | 'Global';
+  targetId?: string; // Project ID if type is Project
+  totalAmount: number;
+  distributedAt: string;
+  recipients: {
+    memberId: string;
+    shares: number;
+    amount: number;
+  }[];
+}
+
+export interface EquityTransfer {
+  fromMemberId: string;
+  transfers: {
+    toMemberId: string;
+    amount: number;
+    shares: number;
+  }[];
+  reason: string;
+  date: string;
 }
 
 export interface Expense {

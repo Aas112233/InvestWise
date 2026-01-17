@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Filter, X, Calendar, User, CheckSquare, Square, ChevronLeft, ChevronRight, Edit2, Trash2, Loader2, RefreshCw } from 'lucide-react';
-import { Deposit } from '../types';
+import { Deposit, AccessLevel, AppScreen } from '../types';
 import Toast, { ToastType } from './Toast';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { financeService } from '../services/api';
 import ExportMenu from './ExportMenu';
 import { formatCurrency } from '../utils/formatters';
+import { Language, t } from '../i18n/translations';
 
 const SHARE_WORTH = 1000;
 const MONTHS = [
@@ -13,8 +14,12 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December"
 ];
 
-const Deposits: React.FC = () => {
-  const { deposits: globalDeposits, members: globalMembers, funds, refreshTransactions } = useGlobalState();
+interface DepositsProps {
+  lang: Language;
+}
+
+const Deposits: React.FC<DepositsProps> = ({ lang }) => {
+  const { deposits: globalDeposits, members: globalMembers, funds, refreshTransactions, currentUser } = useGlobalState();
   const [deposits, setDeposits] = useState<Deposit[]>([]);
   const activeMembers = globalMembers.filter(m => m.status === 'active');
   const [refreshing, setRefreshing] = useState(false);
@@ -26,7 +31,8 @@ const Deposits: React.FC = () => {
   };
 
   useEffect(() => {
-    setDeposits(globalDeposits);
+    // Only show approved/completed deposits in the history table
+    setDeposits(globalDeposits.filter(d => d.status === 'Completed'));
   }, [globalDeposits]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -231,12 +237,12 @@ const Deposits: React.FC = () => {
       <div className="flex items-end justify-between px-2">
         <div>
           <nav className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2 uppercase tracking-widest">
-            <span>OPERATIONS</span>
+            <span>{t('nav.operations', lang)}</span>
             <span className="opacity-30">/</span>
-            <span className="text-brand">DEPOSITS</span>
+            <span className="text-brand">{t('nav.deposits', lang)}</span>
           </nav>
           <div className="flex items-center gap-4">
-            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">Capital Inflow</h1>
+            <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('nav.deposits', lang)}</h1>
             <button
               onClick={handleRefresh}
               className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 transition-all ${refreshing ? 'animate-spin' : ''}`}
@@ -259,130 +265,137 @@ const Deposits: React.FC = () => {
             ]}
             fileName={`deposits_${new Date().toISOString().split('T')[0]}`}
             title="Capital Inflow Report"
+            targetId="deposits-snapshot-target"
           />
-          <button
-            onClick={() => handleOpenModal()}
-            className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20"
-          >
-            <Plus size={20} strokeWidth={3} /> New Deposit
-          </button>
+          {currentUser?.permissions[AppScreen.DEPOSITS] === AccessLevel.WRITE && (
+            <button
+              onClick={() => handleOpenModal()}
+              className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20"
+            >
+              <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="bg-white dark:bg-[#1A221D] p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5 transition-all hover:-translate-y-2 duration-500">
-          <p className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Current Month</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-5xl font-black text-dark dark:text-white tracking-tighter leading-none">{formatCurrency(totalMonthly)}</span>
-            <span className="text-sm font-black text-brand tracking-tight">{getCurrentMonthYear().split(' ')[0]}</span>
+      <div id="deposits-snapshot-target" className="space-y-10">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="bg-white dark:bg-[#1A221D] p-8 lg:p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5 transition-all hover:-translate-y-2 duration-500">
+            <p className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Current Month</p>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className={`font-black text-dark dark:text-white tracking-tighter leading-none ${formatCurrency(totalMonthly).length > 12 ? 'text-3xl sm:text-4xl' : 'text-4xl sm:text-5xl'}`}>{formatCurrency(totalMonthly)}</span>
+              <span className="text-sm font-black text-brand tracking-tight">{getCurrentMonthYear().split(' ')[0]}</span>
+            </div>
           </div>
-        </div>
-        <div className="bg-dark dark:bg-[#1A221D] p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between transition-all hover:-translate-y-2 duration-500">
-          <p className="text-[11px] font-black text-gray-300 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Total Capital</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-5xl font-black text-brand tracking-tighter leading-none uppercase">{formatCurrency(totalAmount)}</span>
-            <span className="text-sm font-black text-white/40 tracking-tight">Lifetime</span>
+          <div className="bg-dark dark:bg-[#1A221D] p-8 lg:p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between transition-all hover:-translate-y-2 duration-500">
+            <p className="text-[11px] font-black text-gray-300 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Total Capital</p>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className={`font-black text-brand tracking-tighter leading-none uppercase ${formatCurrency(totalAmount).length > 12 ? 'text-3xl sm:text-4xl' : 'text-4xl sm:text-5xl'}`}>{formatCurrency(totalAmount)}</span>
+              <span className="text-sm font-black text-white/40 tracking-tight">Lifetime</span>
+            </div>
           </div>
-        </div>
-        <div className="bg-white dark:bg-[#1A221D] p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5 transition-all hover:-translate-y-2 duration-500">
-          <p className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Total Deposits</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-5xl font-black text-dark dark:text-white tracking-tighter leading-none">{totalCount}</span>
-            <span className="text-sm font-black text-gray-400 tracking-tight">Records</span>
+          <div className="bg-white dark:bg-[#1A221D] p-8 lg:p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5 transition-all hover:-translate-y-2 duration-500">
+            <p className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Total Deposits</p>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="text-4xl sm:text-5xl font-black text-dark dark:text-white tracking-tighter leading-none">{totalCount}</span>
+              <span className="text-sm font-black text-gray-400 tracking-tight">Records</span>
+            </div>
           </div>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5 transition-colors duration-300">
-        <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between gap-6">
-          <div className="relative flex-1 max-w-lg">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input
-              type="text"
-              placeholder="Filter by Member ID, Name or Deposit ID..."
-              className="w-full bg-gray-50/50 dark:bg-[#111814] pl-14 pr-6 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/5 focus:ring-2 focus:ring-dark dark:focus:ring-brand text-sm font-bold transition-all dark:text-white placeholder:text-gray-400"
-            />
-          </div>
-          <button className="p-4 bg-gray-50 dark:bg-white/5 rounded-2xl text-gray-500 dark:text-gray-400 hover:text-dark dark:hover:text-white transition-colors">
-            <Filter size={20} />
-          </button>
         </div>
 
-        <div className="overflow-x-auto px-2">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-50/30 dark:bg-white/5">
-                <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Deposit Transaction</th>
-                <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Partner Entity</th>
-                <th className="px-6 py-6 text-center text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Shares</th>
-                <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Month Period</th>
-                <th className="px-6 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Amount (BDT)</th>
-                <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Handled By</th>
-                <th className="px-6 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Status</th>
-                <th className="px-6 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-white/5">
-              {deposits.map((dep) => (
-                <tr key={dep.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
-                  <td className="px-6 py-6">
-                    <div className="flex flex-col">
-                      <p className="text-[10px] font-black text-brand uppercase tracking-tighter">#{dep.id}</p>
-                      <p className="text-xs font-bold text-gray-400">{dep.date}</p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-white/5 flex items-center justify-center text-dark dark:text-brand font-black text-xs">
-                        {dep.memberName.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div>
-                        <p className="font-black text-dark dark:text-white text-base leading-none mb-1 group-hover:text-brand transition-colors">{dep.memberName}</p>
-                        <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">ID: #{dep.memberId}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-6 text-center">
-                    <span className="font-black text-dark dark:text-brand text-lg">{dep.shareNumber}</span>
-                  </td>
-                  <td className="px-6 py-6">
-                    <div className="flex items-center gap-2 text-xs font-black text-gray-600 dark:text-gray-300">
-                      <Calendar size={14} className="text-brand" />
-                      {dep.depositMonth}
-                    </div>
-                  </td>
-                  <td className="px-6 py-6 text-right">
-                    <p className="font-black text-dark dark:text-white text-xl tracking-tighter leading-none">
-                      {formatCurrency(dep.amount)}
-                    </p>
-                  </td>
-                  <td className="px-6 py-6">
-                    <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-tighter">
-                      <User size={12} />
-                      {dep.cashierName}
-                    </div>
-                  </td>
-                  <td className="px-6 py-6 text-right">
-                    <span className={`inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${dep.status === 'Completed' ? 'bg-brand/10 text-brand' : 'bg-amber-400/10 text-amber-500'
-                      }`}>
-                      {dep.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-6 text-right">
-                    <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
-                      <button
-                        onClick={(e) => handleDelete(e, dep.id)}
-                        disabled={!!processingId}
-                        className={`p-3 rounded-2xl shadow-xl border transition-all ${processingId === dep.id ? 'bg-red-50 border-red-100 cursor-wait' : 'bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30'}`}
-                      >
-                        {processingId === dep.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
-                      </button>
-                    </div>
-                  </td>
+        <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5 transition-colors duration-300">
+          <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between gap-6">
+            <div className="relative flex-1 max-w-lg">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder="Filter by Member ID, Name or Deposit ID..."
+                className="w-full bg-gray-50/50 dark:bg-[#111814] pl-14 pr-6 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/5 focus:ring-2 focus:ring-dark dark:focus:ring-brand text-sm font-bold transition-all dark:text-white placeholder:text-gray-400"
+              />
+            </div>
+            <button className="p-4 bg-gray-50 dark:bg-white/5 rounded-2xl text-gray-500 dark:text-gray-400 hover:text-dark dark:hover:text-white transition-colors">
+              <Filter size={20} />
+            </button>
+          </div>
+
+          <div className="overflow-x-auto px-2">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-50/30 dark:bg-white/5">
+                  <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Deposit Transaction</th>
+                  <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Partner Entity</th>
+                  <th className="px-6 py-6 text-center text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Shares</th>
+                  <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Month Period</th>
+                  <th className="px-6 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Amount (BDT)</th>
+                  <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Handled By</th>
+                  <th className="px-6 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Status</th>
+                  <th className="px-6 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                {deposits.map((dep) => (
+                  <tr key={dep.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
+                    <td className="px-6 py-6">
+                      <div className="flex flex-col">
+                        <p className="text-[10px] font-black text-brand uppercase tracking-tighter">#{dep.id}</p>
+                        <p className="text-xs font-bold text-gray-400">{dep.date}</p>
+                      </div>
+                    </td>
+                    <td className="px-6 py-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-white/5 flex items-center justify-center text-dark dark:text-brand font-black text-xs">
+                          {dep.memberName.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <div>
+                          <p className="font-black text-dark dark:text-white text-base leading-none mb-1 group-hover:text-brand transition-colors">{dep.memberName}</p>
+                          <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">ID: #{dep.memberId}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-6 text-center">
+                      <span className="font-black text-dark dark:text-brand text-lg">{dep.shareNumber}</span>
+                    </td>
+                    <td className="px-6 py-6">
+                      <div className="flex items-center gap-2 text-xs font-black text-gray-600 dark:text-gray-300">
+                        <Calendar size={14} className="text-brand" />
+                        {dep.depositMonth}
+                      </div>
+                    </td>
+                    <td className="px-6 py-6 text-right">
+                      <p className="font-black text-dark dark:text-white text-xl tracking-tighter leading-none">
+                        {formatCurrency(dep.amount)}
+                      </p>
+                    </td>
+                    <td className="px-6 py-6">
+                      <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-tighter">
+                        <User size={12} />
+                        {dep.cashierName}
+                      </div>
+                    </td>
+                    <td className="px-6 py-6 text-right">
+                      <span className={`inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${dep.status === 'Completed' ? 'bg-brand/10 text-brand' : 'bg-amber-400/10 text-amber-500'
+                        }`}>
+                        {dep.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-6 text-right">
+                      {currentUser?.permissions[AppScreen.DEPOSITS] === AccessLevel.WRITE && (
+                        <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
+                          <button
+                            onClick={(e) => handleDelete(e, dep.id)}
+                            disabled={!!processingId}
+                            className={`p-3 rounded-2xl shadow-xl border transition-all ${processingId === dep.id ? 'bg-red-50 border-red-100 cursor-wait' : 'bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30'}`}
+                          >
+                            {processingId === dep.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

@@ -6,7 +6,9 @@ import {
     addExpense,
     transferFunds,
     deleteTransaction,
-    approveDeposit
+    approveDeposit,
+    distributeDividends,
+    transferEquity
 } from '../controllers/financeController.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import { transactionValidation } from '../middleware/businessValidator.js';
@@ -17,5 +19,7 @@ router.route('/deposits').post(protect, transactionValidation, addDeposit);
 router.route('/deposits/:id/approve').put(protect, admin, approveDeposit);
 router.route('/expenses').post(protect, admin, transactionValidation, addExpense);
 router.route('/transfer').post(protect, admin, transferFunds);
+router.route('/dividends').post(protect, admin, distributeDividends);
+router.route('/equity/transfer').post(protect, admin, transferEquity);
 
 export default router;
