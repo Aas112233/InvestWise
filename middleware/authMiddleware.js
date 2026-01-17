@@ -34,9 +34,18 @@ const admin = (req, res, next) => {
     if (req.user && req.user.role === 'Administrator') {
         next();
     } else {
-        res.status(401);
+        res.status(403);
         throw new Error('Not authorized as an admin');
     }
 };
 
-export { protect, admin };
+const managerOrAdmin = (req, res, next) => {
+    if (req.user && (req.user.role === 'Administrator' || req.user.role === 'Manager')) {
+        next();
+    } else {
+        res.status(403);
+        throw new Error('Not authorized. Management access required.');
+    }
+};
+
+export { protect, admin, managerOrAdmin };

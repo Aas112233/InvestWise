@@ -322,5 +322,153 @@ const transferFunds = asyncHandler(async (req, res) => {
 });
 
 
-export { getTransactions, addDeposit, addExpense, transferFunds, deleteTransaction, approveDeposit };
+// @desc    Distribute Dividends (Project or Global)
+// @route   POST /api/finance/dividends
+// @access  Private (Admin)
+const distributeDividends = asyncHandler(async (req, res) => {
+    const { type, amount, projectId, sourceFundId, description } = req.body;
+
+    if (!amount || amount <= 0) {
+        res.status(400);
+        throw new Error('Invalid dividend amount');
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const members = await Member.find({ status: 'active' }).session(session);
+        const totalShares = members.reduce((sum, m) => sum + m.shares, 0);
+
+        if (totalShares === 0) throw new Error('No active shares found for distribution');
+
+        // Check source fund/project balance
+        if (type === 'Project') {
+            const project = await Project.findById(projectId).session(session);
+            if (!project) throw new Error('Project not found');
+            if (project.currentFundBalance < amount) throw new Error('Insufficient project fund balance');
+            project.currentFundBalance -= amount;
+            await project.save({ session });
+        } else {
+            const fund = await Fund.findById(sourceFundId).session(session);
+            if (!fund) throw new Error('Source fund not found');
+            if (fund.balance < amount) throw new Error('Insufficient fund balance');
+            fund.balance -= amount;
+            await fund.save({ session });
+        }
+
+        const payoutRecords = [];
+        for (const member of members) {
+            const memberReward = (member.shares / totalShares) * amount;
+            if (memberReward <= 0) continue;
+
+            const tx = await Transaction.create([{
+                type: 'Dividend',
+                amount: memberReward,
+                description: description || `Dividend Distribution: ${type} - ${projectId || 'Global'}`,
+                memberId: member._id,
+                projectId: type === 'Project' ? projectId : null,
+                date: Date.now(),
+                status: 'Success',
+                authorizedBy: req.user._id
+            }], { session });
+
+            payoutRecords.push(tx[0]);
+        }
+
+        await session.commitTransaction();
+        res.status(201).json({ message: 'Dividends distributed successfully', count: payoutRecords.length });
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(400);
+        throw new Error(error.message);
+    } finally {
+        session.endSession();
+    }
+});
+
+// @desc    Transfer Equity (Member Discontinuation)
+// @route   POST /api/finance/equity/transfer
+// @access  Private (Admin)
+const transferEquity = asyncHandler(async (req, res) => {
+    const { fromMemberId, transfers, reason } = req.body; // transfers: [{ toMemberId, amount, shares }]
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const sourceMember = await Member.findById(fromMemberId).session(session);
+        if (!sourceMember) throw new Error('Source member not found');
+
+        const totalBeingTransferred = transfers.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+        const totalSharesTransferred = transfers.reduce((sum, t) => sum + Number(t.shares || 0), 0);
+
+        if (totalBeingTransferred > sourceMember.totalContributed) {
+            throw new Error('Transfer amount exceeds member contribution');
+        }
+        if (totalSharesTransferred > sourceMember.shares) {
+            throw new Error('Transfer shares exceed member holdings');
+        }
+
+        for (const t of transfers) {
+            const targetMember = await Member.findById(t.toMemberId).session(session);
+            if (!targetMember) throw new Error(`Target member ${t.toMemberId} not found`);
+
+            targetMember.totalContributed += Number(t.amount);
+            targetMember.shares += Number(t.shares);
+            await targetMember.save({ session });
+
+            // Record the transfer for the recipient
+            await Transaction.create([{
+                type: 'Equity-Transfer',
+                amount: Number(t.amount),
+                description: `Equity Received from ${sourceMember.name}: ${reason}`,
+                memberId: targetMember._id,
+                date: Date.now(),
+                status: 'Success',
+                authorizedBy: req.user._id
+            }], { session });
+        }
+
+        // Deduct from source
+        sourceMember.totalContributed -= totalBeingTransferred;
+        sourceMember.shares -= totalSharesTransferred;
+
+        if (sourceMember.totalContributed === 0 && sourceMember.shares === 0) {
+            sourceMember.status = 'inactive';
+        }
+        await sourceMember.save({ session });
+
+        // Record the transfer for the source
+        await Transaction.create([{
+            type: 'Equity-Transfer',
+            amount: totalBeingTransferred,
+            description: `Equity Transferred to Others: ${reason}`,
+            memberId: sourceMember._id,
+            date: Date.now(),
+            status: 'Success',
+            authorizedBy: req.user._id
+        }], { session });
+
+        await session.commitTransaction();
+        res.status(200).json({ message: 'Equity transfer completed successfully' });
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(400);
+        throw new Error(error.message);
+    } finally {
+        session.endSession();
+    }
+});
+
+export {
+    getTransactions,
+    addDeposit,
+    addExpense,
+    transferFunds,
+    deleteTransaction,
+    approveDeposit,
+    distributeDividends,
+    transferEquity
+};
 

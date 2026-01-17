@@ -26,6 +26,15 @@ const projectSchema = mongoose.Schema(
             required: true,
             default: 0,
         },
+        budget: {
+            type: Number,
+            required: true,
+            default: 0,
+        },
+        expectedRoi: {
+            type: Number,
+            default: 0, // In percentage
+        },
         totalShares: {
             type: Number,
             required: true,
@@ -36,6 +45,11 @@ const projectSchema = mongoose.Schema(
             enum: ['In Progress', 'Completed', 'Review'],
             default: 'In Progress',
         },
+        health: {
+            type: String,
+            enum: ['Stable', 'At Risk', 'Critical'],
+            default: 'Stable',
+        },
         startDate: {
             type: Date,
             required: true,
@@ -43,8 +57,16 @@ const projectSchema = mongoose.Schema(
         completionDate: {
             type: Date,
         },
+        totalEarnings: {
+            type: Number,
+            default: 0,
+        },
+        totalExpenses: {
+            type: Number,
+            default: 0,
+        },
         projectFundHandler: {
-            type: String, // could be a Member ID or Name
+            type: String,
         },
         linkedFundId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -54,11 +76,10 @@ const projectSchema = mongoose.Schema(
             type: Number,
             default: 0,
         },
-        // Simple array of objects for members logic (can be refined to Ref Member in future)
         involvedMembers: [{
-            memberId: { type: mongoose.Schema.Types.ObjectId, ref: 'Member' },
-            memberName: String,
-            sharesInvested: Number
+            memberId: { type: String },
+            sharesInvested: Number,
+            ownershipPercentage: Number
         }],
         updates: [updateSchema],
     },
