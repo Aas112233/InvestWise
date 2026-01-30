@@ -10,4 +10,6 @@ class AppRoutes {
   static const String transactions = '/transactions';
   static const String addTransaction = '/add-transaction';
   static const String settings = '/settings';
+  static const String deposits = '/deposits';
+  static const String requestDeposit = '/request-deposit';
 }
