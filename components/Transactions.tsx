@@ -371,7 +371,7 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
                         <span className="text-[10px] font-black text-brand uppercase tracking-tighter" title={tx.id}>#{tx.id.substring(0, 8)}...</span>
                       </td>
                       <td className="px-10 py-6">
-                        <span className="text-xs font-bold text-gray-400">{new Date(tx.date).toLocaleDateString()}</span>
+                        <span className="text-xs font-bold text-gray-400 whitespace-nowrap">{formatDate(tx.date)}</span>
                       </td>
                       <td className="px-10 py-6">
                         <div className="flex items-center gap-3">
@@ -387,6 +387,9 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
                           {((tx as any).memberId || tx.member) && (
                             <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">
                               {t('transactions.partner', lang)} {(tx as any).memberId?.name || tx.member}
+                              {((tx as any).memberId?.memberId) && (
+                                <span className="ml-1 opacity-60">(#{(tx as any).memberId.memberId})</span>
+                              )}
                             </p>
                           )}
                         </div>

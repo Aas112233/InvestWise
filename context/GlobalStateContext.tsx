@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Member, Project, Deposit, Expense, Fund, User, AccessLevel, AppScreen, Transaction } from '../types';
-import api, { memberService, projectService, fundService, financeService, authService, analyticsService, isNetworkError } from '../services/api';
+import api, { memberService, projectService, fundService, financeService, authService, analyticsService, auditService, isNetworkError } from '../services/api';
 
 export type ConnectionStatus = 'online' | 'offline' | 'degraded';
 
@@ -19,9 +19,12 @@ interface GlobalState {
   addProject: (p: Project) => void;
   addDeposit: (d: Deposit) => void;
   addExpense: (e: Expense) => void;
+  editExpense: (id: string, e: Expense) => Promise<void>;
   updateProject: (p: Project) => void;
   deleteProject: (id: string) => void;
   addProjectUpdate: (projectId: string, update: any) => void;
+  editProjectUpdate: (projectId: string, updateId: string, update: any) => Promise<void>;
+  deleteProjectUpdate: (projectId: string, updateId: string) => Promise<void>;
   addFund: (f: Fund) => Promise<void>;
   updateFund: (f: Fund) => Promise<void>;
   addSystemUser: (u: User) => void;
@@ -44,6 +47,8 @@ interface GlobalState {
   transactions: Transaction[];
   globalStats: any;
   refreshAnalytics: () => Promise<void>;
+  notifications: { count: number; items: any[] };
+  refreshNotifications: () => Promise<void>;
 }
 
 const GlobalStateContext = createContext<GlobalState | undefined>(undefined);
@@ -77,6 +82,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
   const [lastOnlineAt, setLastOnlineAt] = useState<number | null>(Date.now());
   const [lastError, setLastError] = useState<{ message: string; type: 'error' | 'warning' } | null>(null);
   const [globalStats, setGlobalStats] = useState<any>(null);
+  const [notifications, setNotifications] = useState<{ count: number; items: any[] }>({ count: 0, items: [] });
 
   const clearError = () => setLastError(null);
 
@@ -143,26 +149,31 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       const allTransactions = response.data || [];
       const normalized = allTransactions.map((t: any) => ({
         ...t,
-        id: t._id || t.id
+        id: t._id || t.id,
+        memberDisplayId: t.memberId?.memberId || 'N/A'
       }));
       setTransactions(normalized);
 
       const depositsList = normalized.filter((t: any) => t.type === 'Deposit').map((t: any) => ({
         id: t.id,
-        memberId: t.memberId?._id || t.memberId,
+        memberId: t.memberId?._id || t.memberId, // Use Mongo ID for backend operations
+        memberDisplayId: t.memberId?.memberId || 'N/A', // Custom ID for display
         memberName: t.memberId?.name || 'Unknown',
         shareNumber: Math.floor(t.amount / 1000),
         amount: t.amount,
         depositMonth: new Date(t.date).toLocaleString('default', { month: 'long' }) + ' ' + new Date(t.date).getFullYear(),
         cashierName: t.handlingOfficer || 'System',
         status: t.status === 'Success' ? 'Completed' : t.status,
-        date: t.date
+        date: t.date,
+        fundId: t.fundId?._id || t.fundId, // Ensure fundId is available
+        depositMethod: t.depositMethod || 'Cash'
       }));
       setDeposits(depositsList);
 
       const expensesList = normalized.filter((t: any) => t.type === 'Expense').map((t: any) => ({
         id: t.id,
         memberId: t.memberId?._id || t.memberId,
+        memberDisplayId: t.memberId?.memberId || 'N/A',
         memberName: t.memberId?.name || 'Unknown',
         projectId: t.projectId?._id || t.projectId,
         projectName: t.projectId?.title || '',
@@ -197,6 +208,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     } catch (e: any) { console.error("Fetch analytics failed", e); }
   };
 
+  const fetchNotifications = async () => {
+    if (!user || user.role !== 'Administrator') return;
+    try {
+      const data = await auditService.getNotifications();
+      setNotifications({ count: data.count, items: data.notifications });
+    } catch (e: any) { console.error("Fetch notifications failed", e); }
+  };
+
   useEffect(() => {
     if (!user) return;
     if (connectionStatus === 'online') {
@@ -207,6 +226,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       fetchAnalytics();
       if (user.role === 'Administrator' || user.role === 'Manager') {
         fetchSystemUsers();
+      }
+      if (user.role === 'Administrator') {
+        fetchNotifications();
       }
     }
   }, [user, connectionStatus]);
@@ -330,6 +352,32 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     }
   };
 
+  const editExpense = async (id: string, e: Expense) => {
+    if (connectionStatus === 'offline') {
+      setLastError({ message: 'Cannot edit expense while offline.', type: 'warning' });
+      return;
+    }
+    try {
+      const payload = {
+        amount: e.amount,
+        fundId: e.sourceFund,
+        description: e.reason,
+        category: e.category,
+        date: e.date,
+        memberId: e.memberId,
+        projectId: e.projectId
+      };
+      await financeService.editExpense(id, payload);
+      fetchTransactions();
+      fetchAnalytics();
+      fetchFunds();
+      fetchProjects();
+    } catch (err: any) {
+      setLastError({ message: err.message || 'Failed to edit expense', type: 'error' });
+      throw err;
+    }
+  };
+
   const updateProject = async (p: Project) => {
     if (connectionStatus === 'offline') {
       setLastError({ message: 'Cannot update project while offline.', type: 'warning' });
@@ -360,6 +408,40 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       fetchAnalytics();
     } catch (e: any) {
       setLastError({ message: e.message || 'Failed to add project update', type: 'error' });
+    }
+  };
+
+  const editProjectUpdate = async (projectId: string, updateId: string, update: any) => {
+    if (connectionStatus === 'offline') {
+      setLastError({ message: 'Cannot edit update while offline.', type: 'warning' });
+      return;
+    }
+    try {
+      const updatedProject = await projectService.editUpdate(projectId, updateId, update);
+      const standardized = { ...updatedProject, id: updatedProject._id || updatedProject.id };
+      setProjects(prev => prev.map(item => item.id === projectId ? standardized : item));
+      fetchProjects();
+      fetchAnalytics();
+    } catch (e: any) {
+      setLastError({ message: e.message || 'Failed to edit project update', type: 'error' });
+      throw e;
+    }
+  };
+
+  const deleteProjectUpdate = async (projectId: string, updateId: string) => {
+    if (connectionStatus === 'offline') {
+      setLastError({ message: 'Cannot delete update while offline.', type: 'warning' });
+      return;
+    }
+    try {
+      const updatedProject = await projectService.deleteUpdate(projectId, updateId);
+      const standardized = { ...updatedProject, id: updatedProject._id || updatedProject.id };
+      setProjects(prev => prev.map(item => item.id === projectId ? standardized : item));
+      fetchProjects();
+      fetchAnalytics();
+    } catch (e: any) {
+      setLastError({ message: e.message || 'Failed to delete project update', type: 'error' });
+      throw e;
     }
   };
 
@@ -477,10 +559,6 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     }
   };
 
-  const refreshData = async () => {
-    await Promise.all([fetchMembers(), fetchProjects(), fetchFunds(), fetchTransactions(), fetchSystemUsers(), fetchAnalytics()]);
-  };
-
   const distributeDividends = async (data: any) => {
     await financeService.distributeDividends(data);
     await refreshData();
@@ -491,16 +569,30 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     await refreshData();
   };
 
+  const refreshData = async () => {
+    await Promise.all([
+      fetchMembers(),
+      fetchProjects(),
+      fetchFunds(),
+      fetchTransactions(),
+      fetchSystemUsers(),
+      fetchAnalytics(),
+      user?.role === 'Administrator' ? fetchNotifications() : Promise.resolve()
+    ]);
+  };
+
   return (
     <GlobalStateContext.Provider value={{
       members, projects, deposits, expenses, funds, systemUsers, transactions, currentUser: user,
       globalStats,
-      addMember, updateMember, deleteMember, addProject, addDeposit, addExpense, updateProject, deleteProject, addProjectUpdate,
+      addMember, updateMember, deleteMember, addProject, addDeposit, addExpense, editExpense, updateProject, deleteProject, addProjectUpdate, editProjectUpdate, deleteProjectUpdate,
       addFund, updateFund,
       addSystemUser, updateUserPermissions, updateUserPassword, deleteUser,
       connectionStatus, lastOnlineAt, checkConnection, lastError, clearError,
       refreshMembers: fetchMembers, refreshProjects: fetchProjects, refreshFunds: fetchFunds, refreshTransactions: fetchTransactions,
       refreshAnalytics: fetchAnalytics,
+      notifications,
+      refreshNotifications: fetchNotifications,
       refreshData, distributeDividends, transferEquity
     }}>
       {children}

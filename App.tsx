@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
@@ -33,6 +33,30 @@ const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => voi
   const [lang, setLang] = useState<Language>('en');
   const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const getPageTitle = (path: string) => {
+      switch (path) {
+        case '/dashboard': return 'Dashboard';
+        case '/members': return 'Members';
+        case '/goals': return 'Goals';
+        case '/deposits': return 'Deposits';
+        case '/request-deposit': return 'Request Deposit';
+        case '/transactions': return 'Transactions';
+        case '/expenses': return 'Expenses';
+        case '/projects': return 'Projects';
+        case '/dividends': return 'Dividends';
+        case '/funds': return 'Funds';
+        case '/analysis': return 'Analysis';
+        case '/reports': return 'Reports';
+        case '/settings': return 'Settings';
+        case '/login': return 'Login';
+        default: return 'Strategic Wealth Intelligence';
+      }
+    };
+    document.title = `InvestWise | ${getPageTitle(location.pathname)}`;
+  }, [location]);
 
   useEffect(() => {
     if (isDarkMode) {

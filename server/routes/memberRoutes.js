@@ -7,14 +7,15 @@ import {
     updateMember,
     deleteMember,
 } from '../controllers/memberController.js';
-import { protect, admin, managerOrAdmin } from '../middleware/authMiddleware.js';
+import { protect, requirePermission } from '../middleware/authMiddleware.js';
 import { memberValidation } from '../middleware/validator.js';
 
-router.route('/').get(protect, managerOrAdmin, getMembers).post(protect, admin, memberValidation, createMember);
+// Allow READ access for viewing members, WRITE for creating
+router.route('/').get(protect, requirePermission('MEMBERS', 'READ'), getMembers).post(protect, requirePermission('MEMBERS', 'WRITE'), memberValidation, createMember);
 router
     .route('/:id')
-    .get(protect, managerOrAdmin, getMemberById)
-    .put(protect, admin, memberValidation, updateMember)
-    .delete(protect, admin, deleteMember);
+    .get(protect, requirePermission('MEMBERS', 'READ'), getMemberById)
+    .put(protect, requirePermission('MEMBERS', 'WRITE'), memberValidation, updateMember)
+    .delete(protect, requirePermission('MEMBERS', 'WRITE'), deleteMember);
 
 export default router;

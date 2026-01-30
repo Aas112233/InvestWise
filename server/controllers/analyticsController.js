@@ -132,6 +132,32 @@ const recalculateAllStats = async () => {
         ? { name: topPartners[0].name, role: 'Principal Partner' }
         : { name: 'N/A', role: 'N/A' };
 
+    // Calculate Fund Stability (NAV Ratio)
+    // Assets = Invested Capital + Cash Balance
+    // Liabilities = Total Deposits
+
+    const cashFlowParams = await Transaction.aggregate([
+        { $match: { status: { $in: ['Success', 'Completed'] } } },
+        {
+            $group: {
+                _id: null,
+                totalInflow: { $sum: { $cond: [{ $in: ['$type', ['Deposit', 'Earning', 'Investment', 'Dividend']] }, '$amount', 0] } },
+                totalOutflow: { $sum: { $cond: [{ $in: ['$type', ['Withdrawal', 'Expense']] }, '$amount', 0] } }
+            }
+        }
+    ]);
+
+    const totalDepositsVal = transactionAggregation[0]?.totalDeposits || 1; // Avoid division by zero
+    const totalInflow = cashFlowParams[0]?.totalInflow || 0;
+    const totalOutflow = cashFlowParams[0]?.totalOutflow || 0;
+    const cashBalance = totalInflow - totalOutflow - (projectAggregation[0]?.investedCapital || 0);
+
+    // NAV Ratio = (Invested Capital + Cash Balance) / Total Deposits * 100
+    // Simplified: (Total Assets / Total Liabilities) * 100
+    // Note: This approximates the "Are we solvent?" question
+    const totalAssets = (projectAggregation[0]?.investedCapital || 0) + Math.max(0, cashBalance);
+    const fundStability = Math.min(100, (totalAssets / totalDepositsVal) * 100).toFixed(1);
+
     const statsData = {
         totalMembers,
         investedCapital: projectAggregation[0]?.investedCapital || 0,
@@ -144,6 +170,7 @@ const recalculateAllStats = async () => {
         maxShares,
         topProjects: formattedTopProjects,
         topInvestor,
+        fundStability,
         lastUpdated: new Date()
     };
 

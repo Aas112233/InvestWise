@@ -13,6 +13,7 @@ import ExportMenu from './ExportMenu';
 import { formatCurrency } from '../utils/formatters';
 import Avatar from './Avatar';
 import { ModalForm, FormInput, FormSelect, FormLabel } from './ui/FormElements';
+import PermissionGuard from './PermissionGuard';
 
 const SHARE_VALUE = 1000;
 
@@ -326,7 +327,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             lang={lang}
             targetId="members-snapshot-target"
           />
-          {currentUser?.permissions[AppScreen.MEMBERS] === AccessLevel.WRITE && (
+          <PermissionGuard screen={AppScreen.MEMBERS} requiredLevel={AccessLevel.WRITE}>
             <button
               onClick={() => handleOpenModal()}
               className="bg-dark dark:bg-brand text-white dark:text-dark px-8 py-4 rounded-[2rem] font-black text-[11px] uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-xl shadow-brand/10"
@@ -334,7 +335,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
               <Plus size={18} />
               <span>{t('common.add', lang)}</span>
             </button>
-          )}
+          </PermissionGuard>
         </div>
       </div>
       <div id="members-snapshot-target" className="space-y-10">
@@ -426,18 +427,16 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                         BDT {member.totalContributed.toLocaleString()}
                       </td>
                       <td className="px-10 py-6 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {currentUser?.permissions[AppScreen.MEMBERS] === AccessLevel.WRITE && (
-                            <>
-                              <button onClick={() => handleOpenModal(member)} className="p-3 bg-gray-50 dark:bg-white/5 rounded-xl text-gray-400 hover:text-brand transition-colors">
-                                <Edit2 size={18} />
-                              </button>
-                              <button onClick={() => handleDeleteClick(member)} className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl text-rose-400 hover:text-rose-600 transition-colors">
-                                <Trash2 size={18} />
-                              </button>
-                            </>
-                          )}
-                        </div>
+                        <PermissionGuard screen={AppScreen.MEMBERS} requiredLevel={AccessLevel.WRITE}>
+                          <div className="flex items-center justify-end gap-2">
+                            <button onClick={() => handleOpenModal(member)} className="p-3 bg-gray-50 dark:bg-white/5 rounded-xl text-gray-400 hover:text-brand transition-colors">
+                              <Edit2 size={18} />
+                            </button>
+                            <button onClick={() => handleDeleteClick(member)} className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl text-rose-400 hover:text-rose-600 transition-colors">
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </PermissionGuard>
                       </td>
                     </tr>
                   ))

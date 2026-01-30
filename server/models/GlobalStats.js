@@ -20,6 +20,8 @@ const GlobalStatsSchema = new mongoose.Schema({
         value: { type: Number, default: 0 }
     }],
 
+    fundStability: { type: Number, default: 100 },
+
     lastUpdated: { type: Date, default: Date.now }
 }, { timestamps: true });
 
