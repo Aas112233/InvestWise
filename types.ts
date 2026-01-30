@@ -179,3 +179,18 @@ export interface InsightData {
   message: string;
   type: 'positive' | 'warning' | 'info';
 }
+
+export interface Goal {
+  _id: string; // MongoDB ID
+  user: string;
+  title: string;
+  description?: string;
+  targetAmount: number;
+  currentAmount: number;
+  deadline?: string;
+  status: 'In Progress' | 'Achieved' | 'Cancelled';
+  type: 'Savings' | 'Investment' | 'Other';
+  linkedProject?: string;
+  createdAt: string;
+  updatedAt: string;
+}

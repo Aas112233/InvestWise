@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Member, Project, Deposit, Expense, Fund, User, AccessLevel, AppScreen, Transaction } from '../types';
-import api, { memberService, projectService, fundService, financeService, authService, isNetworkError } from '../services/api';
+import api, { memberService, projectService, fundService, financeService, authService, analyticsService, isNetworkError } from '../services/api';
 
 export type ConnectionStatus = 'online' | 'offline' | 'degraded';
 
@@ -42,6 +42,8 @@ interface GlobalState {
   distributeDividends: (data: any) => Promise<void>;
   transferEquity: (data: any) => Promise<void>;
   transactions: Transaction[];
+  globalStats: any;
+  refreshAnalytics: () => Promise<void>;
 }
 
 const GlobalStateContext = createContext<GlobalState | undefined>(undefined);
@@ -74,6 +76,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('online');
   const [lastOnlineAt, setLastOnlineAt] = useState<number | null>(Date.now());
   const [lastError, setLastError] = useState<{ message: string; type: 'error' | 'warning' } | null>(null);
+  const [globalStats, setGlobalStats] = useState<any>(null);
 
   const clearError = () => setLastError(null);
 
@@ -113,14 +116,16 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
 
   const fetchMembers = async () => {
     try {
-      const data = await memberService.getAll();
+      const response = await memberService.getAll();
+      const data = response.data || [];
       setMembers(data.map((m: any) => ({ ...m, id: m._id || m.id })));
     } catch (e: any) { console.error("Fetch members failed", e); }
   };
 
   const fetchProjects = async () => {
     try {
-      const data = await projectService.getAll();
+      const response = await projectService.getAll();
+      const data = response.data || [];
       setProjects(data.map((p: any) => ({ ...p, id: p._id || p.id })));
     } catch (e: any) { console.error("Fetch projects failed", e); }
   };
@@ -134,7 +139,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
 
   const fetchTransactions = async () => {
     try {
-      const allTransactions = await financeService.getTransactions();
+      const response = await financeService.getTransactions({ limit: 1000 });
+      const allTransactions = response.data || [];
       const normalized = allTransactions.map((t: any) => ({
         ...t,
         id: t._id || t.id
@@ -154,7 +160,18 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       }));
       setDeposits(depositsList);
 
-      const expensesList = normalized.filter((t: any) => t.type === 'Expense');
+      const expensesList = normalized.filter((t: any) => t.type === 'Expense').map((t: any) => ({
+        id: t.id,
+        memberId: t.memberId?._id || t.memberId,
+        memberName: t.memberId?.name || 'Unknown',
+        projectId: t.projectId?._id || t.projectId,
+        projectName: t.projectId?.title || '',
+        amount: t.amount,
+        category: t.category || 'Operational',
+        reason: t.description || 'No description',
+        date: t.date,
+        sourceFund: t.fundId?._id || t.fundId
+      }));
       setExpenses(expensesList);
     } catch (e: any) { console.error("Fetch transactions failed", e); }
   };
@@ -173,6 +190,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     }
   };
 
+  const fetchAnalytics = async () => {
+    try {
+      const data = await analyticsService.getStats();
+      setGlobalStats(data);
+    } catch (e: any) { console.error("Fetch analytics failed", e); }
+  };
+
   useEffect(() => {
     if (!user) return;
     if (connectionStatus === 'online') {
@@ -180,6 +204,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       fetchProjects();
       fetchFunds();
       fetchTransactions();
+      fetchAnalytics();
       if (user.role === 'Administrator' || user.role === 'Manager') {
         fetchSystemUsers();
       }
@@ -195,6 +220,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       const newItem = await memberService.create(m);
       setMembers(prev => [newItem, ...prev]);
       fetchMembers();
+      fetchAnalytics();
     } catch (e: any) {
       setLastError({ message: e.message || 'Failed to add member', type: 'error' });
       throw e;
@@ -211,6 +237,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       const standardized = { ...updated, id: updated._id || updated.id };
       setMembers(prev => prev.map(item => item.id === m.id ? standardized : item));
       fetchMembers();
+      fetchAnalytics();
     } catch (e: any) {
       setLastError({ message: e.message || 'Failed to update member', type: 'error' });
       throw e;
@@ -226,6 +253,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       await memberService.delete(id);
       setMembers(prev => prev.filter(m => m.id !== id));
       fetchMembers();
+      fetchAnalytics();
     } catch (e: any) {
       setLastError({ message: e.message || 'Failed to delete member', type: 'error' });
       throw e;
@@ -242,6 +270,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       const standardized = { ...newItem, id: newItem._id || newItem.id };
       setProjects(prev => [standardized, ...prev]);
       fetchProjects();
+      fetchAnalytics();
       fetchFunds();
     } catch (e: any) {
       setLastError({ message: e.message || 'Failed to add project', type: 'error' });
@@ -266,6 +295,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       };
       await financeService.addDeposit(payload);
       fetchTransactions();
+      fetchAnalytics();
       fetchFunds();
       fetchMembers();
     } catch (e: any) {
@@ -292,6 +322,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       };
       await financeService.addExpense(payload);
       fetchTransactions();
+      fetchAnalytics();
       fetchFunds();
       fetchProjects();
     } catch (err: any) {
@@ -309,6 +340,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       const standardized = { ...updated, id: updated._id || updated.id };
       setProjects(prev => prev.map(item => item.id === p.id ? standardized : item));
       fetchProjects();
+      fetchFunds();
+      fetchAnalytics();
     } catch (e: any) {
       setLastError({ message: e.message || 'Failed to update project', type: 'error' });
     }
@@ -324,6 +357,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       const standardized = { ...updatedProject, id: updatedProject._id || updatedProject.id };
       setProjects(prev => prev.map(item => item.id === projectId ? standardized : item));
       fetchProjects();
+      fetchAnalytics();
     } catch (e: any) {
       setLastError({ message: e.message || 'Failed to add project update', type: 'error' });
     }
@@ -338,6 +372,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       await projectService.delete(id);
       setProjects(prev => prev.filter(p => p.id !== id));
       fetchProjects();
+      fetchFunds();
+      fetchAnalytics();
     } catch (e: any) {
       setLastError({ message: e.message || 'Failed to delete project', type: 'error' });
       throw e;
@@ -352,6 +388,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     try {
       await fundService.create(f);
       fetchFunds();
+      fetchAnalytics();
     } catch (e: any) {
       setLastError({ message: e.message || 'Failed to create fund', type: 'error' });
       throw e;
@@ -368,6 +405,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       const standardized = { ...updated, id: updated._id || updated.id };
       setFunds(prev => prev.map(item => item.id === f.id ? standardized : item));
       fetchFunds();
+      fetchAnalytics();
     } catch (e: any) {
       setLastError({ message: e.message || 'Failed to update fund', type: 'error' });
     }
@@ -412,6 +450,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       await authService.updateUser(userId, { permissions: updatedPermissions });
 
       setSystemUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions: updatedPermissions } : u));
+      fetchSystemUsers();
     } catch (e: any) {
       setLastError({ message: 'Failed to update user permissions', type: 'error' });
     }
@@ -431,6 +470,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     try {
       await authService.deleteUser(userId);
       setSystemUsers(prev => prev.filter(u => u.id !== userId));
+      fetchSystemUsers();
       setLastError({ message: 'User access revoked', type: 'warning' });
     } catch (e: any) {
       setLastError({ message: 'Failed to revoke access', type: 'error' });
@@ -438,7 +478,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
   };
 
   const refreshData = async () => {
-    await Promise.all([fetchMembers(), fetchProjects(), fetchFunds(), fetchTransactions(), fetchSystemUsers()]);
+    await Promise.all([fetchMembers(), fetchProjects(), fetchFunds(), fetchTransactions(), fetchSystemUsers(), fetchAnalytics()]);
   };
 
   const distributeDividends = async (data: any) => {
@@ -454,11 +494,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
   return (
     <GlobalStateContext.Provider value={{
       members, projects, deposits, expenses, funds, systemUsers, transactions, currentUser: user,
+      globalStats,
       addMember, updateMember, deleteMember, addProject, addDeposit, addExpense, updateProject, deleteProject, addProjectUpdate,
       addFund, updateFund,
       addSystemUser, updateUserPermissions, updateUserPassword, deleteUser,
       connectionStatus, lastOnlineAt, checkConnection, lastError, clearError,
       refreshMembers: fetchMembers, refreshProjects: fetchProjects, refreshFunds: fetchFunds, refreshTransactions: fetchTransactions,
+      refreshAnalytics: fetchAnalytics,
       refreshData, distributeDividends, transferEquity
     }}>
       {children}

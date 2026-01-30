@@ -60,7 +60,7 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, change, isPositive = 
   } else if (isDarkVariant) {
     cardClass = "bg-dark text-white dark:bg-brand dark:text-dark shadow-[0_30px_60px_-15px_rgba(0,0,0,0.4)] border-transparent";
   } else {
-    cardClass = "bg-white dark:bg-[#1A221D] text-dark dark:text-white border-gray-100 dark:border-white/5 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)]";
+    cardClass = "bg-white/80 dark:bg-white/5 backdrop-blur-2xl border border-white/20 dark:border-white/5 text-dark dark:text-white transition-all hover:shadow-2xl hover:scale-[1.02] hover:border-brand/30 dark:hover:border-brand/30";
   }
 
   return (
@@ -102,11 +102,11 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, change, isPositive = 
           {[45, 75, 55, 90, 60, 100, 80, 110].map((h, i) => (
             <div
               key={i}
-              className={`flex-1 rounded-t-2xl transition-all duration-1000 delay-[${i * 40}ms] group-hover:translate-y-[-8px] group-hover:shadow-2xl ${isBrandVariant ? 'bg-dark/20' :
+              className={`flex-1 rounded-t-2xl transition-all duration-1000 group-hover:translate-y-[-8px] group-hover:shadow-2xl ${isBrandVariant ? 'bg-dark/20' :
                 isDarkVariant ? 'bg-brand/30 dark:bg-dark/30' :
                   'bg-gray-200/50 dark:bg-brand/20'
                 }`}
-              style={{ height: `${Math.min(h, 100)}%`, opacity: (i + 1) / 8 }}
+              style={{ height: `${Math.min(h, 100)}%`, opacity: (i + 1) / 8, transitionDelay: `${i * 40}ms` }}
             />
           ))}
         </div>

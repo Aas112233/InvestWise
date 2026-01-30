@@ -6,6 +6,13 @@ import { useGlobalState } from '../context/GlobalStateContext';
 import { memberService } from '../services/api';
 import Toast, { ToastType } from './Toast';
 import { Language, t } from '../i18n/translations';
+import SearchBar from './SearchBar';
+import Pagination from './Pagination';
+import ActionDialog, { ActionDialogProps } from './ActionDialog';
+import ExportMenu from './ExportMenu';
+import { formatCurrency } from '../utils/formatters';
+import Avatar from './Avatar';
+import { ModalForm, FormInput, FormSelect, FormLabel } from './ui/FormElements';
 
 const SHARE_VALUE = 1000;
 
@@ -14,16 +21,6 @@ const generateId = () => {
   // Ideally this should come from backend, but for immediate pre-fill:
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
-// Note: We are keeping the 6-digit style for "Member ID" display purposes as requested by design, 
-// but the backend now ensures unique "MEM-XXXX" IDs if not provided.
-// The frontend 'memberId' here is just a suggestion.
-
-
-import ActionDialog, { ActionDialogProps } from './ActionDialog';
-import ExportMenu from './ExportMenu';
-import { formatCurrency } from '../utils/formatters';
-
-// ... existing imports
 
 interface MembersProps {
   lang: Language;
@@ -35,9 +32,41 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [createUserAccess, setCreateUserAccess] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [paginatedMembers, setPaginatedMembers] = useState<{
+    data: Member[];
+    total: number;
+    pages: number;
+  }>({ data: [], total: 0, pages: 0 });
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchPaginatedMembers = async (page: number, search: string, limit: number) => {
+    setLoading(true);
+    try {
+      const result = await memberService.getAll({ page, limit, search });
+      setPaginatedMembers({
+        data: result.data.map((m: any) => ({ ...m, id: m._id || m.id })),
+        total: result.total,
+        pages: result.pages
+      });
+    } catch (err) {
+      console.error('Failed to fetch paginated members:', err);
+      showNotification(t('members.processError', lang), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage);
+  }, [currentPage, searchQuery, rowsPerPage]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    await fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage);
     await refreshMembers();
     setTimeout(() => setRefreshing(false), 500);
   };
@@ -147,13 +176,15 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
 
     try {
       await addSystemUser(newUser);
-      showNotification(`Partner ${member.name} successfully onboarded with system access.`);
+      await createSystemAccess(member);
+      showNotification(t('members.onboardedAccess', lang).replace('{name}', member.name));
     } catch (err: any) {
-      showNotification(`Member created but failed to provision portal: ${err.message}`, "error");
+      showNotification(t('members.portalProvisionError', lang).replace('{error}', err.message), "error");
     }
   };
 
   const executeSubmit = async () => {
+    setIsSubmitting(true);
     try {
       const sharesNum = parseInt(formData.shares) || 0;
 
@@ -167,7 +198,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
         shares: editingMember ? editingMember.shares : sharesNum,
         totalContributed: editingMember ? editingMember.totalContributed : (sharesNum * SHARE_VALUE),
         lastActive: 'Just now',
-        avatar: editingMember?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.name}`,
+        avatar: '', // Letter avatars are generated from name on-the-fly
         status: 'active',
         hasUserAccess: createUserAccess
       };
@@ -178,7 +209,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
         if (createUserAccess) {
           await createSystemAccess(newMember);
         } else {
-          showNotification(`Partner ${formData.name} successfully onboarded.`);
+          showNotification(t('members.onboarded', lang).replace('{name}', formData.name));
         }
       } else {
         await updateMember(newMember);
@@ -186,14 +217,17 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
         if (createUserAccess && !editingMember.hasUserAccess) {
           await createSystemAccess(newMember);
         } else {
-          showNotification(`Partner ${formData.name} updated successfully.`);
+          showNotification(t('members.updated', lang).replace('{name}', formData.name));
         }
       }
 
       handleCloseModal();
       closeDialog();
+      fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage);
     } catch (err: any) {
-      showNotification(err.message || "Failed to process partner data.", "error");
+      showNotification(err.message || t('members.processError', lang), "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -202,40 +236,43 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
 
     // Validation
     if (createUserAccess && (!formData.password || formData.password.length < 6) && !editingMember) {
-      showNotification("Password must be at least 6 characters.", "error");
+      showNotification(t('members.passwordLengthError', lang), "error");
       return;
     }
 
     setDialog({
       isOpen: true,
       type: 'review',
-      title: editingMember ? 'Review Changes' : 'Review New Partner',
-      message: 'Please verify the information below before finalizing the record.',
+      title: editingMember ? t('members.reviewTitle', lang) : t('members.reviewTitle', lang),
+      message: t('members.reviewMessage', lang),
       details: [
-        { label: 'Full Name', value: formData.name },
-        { label: 'Role', value: formData.role },
-        { label: 'Email', value: formData.email },
-        { label: 'Shares', value: formData.shares },
-        { label: 'System Access', value: createUserAccess ? 'Enabled' : 'Disabled' },
-        ...(createUserAccess ? [{ label: 'System Role', value: formData.userRole }] : [])
+        { label: t('members.legalName', lang), value: formData.name },
+        { label: t('members.memberId', lang), value: formData.memberId },
+        { label: t('members.accessRole', lang), value: formData.role },
+        { label: t('members.valuation', lang), value: `BDT ${formData.shares}` },
+        { label: t('members.systemAccess', lang), value: createUserAccess ? t('common.active', lang) : t('common.pending', lang) },
       ],
       onConfirm: executeSubmit
     });
   };
 
   const executeDelete = async (member: Member) => {
+    setIsSubmitting(true);
     try {
       const memberId = (member as any)._id || member.id;
       await deleteMember(memberId); // Use Context method
-      showNotification(`Member ${member.name} deleted successfully.`);
+      showNotification(t('members.deleteSuccess', lang).replace('{name}', member.name));
       closeDialog();
+      fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage);
     } catch (err: any) {
       // Error handling is actually done in Context too, but we catch re-thrown error here to close dialog/show UI
       // Context sets lastError, but we also want local toast if desired.
-      // Since context re-throws, this catch block runs.
-      const errorMessage = err.response?.data?.message || err.message || "Failed to delete member.";
+      // since context re-throws, this catch block runs.
+      const errorMessage = err.response?.data?.message || err.message || t('members.deleteError', lang);
       showNotification(errorMessage, "error");
       closeDialog();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -243,8 +280,8 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
     setDialog({
       isOpen: true,
       type: 'delete',
-      title: 'Confirm Deletion',
-      message: `Are you sure you want to remove ${member.name}? This will permanently delete their record and cannot be undone. Ensure all financial dependencies are resolved first.`,
+      title: t('members.deleteConfirm', lang),
+      message: t('members.deleteMessage', lang).replace('{name}', member.name),
       onConfirm: () => executeDelete(member)
     });
   };
@@ -258,9 +295,9 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
       <div className="flex items-end justify-between px-2">
         <div>
           <nav className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2 uppercase tracking-widest">
-            <span>Core</span>
+            <span>{t('nav.management', lang)}</span>
             <span className="opacity-30">/</span>
-            <span className="text-brand">Stakeholders</span>
+            <span className="text-brand">{t('members.stakeholders', lang)}</span>
           </nav>
           <div className="flex items-center gap-4">
             <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('nav.members', lang)}</h1>
@@ -276,16 +313,17 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
           <ExportMenu
             data={members}
             columns={[
-              { header: 'ID', key: 'memberId' },
-              { header: 'Name', key: 'name' },
-              { header: 'Phone', key: 'phone' },
-              { header: 'Role', key: 'role' },
-              { header: 'Shares', key: 'shares' },
-              { header: 'Contribution', key: 'totalContributed', format: (m: any) => `BDT ${m.totalContributed.toLocaleString()}` },
-              { header: 'Access', key: 'hasUserAccess', format: (m: any) => m.hasUserAccess ? 'Yes' : 'No' }
+              { header: t('members.memberId', lang), key: 'memberId' },
+              { header: t('members.name', lang), key: 'name' },
+              { header: t('members.phone', lang), key: 'phone' },
+              { header: t('members.role', lang), key: 'role' },
+              { header: t('members.shares', lang), key: 'shares' },
+              { header: `${t('members.totalContribution', lang)} (BDT)`, key: 'totalContributed', format: (m: any) => m.totalContributed.toLocaleString() },
+              { header: t('members.access', lang), key: 'hasUserAccess', format: (m: any) => m.hasUserAccess ? (lang === 'bn' ? 'হ্যাঁ' : 'Yes') : (lang === 'bn' ? 'না' : 'No') }
             ]}
             fileName={`members_${new Date().toISOString().split('T')[0]}`}
             title="Stakeholder Register"
+            lang={lang}
             targetId="members-snapshot-target"
           />
           {currentUser?.permissions[AppScreen.MEMBERS] === AccessLevel.WRITE && (
@@ -302,14 +340,14 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
       <div id="members-snapshot-target" className="space-y-10">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="bg-white dark:bg-[#1A221D] p-8 lg:p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5">
-            <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-4">Total Partners</p>
+            <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-4">{t('members.totalPartners', lang)}</p>
             <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="text-4xl sm:text-5xl lg:text-7xl font-black text-dark dark:text-white tracking-tighter leading-none">{members.length}</span>
-              <span className="text-xl font-black text-brand tracking-tight">Vested</span>
+              <span className="text-4xl sm:text-5xl lg:text-7xl font-black text-dark dark:text-white tracking-tighter leading-none">{paginatedMembers.total}</span>
+              <span className="text-xl font-black text-brand tracking-tight">{t('members.vested', lang)}</span>
             </div>
           </div>
           <div className="bg-dark p-8 lg:p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between">
-            <p className="text-[11px] font-black text-white/30 uppercase tracking-widest mb-4">Cumulative Pool</p>
+            <p className="text-[11px] font-black text-white/30 uppercase tracking-widest mb-4">{t('members.cumulativePool', lang)}</p>
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className={`font-black text-brand tracking-tighter leading-tight uppercase ${formatCurrency(totalPool).length > 12 ? 'text-3xl sm:text-4xl' : 'text-4xl sm:text-5xl'}`}>{formatCurrency(totalPool)}</span>
             </div>
@@ -318,209 +356,231 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
 
         <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5">
           <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between gap-6">
-            <div className="relative flex-1 max-w-lg">
-              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input type="text" placeholder="Filter members..." className="w-full bg-gray-50 dark:bg-[#111814] pl-14 pr-6 py-4 rounded-2xl border-none outline-none text-sm font-bold dark:text-white" />
-            </div>
+            <SearchBar
+              onSearch={(q) => {
+                setSearchQuery(q);
+                setCurrentPage(1);
+              }}
+              placeholder={t('members.filterPlaceholder', lang)}
+            />
           </div>
 
           <div className="overflow-x-auto px-2">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-gray-50/30 dark:bg-white/5 text-[11px] font-black text-gray-500 uppercase tracking-widest">
-                  <th className="px-10 py-6 text-left">Partner Identity</th>
-                  <th className="px-10 py-6 text-left">Member ID</th>
-                  <th className="px-10 py-6 text-left">Contact Info</th>
-                  <th className="px-10 py-6 text-center">System Access</th>
-                  <th className="px-10 py-6 text-right">Valuation</th>
-                  <th className="px-10 py-6 text-right">Action</th>
+                  <th className="px-10 py-6 text-left">{t('members.partnerIdentity', lang)}</th>
+                  <th className="px-10 py-6 text-left">{t('members.memberId', lang)}</th>
+                  <th className="px-10 py-6 text-left">{t('members.contactInfo', lang)}</th>
+                  <th className="px-10 py-6 text-center">{t('members.systemAccess', lang)}</th>
+                  <th className="px-10 py-6 text-center">{t('members.shares', lang)}</th>
+                  <th className="px-10 py-6 text-right">{t('members.valuation', lang)}</th>
+                  <th className="px-10 py-6 text-right">{t('members.action', lang)}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-white/5">
-                {members.map((member, index) => (
-                  <tr key={member.id || member.memberId || `member-${index}`} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
-                    <td className="px-10 py-6">
-                      <div className="flex items-center gap-5">
-                        <img src={member.avatar} className="w-14 h-14 rounded-2xl grayscale group-hover:grayscale-0 transition-all duration-500" alt="" />
-                        <div>
-                          <p className="font-black text-dark dark:text-white text-lg leading-none mb-1 group-hover:text-brand transition-colors">{member.name}</p>
-                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{member.role}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-10 py-6 font-mono text-sm font-black text-dark dark:text-brand">#{member.memberId}</td>
-                    <td className="px-10 py-6 text-xs font-black text-dark dark:text-gray-300">{member.phone}</td>
-                    <td className="px-10 py-6 text-center">
-                      {(member.hasUserAccess || systemUsers.some(u => u.memberId === member.memberId)) ? (
-                        <span className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 shadow-sm shadow-emerald-500/5 transition-all hover:scale-105">
-                          <ShieldCheck size={12} strokeWidth={3} /> {t('common.authorizedBadge', lang)}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2 px-4 py-2 bg-gray-500/5 text-gray-400 rounded-xl text-[10px] font-black uppercase tracking-widest border border-gray-500/10 opacity-40 transition-all hover:opacity-60">
-                          <Lock size={12} /> {t('common.restrictedBadge', lang)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-xl tracking-tighter">
-                      BDT {member.totalContributed.toLocaleString()}
-                    </td>
-                    <td className="px-10 py-6 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {currentUser?.permissions[AppScreen.MEMBERS] === AccessLevel.WRITE && (
-                          <>
-                            <button onClick={() => handleOpenModal(member)} className="p-3 bg-gray-50 dark:bg-white/5 rounded-xl text-gray-400 hover:text-brand transition-colors">
-                              <Edit2 size={18} />
-                            </button>
-                            <button onClick={() => handleDeleteClick(member)} className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl text-rose-400 hover:text-rose-600 transition-colors">
-                              <Trash2 size={18} />
-                            </button>
-                          </>
-                        )}
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="px-10 py-20 text-center">
+                      <div className="flex flex-col items-center gap-4">
+                        <RefreshCw className="animate-spin text-brand" size={40} />
+                        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Scanning Ledger...</p>
                       </div>
                     </td>
                   </tr>
-                ))}
+                ) : paginatedMembers.data.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-10 py-20 text-center">
+                      <p className="text-xs font-black text-gray-400 uppercase tracking-widest">No stakeholders found matching your search</p>
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedMembers.data.map((member, index) => (
+                    <tr key={member.id || member.memberId || `member-${index}`} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
+                      <td className="px-10 py-6">
+                        <div className="flex items-center gap-5">
+                          <Avatar name={member.name} size="lg" className="grayscale group-hover:grayscale-0" />
+                          <div>
+                            <p className="font-black text-dark dark:text-white text-lg leading-none mb-1 group-hover:text-brand transition-colors">{member.name}</p>
+                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{member.role}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-10 py-6 font-mono text-sm font-black text-dark dark:text-brand">#{member.memberId}</td>
+                      <td className="px-10 py-6 text-xs font-black text-dark dark:text-gray-300">{member.phone}</td>
+                      <td className="px-10 py-6 text-center">
+                        {(member.hasUserAccess || systemUsers.some(u => u.memberId === member.memberId)) ? (
+                          <span className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 shadow-sm shadow-emerald-500/5 transition-all hover:scale-105">
+                            <ShieldCheck size={12} strokeWidth={3} /> {t('common.authorizedBadge', lang)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-2 px-4 py-2 bg-gray-500/5 text-gray-400 rounded-xl text-[10px] font-black uppercase tracking-widest border border-gray-500/10 opacity-40 transition-all hover:opacity-60">
+                            <Lock size={12} /> {t('common.restrictedBadge', lang)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-10 py-6 text-center">
+                        <span className="font-black text-dark dark:text-brand text-lg">{member.shares}</span>
+                      </td>
+                      <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-xl tracking-tighter">
+                        BDT {member.totalContributed.toLocaleString()}
+                      </td>
+                      <td className="px-10 py-6 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {currentUser?.permissions[AppScreen.MEMBERS] === AccessLevel.WRITE && (
+                            <>
+                              <button onClick={() => handleOpenModal(member)} className="p-3 bg-gray-50 dark:bg-white/5 rounded-xl text-gray-400 hover:text-brand transition-colors">
+                                <Edit2 size={18} />
+                              </button>
+                              <button onClick={() => handleDeleteClick(member)} className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl text-rose-400 hover:text-rose-600 transition-colors">
+                                <Trash2 size={18} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
+          </div>
+
+          <div className="px-10 py-8 border-t border-gray-50 dark:border-white/5">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={paginatedMembers.pages}
+              onPageChange={setCurrentPage}
+              rowsPerPage={rowsPerPage}
+              onRowsPerPageChange={(newLimit) => {
+                setRowsPerPage(newLimit);
+                setCurrentPage(1);
+              }}
+            />
           </div>
         </div>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-dark/90 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-[#1A221D] w-full max-w-xl rounded-[4rem] card-shadow overflow-y-auto max-h-[90vh] relative animate-in zoom-in-95 duration-300 border border-white/10 no-scrollbar">
-            <button onClick={handleCloseModal} className="absolute top-10 right-10 p-3 text-gray-400 hover:text-dark dark:hover:text-white">
-              <X size={28} />
-            </button>
-            <div className="p-8">
-              <div className="mb-6">
-                <h3 className="text-3xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none mb-2">Partner Intake</h3>
-                <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest">Member ID: <span className="text-brand font-mono">#{formData.memberId}</span></p>
+      <ModalForm
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        title={t('members.intake', lang)}
+        subtitle={`${t('members.memberId', lang)}: #${formData.memberId}`}
+        onSubmit={handleReviewSubmit}
+        submitLabel="Authorize Partner"
+        maxWidth="max-w-6xl"
+        loading={isSubmitting}
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <FormInput
+              label={t('members.legalName', lang)}
+              value={formData.name}
+              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              required
+            />
+            <FormInput
+              label={t('auth.identifier', lang)}
+              type="email"
+              value={formData.email}
+              onChange={e => setFormData({ ...formData, email: e.target.value })}
+              required
+            />
+            <FormInput
+              label={t('members.contactInfo', lang)}
+              type="tel"
+              placeholder="Phone Number"
+              value={formData.phone}
+              onChange={e => setFormData({ ...formData, phone: e.target.value })}
+              required
+            />
+          </div>
+
+          <FormInput
+            label={t('members.shares', lang)} // Simplified label, will handle extra info below if needed
+            type="number"
+            value={formData.shares}
+            onChange={e => setFormData({ ...formData, shares: e.target.value })}
+            required
+            disabled={!!editingMember && editingMember.totalContributed > 0}
+            title={editingMember && editingMember.totalContributed > 0 ? "Shares cannot be modified directly. Use Deposit/Investment transactions." : ""}
+            className={!!editingMember && editingMember.totalContributed > 0 ? "opacity-70" : ""}
+          />
+          {editingMember && editingMember.totalContributed > 0 &&
+            <p className="text-[10px] font-bold text-rose-500 flex items-center gap-1 mt-1">
+              <Lock size={10} /> Locked by Ledger
+            </p>
+          }
+
+          {/* System Access Section */}
+          <div className={`p-6 rounded-[2rem] border transition-all duration-300 ${createUserAccess ? 'bg-brand/5 border-brand/20 dark:bg-brand/5 dark:border-brand/20' : 'bg-gray-50 dark:bg-[#111814] border-gray-100 dark:border-white/5'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-xl transition-colors ${createUserAccess ? 'bg-brand text-dark' : 'bg-gray-200 dark:bg-white/5 text-gray-400'}`}>
+                  <ShieldCheck size={20} />
+                </div>
+                <div>
+                  <h4 className={`text-xs font-black uppercase tracking-widest ${createUserAccess ? 'text-dark dark:text-brand' : 'text-gray-500'}`}>{t('members.systemAccessControl', lang)}</h4>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                    {systemUsers.some(u => u.memberId === formData.memberId) ? t('members.portalActive', lang) : createUserAccess ? t('members.portalEnabled', lang) : t('members.noPortal', lang)}
+                  </p>
+                </div>
               </div>
-
-              <form onSubmit={handleReviewSubmit} className="space-y-5">
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Full Legal Name</label>
-                    <input required type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3 rounded-2xl border-none outline-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand" />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Email</label>
-                      <input required type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3 rounded-2xl border-none outline-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Contact Info</label>
-                      <input required type="tel" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} placeholder="Phone Number" className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3 rounded-2xl border-none outline-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1 flex justify-between">
-                      Shares
-                      {editingMember && editingMember.totalContributed > 0 && <span className="text-rose-500 text-[9px] flex items-center gap-1"><Lock size={10} /> Locked by Ledger</span>}
-                    </label>
-                    <input
-                      required
-                      type="number"
-                      value={formData.shares}
-                      onChange={e => setFormData({ ...formData, shares: e.target.value })}
-                      disabled={!!editingMember && editingMember.totalContributed > 0}
-                      title={editingMember && editingMember.totalContributed > 0 ? "Shares cannot be modified directly. Use Deposit/Investment transactions." : ""}
-                      className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3 rounded-2xl border-none outline-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                </div>
-
-                {/* System Access Section */}
-                <div className={`p-6 rounded-[2rem] border transition-all duration-300 ${createUserAccess ? 'bg-brand/5 border-brand/20 dark:bg-brand/5 dark:border-brand/20' : 'bg-gray-50 dark:bg-[#111814] border-gray-100 dark:border-white/5'}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-xl transition-colors ${createUserAccess ? 'bg-brand text-dark' : 'bg-gray-200 dark:bg-white/5 text-gray-400'}`}>
-                        <ShieldCheck size={18} />
-                      </div>
-                      <div>
-                        <h4 className={`text-xs font-black uppercase tracking-widest ${createUserAccess ? 'text-dark dark:text-brand' : 'text-gray-500'}`}>System Access Control</h4>
-                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-                          {systemUsers.some(u => u.memberId === formData.memberId) ? 'Portal Access Active' : createUserAccess ? 'Portal Access Enabled' : 'No Portal Access'}
-                        </p>
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" checked={createUserAccess} onChange={e => setCreateUserAccess(e.target.checked)} className="sr-only peer" />
-                      <div className="w-11 h-6 bg-gray-200 dark:bg-dark rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand shadow-inner"></div>
-                    </label>
-                  </div>
-
-                  {createUserAccess && (
-                    <div className="space-y-4 animate-in slide-in-from-top-2 duration-300 mt-4 pt-4 border-t border-brand/10 dark:border-white/5">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-1">Access Role</label>
-                          <div className="relative">
-                            <select
-                              value={formData.userRole}
-                              onChange={e => setFormData({ ...formData, userRole: e.target.value as any })}
-                              className="w-full bg-white dark:bg-dark px-4 py-3 pl-10 rounded-2xl border-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand appearance-none cursor-pointer text-xs"
-                            >
-                              <option value="Investor">Investor (View Only)</option>
-                              <option value="Manager">Manager (Edit Access)</option>
-                              <option value="Auditor">Auditor (Compliance)</option>
-                            </select>
-                            <UserCheck size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-brand" />
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest px-1">
-                            {systemUsers.some(u => u.memberId === formData.memberId) ? 'Reset Password' : 'Login Password'}
-                          </label>
-                          <div className="relative">
-                            <input
-                              required={!systemUsers.some(u => u.memberId === formData.memberId)}
-                              type="password"
-                              minLength={6}
-                              value={formData.password}
-                              onChange={e => setFormData({ ...formData, password: e.target.value })}
-                              placeholder={systemUsers.some(u => u.memberId === formData.memberId) ? "Leave empty to keep" : "Min 6 chars"}
-                              className="w-full bg-white dark:bg-dark px-4 py-3 pl-10 rounded-2xl border-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand text-xs placeholder:text-gray-400"
-                            />
-                            <Key size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="bg-white/50 dark:bg-white/5 p-3 rounded-xl flex items-start gap-3">
-                        <Info size={14} className="text-brand shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-[9px] font-black text-dark dark:text-white uppercase tracking-widest mb-1">
-                            {formData.userRole} Permissions:
-                          </p>
-                          <p className="text-[9px] font-bold text-gray-500 dark:text-gray-400 leading-relaxed">
-                            {formData.userRole === 'Investor' && "Can view own Holdings, Projects, and simple Reports."}
-                            {formData.userRole === 'Manager' && "Full write access to Members, Projects, and Financials."}
-                            {formData.userRole === 'Auditor' && "Read-only access to all modules for compliance review."}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-6 flex items-center justify-between border-t border-gray-100 dark:border-white/5">
-                  <div>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Initial Valuation</p>
-                    <p className="text-2xl font-black text-dark dark:text-brand tracking-tighter">BDT {(parseInt(formData.shares) * SHARE_VALUE).toLocaleString()}</p>
-                  </div>
-                  <button type="submit" className="bg-dark dark:bg-brand text-white dark:text-dark px-8 py-4 rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-xl hover:scale-105 transition-all">
-                    Authorize Partner
-                  </button>
-                </div>
-              </form>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" checked={createUserAccess} onChange={e => setCreateUserAccess(e.target.checked)} className="sr-only peer" />
+                <div className="w-11 h-6 bg-gray-200 dark:bg-dark rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand shadow-inner"></div>
+              </label>
             </div>
+
+            {createUserAccess && (
+              <div className="space-y-4 animate-in slide-in-from-top-2 duration-300 pt-4 border-t border-brand/10 dark:border-white/5">
+                <div className="grid grid-cols-2 gap-6">
+                  <FormSelect
+                    label="Access Role"
+                    value={formData.userRole}
+                    onChange={e => setFormData({ ...formData, userRole: e.target.value as any })}
+                    options={[
+                      { value: "Investor", label: "Investor (View Only)" },
+                      { value: "Manager", label: "Manager (Edit Access)" },
+                      { value: "Auditor", label: "Auditor (Compliance)" }
+                    ]}
+                    icon={<UserCheck size={14} className="text-brand" />}
+                  />
+                  <FormInput
+                    label={systemUsers.some(u => u.memberId === formData.memberId) ? 'Reset Password' : 'Login Password'}
+                    type="password"
+                    minLength={6}
+                    required={!systemUsers.some(u => u.memberId === formData.memberId)}
+                    value={formData.password}
+                    onChange={e => setFormData({ ...formData, password: e.target.value })}
+                    placeholder={systemUsers.some(u => u.memberId === formData.memberId) ? "Leave empty to keep" : "Min 6 chars"}
+                    icon={<Key size={14} />}
+                  />
+                </div>
+
+                <div className="bg-white/50 dark:bg-white/5 p-4 rounded-2xl flex items-start gap-3">
+                  <Info size={16} className="text-brand shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[10px] font-black text-dark dark:text-white uppercase tracking-widest mb-1">
+                      {formData.userRole} Permissions:
+                    </p>
+                    <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 leading-relaxed">
+                      {formData.userRole === 'Investor' && t('members.investorDesc', lang)}
+                      {formData.userRole === 'Manager' && t('members.managerDesc', lang)}
+                      {formData.userRole === 'Auditor' && t('members.auditorDesc', lang)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-white/5 rounded-3xl">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Initial Valuation</p>
+            <p className="text-2xl font-black text-dark dark:text-brand tracking-tighter">BDT {(parseInt(formData.shares) * SHARE_VALUE).toLocaleString()}</p>
           </div>
         </div>
-      )}
+      </ModalForm>
 
       <ActionDialog
         isOpen={dialog.isOpen}
@@ -530,9 +590,11 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
         onConfirm={dialog.onConfirm}
         onClose={closeDialog}
         details={dialog.details}
+        loading={isSubmitting}
       />
     </div>
   );
+
 };
 
 export default Members;

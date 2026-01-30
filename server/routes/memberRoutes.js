@@ -7,14 +7,14 @@ import {
     updateMember,
     deleteMember,
 } from '../controllers/memberController.js';
-import { protect, admin } from '../middleware/authMiddleware.js';
+import { protect, admin, managerOrAdmin } from '../middleware/authMiddleware.js';
 import { memberValidation } from '../middleware/validator.js';
 
-router.route('/').get(protect, getMembers).post(protect, memberValidation, createMember);
+router.route('/').get(protect, managerOrAdmin, getMembers).post(protect, admin, memberValidation, createMember);
 router
     .route('/:id')
-    .get(protect, getMemberById)
-    .put(protect, memberValidation, updateMember)
+    .get(protect, managerOrAdmin, getMemberById)
+    .put(protect, admin, memberValidation, updateMember)
     .delete(protect, admin, deleteMember);
 
 export default router;

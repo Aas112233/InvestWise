@@ -64,7 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
     <aside
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`bg-white dark:bg-[#1A221D] h-screen border-r border-gray-100 dark:border-white/5 flex flex-col py-8 shrink-0 overflow-hidden transition-all duration-500 ease-in-out relative z-30 shadow-[10px_0_30px_rgba(0,0,0,0.02)] ${isExpanded ? 'w-[280px] px-6' : 'w-[88px] px-3'
+      className={`bg-white/80 dark:bg-[#1A221D]/90 backdrop-blur-xl h-screen border-r border-gray-200/50 dark:border-white/5 flex flex-col py-8 shrink-0 overflow-hidden transition-all duration-500 ease-in-out relative z-30 shadow-[10px_0_30px_rgba(0,0,0,0.02)] ${isExpanded ? 'w-[280px] px-6' : 'w-[88px] px-3'
         }`}
     >
       <button

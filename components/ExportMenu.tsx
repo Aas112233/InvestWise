@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Download, FileSpreadsheet, FileText, Image as ImageIcon, ChevronDown, Check, Loader2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
+import { reportService } from '../services/api';
 
 interface Column {
     header: string;
@@ -16,10 +16,11 @@ interface ExportMenuProps {
     columns: Column[];
     fileName: string;
     title?: string;
+    lang?: string; // App language
     targetId?: string; // ID of the element to capture for JPEG
 }
 
-const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title, targetId }) => {
+const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title, lang, targetId }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [exporting, setExporting] = useState<string | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -49,23 +50,36 @@ const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title,
         });
     };
 
-    const handleExportExcel = () => {
+    const handleExportExcel = async () => {
         setExporting('excel');
         try {
-            const formattedData = getFormattedData();
-            const worksheet = XLSX.utils.json_to_sheet(formattedData);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
-
-            // Auto-size columns
-            const maxWidths = columns.map(col => {
-                const headerLen = col.header.length;
-                const dataMaxLen = formattedData.reduce((max, row) => Math.max(max, String(row[col.header] || "").length), 0);
-                return { wch: Math.max(headerLen, dataMaxLen) + 2 };
+            // Apply column formatters to the data for Excel export
+            const formattedData = data.map(item => {
+                const row = { ...item };
+                columns.forEach(col => {
+                    if (col.format) {
+                        row[col.key] = col.format(item);
+                    }
+                });
+                return row;
             });
-            worksheet['!cols'] = maxWidths;
 
-            XLSX.writeFile(workbook, `${fileName}.xlsx`);
+            const blob = await reportService.exportGeneric({
+                title: title || 'Strategic Finance Report',
+                columns,
+                data: formattedData,
+                fileName,
+                lang: lang || 'en'
+            });
+
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `${fileName}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error('Excel Export Failed:', error);
         } finally {

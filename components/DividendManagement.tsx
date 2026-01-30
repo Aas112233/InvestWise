@@ -59,7 +59,7 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
 
     // Transfer State
     const [fromMemberId, setFromMemberId] = useState<string>('');
-    const [transferDesc, setTransferDesc] = useState<string>('Member Discontinuation - Equity Transfer');
+    const [transferDesc, setTransferDesc] = useState<string>(t('dividends.transferMemo', lang));
     const [transfers, setTransfers] = useState<{ toMemberId: string; amount: number; shares: number }[]>([
         { toMemberId: '', amount: 0, shares: 0 }
     ]);
@@ -94,9 +94,9 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
     );
 
     const handleDistribute = async () => {
-        if (distributionType === 'Project' && !selectedProjectId) return showToast('Please select a project', 'error');
-        if (distributionType === 'Global' && !selectedFundId) return showToast('Please select a source fund', 'error');
-        if (payoutAmount <= 0) return showToast('Invalid amount', 'error');
+        if (distributionType === 'Project' && !selectedProjectId) return showToast(t('dividends.selectProjectError', lang), 'error');
+        if (distributionType === 'Global' && !selectedFundId) return showToast(t('dividends.selectFundError', lang), 'error');
+        if (payoutAmount <= 0) return showToast(t('dividends.invalidAmount', lang), 'error');
 
         try {
             await distributeDividends({
@@ -107,12 +107,12 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                 description
             });
 
-            showToast(`Distributed rewards successfully!`);
+            showToast(t('dividends.distSuccess', lang));
             await refreshData();
             setPayoutAmount(0);
             setDescription('');
         } catch (error: any) {
-            showToast(error.response?.data?.message || 'Distribution failed', 'error');
+            showToast(error.response?.data?.message || t('dividends.distError', lang), 'error');
         }
     };
 
@@ -131,9 +131,9 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
     };
 
     const handleEquityTransfer = async () => {
-        if (!fromMemberId) return showToast('Select source member', 'error');
+        if (!fromMemberId) return showToast(t('dividends.selectSourceError', lang), 'error');
         if (transfers.some(t => !t.toMemberId || t.amount <= 0 || t.shares <= 0)) {
-            return showToast('Complete all transfer details accurately', 'error');
+            return showToast(t('dividends.accuracyError', lang), 'error');
         }
 
         try {
@@ -143,12 +143,12 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                 reason: transferDesc
             });
 
-            showToast('Equity migration successful');
+            showToast(t('dividends.migrationSuccess', lang));
             await refreshData();
             setFromMemberId('');
             setTransfers([{ toMemberId: '', amount: 0, shares: 0 }]);
         } catch (error: any) {
-            showToast(error.response?.data?.message || 'Transfer failed', 'error');
+            showToast(error.response?.data?.message || t('dividends.transferError', lang), 'error');
         }
     };
 
@@ -181,7 +181,7 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                             : 'text-gray-400 hover:text-dark dark:hover:text-white'
                             }`}
                     >
-                        Dividend Payout
+                        {t('dividends.payoutTab', lang)}
                     </button>
                     <button
                         onClick={() => setActiveTab('transfer')}
@@ -190,7 +190,7 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                             : 'text-gray-400 hover:text-dark dark:hover:text-white'
                             }`}
                     >
-                        Asset Transfer
+                        {t('dividends.transferTab', lang)}
                     </button>
                 </div>
             </div>
@@ -207,14 +207,14 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                         <PieChart size={30} />
                                     </div>
                                     <div>
-                                        <h3 className="text-2xl font-black dark:text-white">Payout Configuration</h3>
-                                        <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-1">Configure pro-rata dividend logic</p>
+                                        <h3 className="text-2xl font-black dark:text-white">{t('dividends.payoutConfig', lang)}</h3>
+                                        <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-1">{t('dividends.configSub', lang)}</p>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-12">
                                     <div className="space-y-4">
-                                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Distribution Type</label>
+                                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">{t('dividends.distType', lang)}</label>
                                         <div className="grid grid-cols-2 gap-4">
                                             <button
                                                 onClick={() => setDistributionType('Project')}
@@ -224,7 +224,7 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                                     }`}
                                             >
                                                 <Briefcase className="mb-3 mx-auto" size={24} />
-                                                Project Surplus
+                                                {t('dividends.projectSurplus', lang)}
                                             </button>
                                             <button
                                                 onClick={() => setDistributionType('Global')}
@@ -234,14 +234,14 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                                     }`}
                                             >
                                                 <TrendingUp className="mb-3 mx-auto" size={24} />
-                                                Global Settlement
+                                                {t('dividends.globalSettlement', lang)}
                                             </button>
                                         </div>
                                     </div>
 
                                     <div className="space-y-4">
                                         <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">
-                                            {distributionType === 'Project' ? 'Select Project' : 'Select Source Fund'}
+                                            {distributionType === 'Project' ? t('dividends.selectProject', lang) : t('dividends.selectSourceFund', lang)}
                                         </label>
                                         {distributionType === 'Project' ? (
                                             <select
@@ -249,7 +249,7 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                                 onChange={(e) => setSelectedProjectId(e.target.value)}
                                                 className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-6 rounded-3xl font-black text-xs appearance-none focus:border-brand dark:text-white transition-all shadow-inner"
                                             >
-                                                <option value="">Select Target Venture...</option>
+                                                <option value="">{t('dividends.selectVenture', lang)}</option>
                                                 {projects.map(p => (
                                                     <option key={p.id} value={p.id}>{p.title} (Balance: {p.currentFundBalance})</option>
                                                 ))}
@@ -260,7 +260,7 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                                 onChange={(e) => setSelectedFundId(e.target.value)}
                                                 className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-6 rounded-3xl font-black text-xs appearance-none focus:border-brand dark:text-white transition-all shadow-inner"
                                             >
-                                                <option value="">Select Primary Fund...</option>
+                                                <option value="">{t('dividends.selectPrimaryFund', lang)}</option>
                                                 {funds.map(f => (
                                                     <option key={f.id} value={f.id}>{f.name} ({f.balance})</option>
                                                 ))}
@@ -271,14 +271,14 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
 
                                 <div className="flex flex-col gap-4 mb-12">
                                     <div className="flex justify-between items-center px-1">
-                                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Payout Amount</label>
+                                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">{t('dividends.payoutAmount', lang)}</label>
                                         {distributionType === 'Project' && selectedProject && (
                                             <div className="flex gap-4">
                                                 <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-400/10 px-3 py-1 rounded-full">
-                                                    Surplus: {formatCurrency(projectMetrics.surplus)}
+                                                    {t('dividends.surplus', lang)} {formatCurrency(projectMetrics.surplus)}
                                                 </span>
                                                 <span className="text-[10px] font-black text-brand uppercase tracking-widest bg-brand/10 px-3 py-1 rounded-full">
-                                                    Liquid: {formatCurrency(projectMetrics.balance)}
+                                                    {t('dividends.liquid', lang)} {formatCurrency(projectMetrics.balance)}
                                                 </span>
                                             </div>
                                         )}
@@ -287,15 +287,15 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                     {distributionType === 'Project' && selectedProject && (
                                         <div className="grid grid-cols-3 gap-4 px-1">
                                             <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-gray-100 dark:border-white/5">
-                                                <p className="text-[9px] font-black text-gray-400 uppercase mb-1">Total Revenue</p>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase mb-1">{t('dividends.totalRevenue', lang)}</p>
                                                 <p className="text-xs font-black text-emerald-500">{formatCurrency(projectMetrics.earnings)}</p>
                                             </div>
                                             <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-gray-100 dark:border-white/5">
-                                                <p className="text-[9px] font-black text-gray-400 uppercase mb-1">Ops Costs</p>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase mb-1">{t('dividends.opsCosts', lang)}</p>
                                                 <p className="text-xs font-black text-rose-500">{formatCurrency(projectMetrics.expenses)}</p>
                                             </div>
                                             <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-gray-100 dark:border-white/5">
-                                                <p className="text-[9px] font-black text-gray-400 uppercase mb-1">Capital Base</p>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase mb-1">{t('dividends.capitalBase', lang)}</p>
                                                 <p className="text-xs font-black text-gray-300">{formatCurrency(projectMetrics.investment)}</p>
                                             </div>
                                         </div>
@@ -314,11 +314,11 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                             </div>
 
                             <div className="space-y-4 mb-12">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Distribution Memo</label>
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">{t('dividends.distMemo', lang)}</label>
                                 <textarea
                                     value={description}
                                     onChange={(e) => setDescription(e.target.value)}
-                                    placeholder="Enter distribution rationale..."
+                                    placeholder={t('dividends.rationalePlaceholder', lang)}
                                     className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-8 rounded-[2.5rem] font-bold text-sm focus:border-brand dark:text-white transition-all outline-none resize-none shadow-inner h-32"
                                 />
                             </div>
@@ -330,12 +330,12 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                     className="w-full bg-dark dark:bg-brand text-white dark:text-dark py-10 rounded-[2.5rem] font-black uppercase tracking-[0.2em] text-sm shadow-2xl shadow-brand/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:scale-100"
                                 >
                                     <ShieldCheck size={20} strokeWidth={3} />
-                                    Authorize Disbursement
+                                    {t('dividends.authorize', lang)}
                                 </button>
                             ) : (
                                 <div className="p-10 rounded-[2.5rem] bg-amber-500/5 border border-amber-500/20 text-center">
-                                    <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Read-Only Mode</p>
-                                    <p className="text-xs font-bold text-gray-400 mt-1">Disbursement restricted to authorized officers.</p>
+                                    <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{t('dividends.readOnlyMode', lang)}</p>
+                                    <p className="text-xs font-bold text-gray-400 mt-1">{t('dividends.restrictedOfficer', lang)}</p>
                                 </div>
                             )}
                         </div>
@@ -346,19 +346,19 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                 <div className="absolute -right-4 -top-4 w-32 h-32 bg-brand/5 rounded-full blur-3xl"></div>
                                 <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-3">
                                     <Users size={14} className="text-brand" />
-                                    Stakeholder Matrix
+                                    {t('dividends.stakeholderMatrix', lang)}
                                 </h4>
                                 <div className="space-y-6">
                                     <div className="flex justify-between items-end border-b border-gray-50 dark:border-white/5 pb-4">
-                                        <span className="text-gray-400 font-bold text-xs uppercase">Total Recipients</span>
+                                        <span className="text-gray-400 font-bold text-xs uppercase">{t('dividends.totalRecipients', lang)}</span>
                                         <span className="text-xl font-black dark:text-white">{activeMembers.length}</span>
                                     </div>
                                     <div className="flex justify-between items-end border-b border-gray-50 dark:border-white/5 pb-4">
-                                        <span className="text-gray-400 font-bold text-xs uppercase">Floating Shares</span>
+                                        <span className="text-gray-400 font-bold text-xs uppercase">{t('dividends.floatingShares', lang)}</span>
                                         <span className="text-xl font-black dark:text-white">{totalShares}</span>
                                     </div>
                                     <div className="flex justify-between items-end">
-                                        <span className="text-gray-400 font-bold text-xs uppercase">Value Per Share</span>
+                                        <span className="text-gray-400 font-bold text-xs uppercase">{t('dividends.valuePerShare', lang)}</span>
                                         <span className="text-xl font-black text-brand">
                                             {payoutAmount > 0 ? (payoutAmount / totalShares).toFixed(4) : '0.0000'}
                                         </span>
@@ -370,13 +370,13 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                 <div className="absolute top-0 right-0 p-8 text-white/5 group-hover:text-brand/20 transition-all">
                                     <Info size={100} strokeWidth={1} />
                                 </div>
-                                <h4 className="text-[11px] font-black text-brand uppercase tracking-[0.3em] mb-6">Execution Logic</h4>
+                                <h4 className="text-[11px] font-black text-brand uppercase tracking-[0.3em] mb-6">{t('dividends.execLogic', lang)}</h4>
                                 <p className="text-gray-400 text-xs font-bold leading-relaxed relative z-10">
-                                    Rewards are calculated using a strict pro-rata equity formula. The payout amount is divided by the aggregate active share count to determine the "Reward Multiplier", which is then applied to each member's personal share balance.
+                                    {t('dividends.logicDesc', lang)}
                                 </p>
                                 <div className="mt-8 flex gap-4 relative z-10">
-                                    <div className="px-5 py-3 rounded-2xl bg-white/5 text-[10px] font-black text-white uppercase tracking-wider">Automated Audit</div>
-                                    <div className="px-5 py-3 rounded-2xl bg-white/5 text-[10px] font-black text-white uppercase tracking-wider">Immutable History</div>
+                                    <div className="px-5 py-3 rounded-2xl bg-white/5 text-[10px] font-black text-white uppercase tracking-wider">{t('dividends.automatedAudit', lang)}</div>
+                                    <div className="px-5 py-3 rounded-2xl bg-white/5 text-[10px] font-black text-white uppercase tracking-wider">{t('dividends.immutableHistory', lang)}</div>
                                 </div>
                             </div>
                         </div>
@@ -391,19 +391,19 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                         <ArrowRightLeft size={30} />
                                     </div>
                                     <div>
-                                        <h3 className="text-2xl font-black dark:text-white">Equity Migration Engine</h3>
-                                        <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-1">Discontinue member and re-allocate assets</p>
+                                        <h3 className="text-2xl font-black dark:text-white">{t('dividends.migrationEngine', lang)}</h3>
+                                        <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-1">{t('dividends.migrationSub', lang)}</p>
                                     </div>
                                 </div>
 
                                 <div className="flex-1 max-w-md">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4 mb-2 block text-right">Source Member (Departing)</label>
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4 mb-2 block text-right">{t('dividends.sourceMember', lang)}</label>
                                     <select
                                         value={fromMemberId}
                                         onChange={(e) => setFromMemberId(e.target.value)}
                                         className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-6 rounded-3xl font-black text-xs transition-all shadow-inner text-right"
                                     >
-                                        <option value="">Select Member to Discontinue...</option>
+                                        <option value="">{t('dividends.selectDeparting', lang)}</option>
                                         {activeMembers.map(m => (
                                             <option key={m.id} value={m.id}>{m.name} (Shares: {m.shares}, Cap: {m.totalContributed})</option>
                                         ))}
@@ -414,53 +414,53 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                             {fromMember && (
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 animate-in slide-in-from-top-4">
                                     <div className="p-8 rounded-[2.5rem] bg-brand text-dark shadow-xl">
-                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Total Contribution</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">{t('dividends.totalContribution', lang)}</p>
                                         <p className="text-3xl font-black italic">{formatCurrency(fromMember.totalContributed)}</p>
                                     </div>
                                     <div className="p-8 rounded-[2.5rem] bg-dark text-white shadow-xl dark:bg-white/5">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Share Portfolio</p>
-                                        <p className="text-3xl font-black italic">{fromMember.shares} SH</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{t('dividends.portfolio', lang)}</p>
+                                        <p className="text-3xl font-black italic">{fromMember.shares} {t('dividends.sh', lang)}</p>
                                     </div>
                                     <div className="p-8 rounded-[2.5rem] border-2 border-dashed border-gray-100 dark:border-white/10 flex items-center justify-center gap-4 text-gray-400">
                                         <AlertCircle size={24} />
-                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] leading-tight">These assets will be burned from <br /> source and minted to targets.</p>
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] leading-tight">{t('dividends.transferBanner', lang)}</p>
                                     </div>
                                 </div>
                             )}
 
                             <div className="space-y-8 mb-12">
                                 <div className="flex items-center justify-between border-b border-gray-50 dark:border-white/5 pb-4">
-                                    <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Re-Allocation Plan</h4>
+                                    <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">{t('dividends.reallocationPlan', lang)}</h4>
                                     <button
                                         onClick={addTransferRow}
                                         className="flex items-center gap-2 text-brand font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all"
                                     >
                                         <PlusCircle size={16} />
-                                        Add Split Target
+                                        {t('dividends.addTarget', lang)}
                                     </button>
                                 </div>
 
                                 <div className="space-y-4">
-                                    {transfers.map((t, index) => (
+                                    {transfers.map((tr, index) => (
                                         <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end animate-in fade-in slide-in-from-right-4 duration-300">
                                             <div className="col-span-2 space-y-2">
-                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Recipient Member</label>
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">{t('dividends.recipientMember', lang)}</label>
                                                 <select
-                                                    value={t.toMemberId}
+                                                    value={tr.toMemberId}
                                                     onChange={(e) => updateTransfer(index, 'toMemberId', e.target.value)}
                                                     className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5 rounded-2xl font-black text-xs dark:text-white"
                                                 >
-                                                    <option value="">Select Target Member...</option>
+                                                    <option value="">{t('dividends.selectTarget', lang)}</option>
                                                     {activeMembers.filter(m => m.id !== fromMemberId).map(m => (
                                                         <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
                                             </div>
                                             <div className="space-y-2">
-                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Transfer Capital</label>
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">{t('dividends.transferCapital', lang)}</label>
                                                 <input
                                                     type="number"
-                                                    value={t.amount || ''}
+                                                    value={tr.amount || ''}
                                                     onChange={(e) => updateTransfer(index, 'amount', Number(e.target.value))}
                                                     placeholder="Amount"
                                                     className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5 rounded-2xl font-black text-xs dark:text-white"
@@ -468,10 +468,10 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                             </div>
                                             <div className="flex gap-2 items-center">
                                                 <div className="flex-1 space-y-2">
-                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Transfer Shares</label>
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">{t('dividends.transferShares', lang)}</label>
                                                     <input
                                                         type="number"
-                                                        value={t.shares || ''}
+                                                        value={tr.shares || ''}
                                                         onChange={(e) => updateTransfer(index, 'shares', Number(e.target.value))}
                                                         placeholder="Shares"
                                                         className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-5 rounded-2xl font-black text-xs dark:text-white"
@@ -492,7 +492,7 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                             </div>
 
                             <div className="space-y-4 mb-12">
-                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Transfer Memo</label>
+                                <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">{t('dividends.transferMemo', lang)}</label>
                                 <input
                                     type="text"
                                     value={transferDesc}
@@ -507,12 +507,12 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                     className="w-full bg-dark dark:bg-brand text-white dark:text-dark py-10 rounded-[2.5rem] font-black uppercase tracking-[0.2em] text-sm shadow-2xl hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-4"
                                 >
                                     <ArrowRightLeft size={20} strokeWidth={3} />
-                                    Execute Asset Migration
+                                    {t('dividends.executeMigration', lang)}
                                 </button>
                             ) : (
                                 <div className="p-10 rounded-[2.5rem] bg-amber-500/5 border border-amber-500/20 text-center">
-                                    <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Migration Restricted</p>
-                                    <p className="text-xs font-bold text-gray-400 mt-1">Equity transfers require advanced treasury authorization.</p>
+                                    <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{t('dividends.migrationRestricted', lang)}</p>
+                                    <p className="text-xs font-bold text-gray-400 mt-1">{t('dividends.treasuryAuth', lang)}</p>
                                 </div>
                             )}
                         </div>

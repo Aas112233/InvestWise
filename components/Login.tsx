@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Shield, Lock, User, ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
 import { User as UserType } from '../types';
 import { Language, t } from '../i18n/translations';
@@ -15,6 +16,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const from = location.state?.from?.pathname ||
+    new URLSearchParams(location.search).get('redirect') ||
+    "/dashboard";
+
   const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
     isVisible: false,
     message: '',
@@ -45,6 +53,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
       // Allow toast to show briefly before navigation
       setTimeout(() => {
         onLogin(data); // This triggers App to navigate
+        navigate(from, { replace: true });
       }, 800);
 
     } catch (err: any) {

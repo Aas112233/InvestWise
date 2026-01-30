@@ -7,6 +7,7 @@ import { useGlobalState } from '../context/GlobalStateContext';
 import { financeService } from '../services/api';
 import { formatCurrency } from '../utils/formatters';
 import { Language, t } from '../i18n/translations';
+import ActionDialog from './ActionDialog';
 
 const SHARE_WORTH = 1000;
 const MONTHS = [
@@ -22,6 +23,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
   const { members: globalMembers, deposits: globalDeposits, funds, refreshTransactions, currentUser } = useGlobalState();
   const [requests, setRequests] = useState<Deposit[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -40,6 +42,16 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
     isVisible: false,
     message: '',
     type: 'success',
+  });
+
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    requestId: string;
+    memberName: string;
+  }>({
+    isOpen: false,
+    requestId: '',
+    memberName: ''
   });
 
   // Sync with global state
@@ -151,6 +163,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       if (editingRequest) {
         showNotification("Modification of pending requests is temporarily disabled. Please delete and recreate.", "warning");
@@ -196,6 +209,8 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
     } catch (error: any) {
       console.error(error);
       showNotification(error.message || "Failed to submit request", "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -235,15 +250,26 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Reject and delete this deposit request?")) {
-      try {
-        await financeService.deleteTransaction(id);
-        setRequests(requests.filter(r => r.id !== id));
-        showNotification(`Request has been rejected/deleted.`);
-      } catch (error: any) {
-        showNotification(error.message || "Delete failed", "error");
-      }
+  const handleDeleteClick = (id: string, memberName: string) => {
+    setDeleteDialog({
+      isOpen: true,
+      requestId: id,
+      memberName
+    });
+  };
+
+  const handleDelete = async () => {
+    const { requestId } = deleteDialog;
+    setIsSubmitting(true);
+    try {
+      await financeService.deleteTransaction(requestId);
+      setRequests(requests.filter(r => r.id !== requestId));
+      showNotification(`Request has been rejected/deleted.`);
+      setDeleteDialog({ isOpen: false, requestId: '', memberName: '' });
+    } catch (error: any) {
+      showNotification(error.message || "Delete failed", "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -253,6 +279,18 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <Toast isVisible={toast.isVisible} message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, isVisible: false })} />
+
+      <ActionDialog
+        isOpen={deleteDialog.isOpen}
+        type="delete"
+        title="Reject Deposit Request"
+        message={`Are you sure you want to reject and delete the deposit request from ${deleteDialog.memberName}?`}
+        onConfirm={handleDelete}
+        onClose={() => setDeleteDialog({ isOpen: false, requestId: '', memberName: '' })}
+        confirmLabel="Reject & Delete"
+        cancelLabel="Cancel"
+        loading={isSubmitting}
+      />
 
       <div className="flex items-end justify-between px-2">
         <div>
@@ -365,7 +403,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
                           title="Approve Request"
                           className={`p-3 rounded-2xl border transition-all ${processingId === req.id ? 'bg-gray-100 border-gray-200 cursor-wait' : 'bg-brand/10 text-brand border-brand/20 hover:bg-brand hover:text-dark'}`}
                         >
-                          {processingId === req.id ? <span className="animate-pulse">...</span> : <CheckCircle size={16} strokeWidth={3} />}
+                          {processingId === req.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} strokeWidth={3} />}
                         </button>
                       )}
                       {currentUser?.permissions[AppScreen.REQUEST_DEPOSIT] === AccessLevel.WRITE && (
@@ -373,7 +411,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
                           <button onClick={() => handleOpenModal(req)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-dark dark:hover:text-brand hover:border-brand transition-all">
                             <Edit2 size={16} />
                           </button>
-                          <button onClick={() => handleDelete(req.id)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30 transition-all">
+                          <button onClick={() => handleDeleteClick(req.id, req.memberName)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30 transition-all">
                             <Trash2 size={16} />
                           </button>
                         </>
@@ -599,8 +637,10 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
                   </div>
                   <button
                     type="submit"
-                    className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-xs uppercase hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-brand/20"
+                    disabled={isSubmitting}
+                    className={`bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-xs uppercase shadow-2xl shadow-brand/20 flex items-center gap-2 ${isSubmitting ? 'opacity-70 cursor-wait' : 'hover:scale-105 active:scale-95 transition-all'}`}
                   >
+                    {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : null}
                     {editingRequest ? 'Update Request' : 'Submit for Approval'}
                   </button>
                 </div>

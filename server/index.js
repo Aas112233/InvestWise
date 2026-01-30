@@ -10,7 +10,7 @@ import { apiLimiter } from './middleware/rateLimiter.js';
 
 dotenv.config();
 
-connectDB();
+
 
 const app = express();
 
@@ -42,13 +42,30 @@ import financeRoutes from './routes/financeRoutes.js';
 app.use('/api/finance', apiLimiter, financeRoutes);
 import reportRoutes from './routes/reportRoutes.js';
 app.use('/api/reports', apiLimiter, reportRoutes);
+import analyticsRoutes from './routes/analyticsRoutes.js';
+app.use('/api/analytics', apiLimiter, analyticsRoutes);
+
+import goalRoutes from './routes/goalRoutes.js';
+app.use('/api/goals', apiLimiter, goalRoutes);
 
 // Error Handling
 app.use(notFound);
 app.use(errorHandler);
 
+
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-    console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-});
+const startServer = async () => {
+    try {
+        await connectDB();
+
+        app.listen(PORT, () => {
+            console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+        });
+    } catch (error) {
+        console.error('Failed to connect to the database. Server not started.');
+        process.exit(1);
+    }
+};
+
+startServer();
