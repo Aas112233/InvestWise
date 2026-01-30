@@ -1,12 +1,32 @@
 import asyncHandler from 'express-async-handler';
 import Project from '../models/Project.js';
+import { getPaginationParams, formatPaginatedResponse } from '../utils/paginationHelper.js';
+import { recalculateAllStats } from './analyticsController.js';
 
 // @desc    Get all projects
 // @route   GET /api/projects
 // @access  Private
 const getProjects = asyncHandler(async (req, res) => {
-    const projects = await Project.find({});
-    res.json(projects);
+    const { page, limit, skip } = getPaginationParams(req.query);
+    const search = req.query.search || '';
+
+    // Create search filter
+    const query = search
+        ? {
+            $or: [
+                { title: { $regex: search, $options: 'i' } },
+                { category: { $regex: search, $options: 'i' } }
+            ]
+        }
+        : {};
+
+    const totalCount = await Project.countDocuments(query);
+    const projects = await Project.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+    res.json(formatPaginatedResponse(projects, page, limit, totalCount));
 });
 
 // @desc    Get project by ID
@@ -129,7 +149,7 @@ const createProject = asyncHandler(async (req, res) => {
             await Transaction.create([{
                 type: 'Investment',
                 amount: Number(initialInvestment),
-                description: `Capital Injection for Project: ${title}`,
+                description: `Project Funding Received: ${title}`,
                 fundId: projectFund[0]._id, // Money went HERE
                 projectId: project._id,
                 authorizedBy: req.user._id,
@@ -140,7 +160,7 @@ const createProject = asyncHandler(async (req, res) => {
             await Transaction.create([{
                 type: 'Withdrawal',
                 amount: Number(initialInvestment),
-                description: `Investment Outflow to Project: ${title}`,
+                description: `Investment Sent to Project: ${title}`,
                 fundId: sourceFund._id, // Money left HERE
                 projectId: project._id,
                 authorizedBy: req.user._id,
@@ -154,6 +174,7 @@ const createProject = asyncHandler(async (req, res) => {
         }
 
         await session.commitTransaction();
+        await recalculateAllStats();
         res.status(201).json(project);
 
     } catch (error) {
@@ -170,21 +191,169 @@ const createProject = asyncHandler(async (req, res) => {
 // @route   PUT /api/projects/:id
 // @access  Private/Admin
 const updateProject = asyncHandler(async (req, res) => {
-    const project = await Project.findById(req.params.id);
+    const { id } = req.params;
+    const {
+        title,
+        category,
+        description,
+        initialInvestment,
+        budget,
+        expectedRoi,
+        totalShares,
+        startDate,
+        completionDate,
+        involvedMembers,
+        projectFundHandler,
+        status,
+        health
+    } = req.body;
 
-    if (project) {
-        project.title = req.body.title || project.title;
-        project.category = req.body.category || project.category;
-        project.description = req.body.description || project.description;
-        project.status = req.body.status || project.status;
-        project.currentFundBalance = req.body.currentFundBalance !== undefined ? req.body.currentFundBalance : project.currentFundBalance;
-        project.completionDate = req.body.completionDate || project.completionDate; // Allow updating completion date
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-        const updatedProject = await project.save();
+    try {
+        const project = await Project.findById(id).session(session);
+
+        if (!project) {
+            res.status(404);
+            throw new Error('Project not found');
+        }
+
+        // FEATURE: Structural Lock - Cannot edit if there are operational updates
+        if (project.updates && project.updates.length > 0) {
+            throw new Error(`Modification Restricted: This venture has ${project.updates.length} active operational records. These must be purged or reconciled before structural changes are allowed.`);
+        }
+
+        // Calculate ownership percentages for new members list
+        const processedMembers = (involvedMembers || []).map(m => ({
+            ...m,
+            ownershipPercentage: totalShares > 0 ? (m.sharesInvested / totalShares) * 100 : 0
+        }));
+
+        const oldInitialInvestment = project.initialInvestment || 0;
+        const newInitialInvestment = initialInvestment !== undefined ? Number(initialInvestment) : oldInitialInvestment;
+
+        // Update Project fields
+        project.title = title || project.title;
+        project.category = category || project.category;
+        project.description = description || project.description;
+        project.budget = budget !== undefined ? Number(budget) : project.budget;
+        project.expectedRoi = expectedRoi !== undefined ? Number(expectedRoi) : project.expectedRoi;
+        project.totalShares = totalShares !== undefined ? Number(totalShares) : project.totalShares;
+        project.startDate = startDate || project.startDate;
+        project.completionDate = completionDate || project.completionDate;
+        project.projectFundHandler = projectFundHandler || project.projectFundHandler;
+        project.involvedMembers = processedMembers;
+        project.status = status || project.status;
+        project.health = health || project.health;
+        project.initialInvestment = newInitialInvestment;
+
+        // Handle Fund Adjustments if initialInvestment changed
+        if (newInitialInvestment !== oldInitialInvestment) {
+            const delta = newInitialInvestment - oldInitialInvestment;
+            const projectFund = await Fund.findById(project.linkedFundId).session(session);
+
+            if (!projectFund) throw new Error('Associated Project Fund not found.');
+
+            if (delta > 0) {
+                // Need more funds from enterprise reserves
+                const sourceFund = await Fund.findOne({
+                    type: { $in: ['Primary', 'DEPOSIT'] },
+                    status: 'ACTIVE',
+                    balance: { $gte: delta }
+                }).session(session);
+
+                if (!sourceFund) {
+                    const bestFund = await Fund.findOne({
+                        type: { $in: ['Primary', 'DEPOSIT'] },
+                        status: 'ACTIVE'
+                    }).sort({ balance: -1 }).session(session);
+
+                    throw new Error(`Insufficient liquidity in enterprise reserves. Required additional: BDT ${delta.toLocaleString()}. Highest available fund (${bestFund?.name || 'N/A'}) only has BDT ${bestFund?.balance.toLocaleString() || 0}.`);
+                }
+
+                sourceFund.balance -= delta;
+                projectFund.balance += delta;
+                project.currentFundBalance += delta;
+
+                await sourceFund.save({ session });
+                await projectFund.save({ session });
+
+                // Record Audit Transactions
+                await Transaction.create([{
+                    type: 'Investment',
+                    amount: delta,
+                    description: `Project Funding Increased: ${project.title}`,
+                    fundId: projectFund._id,
+                    projectId: project._id,
+                    authorizedBy: req.user._id,
+                    date: Date.now()
+                }, {
+                    type: 'Withdrawal',
+                    amount: delta,
+                    description: `Additional Investment to Project: ${project.title}`,
+                    fundId: sourceFund._id,
+                    projectId: project._id,
+                    authorizedBy: req.user._id,
+                    date: Date.now()
+                }], { session });
+
+            } else {
+                // Negative delta: Partial divestment / fund recovery
+                const refundAmount = Math.abs(delta);
+
+                // Ensure project fund has enough to refund (can't refund money already spent)
+                if (projectFund.balance < refundAmount) {
+                    throw new Error(`Divestment Failed: Project fund only has BDT ${projectFund.balance.toLocaleString()} available liquidity. To reduce initial investment by BDT ${refundAmount.toLocaleString()}, you must first recover project liquidity.`);
+                }
+
+                const targetFund = await Fund.findOne({
+                    type: { $in: ['Primary', 'DEPOSIT'] },
+                    status: 'ACTIVE'
+                }).session(session);
+
+                if (!targetFund) throw new Error('No target Primary/Deposit fund found to receive refund.');
+
+                projectFund.balance -= refundAmount;
+                targetFund.balance += refundAmount;
+                project.currentFundBalance -= refundAmount;
+
+                await projectFund.save({ session });
+                await targetFund.save({ session });
+
+                // Record Audit Transactions
+                await Transaction.create([{
+                    type: 'Withdrawal',
+                    amount: refundAmount,
+                    description: `Project Funding Reduced: ${project.title}`,
+                    fundId: projectFund._id,
+                    projectId: project._id,
+                    authorizedBy: req.user._id,
+                    date: Date.now()
+                }, {
+                    type: 'Investment',
+                    amount: refundAmount,
+                    description: `Investment Refund from Project: ${project.title}`,
+                    fundId: targetFund._id,
+                    projectId: project._id,
+                    authorizedBy: req.user._id,
+                    date: Date.now()
+                }], { session });
+            }
+        }
+
+        const updatedProject = await project.save({ session });
+        await session.commitTransaction();
+        await recalculateAllStats();
+
         res.json(updatedProject);
-    } else {
-        res.status(404);
-        throw new Error('Project not found');
+
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(400);
+        throw new Error(error.message || 'Project update failed');
+    } finally {
+        session.endSession();
     }
 });
 
@@ -199,23 +368,56 @@ const deleteProject = asyncHandler(async (req, res) => {
         throw new Error('Project not found');
     }
 
+    // FEATURE: Termination Lock - Cannot delete if there are operational updates
+    if (project.updates && project.updates.length > 0) {
+        throw new Error(`Termination Forbidden: Project "${project.title}" has active operational records. These must be purged or reconciled individually before the venture can be terminated.`);
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        // 1. Delete associated Transactions linked to this project
+        // 1. REVERSION: Return liquidity to enterprise reserves
+        // Any remaining balance in the project fund should go back to Primary/Enterprise reserves
+        const projectFund = await Fund.findById(project.linkedFundId).session(session);
+        const amountToRevert = projectFund ? projectFund.balance : (project.initialInvestment || 0);
+
+        if (amountToRevert > 0) {
+            const enterpriseFund = await Fund.findOne({
+                type: { $in: ['Primary', 'DEPOSIT'] },
+                status: 'ACTIVE'
+            }).session(session);
+
+            if (enterpriseFund) {
+                enterpriseFund.balance += Number(amountToRevert);
+                await enterpriseFund.save({ session });
+
+                // Record the Reversion Transaction for Audit
+                await Transaction.create([{
+                    type: 'Investment',
+                    amount: Number(amountToRevert),
+                    description: `Venture Liquidation: Funds returned from ${project.title}`,
+                    fundId: enterpriseFund._id,
+                    authorizedBy: req.user._id,
+                    date: Date.now()
+                }], { session });
+            }
+        }
+
+        // 2. PURGE associated Transactions
         await Transaction.deleteMany({ projectId: req.params.id }).session(session);
 
-        // 2. Delete the auto-generated Fund linked to this project
+        // 3. PURGE associated Fund
         if (project.linkedFundId) {
             await Fund.findByIdAndDelete(project.linkedFundId).session(session);
         }
 
-        // 3. Finally delete the project record
+        // 4. PURGE project record
         await project.deleteOne({ session });
 
         await session.commitTransaction();
-        res.json({ message: 'Project and all associated financial records purged successfully.' });
+        await recalculateAllStats();
+        res.json({ message: 'Venture terminated successfully. All liquidity has been reconciled to enterprise reserves.' });
     } catch (error) {
         await session.abortTransaction();
         res.status(400);
@@ -229,31 +431,73 @@ const deleteProject = asyncHandler(async (req, res) => {
 // @route   POST /api/projects/:id/updates
 // @access  Private
 const addProjectUpdate = asyncHandler(async (req, res) => {
-    const { type, amount, description } = req.body;
-    const project = await Project.findById(req.params.id);
+    const { type, amount, description, date } = req.body;
 
-    if (project) {
-        const update = {
-            type,
-            amount: Number(amount),
-            description,
-            date: Date.now(),
-        };
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-        if (type === 'Earning') {
-            project.currentFundBalance += Number(amount);
-            project.totalEarnings += Number(amount);
-        } else if (type === 'Expense') {
-            project.currentFundBalance -= Number(amount);
-            project.totalExpenses += Number(amount);
+    try {
+        const project = await Project.findById(req.params.id).session(session);
+        if (!project) {
+            res.status(404);
+            throw new Error('Project not found');
         }
 
-        project.updates.push(update);
-        await project.save();
+        const updateDate = date || Date.now();
+        const updateAmount = Number(amount);
+
+        // 1. Update Project Totals
+        if (type === 'Earning') {
+            project.currentFundBalance += updateAmount;
+            project.totalEarnings += updateAmount;
+        } else if (type === 'Expense') {
+            project.currentFundBalance -= updateAmount;
+            project.totalExpenses += updateAmount;
+        }
+
+        project.updates.push({
+            type,
+            amount: updateAmount,
+            description,
+            date: updateDate,
+        });
+
+        await project.save({ session });
+
+        // 2. Update Associated Fund
+        if (project.linkedFundId) {
+            const fund = await Fund.findById(project.linkedFundId).session(session);
+            if (fund) {
+                if (type === 'Earning') {
+                    fund.balance += updateAmount;
+                } else if (type === 'Expense') {
+                    fund.balance -= updateAmount;
+                }
+                await fund.save({ session });
+            }
+        }
+
+        // 3. Record Audit Transaction
+        await Transaction.create([{
+            type: type,
+            amount: updateAmount,
+            description: `[Project Update: ${project.title}] ${description}`,
+            projectId: project._id,
+            fundId: project.linkedFundId,
+            date: updateDate,
+            status: 'Success',
+            authorizedBy: req.user._id
+        }], { session });
+
+        await session.commitTransaction();
+        await recalculateAllStats();
         res.status(201).json(project);
-    } else {
-        res.status(404);
-        throw new Error('Project not found');
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(400);
+        throw new Error(error.message || 'Project update failed');
+    } finally {
+        session.endSession();
     }
 });
 

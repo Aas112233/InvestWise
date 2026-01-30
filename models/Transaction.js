@@ -4,7 +4,7 @@ const transactionSchema = mongoose.Schema(
     {
         type: {
             type: String,
-            enum: ['Deposit', 'Withdrawal', 'Investment', 'Expense', 'Earning'],
+            enum: ['Deposit', 'Withdrawal', 'Investment', 'Expense', 'Earning', 'Dividend', 'Equity-Transfer'],
             required: true,
         },
         amount: {
@@ -14,6 +14,10 @@ const transactionSchema = mongoose.Schema(
         description: {
             type: String,
             required: true,
+        },
+        category: {
+            type: String,
+            required: false,
         },
         date: {
             type: Date,

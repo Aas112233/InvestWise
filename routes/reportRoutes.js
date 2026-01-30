@@ -7,8 +7,18 @@ import Member from '../models/Member.js';
 import Project from '../models/Project.js';
 import Transaction from '../models/Transaction.js';
 import Fund from '../models/Fund.js';
+import ExcelDesigner from '../utils/excelDesigner.js';
 
 const router = express.Router();
+const formatDate = (date) => {
+  if (!date) return '-';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return date;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+};
 
 router.get('/', protect, async (req, res) => {
   try {
@@ -29,44 +39,105 @@ router.post('/', protect, async (req, res) => {
   }
 });
 
+router.post('/export-generic', protect, async (req, res) => {
+  try {
+    const { title, columns, data, fileName, lang } = req.body;
+
+    const workbook = new ExcelJS.Workbook();
+    const designer = new ExcelDesigner(workbook);
+
+    designer.init(title, 'EX-DATA', lang || 'en');
+
+    const headers = columns.map(c => c.header);
+    const rows = data.map(item => columns.map(col => {
+      const val = item[col.header] || item[col.key] || '-';
+      // Auto-format dates if they looks like ISO strings in generic export
+      if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) {
+        return formatDate(val);
+      }
+      return val;
+    }));
+
+    designer.addTable(headers, rows);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${fileName || 'export'}.xlsx`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+const getDateFilter = (period, dateStr) => {
+  if (!period || !dateStr || period === 'All Time') return {};
+
+  let start = new Date();
+  let end = new Date();
+
+  if (period === 'Monthly') {
+    const [year, month] = dateStr.split('-');
+    start = new Date(year, month - 1, 1);
+    end = new Date(year, month, 0, 23, 59, 59);
+  } else if (period === 'Quarterly') {
+    const [year, quarter] = dateStr.split('-');
+    const qNum = parseInt(quarter.substring(1));
+    start = new Date(year, (qNum - 1) * 3, 1);
+    end = new Date(year, qNum * 3, 0, 23, 59, 59);
+  } else if (period === 'Yearly') {
+    start = new Date(dateStr, 0, 1);
+    end = new Date(dateStr, 11, 31, 23, 59, 59);
+  } else if (period === 'Custom') {
+    const [startStr, endStr] = dateStr.split('_to_');
+    start = new Date(startStr);
+    end = new Date(endStr);
+    end.setHours(23, 59, 59);
+  }
+
+  return { date: { $gte: start, $lte: end } };
+};
+
 router.get('/generate/:type', protect, async (req, res) => {
   try {
     const { type } = req.params;
-    const { format, fiscalMonth, projectId, memberId } = req.query;
+    const { format, period, date, projectId, memberId, fundId } = req.query;
+    const dateQuery = getDateFilter(period, date);
+    const dateLabel = date || 'ALL TIME';
 
     let data = {};
 
     if (type === 'Member Contribution') {
-      const members = await Member.find();
+      const members = await Member.find().sort({ totalContributed: -1 });
       data = { members, title: 'Member Contribution Report' };
     } else if (type === 'Project Performance') {
       const projects = await Project.find();
       data = { projects, title: 'Project Performance Report' };
     } else if (type === 'Expense Audit') {
-      const expenses = await Transaction.find({ type: 'Expense' });
+      const expenses = await Transaction.find({ type: 'Expense', ...dateQuery }).sort({ date: -1 });
       data = { expenses, title: 'Expense Audit Report' };
     } else if (type === 'Project Expense Audit' && projectId) {
       const project = await Project.findById(projectId);
-      const expenses = await Transaction.find({ projectId, type: 'Expense' }).sort({ date: -1 });
+      const expenses = await Transaction.find({ projectId, type: 'Expense', ...dateQuery }).sort({ date: -1 });
       data = { expenses, title: `Expense Audit: ${project?.title || 'Unknown Project'}` };
     } else if (type === 'Funds Summary') {
       const funds = await Fund.find();
       data = { funds, title: 'Funds Summary Report' };
     } else if (type === 'ROI Analysis') {
       const projects = await Project.find();
-      data = { projects, title: 'ROI Analysis Report' };
+      data = { projects, title: 'Venture ROI Analysis Report' };
     } else if (type === 'Dividend Report') {
       const members = await Member.find().sort({ totalContributed: -1 });
       data = { members, title: 'Stakeholder Dividend Distribution' };
     } else if (type === 'Stakeholder Statement') {
       const members = await Member.find();
-      const transactions = await Transaction.find().sort({ date: -1 }).limit(100);
+      const transactions = await Transaction.find(dateQuery).sort({ date: -1 }).limit(100);
       data = { members, transactions, title: 'Consolidated Stakeholder Statement' };
     } else if (type === 'Venture Growth Matrix') {
       const projects = await Project.find().sort({ initialInvestment: -1 });
       data = { projects, title: 'Strategic Venture Growth Matrix' };
-    } else if (type === 'Comprehensive Master Ledger' || type === 'Project Specific Ledger' || type === 'Member Specific Ledger') {
-      let filter = {};
+    } else if (type === 'Comprehensive Master Ledger' || type === 'Project Specific Ledger' || type === 'Member Specific Ledger' || type === 'Fund Specific Ledger') {
+      let filter = { ...dateQuery };
       let title = 'Comprehensive Master Ledger';
 
       if (type === 'Project Specific Ledger' && projectId) {
@@ -77,38 +148,79 @@ router.get('/generate/:type', protect, async (req, res) => {
         const member = await Member.findById(memberId);
         filter.memberId = memberId;
         title = `Individual Member Ledger: ${member?.name || 'Unknown'}`;
+      } else if (type === 'Fund Specific Ledger' && fundId) {
+        const fund = await Fund.findById(fundId);
+        filter.fundId = fundId;
+        title = `Internal Fund Ledger: ${fund?.name || 'Unknown'}`;
       }
 
-      const allTransactions = await Transaction.find(filter).sort({ date: 1 });
+      const allTransactions = await Transaction.find(filter)
+        .populate('fundId', 'name')
+        .populate('projectId', 'title')
+        .sort({ date: 1 });
+
       let currentBalance = 0;
       const transactionsWithBalance = allTransactions.map(tx => {
-        const isIn = ['Deposit', 'Earning'].includes(tx.type);
-        if (isIn) currentBalance += tx.amount;
-        else currentBalance -= tx.amount;
+        // Financial Protocol: 
+        // Inflows (Credit): Deposit, Earning, Investment
+        // Outflows (Debit): Withdrawal, Expense, Dividend
+        // Neutral (Equity): Equity-Transfer (Doesn't affect cash balance)
+        const isIn = ['Deposit', 'Earning', 'Investment'].includes(tx.type);
+        const isOut = ['Withdrawal', 'Expense', 'Dividend'].includes(tx.type);
+
+        if (isIn) {
+          currentBalance += tx.amount;
+        } else if (isOut) {
+          currentBalance -= tx.amount;
+        }
+
         return {
           ...tx.toObject(),
           in: isIn ? tx.amount : 0,
-          out: !isIn ? tx.amount : 0,
+          out: isOut ? tx.amount : 0,
           balance: currentBalance
         };
       });
       data = { allTransactions: transactionsWithBalance.reverse(), title };
     } else if (type === 'Member Deposit History' && memberId) {
       const member = await Member.findById(memberId);
-      const deposits = await Transaction.find({ memberId, type: 'Deposit' }).sort({ date: -1 });
+      const deposits = await Transaction.find({ memberId, type: 'Deposit', ...dateQuery }).sort({ date: -1 });
       data = { transactions: deposits, title: `Deposit History: ${member?.name || 'Unknown'}` };
     } else if (type === 'Revenue Analytics') {
-      const earnings = await Transaction.find({ type: 'Earning' }).sort({ date: -1 });
-      data = { earnings, title: 'Revenue & Project Returns Analytics' };
+      const earnings = await Transaction.find({ type: 'Earning', ...dateQuery })
+        .populate('projectId', 'title')
+        .populate('fundId', 'name')
+        .sort({ date: -1 });
+      data = { earnings, title: 'Direct Revenue & Profit Analytics' };
+    } else if (type === 'Earnings Ledger') {
+      const earnings = await Transaction.find({ type: 'Earning', ...dateQuery })
+        .populate('projectId', 'title')
+        .populate('fundId', 'name')
+        .sort({ date: 1 });
+
+      let currentBalance = 0;
+      const earningsWithBalance = earnings.map(tx => {
+        currentBalance += tx.amount;
+        return {
+          ...tx.toObject(),
+          in: tx.amount,
+          out: 0,
+          balance: currentBalance
+        };
+      });
+      data = { allTransactions: earningsWithBalance.reverse(), title: 'Venture Earnings & General Profit Ledger' };
     } else if (type === 'Interest Accruals') {
-      const interest = await Transaction.find({ type: 'Earning', description: /interest/i }).sort({ date: -1 });
+      const interest = await Transaction.find({ type: { $in: ['Earning', 'Investment'] }, description: /interest/i, ...dateQuery })
+        .populate('projectId', 'title')
+        .populate('fundId', 'name')
+        .sort({ date: -1 });
       data = { earnings: interest, title: 'Interest Accruals & Bank Placements' };
     }
 
     if (format === 'PDF') {
-      generatePDF(res, data, type, fiscalMonth);
+      generatePDF(res, data, type, dateLabel);
     } else if (format === 'Excel') {
-      await generateExcel(res, data, type, fiscalMonth);
+      await generateExcel(res, data, type, dateLabel);
     } else {
       res.status(400).json({ message: 'Invalid format' });
     }
@@ -121,7 +233,7 @@ const generatePDF = (res, data, type, fiscalMonth) => {
   const doc = new PDFDocument({ margin: 30, size: 'A4' });
 
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename=${type.replace(/\s+/g, '_')}_${fiscalMonth}.pdf`);
+  res.setHeader('Content-Disposition', `attachment; filename=${type.replace(/\s+/g, '_')}_${fiscalMonth.replace(/:/g, '-')}.pdf`);
 
   doc.pipe(res);
 
@@ -184,16 +296,24 @@ const generatePDF = (res, data, type, fiscalMonth) => {
     const rows = data.members.map(m => [m.name, m.memberId, m.shares, `BDT ${m.totalContributed}`, m.status]);
     drawTable(headers, rows, colWidths);
   } else if (data.projects) {
-    const headers = ['Title', 'Category', 'Investment', 'Return', 'Status'];
-    const colWidths = [180, 100, 100, 70, 80];
-    const rows = data.projects.map(p => [p.title, p.category, `BDT ${p.initialInvestment}`, `${p.projectedReturn}%`, p.status]);
+    const headers = ['Title', 'Invested', 'Earned', 'Expenses', 'ROI (%)', 'Status'];
+    const colWidths = [150, 90, 90, 90, 60, 60];
+    const rows = data.projects.map(p => [
+      p.title,
+      `BDT ${p.initialInvestment}`,
+      `BDT ${p.totalEarnings || 0}`,
+      `BDT ${p.totalExpenses || 0}`,
+      `${p.expectedRoi || 0}%`,
+      p.status
+    ]);
     drawTable(headers, rows, colWidths);
   } else if (data.allTransactions) {
-    const headers = ['Date', 'Type', 'Description', 'In (Credit)', 'Out (Debit)', 'Balance'];
-    const colWidths = [70, 80, 160, 75, 75, 75];
+    const headers = ['Date', 'Type', 'Fund', 'Description', 'Fund In', 'Fund Out', 'Balance'];
+    const colWidths = [60, 60, 80, 115, 70, 70, 80];
     const rows = data.allTransactions.map(tx => [
-      new Date(tx.date).toLocaleDateString(),
+      formatDate(tx.date),
       tx.type.toUpperCase(),
+      tx.fundId?.name || '-',
       tx.description,
       tx.in > 0 ? `+${tx.in}` : '-',
       tx.out > 0 ? `-${tx.out}` : '-',
@@ -209,142 +329,98 @@ const generatePDF = (res, data, type, fiscalMonth) => {
   } else if (data.expenses) {
     const headers = ['Description', 'Amount', 'Category', 'Date'];
     const colWidths = [200, 100, 130, 100];
-    const rows = data.expenses.map(e => [e.description, `BDT ${e.amount}`, e.category, new Date(e.date).toLocaleDateString()]);
+    const rows = data.expenses.map(e => [e.description, `BDT ${e.amount}`, e.category, formatDate(e.date)]);
     drawTable(headers, rows, colWidths);
   } else if (data.transactions) {
     const headers = ['Date', 'Type', 'Description', 'Amount', 'Status'];
     const colWidths = [100, 100, 180, 100, 50];
-    const rows = data.transactions.map(tx => [new Date(tx.date).toLocaleDateString(), tx.type.toUpperCase(), tx.description, `BDT ${tx.amount}`, tx.status]);
+    const rows = data.transactions.map(tx => [formatDate(tx.date), tx.type.toUpperCase(), tx.description, `BDT ${tx.amount}`, tx.status]);
     drawTable(headers, rows, colWidths);
   } else if (data.earnings) {
-    const headers = ['Date', 'Source', 'Amount', 'Status'];
-    const colWidths = [120, 200, 130, 80];
-    const rows = data.earnings.map(tx => [new Date(tx.date).toLocaleDateString(), tx.description, `BDT ${tx.amount}`, tx.status]);
+    const headers = ['Date', 'Project', 'Fund', 'Source/Memo', 'Amount', 'Status'];
+    const colWidths = [60, 100, 80, 130, 100, 60];
+    const rows = data.earnings.map(tx => [
+      formatDate(tx.date),
+      tx.projectId?.title || '-',
+      tx.fundId?.name || '-',
+      tx.description,
+      `BDT ${tx.amount}`,
+      tx.status
+    ]);
     drawTable(headers, rows, colWidths);
   }
 
   doc.end();
 };
 
-const generateExcel = async (res, data, type, fiscalMonth) => {
+const generateExcel = async (res, data, type, fiscalMonth, lang = 'en') => {
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Report');
+  const designer = new ExcelDesigner(workbook);
 
-  // Title Styling
-  worksheet.mergeCells('A1:G1');
-  const titleCell = worksheet.getCell('A1');
-  titleCell.value = data.title || 'Report';
-  titleCell.font = { size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
-  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A221D' } };
-  titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  designer.init(data.title, fiscalMonth || 'All Time', lang);
 
-  worksheet.getCell('A2').value = `Period: ${fiscalMonth || 'All Time'}`;
-  worksheet.getCell('A3').value = `Generated: ${new Date().toLocaleString()}`;
-  worksheet.getRow(2).font = { bold: true };
-  worksheet.getRow(3).font = { italic: true };
+  let headers = [];
+  let rows = [];
+  let options = {};
 
-  // Helper function for borders and centering
-  const applyCellStyle = (cell, isHeader = false) => {
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.border = {
-      top: { style: 'thin' },
-      left: { style: 'thin' },
-      bottom: { style: 'thin' },
-      right: { style: 'thin' }
-    };
-    if (isHeader) {
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2D3748' } };
+  const langMap = {
+    en: {
+      name: 'Name', memberId: 'Member ID', shares: 'Shares', totalContributed: 'Total Contributed (BDT)', status: 'Status',
+      title: 'Title', category: 'Category', investment: 'Investment (BDT)', projectedReturn: 'Projected Return',
+      description: 'Description', amount: 'Amount (BDT)', date: 'Date',
+      fundName: 'Fund Name', type: 'Type', balance: 'Balance (BDT)',
+      credit: 'Fund In (Credit)', debit: 'Fund Out (Debit)', runningBalance: 'Running Balance (BDT)', source: 'Source',
+      fund: 'Fund Account'
+    },
+    bn: {
+      name: 'নাম', memberId: 'মেম্বার আইডি', shares: 'শেয়ার সংখ্যা', totalContributed: 'মোট অবদান (BDT)', status: 'অবস্থা',
+      title: 'শিরোনাম', category: 'বিভাগ', investment: 'বিনিয়োগ (BDT)', projectedReturn: 'প্রত্যাশিত আয়',
+      description: 'বিবরণ', amount: 'পরিমাণ (BDT)', date: 'তারিখ',
+      fundName: 'ফান্ডের নাম', type: 'ধরণ', balance: 'ব্যালেন্স (BDT)',
+      credit: 'আমানত (ইন)', debit: 'ব্যয় (আউট)', runningBalance: 'স্থিতি (BDT)', source: 'উৎস',
+      fund: 'ফান্ড অ্যাকাউন্ট'
     }
   };
 
+  const t = langMap[lang] || langMap.en;
+
   if (data.members) {
-    worksheet.addRow([]);
-    const headerRow = worksheet.addRow(['Name', 'Member ID', 'Shares', 'Total Contributed', 'Status']);
-    headerRow.eachCell(cell => applyCellStyle(cell, true));
-    data.members.forEach(m => {
-      const row = worksheet.addRow([m.name, m.memberId, m.shares, m.totalContributed, m.status]);
-      row.eachCell(cell => applyCellStyle(cell));
-    });
+    headers = [t.name, t.memberId, t.shares, t.totalContributed, t.status];
+    rows = data.members.map(m => [m.name, m.memberId, m.shares, m.totalContributed, m.status]);
   } else if (data.projects) {
-    worksheet.addRow([]);
-    const headerRow = worksheet.addRow(['Title', 'Category', 'Investment', 'Projected Return', 'Status']);
-    headerRow.eachCell(cell => applyCellStyle(cell, true));
-    data.projects.forEach(p => {
-      const row = worksheet.addRow([p.title, p.category, p.initialInvestment, p.projectedReturn + '%', p.status]);
-      row.eachCell(cell => applyCellStyle(cell));
-    });
+    headers = [t.title, t.investment, 'Earnings (BDT)', 'Expenses (BDT)', 'ROI (%)', t.status];
+    rows = data.projects.map(p => [p.title, p.initialInvestment, p.totalEarnings || 0, p.totalExpenses || 0, `${p.expectedRoi || 0}%`, p.status]);
   } else if (data.expenses) {
-    worksheet.addRow([]);
-    const headerRow = worksheet.addRow(['Description', 'Amount', 'Category', 'Date']);
-    headerRow.eachCell(cell => applyCellStyle(cell, true));
-    data.expenses.forEach(e => {
-      const row = worksheet.addRow([e.description, e.amount, e.category, new Date(e.date).toLocaleDateString()]);
-      row.eachCell(cell => applyCellStyle(cell));
-    });
+    headers = [t.description, t.amount, t.category, t.date];
+    rows = data.expenses.map(e => [e.description, e.amount, e.category, formatDate(e.date)]);
   } else if (data.funds) {
-    worksheet.addRow([]);
-    const headerRow = worksheet.addRow(['Name', 'Type', 'Balance', 'Status']);
-    headerRow.eachCell(cell => applyCellStyle(cell, true));
-    data.funds.forEach(f => {
-      const row = worksheet.addRow([f.name, f.type, f.balance, 'Active']);
-      row.eachCell(cell => applyCellStyle(cell));
-    });
+    headers = [t.fundName, t.type, t.balance, t.status];
+    rows = data.funds.map(f => [f.name, f.type, f.balance, 'Active']);
   } else if (data.allTransactions) {
-    worksheet.addRow([]);
-    const headerRow = worksheet.addRow(['Date', 'Type', 'Description', 'In (Credit)', 'Out (Debit)', 'Running Balance', 'Status']);
-    headerRow.eachCell(cell => applyCellStyle(cell, true));
-
-    data.allTransactions.forEach(tx => {
-      const row = worksheet.addRow([
-        new Date(tx.date).toLocaleDateString(),
-        tx.type,
-        tx.description,
-        tx.in || '-',
-        tx.out || '-',
-        tx.balance,
-        tx.status
-      ]);
-
-      row.eachCell((cell, colNumber) => {
-        applyCellStyle(cell);
-
-        // Color coding for In (Col 4) and Out (Col 5)
-        if (colNumber === 4 && tx.in > 0) {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } }; // Light Green
-          cell.font = { color: { argb: 'FF006100' }, bold: true }; // Dark Green Text
-        }
-        if (colNumber === 5 && tx.out > 0) {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } }; // Light Red
-          cell.font = { color: { argb: 'FF9C0006' }, bold: true }; // Dark Red Text
-        }
-      });
-    });
+    headers = [t.date, t.type, t.fund, t.description, t.credit, t.debit, t.runningBalance, t.status];
+    rows = data.allTransactions.map(tx => [
+      formatDate(tx.date),
+      tx.type.toUpperCase(),
+      tx.fundId?.name || '-',
+      tx.description,
+      tx.in > 0 ? `+${tx.in}` : '-',
+      tx.out > 0 ? `-${tx.out}` : '-',
+      tx.balance,
+      tx.status
+    ]);
+    options.isLedger = true;
   } else if (data.transactions) {
-    worksheet.addRow([]);
-    const headerRow = worksheet.addRow(['Date', 'Type', 'Description', 'Amount', 'Status']);
-    headerRow.eachCell(cell => applyCellStyle(cell, true));
-    data.transactions.forEach(tx => {
-      const row = worksheet.addRow([new Date(tx.date).toLocaleDateString(), tx.type, tx.description, tx.amount, tx.status]);
-      row.eachCell(cell => applyCellStyle(cell));
-    });
+    headers = [t.date, t.type, t.description, t.amount, t.status];
+    rows = data.transactions.map(tx => [formatDate(tx.date), tx.type.toUpperCase(), tx.description, tx.amount, tx.status]);
   } else if (data.earnings) {
-    worksheet.addRow([]);
-    const headerRow = worksheet.addRow(['Date', 'Source', 'Amount', 'Status']);
-    headerRow.eachCell(cell => applyCellStyle(cell, true));
-    data.earnings.forEach(tx => {
-      const row = worksheet.addRow([new Date(tx.date).toLocaleDateString(), tx.description, tx.amount, tx.status]);
-      row.eachCell(cell => applyCellStyle(cell));
-    });
+    headers = [t.date, t.title, t.fund, t.source, t.amount, t.status];
+    rows = data.earnings.map(tx => [formatDate(tx.date), tx.projectId?.title || '-', tx.fundId?.name || '-', tx.description, tx.amount, tx.status]);
   }
 
-  // Auto-fit columns
-  worksheet.columns.forEach(column => {
-    column.width = 20;
-  });
+  designer.addTable(headers, rows, options);
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename=${type.replace(/\s+/g, '_')}_${fiscalMonth}.xlsx`);
+  res.setHeader('Content-Disposition', `attachment; filename=${type.replace(/\s+/g, '_')}_${fiscalMonth.replace(/:/g, '-')}.xlsx`);
 
   await workbook.xlsx.write(res);
   res.end();

@@ -3,14 +3,34 @@ import Member from '../models/Member.js';
 import Transaction from '../models/Transaction.js';
 import Project from '../models/Project.js';
 import { v4 as uuidv4 } from 'uuid';
+import { getPaginationParams, formatPaginatedResponse } from '../utils/paginationHelper.js';
+import { recalculateAllStats } from './analyticsController.js';
 
 // @desc    Get all members
 // @route   GET /api/members
 // @access  Private
 const getMembers = asyncHandler(async (req, res) => {
-    // TODO: Add pagination (req.query.page, req.query.limit)
-    const members = await Member.find({});
-    res.json(members);
+    const { page, limit, skip } = getPaginationParams(req.query);
+    const search = req.query.search || '';
+
+    // Create search filter
+    const query = search
+        ? {
+            $or: [
+                { name: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { memberId: { $regex: search, $options: 'i' } }
+            ]
+        }
+        : {};
+
+    const totalCount = await Member.countDocuments(query);
+    const members = await Member.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+    res.json(formatPaginatedResponse(members, page, limit, totalCount));
 });
 
 // @desc    Get member by ID
@@ -73,6 +93,7 @@ const createMember = asyncHandler(async (req, res) => {
     });
 
     if (member) {
+        await recalculateAllStats();
         res.status(201).json(member);
     } else {
         res.status(400);
@@ -121,6 +142,7 @@ const updateMember = asyncHandler(async (req, res) => {
         member.status = req.body.status || member.status;
 
         const updatedMember = await member.save();
+        await recalculateAllStats();
         res.json(updatedMember);
     } else {
         res.status(404);
@@ -161,6 +183,7 @@ const deleteMember = asyncHandler(async (req, res) => {
     }
 
     await member.deleteOne();
+    await recalculateAllStats();
     res.json({ message: 'Member removed' });
 });
 
