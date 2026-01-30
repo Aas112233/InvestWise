@@ -280,6 +280,7 @@ class _RequestDepositScreenState extends State<RequestDepositScreen> {
         
         return DropdownButtonFormField<String>(
           initialValue: _selectedFundId,
+          isExpanded: true, // Fix for overflow
           decoration: InputDecoration(
             labelText: 'Select Fund',
             prefixIcon: const Icon(Icons.account_balance, color: AppColors.primary),
@@ -290,7 +291,10 @@ class _RequestDepositScreenState extends State<RequestDepositScreen> {
           items: provider.funds
               .map((f) => DropdownMenuItem(
                     value: f.id,
-                    child: Text('${f.name} (BDT ${f.balance.toStringAsFixed(0)})'),
+                    child: Text(
+                      '${f.name} (BDT ${f.balance.toStringAsFixed(0)})',
+                      overflow: TextOverflow.ellipsis, // Truncate long text
+                    ),
                   ))
               .toList(),
           onChanged: (id) => setState(() => _selectedFundId = id),
