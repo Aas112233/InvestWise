@@ -47,6 +47,8 @@ app.use('/api/analytics', apiLimiter, analyticsRoutes);
 
 import goalRoutes from './routes/goalRoutes.js';
 app.use('/api/goals', apiLimiter, goalRoutes);
+import auditRoutes from './routes/auditRoutes.js';
+app.use('/api/audit', apiLimiter, auditRoutes);
 
 // Error Handling
 app.use(notFound);

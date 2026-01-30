@@ -1,7 +1,12 @@
 import asyncHandler from 'express-async-handler';
 import Project from '../models/Project.js';
+import { logAudit } from '../utils/auditLogger.js';
 import { getPaginationParams, formatPaginatedResponse } from '../utils/paginationHelper.js';
 import { recalculateAllStats } from './analyticsController.js';
+import mongoose from 'mongoose';
+import Fund from '../models/Fund.js';
+import Transaction from '../models/Transaction.js';
+import AuditLog from '../models/AuditLog.js';
 
 // @desc    Get all projects
 // @route   GET /api/projects
@@ -42,14 +47,6 @@ const getProjectById = asyncHandler(async (req, res) => {
         throw new Error('Project not found');
     }
 });
-
-// @desc    Create a project
-// @route   POST /api/projects
-// @access  Private/Admin
-
-import mongoose from 'mongoose';
-import Fund from '../models/Fund.js';
-import Transaction from '../models/Transaction.js';
 
 // @desc    Create a project
 // @route   POST /api/projects
@@ -134,7 +131,7 @@ const createProject = asyncHandler(async (req, res) => {
                 if (!bestFund) {
                     throw new Error('No Active Primary/Deposit Fund found to source the initial investment.');
                 }
-                throw new Error(`Venture Authorization Failed: Insufficient liquidity in enterprise reserves. Required: BDT ${Number(initialInvestment).toLocaleString()}, Highest available fund (${bestFund.name}) only has BDT ${bestFund.balance.toLocaleString()}.`);
+                throw new Error(`Project Authorization Failed: Insufficient liquidity in enterprise reserves. Required: BDT ${Number(initialInvestment).toLocaleString()}, Highest available fund (${bestFund.name}) only has BDT ${bestFund.balance.toLocaleString()}.`);
             }
 
             // Debit Source
@@ -221,7 +218,7 @@ const updateProject = asyncHandler(async (req, res) => {
 
         // FEATURE: Structural Lock - Cannot edit if there are operational updates
         if (project.updates && project.updates.length > 0) {
-            throw new Error(`Modification Restricted: This venture has ${project.updates.length} active operational records. These must be purged or reconciled before structural changes are allowed.`);
+            throw new Error(`Modification Restricted: This project has ${project.updates.length} active operational records. These must be purged or reconciled before structural changes are allowed.`);
         }
 
         // Calculate ownership percentages for new members list
@@ -346,6 +343,16 @@ const updateProject = asyncHandler(async (req, res) => {
         await session.commitTransaction();
         await recalculateAllStats();
 
+        // Audit Log
+        await logAudit({
+            req,
+            user: req.user,
+            action: 'UPDATE_PROJECT',
+            resourceType: 'Project',
+            resourceId: project._id,
+            details: { title: project.title, changes: req.body }
+        });
+
         res.json(updatedProject);
 
     } catch (error) {
@@ -370,7 +377,7 @@ const deleteProject = asyncHandler(async (req, res) => {
 
     // FEATURE: Termination Lock - Cannot delete if there are operational updates
     if (project.updates && project.updates.length > 0) {
-        throw new Error(`Termination Forbidden: Project "${project.title}" has active operational records. These must be purged or reconciled individually before the venture can be terminated.`);
+        throw new Error(`Termination Forbidden: Project "${project.title}" has active operational records. These must be purged or reconciled individually before the project can be terminated.`);
     }
 
     const session = await mongoose.startSession();
@@ -396,7 +403,7 @@ const deleteProject = asyncHandler(async (req, res) => {
                 await Transaction.create([{
                     type: 'Investment',
                     amount: Number(amountToRevert),
-                    description: `Venture Liquidation: Funds returned from ${project.title}`,
+                    description: `Project Liquidation: Funds returned from ${project.title}`,
                     fundId: enterpriseFund._id,
                     authorizedBy: req.user._id,
                     date: Date.now()
@@ -417,7 +424,18 @@ const deleteProject = asyncHandler(async (req, res) => {
 
         await session.commitTransaction();
         await recalculateAllStats();
-        res.json({ message: 'Venture terminated successfully. All liquidity has been reconciled to enterprise reserves.' });
+
+        // Audit Log
+        await logAudit({
+            req,
+            user: req.user,
+            action: 'DELETE_PROJECT',
+            resourceType: 'Project',
+            resourceId: req.params.id,
+            details: { title: project.title, finalBalanceReverted: amountToRevert }
+        });
+
+        res.json({ message: 'Project terminated successfully. All liquidity has been reconciled to enterprise reserves.' });
     } catch (error) {
         await session.abortTransaction();
         res.status(400);
@@ -489,6 +507,23 @@ const addProjectUpdate = asyncHandler(async (req, res) => {
             authorizedBy: req.user._id
         }], { session });
 
+        // 4. Audit Log (System Activity)
+        await AuditLog.create([{
+            user: req.user._id,
+            userName: req.user.name,
+            action: 'ADD_PROJECT_UPDATE',
+            resourceType: 'Project',
+            resourceId: project._id,
+            details: {
+                message: `Added ${type.toLowerCase()} of ${updateAmount} to project ${project.title}`,
+                type,
+                amount: updateAmount,
+                description
+            },
+            ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+            userAgent: req.headers['user-agent']
+        }], { session });
+
         await session.commitTransaction();
         await recalculateAllStats();
         res.status(201).json(project);
@@ -501,6 +536,202 @@ const addProjectUpdate = asyncHandler(async (req, res) => {
     }
 });
 
+// @desc    Edit update from project
+// @route   PUT /api/projects/:id/updates/:updateId
+// @access  Private
+const editProjectUpdate = asyncHandler(async (req, res) => {
+    const { type, amount, description, date } = req.body;
+    const { id, updateId } = req.params;
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const project = await Project.findById(id).session(session);
+        if (!project) {
+            res.status(404);
+            throw new Error('Project not found');
+        }
+
+        const update = project.updates.id(updateId);
+        if (!update) {
+            res.status(404);
+            throw new Error('Update record not found');
+        }
+
+        const oldType = update.type;
+        const oldAmount = update.amount;
+        const newAmount = Number(amount);
+        const newDate = date || update.date;
+
+        // 1. Revert Old Impact
+        if (oldType === 'Earning') {
+            project.currentFundBalance -= oldAmount;
+            project.totalEarnings -= oldAmount;
+        } else if (oldType === 'Expense') {
+            project.currentFundBalance += oldAmount;
+            project.totalExpenses -= oldAmount;
+        }
+
+        // 2. Apply New Impact
+        if (type === 'Earning') {
+            project.currentFundBalance += newAmount;
+            project.totalEarnings += newAmount;
+        } else if (type === 'Expense') {
+            project.currentFundBalance -= newAmount;
+            project.totalExpenses += newAmount;
+        }
+
+        // 3. Update Subdocument
+        update.type = type;
+        update.amount = newAmount;
+        update.description = description;
+        update.date = newDate;
+
+        await project.save({ session });
+
+        // 4. Update Fund Impact
+        if (project.linkedFundId) {
+            const fund = await Fund.findById(project.linkedFundId).session(session);
+            if (fund) {
+                // Revert Old
+                if (oldType === 'Earning') fund.balance -= oldAmount;
+                else if (oldType === 'Expense') fund.balance += oldAmount;
+
+                // Apply New
+                if (type === 'Earning') fund.balance += newAmount;
+                else if (type === 'Expense') fund.balance -= newAmount;
+
+                await fund.save({ session });
+            }
+        }
+
+        // 5. Audit Log (Correction)
+        await Transaction.create([{
+            type: 'Adjustment', // Using Adjustment to denote internal correction
+            amount: 0,
+            description: `[Correction: ${project.title}] Updated event: ${description} (Was: ${oldType} ${oldAmount}, Now: ${type} ${newAmount})`,
+            projectId: project._id,
+            fundId: project.linkedFundId,
+            authorizedBy: req.user._id,
+            date: Date.now()
+        }], { session });
+
+        // 6. Audit Log (System Activity)
+        await AuditLog.create([{
+            user: req.user._id,
+            userName: req.user.name,
+            action: 'EDIT_PROJECT_UPDATE',
+            resourceType: 'Project',
+            resourceId: project._id,
+            details: {
+                message: `Edited update for project ${project.title}`,
+                previous: { type: oldType, amount: oldAmount },
+                current: { type, amount: newAmount, description }
+            },
+            ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+            userAgent: req.headers['user-agent']
+        }], { session });
+
+        await session.commitTransaction();
+        await recalculateAllStats();
+        res.json(project);
+
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(400);
+        throw new Error(error.message || 'Failed to edit update');
+    } finally {
+        session.endSession();
+    }
+});
+
+// @desc    Delete update from project
+// @route   DELETE /api/projects/:id/updates/:updateId
+// @access  Private
+const deleteProjectUpdate = asyncHandler(async (req, res) => {
+    const { id, updateId } = req.params;
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const project = await Project.findById(id).session(session);
+        if (!project) {
+            res.status(404);
+            throw new Error('Project not found');
+        }
+
+        const update = project.updates.id(updateId);
+        if (!update) {
+            res.status(404);
+            throw new Error('Update record not found');
+        }
+
+        const { type, amount } = update;
+
+        // 1. Revert Impact on Project
+        if (type === 'Earning') {
+            project.currentFundBalance -= amount;
+            project.totalEarnings -= amount;
+        } else if (type === 'Expense') {
+            project.currentFundBalance += amount;
+            project.totalExpenses -= amount;
+        }
+
+        // 2. Remove Subdocument
+        // update.remove() is deprecated in newer Mongoose
+        project.updates.pull({ _id: updateId });
+        await project.save({ session });
+
+        // 3. Revert Impact on Fund
+        if (project.linkedFundId) {
+            const fund = await Fund.findById(project.linkedFundId).session(session);
+            if (fund) {
+                if (type === 'Earning') fund.balance -= amount;
+                else if (type === 'Expense') fund.balance += amount;
+                await fund.save({ session });
+            }
+        }
+
+        // 4. Audit Log
+        await Transaction.create([{
+            type: 'Adjustment',
+            amount: amount,
+            description: `[Reversal: ${project.title}] Removed event: ${update.description}`,
+            projectId: project._id,
+            fundId: project.linkedFundId,
+            authorizedBy: req.user._id,
+            date: Date.now()
+        }], { session });
+
+        // 5. Audit Log (System Activity)
+        await AuditLog.create([{
+            user: req.user._id,
+            userName: req.user.name,
+            action: 'DELETE_PROJECT_UPDATE',
+            resourceType: 'Project',
+            resourceId: project._id,
+            details: {
+                message: `Deleted update from project ${project.title}`,
+                deletedRecord: { type, amount, description: update.description }
+            },
+            ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+            userAgent: req.headers['user-agent']
+        }], { session });
+
+        await session.commitTransaction();
+        await recalculateAllStats();
+        res.json(project);
+
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(400);
+        throw new Error(error.message || 'Failed to delete update');
+    } finally {
+        session.endSession();
+    }
+});
 
 export {
     getProjects,
@@ -508,5 +739,7 @@ export {
     createProject,
     updateProject,
     deleteProject,
-    addProjectUpdate
+    addProjectUpdate,
+    editProjectUpdate,
+    deleteProjectUpdate
 };

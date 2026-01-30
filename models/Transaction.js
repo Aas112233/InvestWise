@@ -4,7 +4,7 @@ const transactionSchema = mongoose.Schema(
     {
         type: {
             type: String,
-            enum: ['Deposit', 'Withdrawal', 'Investment', 'Expense', 'Earning', 'Dividend', 'Equity-Transfer'],
+            enum: ['Deposit', 'Withdrawal', 'Investment', 'Expense', 'Earning', 'Dividend', 'Equity-Transfer', 'Adjustment', 'Transfer'],
             required: true,
         },
         amount: {
@@ -43,6 +43,11 @@ const transactionSchema = mongoose.Schema(
         },
         handlingOfficer: {
             type: String,
+            required: false
+        },
+        depositMethod: {
+            type: String,
+            enum: ['Cash', 'Bank', 'Mobile Banking', 'Check', 'Other'],
             required: false
         },
         authorizedBy: {
