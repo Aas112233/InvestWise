@@ -13,7 +13,7 @@ class ProjectUpdateModel extends ProjectUpdate {
     return ProjectUpdateModel(
       id: json['_id'] as String?,
       type: json['type'] as String,
-      amount: (json['amount'] as num).toDouble(),
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
       description: json['description'] as String,
       date: DateTime.parse(json['date'] as String),
     );
@@ -68,19 +68,19 @@ class ProjectModel extends Project {
       title: json['title'] as String,
       category: json['category'] as String,
       description: json['description'] as String,
-      initialInvestment: (json['initialInvestment'] as num).toDouble(),
-      budget: (json['budget'] as num).toDouble(),
-      expectedRoi: (json['expectedRoi'] as num).toDouble(),
-      totalShares: json['totalShares'] as int,
+      initialInvestment: (json['initialInvestment'] as num?)?.toDouble() ?? 0.0,
+      budget: (json['budget'] as num?)?.toDouble() ?? 0.0,
+      expectedRoi: (json['expectedRoi'] as num?)?.toDouble() ?? 0.0,
+      totalShares: (json['totalShares'] as num?)?.toInt() ?? 0,
       status: json['status'] as String,
       health: json['health'] as String,
       startDate: DateTime.parse(json['startDate'] as String),
       completionDate: json['completionDate'] != null
           ? DateTime.parse(json['completionDate'] as String)
           : null,
-      totalEarnings: (json['totalEarnings'] as num).toDouble(),
-      totalExpenses: (json['totalExpenses'] as num).toDouble(),
-      currentValue: (json['currentValue'] as num).toDouble(),
+      totalEarnings: (json['totalEarnings'] as num?)?.toDouble() ?? 0.0,
+      totalExpenses: (json['totalExpenses'] as num?)?.toDouble() ?? 0.0,
+      currentValue: (json['currentValue'] as num?)?.toDouble() ?? 0.0,
       updates: (json['updates'] as List<dynamic>)
           .map((update) =>
               ProjectUpdateModel.fromJson(update as Map<String, dynamic>))

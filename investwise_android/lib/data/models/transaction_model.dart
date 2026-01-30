@@ -18,20 +18,30 @@ class TransactionModel extends Transaction {
   });
 
   factory TransactionModel.fromJson(Map<String, dynamic> json) {
+    // Helper to safely extract String ID or Name from dynamic value
+    String? extractString(dynamic value, [String fieldName = '_id']) {
+      if (value == null) return null;
+      if (value is String) return value;
+      if (value is Map) {
+        return value[fieldName] as String? ?? value['_id'] as String?;
+      }
+      return value.toString();
+    }
+
     return TransactionModel(
       id: json['_id'] as String,
       type: json['type'] as String,
       amount: (json['amount'] as num).toDouble(),
       description: json['description'] as String,
-      category: json['category'] as String?,
+      category: extractString(json['category'], 'name'),
       date: DateTime.parse(json['date'] as String),
       status: json['status'] as String,
-      memberId: json['memberId'] as String?,
-      projectId: json['projectId'] as String?,
-      fundId: json['fundId'] as String?,
-      handlingOfficer: json['handlingOfficer'] as String?,
+      memberId: extractString(json['memberId']),
+      projectId: extractString(json['projectId']),
+      fundId: extractString(json['fundId']),
+      handlingOfficer: extractString(json['handlingOfficer'], 'name'),
       depositMethod: json['depositMethod'] as String?,
-      authorizedBy: json['authorizedBy'] as String?,
+      authorizedBy: extractString(json['authorizedBy'], 'name'),
     );
   }
 

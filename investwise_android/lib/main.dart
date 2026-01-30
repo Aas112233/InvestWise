@@ -23,6 +23,8 @@ import 'presentation/screens/projects/project_detail_screen.dart';
 import 'presentation/screens/projects/add_project_screen.dart';
 import 'presentation/screens/transactions/transaction_list_screen.dart';
 import 'presentation/screens/transactions/add_transaction_screen.dart';
+import 'presentation/screens/deposits/deposits_screen.dart';
+import 'presentation/screens/deposits/request_deposit_screen.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
@@ -112,6 +114,8 @@ class InvestWiseApp extends StatelessWidget {
           AppRoutes.addProject: (context) => const AddProjectScreen(),
           AppRoutes.transactions: (context) => const TransactionListScreen(),
           AppRoutes.addTransaction: (context) => const AddTransactionScreen(),
+          AppRoutes.deposits: (context) => const DepositsScreen(),
+          AppRoutes.requestDeposit: (context) => const RequestDepositScreen(),
         },
       ),
     );
