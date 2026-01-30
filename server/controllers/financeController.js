@@ -5,17 +5,75 @@ import Fund from '../models/Fund.js';
 import Member from '../models/Member.js';
 import Project from '../models/Project.js';
 import DeletedRecord from '../models/DeletedRecord.js';
+import { getPaginationParams, formatPaginatedResponse } from '../utils/paginationHelper.js';
+import { recalculateAllStats } from './analyticsController.js';
 
 // @desc    Get all transactions
 // @route   GET /api/finance/transactions
 // @access  Private
 const getTransactions = asyncHandler(async (req, res) => {
-    const transactions = await Transaction.find({})
+    const { page, limit, skip } = getPaginationParams(req.query);
+    const search = req.query.search || '';
+
+    // Create search filter
+    const query = search
+        ? {
+            $or: [
+                { type: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } },
+                { status: { $regex: search, $options: 'i' } }
+            ]
+        }
+        : {};
+
+    const totalCount = await Transaction.countDocuments(query);
+    const transactions = await Transaction.find(query)
         .populate('memberId', 'name email')
         .populate('projectId', 'title')
         .populate('fundId', 'name')
-        .sort({ date: -1 });
-    res.json(transactions);
+        .sort({ date: -1 })
+        .skip(skip)
+        .limit(limit);
+
+    // Calculate totals for inflow and outflow
+    const totals = await Transaction.aggregate([
+        {
+            $match: {
+                status: { $in: ['Success', 'Completed'] }
+            }
+        },
+        {
+            $group: {
+                _id: null,
+                totalInflow: {
+                    $sum: {
+                        $cond: [
+                            { $in: ['$type', ['Deposit', 'Earning', 'Investment']] },
+                            '$amount',
+                            0
+                        ]
+                    }
+                },
+                totalOutflow: {
+                    $sum: {
+                        $cond: [
+                            { $in: ['$type', ['Expense', 'Withdrawal', 'Dividend']] },
+                            '$amount',
+                            0
+                        ]
+                    }
+                }
+            }
+        }
+    ]);
+
+    const stats = totals[0] || { totalInflow: 0, totalOutflow: 0 };
+
+    res.json({
+        ...formatPaginatedResponse(transactions, page, limit, totalCount),
+        totalInflow: stats.totalInflow,
+        totalOutflow: stats.totalOutflow
+    });
 });
 
 // @desc    Add a deposit
@@ -79,6 +137,7 @@ const addDeposit = asyncHandler(async (req, res) => {
         }
 
         await session.commitTransaction();
+        await recalculateAllStats();
         res.status(201).json(transaction[0]);
     } catch (error) {
         await session.abortTransaction();
@@ -140,6 +199,7 @@ const approveDeposit = asyncHandler(async (req, res) => {
         await transaction.save({ session });
 
         await session.commitTransaction();
+        await recalculateAllStats();
         res.json(transaction);
     } catch (error) {
         await session.abortTransaction();
@@ -153,50 +213,128 @@ const approveDeposit = asyncHandler(async (req, res) => {
 // @route   POST /api/finance/expenses
 // @access  Private (Admin)
 const addExpense = asyncHandler(async (req, res) => {
-    const { amount, fundId, description, category, date, projectId } = req.body;
+    let { amount, fundId, description, category, date, projectId, memberId } = req.body;
 
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
+        // Enforce Project-Fund Integrity
+        if (projectId) {
+            const project = await Project.findById(projectId).session(session);
+            if (!project) throw new Error('Project not found');
+
+            // If the project has a linked fund, it MUST be the source fund
+            if (project.linkedFundId) {
+                fundId = project.linkedFundId;
+            }
+
+            // Update Project internal tracking
+            project.currentFundBalance -= Number(amount);
+            project.totalExpenses = (project.totalExpenses || 0) + Number(amount);
+            await project.save({ session });
+
+            // Enrich description with project context
+            if (!description.includes(`[${project.title}]`)) {
+                description = `[${project.title}] ${description}`;
+            }
+        }
+
         const fund = await Fund.findById(fundId).session(session);
-        if (!fund) throw new Error('Fund not found');
+        if (!fund) throw new Error('Source Fund not found');
+
+        // Prevent using project funds for non-project expenses
+        if (!projectId && fund.type === 'PROJECT') {
+            throw new Error('Project-specific funds cannot be used for general expenses. Please select a project first.');
+        }
 
         if (fund.balance < amount) {
-            throw new Error('Insufficient funds');
+            throw new Error('Insufficient balance in ' + fund.name);
         }
 
         // Update Fund
         fund.balance -= Number(amount);
         await fund.save({ session });
 
-        // Update Project if applicable
-        if (projectId) {
-            const project = await Project.findById(projectId).session(session);
-            if (project) {
-                project.currentFundBalance -= Number(amount);
-                await project.save({ session });
-            }
-        }
-
         // Create Transaction
         const transaction = await Transaction.create([{
             type: 'Expense',
             amount: Number(amount),
-            description: category ? `${category}: ${description}` : description,
+            description: description,
+            category: category || 'Operational',
             fundId,
             projectId,
+            memberId, // Added memberId
             date: date || Date.now(),
             status: 'Success',
             authorizedBy: req.user._id
         }], { session });
 
         await session.commitTransaction();
+        await recalculateAllStats();
         res.status(201).json(transaction[0]);
     } catch (error) {
         await session.abortTransaction();
         res.status(400);
         throw new Error(error.message || 'Expense failed');
+    } finally {
+        session.endSession();
+    }
+});
+
+// @desc    Add an earning (General Income / Interest)
+// @route   POST /api/finance/earnings
+// @access  Private (Admin)
+const addEarning = asyncHandler(async (req, res) => {
+    const { amount, fundId, description, category, date, projectId, memberId } = req.body;
+
+    if (!amount || Number(amount) <= 0) {
+        res.status(400);
+        throw new Error('Invalid earning amount');
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const fund = await Fund.findById(fundId).session(session);
+        if (!fund) throw new Error('Target Fund not found');
+
+        // Update Fund
+        fund.balance += Number(amount);
+        await fund.save({ session });
+
+        // Update Project if linked (though projectController has its own, this provides synergy)
+        if (projectId) {
+            const project = await Project.findById(projectId).session(session);
+            if (project) {
+                project.currentFundBalance += Number(amount);
+                project.totalEarnings += Number(amount);
+                await project.save({ session });
+            }
+        }
+
+        // Create Transaction
+        const transaction = await Transaction.create([{
+            type: 'Earning',
+            amount: Number(amount),
+            description: description || 'General Earning',
+            category: category || 'Income',
+            fundId,
+            projectId,
+            memberId,
+            date: date || Date.now(),
+            status: 'Success',
+            authorizedBy: req.user._id
+        }], { session });
+
+        await session.commitTransaction();
+        await recalculateAllStats();
+        res.status(201).json(transaction[0]);
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(400);
+        throw new Error(error.message || 'Earning record failed');
     } finally {
         session.endSession();
     }
@@ -219,33 +357,52 @@ const deleteTransaction = asyncHandler(async (req, res) => {
 
         // Only reverse impact if it was actually applied (Success/Completed)
         if (transaction.status === 'Success' || transaction.status === 'Completed') {
-            if (transaction.type === 'Deposit') {
-                const fund = await Fund.findById(transaction.fundId).session(session);
-                const member = await Member.findById(transaction.memberId).session(session);
+            const amount = transaction.amount;
+            const fundId = transaction.fundId;
+            const projectId = transaction.projectId;
+            const memberId = transaction.memberId;
 
+            // 1. Revert Fund Balance
+            if (fundId) {
+                const fund = await Fund.findById(fundId).session(session);
                 if (fund) {
-                    fund.balance -= transaction.amount;
+                    if (['Deposit', 'Earning', 'Investment'].includes(transaction.type)) {
+                        fund.balance -= amount;
+                    } else if (['Withdrawal', 'Expense', 'Dividend'].includes(transaction.type)) {
+                        fund.balance += amount;
+                    }
                     await fund.save({ session });
                 }
+            }
+
+            // 2. Revert Member Contributions/Shares
+            if (memberId && transaction.type === 'Deposit') {
+                const member = await Member.findById(memberId).session(session);
                 if (member) {
-                    member.totalContributed -= transaction.amount;
-                    // Revert shares estimate
-                    const estimatedShares = Math.floor(transaction.amount / 1000);
+                    member.totalContributed -= amount;
+                    // Revert shares estimate (1000 per share as seen in current code)
+                    const estimatedShares = Math.floor(amount / 1000);
                     member.shares = Math.max(0, member.shares - estimatedShares);
                     await member.save({ session });
                 }
-            } else if (transaction.type === 'Expense') {
-                const fund = await Fund.findById(transaction.fundId).session(session);
-                if (fund) {
-                    fund.balance += transaction.amount;
-                    await fund.save({ session });
-                }
-                if (transaction.projectId) {
-                    const project = await Project.findById(transaction.projectId).session(session);
-                    if (project) {
-                        project.currentFundBalance += transaction.amount;
-                        await project.save({ session });
+            }
+
+            // 3. Revert Project Tracking
+            if (projectId) {
+                const project = await Project.findById(projectId).session(session);
+                if (project) {
+                    if (transaction.type === 'Earning') {
+                        project.currentFundBalance -= amount;
+                        project.totalEarnings -= amount;
+                    } else if (transaction.type === 'Expense') {
+                        project.currentFundBalance += amount;
+                        project.totalExpenses = Math.max(0, (project.totalExpenses || 0) - amount);
+                    } else if (transaction.type === 'Investment') {
+                        project.currentFundBalance -= amount;
+                    } else if (transaction.type === 'Withdrawal') {
+                        project.currentFundBalance += amount;
                     }
+                    await project.save({ session });
                 }
             }
         }
@@ -262,6 +419,7 @@ const deleteTransaction = asyncHandler(async (req, res) => {
         await transaction.deleteOne({ session });
 
         await session.commitTransaction();
+        await recalculateAllStats();
         res.json({ message: 'Transaction removed' });
     } catch (error) {
         await session.abortTransaction();
@@ -465,6 +623,7 @@ export {
     getTransactions,
     addDeposit,
     addExpense,
+    addEarning,
     transferFunds,
     deleteTransaction,
     approveDeposit,

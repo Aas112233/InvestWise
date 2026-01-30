@@ -15,8 +15,10 @@ import Analysis from './components/Analysis';
 import Reports from './components/Reports';
 import Settings from './components/Settings';
 import Login from './components/Login';
+import ProtectedRoute from './components/ProtectedRoute';
 import DividendManagement from './components/DividendManagement';
 import AIAdvisorSidebar from './components/AIAdvisorSidebar';
+import Goals from './components/Goals';
 import Forbidden from './components/Forbidden';
 import NotFound from './components/NotFound';
 import { User, AppScreen, AccessLevel } from './types';
@@ -40,10 +42,17 @@ const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => voi
     }
   }, [isDarkMode]);
 
+  useEffect(() => {
+    // Apply font-family classes to root for proper language rendering
+    document.documentElement.classList.remove('lang-en', 'lang-bn');
+    document.documentElement.classList.add(`lang-${lang}`);
+    document.documentElement.setAttribute('lang', lang);
+  }, [lang]);
+
   const handleLogin = (loggedUser: User) => {
     setUser(loggedUser);
     localStorage.setItem('userInfo', JSON.stringify(loggedUser));
-    navigate('/dashboard');
+    // Redirection is now handled by Login.tsx
   };
 
   const handleLogout = () => {
@@ -106,26 +115,6 @@ const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => voi
     );
   };
 
-  // Route Guard Component
-  const ProtectedRoute = ({ children, requiredScreen }: { children: React.ReactNode; requiredScreen?: AppScreen }) => {
-    if (!user) {
-      return <Navigate to="/login" replace />;
-    }
-
-    // Role-Based Access Control Check
-    if (requiredScreen) {
-      const userPermission = user.permissions?.[requiredScreen];
-      if (userPermission === AccessLevel.NONE) {
-        return (
-          <AppShell>
-            <Forbidden />
-          </AppShell>
-        );
-      }
-    }
-
-    return <AppShell>{children}</AppShell>;
-  };
 
   return (
     <Routes>
@@ -140,74 +129,80 @@ const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => voi
 
       {/* Protected Routes */}
       <Route path="/dashboard" element={
-        <ProtectedRoute requiredScreen={AppScreen.DASHBOARD}>
+        <ProtectedRoute user={user} requiredScreen={AppScreen.DASHBOARD} appShell={AppShell} forbiddenComponent={<Forbidden />}>
           <Dashboard isDarkMode={isDarkMode} lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/members" element={
-        <ProtectedRoute requiredScreen={AppScreen.MEMBERS}>
+        <ProtectedRoute user={user} requiredScreen={AppScreen.MEMBERS} appShell={AppShell} forbiddenComponent={<Forbidden />}>
           <Members lang={lang} />
         </ProtectedRoute>
       } />
 
+      <Route path="/goals" element={
+        <ProtectedRoute user={user} requiredScreen={AppScreen.GOALS} appShell={AppShell} forbiddenComponent={<Forbidden />}>
+          <Goals lang={lang} />
+        </ProtectedRoute>
+      } />
+
       <Route path="/deposits" element={
-        <ProtectedRoute requiredScreen={AppScreen.DEPOSITS}>
+        <ProtectedRoute user={user} requiredScreen={AppScreen.DEPOSITS} appShell={AppShell} forbiddenComponent={<Forbidden />}>
           <Deposits lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/request-deposit" element={
-        <ProtectedRoute requiredScreen={AppScreen.REQUEST_DEPOSIT}>
+        <ProtectedRoute user={user} requiredScreen={AppScreen.REQUEST_DEPOSIT} appShell={AppShell} forbiddenComponent={<Forbidden />}>
           <RequestDeposit lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/transactions" element={
-        <ProtectedRoute requiredScreen={AppScreen.TRANSACTIONS}>
+        <ProtectedRoute user={user} requiredScreen={AppScreen.TRANSACTIONS} appShell={AppShell} forbiddenComponent={<Forbidden />}>
           <Transactions lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/expenses" element={
-        <ProtectedRoute requiredScreen={AppScreen.EXPENSES}>
+        <ProtectedRoute user={user} requiredScreen={AppScreen.EXPENSES} appShell={AppShell} forbiddenComponent={<Forbidden />}>
           <Expenses lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/projects" element={
-        <ProtectedRoute requiredScreen={AppScreen.PROJECT_MANAGEMENT}>
+        <ProtectedRoute user={user} requiredScreen={AppScreen.PROJECT_MANAGEMENT} appShell={AppShell} forbiddenComponent={<Forbidden />}>
           <ProjectManagement lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/dividends" element={
-        <ProtectedRoute requiredScreen={AppScreen.DIVIDENDS}>
+        <ProtectedRoute user={user} requiredScreen={AppScreen.DIVIDENDS} appShell={AppShell} forbiddenComponent={<Forbidden />}>
           <DividendManagement lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/funds" element={
-        <ProtectedRoute requiredScreen={AppScreen.FUNDS_MANAGEMENT}>
+        <ProtectedRoute user={user} requiredScreen={AppScreen.FUNDS_MANAGEMENT} appShell={AppShell} forbiddenComponent={<Forbidden />}>
           <FundsManagement lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/analysis" element={
-        <ProtectedRoute requiredScreen={AppScreen.ANALYSIS}>
+        <ProtectedRoute user={user} requiredScreen={AppScreen.ANALYSIS} appShell={AppShell} forbiddenComponent={<Forbidden />}>
           <Analysis lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/reports" element={
-        <ProtectedRoute requiredScreen={AppScreen.REPORTS}>
+        <ProtectedRoute user={user} requiredScreen={AppScreen.REPORTS} appShell={AppShell} forbiddenComponent={<Forbidden />}>
           <Reports lang={lang} />
         </ProtectedRoute>
       } />
 
       <Route path="/settings" element={
-        <ProtectedRoute requiredScreen={AppScreen.SETTINGS}>
-          <Settings currentUser={user} lang={lang} />
+        <ProtectedRoute user={user} requiredScreen={AppScreen.SETTINGS} appShell={AppShell} forbiddenComponent={<Forbidden />}>
+          <Settings currentUser={user!} lang={lang} />
         </ProtectedRoute>
       } />
 

@@ -33,7 +33,12 @@ api.interceptors.response.use(
         if (error.response?.status === 401) {
             console.warn('Unauthorized access - logging out');
             localStorage.removeItem('userInfo');
-            window.location.href = '/login';
+            const currentPath = window.location.pathname;
+            if (currentPath !== '/login') {
+                window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+            } else {
+                window.location.href = '/login';
+            }
         }
 
         const message = error.response?.data?.message || error.message || 'An error occurred';
@@ -89,8 +94,8 @@ export const authService = {
 };
 
 export const memberService = {
-    getAll: async () => {
-        const { data } = await api.get('/members');
+    getAll: async (params?: { page?: number; limit?: number; search?: string }) => {
+        const { data } = await api.get('/members', { params });
         return data;
     },
     create: async (memberData: any) => {
@@ -108,8 +113,8 @@ export const memberService = {
 };
 
 export const projectService = {
-    getAll: async () => {
-        const { data } = await api.get('/projects');
+    getAll: async (params?: { page?: number; limit?: number; search?: string }) => {
+        const { data } = await api.get('/projects', { params });
         return data;
     },
     create: async (projectData: any) => {
@@ -146,8 +151,8 @@ export const fundService = {
 };
 
 export const financeService = {
-    getTransactions: async () => {
-        const { data } = await api.get('/finance/transactions');
+    getTransactions: async (params?: { page?: number; limit?: number; search?: string }) => {
+        const { data } = await api.get('/finance/transactions', { params });
         return data;
     },
     addDeposit: async (depositData: any) => {
@@ -203,6 +208,43 @@ export const reportService = {
             timeout: 60000
         });
         return response.data;
+    },
+    exportGeneric: async (payload: { title?: string, columns: any[], data: any[], fileName: string, lang?: string }) => {
+        const response = await api.post('/reports/export-generic', payload, {
+            responseType: 'blob',
+            timeout: 60000
+        });
+        return response.data;
+    }
+};
+
+export const analyticsService = {
+    getStats: async () => {
+        const { data } = await api.get('/analytics/stats');
+        return data;
+    },
+    recalculate: async () => {
+        const { data } = await api.post('/analytics/recalculate');
+        return data;
+    }
+};
+
+export const goalService = {
+    getAll: async () => {
+        const { data } = await api.get('/goals');
+        return data;
+    },
+    create: async (goalData: any) => {
+        const { data } = await api.post('/goals', goalData);
+        return data;
+    },
+    update: async (id: string, goalData: any) => {
+        const { data } = await api.put(`/goals/${id}`, goalData);
+        return data;
+    },
+    delete: async (id: string) => {
+        const { data } = await api.delete(`/goals/${id}`);
+        return data;
     }
 };
 

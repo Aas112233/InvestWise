@@ -21,6 +21,8 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December"
 ];
 
+const monthKeys = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
 const YEARS = [2024, 2025, 2026];
 
 interface AnalysisProps {
@@ -134,16 +136,17 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
               ...row.payments
             }))}
             columns={[
-              { header: 'Partner', key: 'memberName' },
-              { header: 'Member ID', key: 'memberId' },
-              ...MONTHS.map(m => ({
-                header: m,
+              { header: t('analysis.partnerEntity', lang), key: 'memberName' },
+              { header: t('members.memberId', lang), key: 'memberId' },
+              ...MONTHS.map((m, i) => ({
+                header: `${t(`common.months.${monthKeys[i]}`, lang)} (BDT)`,
                 key: `${m} ${selectedYear}`,
-                format: (item: any) => formatCurrency(item[`${m} ${selectedYear}`] || 0)
+                format: (item: any) => (item[`${m} ${selectedYear}`] || 0).toLocaleString()
               }))
             ]}
             fileName={`contribution_analysis_${selectedYear}`}
-            title={`Financial Contribution Analysis - ${selectedYear}`}
+            title={`${t('analysis.regularityMatrix', lang)} - ${selectedYear}`}
+            lang={lang}
             targetId="analysis-snapshot-target"
           />
           <div className="flex bg-white dark:bg-[#1A221D] p-1 rounded-2xl border border-gray-100 dark:border-white/5">
@@ -162,7 +165,7 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
             onChange={(e) => setSelectedMonth(e.target.value)}
             className="bg-dark dark:bg-brand text-white dark:text-dark px-6 py-3.5 rounded-2xl font-black text-xs uppercase outline-none shadow-xl shadow-brand/10 cursor-pointer"
           >
-            {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+            {MONTHS.map((m, i) => <option key={m} value={m}>{t(`common.months.${monthKeys[i]}`, lang)}</option>)}
           </select>
         </div>
       </div>
@@ -178,7 +181,7 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
               : 'text-gray-500 hover:text-dark dark:hover:text-white'
               }`}
           >
-            {tab}
+            {t(`analysis.${tab.toLowerCase()}`, lang)}
           </button>
         ))}
       </div>
@@ -190,33 +193,33 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
               <div className="bg-dark p-10 rounded-[4rem] text-white flex flex-col justify-between shadow-2xl relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-20 bg-brand/10 rounded-full -mr-10 -mt-10 blur-3xl group-hover:scale-110 transition-transform duration-1000"></div>
                 <div className="relative z-10">
-                  <p className="text-[11px] font-black text-brand uppercase tracking-[0.4em] mb-4">Top Performer ({selectedMonth})</p>
+                  <p className="text-[11px] font-black text-brand uppercase tracking-[0.4em] mb-4">{t('analysis.topPerformer', lang)} ({t(`common.months.${monthKeys[MONTHS.indexOf(selectedMonth)]}`, lang)})</p>
                   {topContributorOfMonth ? (
                     <>
                       <div className="flex items-center gap-6 mb-8">
                         <img src={topContributorOfMonth.avatar || `https://ui-avatars.com/api/?name=${topContributorOfMonth.name}&background=BFF300&color=000`} className="w-20 h-20 rounded-[2.5rem] border-4 border-brand/20 shadow-2xl" alt="" />
                         <div>
                           <h3 className="text-3xl font-black tracking-tighter leading-none">{topContributorOfMonth.name}</h3>
-                          <p className="text-[10px] font-black opacity-40 uppercase tracking-widest mt-2">Elite Partner Pool</p>
+                          <p className="text-[10px] font-black opacity-40 uppercase tracking-widest mt-2">{t('analysis.elitePool', lang)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 py-4 border-t border-white/10">
                         <Award className="text-brand" size={24} />
-                        <p className="text-lg font-black tracking-tight leading-none">BDT {topContributorOfMonth.totalContributed.toLocaleString()} <span className="text-[10px] opacity-40 uppercase">Invested</span></p>
+                        <p className="text-lg font-black tracking-tight leading-none">BDT {topContributorOfMonth.totalContributed.toLocaleString()} <span className="text-[10px] opacity-40 uppercase">{t('analysis.invested', lang)}</span></p>
                       </div>
                     </>
                   ) : (
-                    <p className="text-white/40">No data available</p>
+                    <p className="text-white/40">{t('common.noData', lang)}</p>
                   )}
                 </div>
               </div>
 
               <div className="lg:col-span-2 bg-white dark:bg-[#1A221D] p-12 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5 flex flex-col justify-between">
                 <div className="flex items-center justify-between mb-8">
-                  <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter">Collection Velocity</h4>
+                  <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter">{t('analysis.velocity', lang)}</h4>
                   <div className="flex items-center gap-4 text-[10px] font-black">
-                    <div className="flex items-center gap-1.5 text-emerald-500"><TrendingUp size={14} /> {monthStats.growth} Growth</div>
-                    <div className="flex items-center gap-1.5 text-gray-400"><CheckCircle2 size={14} /> {monthStats.completion} Target Met</div>
+                    <div className="flex items-center gap-1.5 text-emerald-500"><TrendingUp size={14} /> {monthStats.growth} {t('analysis.growth', lang)}</div>
+                    <div className="flex items-center gap-1.5 text-gray-400"><CheckCircle2 size={14} /> {monthStats.completion} {t('analysis.targetMet', lang)}</div>
                   </div>
                 </div>
                 <div className="h-[250px] w-full">
@@ -243,10 +246,10 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
               {[
-                { label: 'Avg Monthly Pay', value: `${avgMonthlyPay}K`, icon: <Activity size={20} />, color: 'text-brand' },
-                { label: 'Active Members', value: members.filter(m => m.status === 'active').length.toString(), icon: <Users size={20} />, color: 'text-blue-500' },
-                { label: 'Retention rate', value: `${retentionRate}%`, icon: <Users size={20} />, color: 'text-emerald-500' },
-                { label: 'Total Deposits', value: deposits.length.toString(), icon: <ArrowUpRight size={20} />, color: 'text-amber-500' }
+                { label: t('analysis.avgPay', lang), value: `${avgMonthlyPay}K`, icon: <Activity size={20} />, color: 'text-brand' },
+                { label: t('analysis.activeMembers', lang), value: members.filter(m => m.status === 'active').length.toString(), icon: <Users size={20} />, color: 'text-blue-500' },
+                { label: t('analysis.retention', lang), value: `${retentionRate}%`, icon: <Users size={20} />, color: 'text-emerald-500' },
+                { label: t('analysis.totalDeposits', lang), value: deposits.length.toString(), icon: <ArrowUpRight size={20} />, color: 'text-amber-500' }
               ].map((stat, i) => (
                 <div key={i} className="bg-white dark:bg-[#1A221D] p-8 rounded-[3rem] card-shadow border border-gray-100 dark:border-white/5 flex items-center justify-between transition-all hover:-translate-y-1">
                   <div>
@@ -264,17 +267,17 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
           <div className="bg-white dark:bg-[#1A221D] rounded-[4rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5 animate-in slide-in-from-bottom-4 duration-500">
             <div className="p-10 border-b border-gray-50 dark:border-white/5 flex items-center justify-between bg-gray-50/30 dark:bg-white/5">
               <div>
-                <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">Payment Regularity Matrix</h4>
-                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-2">Visual audit of member contributions for {selectedYear}</p>
+                <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('analysis.regularityMatrix', lang)}</h4>
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-2">{t('analysis.visualAudit', lang).replace('{year}', selectedYear.toString())}</p>
               </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-50/50 dark:bg-white/5">
-                    <th className="sticky left-0 bg-white dark:bg-[#1A221D] z-10 px-10 py-6 text-left text-[11px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-100 dark:border-white/5 shadow-xl">Partner Entity</th>
-                    {MONTHS.map(m => (
-                      <th key={m} className="px-6 py-6 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">{m.substring(0, 3)}</th>
+                    <th className="sticky left-0 bg-white dark:bg-[#1A221D] z-10 px-10 py-6 text-left text-[11px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-100 dark:border-white/5 shadow-xl">{t('analysis.partnerEntity', lang)}</th>
+                    {MONTHS.map((m, i) => (
+                      <th key={m} className="px-6 py-6 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">{t(`common.months.${monthKeys[i]}`, lang).substring(0, 3)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -312,7 +315,7 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 animate-in fade-in duration-500">
             <div className="bg-white dark:bg-[#1A221D] p-12 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5">
               <div className="flex items-center justify-between mb-10">
-                <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter">Strategic Lead Partners</h4>
+                <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter">{t('analysis.strategicLead', lang)}</h4>
                 <Award className="text-brand" size={28} />
               </div>
               <div className="space-y-6">
@@ -323,12 +326,12 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
                       <img src={m.avatar || `https://ui-avatars.com/api/?name=${m.name}&background=BFF300&color=000`} className="w-14 h-14 rounded-2xl shadow-xl grayscale group-hover:grayscale-0 transition-all duration-500" alt="" />
                       <div>
                         <p className="font-black text-dark dark:text-white text-lg uppercase tracking-tight">{m.name}</p>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Share Rank: Platinum</p>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t('analysis.shareRank', lang)}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-2xl font-black text-brand tracking-tighter leading-none">{formatCurrency(m.totalContributed)}</p>
-                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">Total BDT Vested</p>
+                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">{t('analysis.totalBDT', lang)}</p>
                     </div>
                   </div>
                 ))}
@@ -341,18 +344,18 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
                 <div className="relative z-10 flex flex-col justify-between h-full">
                   <div>
                     <div className="inline-block px-5 py-2 bg-brand/10 border border-brand/20 rounded-full mb-8">
-                      <p className="text-[10px] font-black text-brand uppercase tracking-[0.4em]">Portfolio Overview</p>
+                      <p className="text-[10px] font-black text-brand uppercase tracking-[0.4em]">{t('analysis.portfolioOverview', lang)}</p>
                     </div>
-                    <h4 className="text-5xl font-black text-white uppercase tracking-tighter leading-[0.8] mb-8">Investment Distribution</h4>
+                    <h4 className="text-5xl font-black text-white uppercase tracking-tighter leading-[0.8] mb-8">{t('analysis.investmentDist', lang)}</h4>
                     <p className="text-white/40 text-base font-medium leading-relaxed max-w-sm mb-12">
-                      {members.length} active partners contributing to the investment pool. Total contributions: {formatCurrency(deposits.reduce((sum, d) => sum + d.amount, 0))}
+                      {t('analysis.partnersContributing', lang).replace('{count}', members.length.toString()).replace('{total}', formatCurrency(deposits.reduce((sum, d) => sum + d.amount, 0)))}
                     </p>
                   </div>
                   <div className="pt-12 border-t border-white/10">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">Total Members</p>
-                        <p className="text-4xl font-black text-white tracking-tighter leading-none">{members.length} <span className="text-xs opacity-30">PARTNERS</span></p>
+                        <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">{t('dashboard.totalPartners', lang)}</p>
+                        <p className="text-4xl font-black text-white tracking-tighter leading-none">{members.length} <span className="text-xs opacity-30 uppercase">{t('nav.members', lang)}</span></p>
                       </div>
                       <div className="bg-brand w-16 h-16 rounded-[2rem] flex items-center justify-center text-dark hover:rotate-12 transition-all cursor-pointer">
                         <Eye size={28} strokeWidth={3} />

@@ -6,6 +6,7 @@ import ExportMenu from './ExportMenu';
 import Toast, { ToastType } from './Toast';
 import { formatCurrency } from '../utils/formatters';
 import { Language, t } from '../i18n/translations';
+import { ModalForm, FormInput, FormSelect, FormTextarea } from './ui/FormElements';
 
 interface FundsManagementProps {
   lang: Language;
@@ -14,6 +15,7 @@ interface FundsManagementProps {
 const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
   const { funds, addFund, updateFund, refreshFunds, currentUser } = useGlobalState();
   const [refreshing, setRefreshing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -48,6 +50,7 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
 
   const handleCreateFund = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       const payload: any = {
         name: formData.name,
@@ -69,6 +72,8 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
       setIsModalOpen(false);
     } catch (err: any) {
       showNotification(err.message || "Failed to create fund.", "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -109,15 +114,16 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
             data={activeFunds}
             columns={[
               { header: 'ID', key: 'id' },
-              { header: 'Funding Name', key: 'name' },
-              { header: 'Type', key: 'type' },
-              { header: 'Officer', key: 'handlingOfficer' },
-              { header: 'Balance', key: 'balance', format: (f: any) => formatCurrency(f.balance) },
-              { header: 'Currency', key: 'currency' },
-              { header: 'Description', key: 'description' }
+              { header: t('funds.fundName', lang) || 'Funding Name', key: 'name' },
+              { header: t('funds.fundType', lang) || 'Type', key: 'type' },
+              { header: t('funds.handlingOfficer', lang) || 'Officer', key: 'handlingOfficer' },
+              { header: `${t('funds.currentBalance', lang) || 'Balance'} (BDT)`, key: 'balance', format: (f: any) => f.balance.toLocaleString() },
+              { header: t('funds.description', lang) || 'Description', key: 'description' }
             ]}
             fileName={`funds_${new Date().toISOString().split('T')[0]}`}
             title="Liquidity Funds Report"
+            lang={lang}
+            targetId="funds-snapshot-target"
           />
           {currentUser?.permissions[AppScreen.FUNDS_MANAGEMENT] === AccessLevel.WRITE && (
             <button onClick={handleOpenModal} className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20">
@@ -202,48 +208,69 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
       )}
 
       {/* Create Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-dark/90 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-[#1A221D] w-full max-w-lg rounded-[3rem] card-shadow p-10 animate-in zoom-in-95 duration-300 relative border border-white/10">
-            <h3 className="text-3xl font-black text-dark dark:text-white uppercase tracking-tighter mb-8">New Fund</h3>
-            <form onSubmit={handleCreateFund} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest pl-1">Fund Name</label>
-                <input required type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-4 rounded-2xl border-none outline-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand" placeholder="e.g. Operational Reserve" />
-              </div>
+      <ModalForm
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={t('funds.newFund', lang)}
+        subtitle={t('funds.liquidityProv', lang)}
+        onSubmit={handleCreateFund}
+        submitLabel={t('funds.createFund', lang)}
+        submitLabel={t('funds.createFund', lang)}
+        maxWidth="max-w-5xl"
+        loading={isSubmitting}
+      >
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <FormInput
+              label={t('funds.fundName', lang)}
+              value={formData.name}
+              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              placeholder={t('funds.fundNamePlaceholder', lang)}
+              required
+            />
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest pl-1">Fund Type</label>
-                <select value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-4 rounded-2xl border-none outline-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand appearance-none">
-                  <option value="DEPOSIT">DEPOSIT (Capital Inflow)</option>
-                  <option value="OTHER">OTHER (Special Purpose)</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest pl-1">Initial Balance (Optional)</label>
-                <input type="number" min="0" value={formData.initialBalance} onChange={e => setFormData({ ...formData, initialBalance: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-4 rounded-2xl border-none outline-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand" placeholder="0.00" />
-                <p className="text-[10px] text-gray-400 pl-1">* Creates an opening balance transaction automatically.</p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest pl-1">Handling Officer</label>
-                <input required type="text" value={formData.handlingOfficer} onChange={e => setFormData({ ...formData, handlingOfficer: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-4 rounded-2xl border-none outline-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand" placeholder="Officer Name" />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest pl-1">Description</label>
-                <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-4 rounded-2xl border-none outline-none font-bold text-dark dark:text-white focus:ring-2 focus:ring-brand h-24 resize-none" placeholder="Purpose of this fund..."></textarea>
-              </div>
-
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 rounded-[2rem] bg-gray-100 dark:bg-white/5 font-black text-xs uppercase hover:bg-gray-200 dark:hover:bg-white/10 transition-colors text-gray-500">Cancel</button>
-                <button type="submit" className="flex-1 py-4 rounded-[2rem] bg-dark dark:bg-brand text-white dark:text-dark font-black text-xs uppercase hover:scale-105 transition-all shadow-xl">Create Fund</button>
-              </div>
-            </form>
+            <FormSelect
+              label={t('funds.fundType', lang)}
+              value={formData.type}
+              onChange={e => setFormData({ ...formData, type: e.target.value })}
+              options={[
+                { value: "DEPOSIT", label: t('funds.typeDeposit', lang) },
+                { value: "OTHER", label: t('funds.typeOther', lang) }
+              ]}
+            />
           </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="space-y-2">
+              <FormInput
+                label={t('funds.initialBalance', lang)}
+                type="number"
+                min="0"
+                value={formData.initialBalance}
+                onChange={e => setFormData({ ...formData, initialBalance: e.target.value })}
+                placeholder="0.00"
+              />
+              <p className="text-[10px] text-gray-400 pl-1 font-bold">{t('funds.openingBalanceNote', lang)}</p>
+            </div>
+
+            <FormInput
+              label={t('funds.handlingOfficer', lang)}
+              value={formData.handlingOfficer}
+              onChange={e => setFormData({ ...formData, handlingOfficer: e.target.value })}
+              placeholder={t('funds.officerPlaceholder', lang)}
+              required
+            />
+          </div>
+
+          <FormTextarea
+            label={t('funds.description', lang)}
+            value={formData.description}
+            onChange={e => setFormData({ ...formData, description: e.target.value })}
+            placeholder={t('funds.descPlaceholder', lang)}
+            className="h-32 resize-none"
+          />
         </div>
-      )}
+      </ModalForm>
     </div>
   );
 };

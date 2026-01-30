@@ -11,7 +11,7 @@ import ExportMenu from './ExportMenu';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { Language, t } from '../i18n/translations';
 
-type ReportType = 'Member Contribution' | 'Project Performance' | 'Expense Audit' | 'Funds Summary' | 'ROI Analysis' | 'Dividend Report' | 'Stakeholder Statement' | 'Venture Growth Matrix' | 'Revenue Analytics' | 'Interest Accruals' | 'Comprehensive Master Ledger' | 'Project Specific Ledger' | 'Member Specific Ledger' | 'Project Expense Audit' | 'Member Deposit History';
+type ReportType = 'Member Contribution' | 'Project Performance' | 'Expense Audit' | 'Funds Summary' | 'ROI Analysis' | 'Dividend Report' | 'Stakeholder Statement' | 'Venture Growth Matrix' | 'Revenue Analytics' | 'Interest Accruals' | 'Comprehensive Master Ledger' | 'Project Specific Ledger' | 'Member Specific Ledger' | 'Project Expense Audit' | 'Member Deposit History' | 'Fund Specific Ledger';
 type ExportFormat = 'PDF' | 'Excel' | 'JSON';
 type PeriodType = 'Monthly' | 'Quarterly' | 'Yearly' | 'Custom';
 type ReportCategory = 'Ledger' | 'Deposits' | 'Incomes' | 'Expenses' | 'Projects';
@@ -21,7 +21,7 @@ interface ReportsProps {
 }
 
 const Reports: React.FC<ReportsProps> = ({ lang }) => {
-  const { members, projects } = useGlobalState();
+  const { members, projects, funds } = useGlobalState();
   const [activeTab, setActiveTab] = useState<ReportCategory>('Ledger');
   const [activeType, setActiveType] = useState<ReportType>('Comprehensive Master Ledger');
   const [format, setFormat] = useState<ExportFormat>('PDF');
@@ -33,6 +33,7 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
   const [fiscalQuarter, setFiscalQuarter] = useState('Q1');
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
+  const [selectedFundId, setSelectedFundId] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
     isVisible: false,
@@ -73,6 +74,7 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
 
       if (selectedProjectId) params.append('projectId', selectedProjectId);
       if (selectedMemberId) params.append('memberId', selectedMemberId);
+      if (selectedFundId) params.append('fundId', selectedFundId);
 
       const fileName = `${activeType.replace(/\s+/g, '_')}_${periodValue}.${format.toLowerCase() === 'excel' ? 'xlsx' : format.toLowerCase()}`;
       const blob = await reportService.generate(activeType, params.toString());
@@ -97,29 +99,30 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
 
   const reportConfigs = [
     // Ledger
-    { type: 'Comprehensive Master Ledger', category: 'Ledger', icon: <Activity size={20} />, desc: 'Universal "In-Out" data log. Includes all transactions, deposits, and expenditures in a single audit line.' },
-    { type: 'Project Specific Ledger', category: 'Ledger', icon: <Briefcase size={20} />, desc: 'Narrow-focus financial history for a specific active or legacy project.' },
-    { type: 'Member Specific Ledger', category: 'Ledger', icon: <Users size={20} />, desc: 'Individual data mining of all financial interactions for a single stakeholder.' },
-    { type: 'Stakeholder Statement', category: 'Ledger', icon: <FileText size={20} />, desc: 'Individual partner financial activities and balance certification.' },
-    { type: 'Funds Summary', category: 'Ledger', icon: <Landmark size={20} />, desc: 'Analysis of primary, project, and reserve fund distributions.' },
-    { type: 'Dividend Report', category: 'Ledger', icon: <Award size={20} />, desc: 'Calculated profit distributions and equity payouts per stakeholder.' },
+    { type: 'Comprehensive Master Ledger', category: 'Ledger', icon: <Activity size={20} />, desc: t('reports.descs.comprehensiveLedger', lang) },
+    { type: 'Project Specific Ledger', category: 'Ledger', icon: <Briefcase size={20} />, desc: t('reports.descs.projectLedger', lang) },
+    { type: 'Member Specific Ledger', category: 'Ledger', icon: <Users size={20} />, desc: t('reports.descs.memberLedger', lang) },
+    { type: 'Fund Specific Ledger', category: 'Ledger', icon: <Landmark size={20} />, desc: t('reports.descs.fundLedger', lang) },
+    { type: 'Stakeholder Statement', category: 'Ledger', icon: <FileText size={20} />, desc: t('reports.descs.stakeholderStatement', lang) },
+    { type: 'Funds Summary', category: 'Ledger', icon: <Landmark size={20} />, desc: t('reports.descs.fundsSummary', lang) },
+    { type: 'Dividend Report', category: 'Ledger', icon: <Award size={20} />, desc: t('reports.descs.dividendReport', lang) },
 
     // Deposits
-    { type: 'Member Contribution', category: 'Deposits', icon: <Users size={20} />, desc: 'Detailed breakdown of all member deposits and share holdings.' },
-    { type: 'Member Deposit History', category: 'Deposits', icon: <Wallet size={20} />, desc: 'Timeline extraction of all capital injections for a selected member.' },
+    { type: 'Member Contribution', category: 'Deposits', icon: <Users size={20} />, desc: t('reports.descs.memberContribution', lang) },
+    { type: 'Member Deposit History', category: 'Deposits', icon: <Wallet size={20} />, desc: t('reports.descs.memberHistory', lang) },
 
     // Incomes
-    { type: 'Revenue Analytics', category: 'Incomes', icon: <TrendingUp size={20} />, desc: 'Consolidated view of all revenue streams and project returns.' },
-    { type: 'Interest Accruals', category: 'Incomes', icon: <TrendingUp size={20} />, desc: 'Tracking of interest earned from bank placements and holdings.' },
+    { type: 'Revenue Analytics', category: 'Incomes', icon: <TrendingUp size={20} />, desc: t('reports.descs.revenueAnalytics', lang) },
+    { type: 'Interest Accruals', category: 'Incomes', icon: <TrendingUp size={20} />, desc: t('reports.descs.interestAccruals', lang) },
 
     // Expenses
-    { type: 'Expense Audit', category: 'Expenses', icon: <Receipt size={20} />, desc: 'Complete historical log of all operational and project expenditures.' },
-    { type: 'Project Expense Audit', category: 'Expenses', icon: <Receipt size={20} />, desc: 'Granular expenditure log narrowed down to a specific venture.' },
+    { type: 'Expense Audit', category: 'Expenses', icon: <Receipt size={20} />, desc: t('reports.descs.expenseAudit', lang) },
+    { type: 'Project Expense Audit', category: 'Expenses', icon: <Receipt size={20} />, desc: t('reports.descs.projectExpenseAudit', lang) },
 
     // Projects
-    { type: 'Project Performance', category: 'Projects', icon: <Briefcase size={20} />, desc: 'ROI tracking, milestone status, and project fund health.' },
-    { type: 'ROI Analysis', category: 'Projects', icon: <PieChart size={20} />, desc: 'Strategic predictive modeling of venture returns over time.' },
-    { type: 'Venture Growth Matrix', category: 'Projects', icon: <Projector size={20} />, desc: 'Comparative analysis of growth across all active and legacy ventures.' },
+    { type: 'Project Performance', category: 'Projects', icon: <Briefcase size={20} />, desc: t('reports.descs.projectPerformance', lang) },
+    { type: 'ROI Analysis', category: 'Projects', icon: <PieChart size={20} />, desc: t('reports.descs.roiAnalysis', lang) },
+    { type: 'Venture Growth Matrix', category: 'Projects', icon: <Projector size={20} />, desc: t('reports.descs.ventureGrowth', lang) },
   ];
 
   const categories: { id: ReportCategory; icon: React.ReactNode }[] = [
@@ -160,6 +163,7 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
           ]}
           fileName={`reporting_templates_${new Date().toISOString().split('T')[0]}`}
           title="Intelligence Template Catalog"
+          lang={lang}
           targetId="reports-config-capture"
         />
       </div>
@@ -170,12 +174,12 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
           <div className="bg-white dark:bg-[#1A221D] p-6 rounded-[2rem] card-shadow border border-gray-100 dark:border-white/5 h-full">
             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
               <div className="w-1 h-1 rounded-full bg-brand"></div>
-              Extraction Protocol
+              {t('reports.extractionProtocol', lang)}
             </h4>
 
             <div className="space-y-6">
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Period Selection</label>
+                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">{t('reports.periodSelection', lang)}</label>
                 <div className="grid grid-cols-2 gap-2 bg-gray-50 dark:bg-[#111814] p-1 rounded-xl ring-1 ring-gray-100 dark:ring-white/10">
                   {(['Monthly', 'Quarterly', 'Yearly', 'Custom'] as PeriodType[]).map(p => (
                     <button
@@ -183,7 +187,7 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
                       onClick={() => setPeriodType(p)}
                       className={`py-2.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${periodType === p ? 'bg-dark dark:bg-brand text-white dark:text-dark shadow-md' : 'text-gray-400'}`}
                     >
-                      {p}
+                      {t(`reports.periods.${p.toLowerCase()}`, lang) || p}
                     </button>
                   ))}
                 </div>
@@ -220,7 +224,7 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
               </div>
 
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Export Architecture</label>
+                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">{t('reports.exportArch', lang)}</label>
                 <div className="flex gap-2 bg-gray-50 dark:bg-[#111814] p-1 rounded-xl ring-1 ring-gray-100 dark:ring-white/10">
                   {(['PDF', 'Excel', 'JSON'] as ExportFormat[]).map(f => (
                     <button
@@ -237,13 +241,13 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
               {/* Dynamic Context Filters */}
               {(activeType.includes('Project') || activeType === 'Project Expense Audit') && (
                 <div className="space-y-3 animate-in slide-in-from-left duration-300">
-                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Active Project Focus</label>
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">{t('reports.projectFocus', lang)}</label>
                   <select
                     value={selectedProjectId}
                     onChange={e => setSelectedProjectId(e.target.value)}
                     className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3.5 rounded-xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-xs font-bold text-dark dark:text-white outline-none"
                   >
-                    <option value="">Select Target Project</option>
+                    <option value="">{t('reports.selectProject', lang)}</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
                   </select>
                 </div>
@@ -251,14 +255,28 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
 
               {(activeType.includes('Member') || activeType === 'Member Deposit History') && (
                 <div className="space-y-3 animate-in slide-in-from-left duration-300">
-                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Member Entity Filter</label>
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">{t('reports.memberEntity', lang)}</label>
                   <select
                     value={selectedMemberId}
                     onChange={e => setSelectedMemberId(e.target.value)}
                     className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3.5 rounded-xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-xs font-bold text-dark dark:text-white outline-none"
                   >
-                    <option value="">Select Target Member</option>
+                    <option value="">{t('reports.selectMember', lang)}</option>
                     {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {activeType === 'Fund Specific Ledger' && (
+                <div className="space-y-3 animate-in slide-in-from-left duration-300">
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">{t('reports.fundFocus', lang)}</label>
+                  <select
+                    value={selectedFundId}
+                    onChange={e => setSelectedFundId(e.target.value)}
+                    className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-3.5 rounded-xl border-none ring-1 ring-gray-100 dark:ring-white/10 text-xs font-bold text-dark dark:text-white outline-none"
+                  >
+                    <option value="">{t('reports.selectFund', lang)}</option>
+                    {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                   </select>
                 </div>
               )}
@@ -293,18 +311,39 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
 
             <div className="relative z-10 space-y-8">
               <div className="space-y-4">
-                <label className="text-[11px] font-black text-gray-500 uppercase tracking-[0.2em] px-1">Select Module Protocol:</label>
+                <label className="text-[11px] font-black text-gray-500 uppercase tracking-[0.2em] px-1">{t('reports.moduleProtocol', lang)}</label>
                 <div className="relative group">
                   <select
                     value={activeType}
                     onChange={(e) => setActiveType(e.target.value as ReportType)}
                     className="w-full bg-gray-50 dark:bg-[#111814] px-8 py-6 rounded-2xl border-none ring-2 ring-gray-100 dark:ring-white/10 text-lg font-black text-dark dark:text-white focus:ring-4 focus:ring-brand outline-none transition-all appearance-none cursor-pointer"
                   >
-                    {filteredConfigs.map((cfg) => (
-                      <option key={cfg.type} value={cfg.type} className="bg-white dark:bg-[#1A221D] text-dark dark:text-white py-2">
-                        {cfg.type.toUpperCase()}
-                      </option>
-                    ))}
+                    {filteredConfigs.map((cfg) => {
+                      const typeKey = cfg.type
+                        .replace(/\s+/g, '')
+                        .replace(/ComprehensiveMasterLedger/, 'comprehensiveLedger')
+                        .replace(/ProjectSpecificLedger/, 'projectLedger')
+                        .replace(/MemberSpecificLedger/, 'memberLedger')
+                        .replace(/StakeholderStatement/, 'stakeholderStatement')
+                        .replace(/FundsSummary/, 'fundsSummary')
+                        .replace(/DividendReport/, 'dividendReport')
+                        .replace(/MemberContribution/, 'memberContribution')
+                        .replace(/MemberDepositHistory/, 'memberHistory')
+                        .replace(/RevenueAnalytics/, 'revenueAnalytics')
+                        .replace(/InterestAccruals/, 'interestAccruals')
+                        .replace(/ExpenseAudit/, 'expenseAudit')
+                        .replace(/ProjectExpenseAudit/, 'projectExpenseAudit')
+                        .replace(/ProjectPerformance/, 'projectPerformance')
+                        .replace(/ROIAnalysis/, 'roiAnalysis')
+                        .replace(/VentureGrowthMatrix/, 'ventureGrowth')
+                        .replace(/FundSpecificLedger/, 'fundLedger');
+
+                      return (
+                        <option key={cfg.type} value={cfg.type} className="bg-white dark:bg-[#1A221D] text-dark dark:text-white py-2">
+                          {t(`reports.types.${typeKey}`, lang).toUpperCase()}
+                        </option>
+                      );
+                    })}
                   </select>
                   <div className="absolute right-8 top-1/2 -translate-y-1/2 pointer-events-none group-hover:scale-110 transition-transform">
                     <FileText className="text-brand" size={24} />
@@ -319,7 +358,7 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
                   </div>
                   <div>
                     <h5 className="text-xs font-black text-dark dark:text-brand uppercase tracking-widest mb-1.5 flex items-center gap-2">
-                      Template Logic
+                      {t('reports.templateLogic', lang)}
                       <div className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse"></div>
                     </h5>
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-relaxed">
@@ -338,11 +377,11 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
           >
             {isGenerating ? (
               <>
-                <Clock className="animate-spin" size={16} /> Encryption In Progress...
+                <Clock className="animate-spin" size={16} /> {t('reports.encryptionInProgress', lang)}
               </>
             ) : (
               <>
-                <FileBarChart size={16} /> Finalize Intelligence Protocol
+                <FileBarChart size={16} /> {t('reports.finalizeProtocol', lang)}
               </>
             )}
           </button>

@@ -8,6 +8,8 @@ import { financeService } from '../services/api';
 import ExportMenu from './ExportMenu';
 import { formatCurrency } from '../utils/formatters';
 import { Language, t } from '../i18n/translations';
+import ActionDialog from './ActionDialog';
+import { ModalForm, FormInput, FormSelect, FormTextarea } from './ui/FormElements';
 
 type SortKey = keyof Expense;
 
@@ -32,11 +34,22 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
     isVisible: false,
     message: '',
     type: 'success',
+  });
+
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    expenseId: string;
+    reason: string;
+  }>({
+    isOpen: false,
+    expenseId: '',
+    reason: ''
   });
 
   const [formData, setFormData] = useState({
@@ -78,20 +91,30 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
 
 
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDeleteClick = (id: string, reason: string) => {
+    setDeleteDialog({
+      isOpen: true,
+      expenseId: id,
+      reason
+    });
+  };
+
+  const handleDelete = async () => {
     if (processingId) return;
+    const { expenseId } = deleteDialog;
 
     try {
-      setProcessingId(id);
-      await financeService.deleteTransaction(id);
-      showNotification('Expense record archived successfully.');
+      setProcessingId(expenseId);
+      setIsSubmitting(true);
+      await financeService.deleteTransaction(expenseId);
+      showNotification(t('expenses.archived', lang));
       await refreshTransactions();
+      setDeleteDialog({ isOpen: false, expenseId: '', reason: '' });
     } catch (err: any) {
-      showNotification(err.message || 'Failed to archive expense', 'error');
+      showNotification(err.message || t('expenses.archiveError', lang), 'error');
     } finally {
       setProcessingId(null);
+      setIsSubmitting(false);
     }
   };
 
@@ -120,6 +143,22 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
       });
   }, [expenses, searchQuery, sortKey, sortOrder]);
 
+  // Auto-set and lock fund when project is selected
+  useEffect(() => {
+    if (formData.projectId) {
+      const selectedProject = globalProjects.find(p => p.id === formData.projectId);
+      if (selectedProject?.linkedFundId) {
+        setFormData(prev => ({ ...prev, sourceFundId: selectedProject.linkedFundId }));
+      }
+    } else {
+      // Revert to primary fund if no project is selected
+      const primary = globalFunds.find(f => f.type === 'Primary') || globalFunds[0];
+      if (primary && !formData.projectId) {
+        setFormData(prev => ({ ...prev, sourceFundId: primary.id }));
+      }
+    }
+  }, [formData.projectId, globalProjects, globalFunds]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const member = activeMembers.find(m => m.id === formData.memberId || m.memberId === formData.memberId);
@@ -127,7 +166,7 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
     const amountVal = parseFloat(formData.amount);
 
     if (!amountVal || amountVal <= 0) {
-      showNotification("Please enter a valid amount.", "error");
+      showNotification(t('expenses.validAmount', lang), "error");
       return;
     }
 
@@ -147,9 +186,10 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
       sourceFund: formData.sourceFundId,
     };
 
+    setIsSubmitting(true);
     try {
       await addExpense(newExpensePayload);
-      showNotification(`Expense of BDT ${amountVal.toLocaleString()} recorded successfully.`);
+      showNotification(t('expenses.confirmSuccess', lang).replace('{amount}', amountVal.toLocaleString()));
       setIsModalOpen(false);
       // Reset form
       const primary = globalFunds.find(f => f.type === 'Primary') || globalFunds[0];
@@ -165,6 +205,8 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
     } catch (err: any) {
       // Error handled in context usually, but we ensure UI feedback
       // Notification already shown by context if error? Context sets lastError.
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -178,6 +220,18 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <Toast isVisible={toast.isVisible} message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, isVisible: false })} />
+
+      <ActionDialog
+        isOpen={deleteDialog.isOpen}
+        type="delete"
+        title={t('expenses.deleteExpense', lang)}
+        message={`${t('expenses.deleteConfirm', lang)} "${deleteDialog.reason}"?`}
+        onConfirm={handleDelete}
+        onClose={() => setDeleteDialog({ isOpen: false, expenseId: '', reason: '' })}
+        confirmLabel={t('common.delete', lang)}
+        cancelLabel={t('common.cancel', lang)}
+        loading={isSubmitting}
+      />
 
       <div className="flex items-end justify-between px-2">
         <div>
@@ -201,16 +255,17 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
             data={filteredAndSortedExpenses}
             columns={[
               { header: 'ID', key: 'id' },
-              { header: 'Date', key: 'date', format: (e: any) => new Date(e.date).toLocaleDateString() },
-              { header: 'Category', key: 'category' },
-              { header: 'Reason', key: 'reason' },
-              { header: 'Member', key: 'memberName' },
-              { header: 'Project', key: 'projectName', format: (e: any) => e.projectName || 'N/A' },
-              { header: 'Amount', key: 'amount', format: (e: any) => formatCurrency(e.amount) },
-              { header: 'Source Fund', key: 'sourceFund' }
+              { header: t('transactions.date', lang), key: 'date', format: (e: any) => new Date(e.date).toLocaleDateString() },
+              { header: t('expenses.category', lang), key: 'category' },
+              { header: t('transactions.description', lang), key: 'reason' },
+              { header: t('nav.members', lang), key: 'memberName' },
+              { header: t('projects.project', lang), key: 'projectName', format: (e: any) => e.projectName || 'N/A' },
+              { header: `${t('transactions.valuation', lang)} (BDT)`, key: 'amount', format: (e: any) => e.amount.toLocaleString() },
+              { header: t('deposits.targetFund', lang), key: 'sourceFund' }
             ]}
             fileName={`expenses_${new Date().toISOString().split('T')[0]}`}
-            title="Operational Expenses Report"
+            title={t('expenses.reportTitle', lang)}
+            lang={lang}
             targetId="expenses-snapshot-target"
           />
           {currentUser?.permissions[AppScreen.EXPENSES] === AccessLevel.WRITE && (
@@ -227,17 +282,17 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
       <div id="expenses-snapshot-target" className="space-y-10">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="bg-white dark:bg-[#1A221D] p-8 lg:p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between border border-gray-100 dark:border-white/5">
-            <p className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Cumulative Outflow</p>
+            <p className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">{t('expenses.cumulativeOutflow', lang)}</p>
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className={`font-black text-dark dark:text-white tracking-tighter leading-none ${formatCurrency(totalExpenses).length > 12 ? 'text-3xl sm:text-4xl' : 'text-4xl sm:text-5xl'}`}>{formatCurrency(totalExpenses)}</span>
-              <span className="text-xl font-black text-rose-500 tracking-tight">Debited</span>
+              <span className="text-xl font-black text-rose-500 tracking-tight">{t('expenses.debited', lang)}</span>
             </div>
           </div>
           <div className="bg-dark dark:bg-[#1A221D] p-8 lg:p-10 rounded-[3.5rem] card-shadow flex flex-col justify-between">
-            <p className="text-[11px] font-black text-gray-300 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">Expense Count</p>
+            <p className="text-[11px] font-black text-gray-300 dark:text-gray-400 uppercase tracking-[0.2em] mb-4">{t('expenses.expenseCount', lang)}</p>
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="text-4xl sm:text-5xl font-black text-brand tracking-tighter leading-none uppercase">{expenses.length}</span>
-              <span className="text-xl font-black text-white/40 tracking-tight">Records</span>
+              <span className="text-xl font-black text-white/40 tracking-tight">{t('deposits.records', lang)}</span>
             </div>
           </div>
         </div>
@@ -250,7 +305,7 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by ID, Category, Member or Reason..."
+                placeholder={t('expenses.searchPlaceholder', lang)}
                 className="w-full bg-gray-50/50 dark:bg-[#111814] pl-14 pr-6 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/5 focus:ring-2 focus:ring-dark dark:focus:ring-brand text-sm font-bold transition-all text-dark dark:text-white"
               />
             </div>
@@ -264,20 +319,20 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
               <thead>
                 <tr className="bg-gray-50/30 dark:bg-white/5">
                   <th onClick={() => handleSort('id')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                    <div className="flex items-center gap-2">EXP REF <SortIcon column="id" /></div>
+                    <div className="flex items-center gap-2">{t('expenses.expRef', lang)} <SortIcon column="id" /></div>
                   </th>
                   <th onClick={() => handleSort('date')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                    <div className="flex items-center gap-2">DATE <SortIcon column="date" /></div>
+                    <div className="flex items-center gap-2">{t('transactions.date', lang)} <SortIcon column="date" /></div>
                   </th>
                   <th onClick={() => handleSort('category')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                    <div className="flex items-center gap-2">CATEGORY <SortIcon column="category" /></div>
+                    <div className="flex items-center gap-2">{t('expenses.category', lang)} <SortIcon column="category" /></div>
                   </th>
-                  <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">REASON & ENTITY</th>
+                  <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">{t('expenses.reasonEntity', lang)}</th>
                   <th onClick={() => handleSort('amount')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-2">AMOUNT <SortIcon column="amount" /></div>
+                    <div className="flex items-center justify-end gap-2">{t('transactions.valuation', lang)} <SortIcon column="amount" /></div>
                   </th>
                   <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                    ACTIONS
+                    {t('transactions.actions', lang)}
                   </th>
                 </tr>
               </thead>
@@ -292,7 +347,7 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
                     </td>
                     <td className="px-10 py-6">
                       <span className="inline-block px-3 py-1 rounded-lg bg-gray-50 dark:bg-white/5 text-[10px] font-black uppercase text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-white/5">
-                        {exp.category}
+                        {t(`expenses.categories.${(exp.category || 'operational').toLowerCase()}`, lang)}
                       </span>
                     </td>
                     <td className="px-10 py-6">
@@ -318,7 +373,11 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
                     <td className="px-10 py-6 text-right">
                       {currentUser?.permissions[AppScreen.EXPENSES] === AccessLevel.WRITE && (
                         <button
-                          onClick={(e) => handleDelete(e, exp.id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteClick(exp.id, exp.reason);
+                          }}
                           disabled={!!processingId}
                           className={`p-2 rounded-xl border transition-all ${processingId === exp.id
                             ? 'bg-red-50 border-red-100 cursor-wait'
@@ -335,7 +394,7 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
                 {filteredAndSortedExpenses.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-10 py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-xs">
-                      Clean slate. No operational expenses discovered.
+                      {t('expenses.noExpenses', lang)}
                     </td>
                   </tr>
                 )}
@@ -345,85 +404,92 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
         </div>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-dark/90 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-[#1A221D] w-full max-w-2xl rounded-[4rem] card-shadow overflow-hidden relative animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-white/10">
-            <button onClick={() => setIsModalOpen(false)} className="absolute top-10 right-10 p-4 text-gray-500 hover:text-dark dark:hover:text-white rounded-2xl transition-all">
-              <X size={28} strokeWidth={3} />
-            </button>
-            <div className="p-14">
-              <div className="mb-10">
-                <h3 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none mb-3">Record Outflow</h3>
-                <p className="text-[11px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-[0.4em]">Strategic Expense Allocation</p>
-              </div>
+      <ModalForm
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={t('expenses.recordOutflow', lang)}
+        subtitle={t('expenses.strategicAllocation', lang)}
+        onSubmit={handleSubmit}
+        submitLabel={t('expenses.postExpense', lang)}
+        maxWidth="max-w-5xl"
+        loading={isSubmitting}
+      >
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <FormSelect
+              label={t('expenses.expenseBy', lang)}
+              value={formData.memberId}
+              onChange={e => setFormData({ ...formData, memberId: e.target.value })}
+              options={activeMembers.map(m => ({ value: m.id, label: m.name }))}
+              placeholder={t('expenses.selectMember', lang)}
+              required
+            />
+            <FormSelect
+              label={t('expenses.projectOptional', lang)}
+              value={formData.projectId}
+              onChange={e => setFormData({ ...formData, projectId: e.target.value })}
+              options={activeProjects.map(p => ({ value: p.id, label: p.title }))}
+              placeholder={t('expenses.general', lang)}
+            />
+            <FormSelect
+              label={t('expenses.category', lang)}
+              value={formData.category}
+              onChange={e => setFormData({ ...formData, category: e.target.value })}
+              options={['Operational', 'Marketing', 'Legal', 'Travel', 'Technology', 'Maintenance'].map(cat => ({
+                value: cat,
+                label: t(`expenses.categories.${cat.toLowerCase()}`, lang)
+              }))}
+              required
+            />
+          </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest px-1">Expense By</label>
-                    <select required value={formData.memberId} onChange={e => setFormData({ ...formData, memberId: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl border-none ring-1 ring-gray-100 dark:ring-white/10 outline-none text-sm font-bold text-dark dark:text-white cursor-pointer">
-                      <option value="">Select Member</option>
-                      {activeMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest px-1">Project (Optional)</label>
-                    <select value={formData.projectId} onChange={e => setFormData({ ...formData, projectId: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl border-none ring-1 ring-gray-100 dark:ring-white/10 outline-none text-sm font-bold text-dark dark:text-white cursor-pointer">
-                      <option value="">N/A (General)</option>
-                      {activeProjects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                    </select>
-                  </div>
-                </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <FormInput
+              label={t('deposits.amountBDT', lang)}
+              type="number"
+              value={formData.amount}
+              onChange={e => setFormData({ ...formData, amount: e.target.value })}
+              placeholder="0.00"
+              required
+            />
+            <FormInput
+              label={t('expenses.expenseDate', lang)}
+              type="date"
+              value={formData.date}
+              onChange={e => setFormData({ ...formData, date: e.target.value })}
+              required
+            />
+            <FormSelect
+              label={t('expenses.deductFromFund', lang)}
+              value={formData.sourceFundId}
+              onChange={e => setFormData({ ...formData, sourceFundId: e.target.value })}
+              options={globalFunds
+                .filter(fund => formData.projectId ? true : fund.type !== 'PROJECT')
+                .map(fund => ({ value: fund.id, label: fund.name }))}
+              required
+              disabled={!!formData.projectId}
+            />
+          </div>
 
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest px-1">Amount (BDT)</label>
-                    <input required type="number" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} placeholder="0.00" className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl border-none ring-1 ring-gray-100 dark:ring-white/10 outline-none text-sm font-bold text-dark dark:text-white" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest px-1">Category</label>
-                    <select required value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl border-none ring-1 ring-gray-100 dark:ring-white/10 outline-none text-sm font-bold text-dark dark:text-white cursor-pointer">
-                      {['Operational', 'Marketing', 'Legal', 'Travel', 'Technology', 'Maintenance'].map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                    </select>
-                  </div>
-                </div>
+          <FormTextarea
+            label={t('expenses.reasonDescription', lang)}
+            value={formData.reason}
+            onChange={e => setFormData({ ...formData, reason: e.target.value })}
+            placeholder={t('expenses.justification', lang)}
+            required
+            className="h-24 resize-none"
+          />
 
-                <div className="space-y-2">
-                  <label className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest px-1">Reason / Description</label>
-                  <textarea required value={formData.reason} onChange={e => setFormData({ ...formData, reason: e.target.value })} placeholder="Provide detailed justification for the expense..." className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl border-none ring-1 ring-gray-100 dark:ring-white/10 outline-none text-sm font-bold text-dark dark:text-white h-24 resize-none" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest px-1">Expense Date</label>
-                    <div className="relative">
-                      <input required type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl border-none ring-1 ring-gray-100 dark:ring-white/10 outline-none text-sm font-bold text-dark dark:text-white" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest px-1">Deduct From Fund</label>
-                    <select required value={formData.sourceFundId} onChange={e => setFormData({ ...formData, sourceFundId: e.target.value })} className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl border-none ring-1 ring-gray-100 dark:ring-white/10 outline-none text-sm font-bold text-dark dark:text-white cursor-pointer">
-                      {globalFunds.map(fund => <option key={fund.id} value={fund.id}>{fund.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="pt-8 flex items-center justify-between gap-10 border-t border-gray-100 dark:border-white/10">
-                  <div className="flex-1">
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Fund Impact</p>
-                    <p className="text-3xl font-black text-rose-500 tracking-tighter leading-none">
-                      - {(parseFloat(formData.amount || '0')).toLocaleString()} <span className="text-sm opacity-40">BDT</span>
-                    </p>
-                  </div>
-                  <button type="submit" className="bg-dark dark:bg-brand text-white dark:text-dark px-14 py-6 rounded-[2.5rem] font-black text-sm uppercase hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-brand/20">
-                    Post Expense
-                  </button>
-                </div>
-              </form>
+          <div className="pt-6 flex items-center justify-between border-t border-gray-100 dark:border-white/10 mt-2">
+            <div>
+              <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">{t('expenses.fundImpact', lang)}</p>
+              <p className="text-3xl font-black text-rose-500 tracking-tighter leading-none">
+                - {(parseFloat(formData.amount || '0')).toLocaleString()} <span className="text-sm opacity-40">BDT</span>
+              </p>
             </div>
           </div>
         </div>
-      )}
+      </ModalForm>
     </div>
   );
 };

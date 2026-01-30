@@ -10,6 +10,7 @@ import { User as UserType, AccessLevel, AppScreen } from '../types';
 import { useGlobalState } from '../context/GlobalStateContext';
 import Toast, { ToastType } from './Toast';
 import { Language, t } from '../i18n/translations';
+import { FormInput, FormSelect, FormTextarea } from './ui/FormElements';
 
 import { Member } from '../types';
 
@@ -25,6 +26,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<Member | null>(null);
   const [memberFormData, setMemberFormData] = useState<Partial<Member>>({});
   const [newPassword, setNewPassword] = useState<string>('');
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
     isVisible: false,
@@ -45,11 +47,14 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
     // The user asked to "add details". I will assume standard updateMember works for now.
 
     try {
+      setProcessingId('profile-save');
       await updateMember({ ...selectedMemberProfile, ...memberFormData } as Member);
       showNotification(`Extended profile for ${selectedMemberProfile.name} updated.`);
       setSelectedMemberProfile(null);
     } catch (error) {
       showNotification("Failed to update profile", "error");
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -67,11 +72,16 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
       showNotification("Insufficient privileges to modify permissions", "error");
       return;
     }
+
+    const permId = `perm-${userId}-${screen}-${level}`;
     try {
+      setProcessingId(permId);
       await updateUserPermissions(userId, screen, level);
       showNotification(`Permissions updated for ${screen}.`);
     } catch (e) {
       showNotification("Failed to update permission", "error");
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -84,12 +94,17 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
       showNotification("Please enter a valid password (min 6 chars).", "error");
       return;
     }
+
+    const resetId = `reset-${userId}`;
     try {
+      setProcessingId(resetId);
       await updateUserPassword(userId, newPassword);
       setNewPassword('');
       showNotification("Credentials updated successfully.");
     } catch (e) {
       showNotification("Failed to reset password", "error");
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -160,19 +175,21 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                 </div>
                 <div className="flex-1 space-y-8">
                   <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest px-1">Full Name</label>
-                      <input defaultValue={currentUser.name} className="w-full bg-gray-50 dark:bg-[#111814] px-8 py-5 rounded-3xl outline-none font-bold text-dark dark:text-white border border-transparent focus:border-brand" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest px-1">Role</label>
-                      <input readOnly value={currentUser.role} className="w-full bg-gray-50 dark:bg-[#111814] px-8 py-5 rounded-3xl outline-none font-bold text-gray-400 cursor-not-allowed" />
-                    </div>
+                    <FormInput
+                      label="Full Name"
+                      defaultValue={currentUser.name}
+                    />
+                    <FormInput
+                      label="Role"
+                      value={currentUser.role}
+                      readOnly
+                      className="text-gray-400 cursor-not-allowed"
+                    />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest px-1">Primary Identity Terminal (Email)</label>
-                    <input defaultValue={currentUser.email} className="w-full bg-gray-50 dark:bg-[#111814] px-8 py-5 rounded-3xl outline-none font-bold text-dark dark:text-white border border-transparent focus:border-brand" />
-                  </div>
+                  <FormInput
+                    label="Primary Identity Terminal (Email)"
+                    defaultValue={currentUser.email}
+                  />
                 </div>
               </div>
             </div>
@@ -247,7 +264,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                                                 : 'bg-gray-100 dark:bg-white/5 text-gray-300 dark:text-gray-700'
                                                 } ${currentUser.permissions[AppScreen.SETTINGS] === AccessLevel.WRITE ? 'hover:text-brand' : 'opacity-50 cursor-not-allowed'}`}
                                             >
-                                              {user.permissions[module] === level ? <Check size={14} strokeWidth={4} /> : <div className="w-1 h-1 rounded-full bg-current"></div>}
+                                              {processingId === `perm-${user.id}-${module}-${level}` ? <RefreshCw size={14} className="animate-spin" /> : user.permissions[module] === level ? <Check size={14} strokeWidth={4} /> : <div className="w-1 h-1 rounded-full bg-current"></div>}
                                             </button>
                                           </td>
                                         ))}
@@ -279,7 +296,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                                         onClick={() => handleResetPassword(user.id)}
                                         className={`bg-dark dark:bg-brand text-white dark:text-dark px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all flex items-center gap-2 ${currentUser.permissions[AppScreen.SETTINGS] === AccessLevel.WRITE ? 'hover:scale-105 active:scale-95' : 'opacity-50 cursor-not-allowed'}`}
                                       >
-                                        <Key size={14} /> Reset
+                                        {processingId === `reset-${user.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Key size={14} />} {processingId === `reset-${user.id}` ? 'Updating...' : 'Reset'}
                                       </button>
                                     </div>
                                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed mt-2 italic px-1">Updating this will immediately invalidate current sessions for this user ID.</p>
@@ -293,17 +310,25 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                                   <p className="text-xs font-bold text-dark dark:text-white uppercase">{user.lastLogin}</p>
                                 </div>
                                 <button
-                                  disabled={currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE}
+                                  disabled={currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE || !!processingId}
                                   onClick={async () => {
                                     if (currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE) return;
                                     if (window.confirm(`Are you sure you want to revoke access for ${user.name}?`)) {
-                                      await deleteUser(user.id);
-                                      showNotification(`Access revoked for ${user.name}`);
+                                      const revokeId = `revoke-${user.id}`;
+                                      try {
+                                        setProcessingId(revokeId);
+                                        await deleteUser(user.id);
+                                        showNotification(`Access revoked for ${user.name}`);
+                                      } catch (e) {
+                                        showNotification("Failed to revoke access", "error");
+                                      } finally {
+                                        setProcessingId(null);
+                                      }
                                     }
                                   }}
                                   className={`flex items-center gap-2 px-6 py-3 bg-rose-500/10 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-rose-500/20 ${currentUser.permissions[AppScreen.SETTINGS] === AccessLevel.WRITE ? 'hover:bg-rose-500 hover:text-white' : 'opacity-50 cursor-not-allowed'}`}
                                 >
-                                  <Trash2 size={14} /> Revoke Authorization
+                                  {processingId === `revoke-${user.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />} {processingId === `revoke-${user.id}` ? 'Revoking...' : 'Revoke Authorization'}
                                 </button>
                               </div>
                             </div>
@@ -368,59 +393,43 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
 
                       <div className="flex-1 space-y-8">
                         <div className="grid grid-cols-2 gap-8">
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Legal Name</label>
-                            <input
-                              value={memberFormData.name || selectedMemberProfile.name}
-                              onChange={e => setMemberFormData({ ...memberFormData, name: e.target.value })}
-                              className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl outline-none font-bold text-dark dark:text-white border border-transparent focus:border-brand focus:bg-white dark:focus:bg-black transition-all"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Email Address</label>
-                            <input
-                              value={memberFormData.email || selectedMemberProfile.email}
-                              onChange={e => setMemberFormData({ ...memberFormData, email: e.target.value })}
-                              className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl outline-none font-bold text-dark dark:text-white border border-transparent focus:border-brand focus:bg-white dark:focus:bg-black transition-all"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Phone Contact</label>
-                            <input
-                              value={memberFormData.phone || selectedMemberProfile.phone}
-                              onChange={e => setMemberFormData({ ...memberFormData, phone: e.target.value })}
-                              className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl outline-none font-bold text-dark dark:text-white border border-transparent focus:border-brand focus:bg-white dark:focus:bg-black transition-all"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">National ID / Passport</label>
-                            <input
-                              placeholder="Add ID Number..."
-                              className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl outline-none font-bold text-dark dark:text-white border border-transparent focus:border-brand focus:bg-white dark:focus:bg-black transition-all"
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Residential Address</label>
-                          <textarea
-                            placeholder="Add full address..."
-                            className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl outline-none font-bold text-dark dark:text-white border border-transparent focus:border-brand focus:bg-white dark:focus:bg-black transition-all h-32 resize-none"
+                          <FormInput
+                            label="Legal Name"
+                            value={memberFormData.name || selectedMemberProfile.name}
+                            onChange={e => setMemberFormData({ ...memberFormData, name: e.target.value })}
+                          />
+                          <FormInput
+                            label="Email Address"
+                            value={memberFormData.email || selectedMemberProfile.email}
+                            onChange={e => setMemberFormData({ ...memberFormData, email: e.target.value })}
+                          />
+                          <FormInput
+                            label="Phone Contact"
+                            value={memberFormData.phone || selectedMemberProfile.phone}
+                            onChange={e => setMemberFormData({ ...memberFormData, phone: e.target.value })}
+                          />
+                          <FormInput
+                            label="National ID / Passport"
+                            placeholder="Add ID Number..."
                           />
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nominee Details</label>
-                          <input
-                            placeholder="Nominee Name & Relation..."
-                            className="w-full bg-gray-50 dark:bg-[#111814] px-6 py-4 rounded-3xl outline-none font-bold text-dark dark:text-white border border-transparent focus:border-brand focus:bg-white dark:focus:bg-black transition-all"
-                          />
-                        </div>
+                        <FormTextarea
+                          label="Residential Address"
+                          placeholder="Add full address..."
+                          className="h-32 resize-none"
+                        />
+                        <FormInput
+                          label="Nominee Details"
+                          placeholder="Nominee Name & Relation..."
+                        />
 
                         <div className="flex justify-end pt-6 border-t border-gray-100 dark:border-white/5">
                           <button
+                            disabled={!!processingId}
                             onClick={handleUpdateMemberProfile}
-                            className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2.5rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+                            className={`bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2.5rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3 ${processingId ? 'opacity-70 cursor-wait' : ''}`}
                           >
-                            <Save size={18} /> Save Profile
+                            {processingId === 'profile-save' ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />} {processingId === 'profile-save' ? 'Saving...' : 'Save Profile'}
                           </button>
                         </div>
                       </div>
