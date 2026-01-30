@@ -5,6 +5,8 @@ import Fund from '../models/Fund.js';
 import Member from '../models/Member.js';
 import Project from '../models/Project.js';
 import DeletedRecord from '../models/DeletedRecord.js';
+import AuditLog from '../models/AuditLog.js';
+import { logAudit } from '../utils/auditLogger.js';
 import { getPaginationParams, formatPaginatedResponse } from '../utils/paginationHelper.js';
 import { recalculateAllStats } from './analyticsController.js';
 
@@ -28,7 +30,7 @@ const getTransactions = asyncHandler(async (req, res) => {
 
     const totalCount = await Transaction.countDocuments(query);
     const transactions = await Transaction.find(query)
-        .populate('memberId', 'name email')
+        .populate('memberId', 'memberId name email')
         .populate('projectId', 'title')
         .populate('fundId', 'name')
         .sort({ date: -1 })
@@ -84,7 +86,7 @@ const getTransactions = asyncHandler(async (req, res) => {
 // @access  Private (Admin/Manager)
 const addDeposit = asyncHandler(async (req, res) => {
     console.log('DEBUG addDeposit body:', req.body);
-    const { memberId, amount, fundId, description, date, shareNumber, status, cashierName, handlingOfficer } = req.body;
+    const { memberId, amount, fundId, description, date, shareNumber, status, cashierName, handlingOfficer, depositMethod } = req.body;
 
     // Validate inputs
     if (!amount || Number(amount) <= 0) {
@@ -113,7 +115,8 @@ const addDeposit = asyncHandler(async (req, res) => {
             date: date || Date.now(),
             status: depositStatus, // 'Success' or 'Pending'
             authorizedBy: req.user._id,
-            handlingOfficer: cashierName || handlingOfficer // Save the officer name
+            handlingOfficer: cashierName || handlingOfficer, // Save the officer name
+            depositMethod: depositMethod || 'Cash' // Default to Cash if not provided
         }], { session });
 
         // IF status is 'Success' (Direct Deposit), apply financial impact immediately.
@@ -144,6 +147,110 @@ const addDeposit = asyncHandler(async (req, res) => {
         console.error('Deposit Transaction Failed:', error);
         res.status(400);
         throw new Error(error.message || 'Deposit failed');
+    } finally {
+        session.endSession();
+    }
+});
+
+// @desc    Edit a deposit
+// @route   PUT /api/finance/deposits/:id
+// @access  Private (Admin)
+const editDeposit = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { memberId, amount, fundId, description, date, shareNumber, cashierName, depositMethod } = req.body;
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const transaction = await Transaction.findById(id).session(session);
+        if (!transaction) {
+            res.status(404);
+            throw new Error('Transaction not found');
+        }
+
+        if (transaction.type !== 'Deposit') {
+            res.status(400);
+            throw new Error('Transaction is not a deposit');
+        }
+
+        const oldAmount = transaction.amount;
+        const oldFundId = transaction.fundId;
+        const oldMemberId = transaction.memberId;
+        const oldShareImpact = Math.floor(oldAmount / 1000); // Approximation from addDeposit logic
+
+        const newAmount = parseInt(amount);
+        const newShareImpact = parseInt(shareNumber);
+
+        // 1. Revert Old Impact
+        if (transaction.status === 'Success' || transaction.status === 'Completed') {
+            // Revert Fund
+            const oldFund = await Fund.findById(oldFundId).session(session);
+            if (oldFund) {
+                oldFund.balance -= oldAmount;
+                await oldFund.save({ session });
+            }
+
+            // Revert Member
+            const oldMember = await Member.findById(oldMemberId).session(session);
+            if (oldMember) {
+                oldMember.totalContributed -= oldAmount;
+                oldMember.shares -= oldShareImpact;
+                await oldMember.save({ session });
+            }
+        }
+
+        // 2. Apply New Impact
+        // Find New Fund (or same)
+        const newFund = await Fund.findById(fundId).session(session);
+        if (!newFund) throw new Error('Target fund not found');
+
+        newFund.balance += newAmount;
+        await newFund.save({ session });
+
+        // Find New Member (or same)
+        const newMember = await Member.findById(memberId).session(session);
+        if (!newMember) throw new Error('Target member not found');
+
+        newMember.totalContributed += newAmount;
+        newMember.shares += newShareImpact;
+        await newMember.save({ session });
+
+        // 3. Update Transaction Record
+        transaction.amount = newAmount;
+        transaction.fundId = fundId;
+        transaction.memberId = memberId;
+        transaction.description = description;
+        transaction.date = date;
+        transaction.handlingOfficer = cashierName;
+        transaction.depositMethod = depositMethod;
+        // transaction.shareNumber -- Transaction schema might not have this, but Member does.
+        await transaction.save({ session });
+
+        // 4. Audit Log (System Activity)
+        await AuditLog.create([{
+            user: req.user._id,
+            userName: req.user.name,
+            action: 'EDIT_DEPOSIT',
+            resourceType: 'Transaction',
+            resourceId: transaction._id,
+            details: {
+                message: `Edited deposit #${transaction._id}`,
+                previous: { amount: oldAmount, fundId: oldFundId, memberId: oldMemberId },
+                current: { amount: newAmount, fundId, memberId }
+            },
+            ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+            userAgent: req.headers['user-agent']
+        }], { session });
+
+        await session.commitTransaction();
+        await recalculateAllStats();
+        res.json(transaction);
+
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(400);
+        throw new Error(error.message || 'Edit deposit failed');
     } finally {
         session.endSession();
     }
@@ -213,7 +320,11 @@ const approveDeposit = asyncHandler(async (req, res) => {
 // @route   POST /api/finance/expenses
 // @access  Private (Admin)
 const addExpense = asyncHandler(async (req, res) => {
-    let { amount, fundId, description, category, date, projectId, memberId } = req.body;
+    let { amount, fundId, description, reason, category, date, projectId, memberId } = req.body;
+
+    // Normalize description
+    if (!description && reason) description = reason;
+    if (!description) description = "";
 
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -235,7 +346,7 @@ const addExpense = asyncHandler(async (req, res) => {
             await project.save({ session });
 
             // Enrich description with project context
-            if (!description.includes(`[${project.title}]`)) {
+            if (description && typeof description === 'string' && !description.includes(`[${project.title}]`)) {
                 description = `[${project.title}] ${description}`;
             }
         }
@@ -420,6 +531,17 @@ const deleteTransaction = asyncHandler(async (req, res) => {
 
         await session.commitTransaction();
         await recalculateAllStats();
+
+        // Audit Log
+        await logAudit({
+            req,
+            user: req.user,
+            action: 'DELETE_TRANSACTION',
+            resourceType: 'Transaction',
+            resourceId: transaction._id,
+            details: { originalAmount: transaction.amount, reason: req.body.reason || 'Manual Deletion' }
+        });
+
         res.json({ message: 'Transaction removed' });
     } catch (error) {
         await session.abortTransaction();
@@ -469,6 +591,17 @@ const transferFunds = asyncHandler(async (req, res) => {
         }], { session });
 
         await session.commitTransaction();
+
+        // Audit Log
+        await logAudit({
+            req,
+            user: req.user,
+            action: 'TRANSFER_FUNDS',
+            resourceType: 'Fund',
+            resourceId: targetFundId,
+            details: { amount, sourceFundId, targetFundId, description }
+        });
+
         res.status(201).json(transaction[0]);
     } catch (error) {
         await session.abortTransaction();
@@ -618,6 +751,124 @@ const transferEquity = asyncHandler(async (req, res) => {
         session.endSession();
     }
 });
+// @desc    Edit an expense
+// @route   PUT /api/finance/expenses/:id
+// @access  Private (Admin/Manager)
+const editExpense = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    let { amount, fundId, description, reason, category, date, projectId, memberId } = req.body;
+
+    // Normalize description
+    if (!description && reason) description = reason;
+    if (!description) description = "";
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const transaction = await Transaction.findById(id).session(session);
+        if (!transaction) {
+            res.status(404);
+            throw new Error('Transaction not found');
+        }
+
+        if (transaction.type !== 'Expense') {
+            res.status(400);
+            throw new Error('Transaction is not an expense');
+        }
+
+        const oldAmount = transaction.amount;
+        const oldFundId = transaction.fundId;
+        const oldProjectId = transaction.projectId;
+        const newAmount = Number(amount);
+
+        // 1. Revert Old Impact
+        if (oldProjectId) {
+            const oldProject = await Project.findById(oldProjectId).session(session);
+            if (oldProject) {
+                oldProject.currentFundBalance += oldAmount;
+                oldProject.totalExpenses = Math.max(0, (oldProject.totalExpenses || 0) - oldAmount);
+                await oldProject.save({ session });
+            }
+        }
+
+        const oldFund = await Fund.findById(oldFundId).session(session);
+        if (oldFund) {
+            oldFund.balance += oldAmount;
+            await oldFund.save({ session });
+        }
+
+        // 2. Apply New Impact
+        // Enforce Project-Fund Integrity for new data
+        if (projectId) {
+            const project = await Project.findById(projectId).session(session);
+            if (!project) throw new Error('New project not found');
+
+            if (project.linkedFundId) {
+                fundId = project.linkedFundId;
+            }
+
+            project.currentFundBalance -= newAmount;
+            project.totalExpenses = (project.totalExpenses || 0) + newAmount;
+            await project.save({ session });
+
+            if (description && typeof description === 'string' && !description.includes(`[${project.title}]`)) {
+                description = `[${project.title}] ${description}`;
+            }
+        }
+
+        const newFund = await Fund.findById(fundId).session(session);
+        if (!newFund) throw new Error('New source fund not found');
+
+        if (!projectId && newFund.type === 'PROJECT') {
+            throw new Error('Project-specific funds cannot be used for general expenses.');
+        }
+
+        if (newFund.balance < newAmount) {
+            throw new Error('Insufficient balance in ' + newFund.name);
+        }
+
+        newFund.balance -= newAmount;
+        await newFund.save({ session });
+
+        // 3. Update Transaction Record
+        transaction.amount = newAmount;
+        transaction.fundId = fundId;
+        transaction.projectId = projectId;
+        transaction.memberId = memberId;
+        transaction.description = description;
+        transaction.category = category;
+        transaction.date = date || transaction.date;
+        await transaction.save({ session });
+
+        // 4. Audit Log
+        await AuditLog.create([{
+            user: req.user._id,
+            userName: req.user.name,
+            action: 'EDIT_EXPENSE',
+            resourceType: 'Transaction',
+            resourceId: transaction._id,
+            details: {
+                message: `Edited expense #${transaction._id}`,
+                previous: { amount: oldAmount, fundId: oldFundId, projectId: oldProjectId },
+                current: { amount: newAmount, fundId, projectId }
+            },
+            ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+            userAgent: req.headers['user-agent']
+        }], { session });
+
+        await session.commitTransaction();
+        await recalculateAllStats();
+        res.json(transaction);
+
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(400);
+        throw new Error(error.message || 'Edit expense failed');
+    } finally {
+        session.endSession();
+    }
+});
 
 export {
     getTransactions,
@@ -628,6 +879,9 @@ export {
     deleteTransaction,
     approveDeposit,
     distributeDividends,
-    transferEquity
+    transferEquity,
+    editDeposit,
+    editExpense
 };
+
 
