@@ -129,6 +129,14 @@ export const projectService = {
         const { data } = await api.post(`/projects/${id}/updates`, updateData);
         return data;
     },
+    editUpdate: async (id: string, updateId: string, updateData: any) => {
+        const { data } = await api.put(`/projects/${id}/updates/${updateId}`, updateData);
+        return data;
+    },
+    deleteUpdate: async (id: string, updateId: string) => {
+        const { data } = await api.delete(`/projects/${id}/updates/${updateId}`);
+        return data;
+    },
     delete: async (id: string) => {
         const { data } = await api.delete(`/projects/${id}`);
         return data;
@@ -159,12 +167,20 @@ export const financeService = {
         const { data } = await api.post('/finance/deposits', depositData);
         return data;
     },
+    editDeposit: async (id: string, depositData: any) => {
+        const { data } = await api.put(`/finance/deposits/${id}`, depositData);
+        return data;
+    },
     approveDeposit: async (id: string) => {
         const { data } = await api.put(`/finance/deposits/${id}/approve`);
         return data;
     },
     addExpense: async (expenseData: any) => {
         const { data } = await api.post('/finance/expenses', expenseData);
+        return data;
+    },
+    editExpense: async (id: string, expenseData: any) => {
+        const { data } = await api.put(`/finance/expenses/${id}`, expenseData);
         return data;
     },
     deleteTransaction: async (id: string) => {
@@ -225,6 +241,21 @@ export const analyticsService = {
     },
     recalculate: async () => {
         const { data } = await api.post('/analytics/recalculate');
+        return data;
+    }
+};
+
+export const auditService = {
+    getLogs: async (params?: any) => {
+        const { data } = await api.get('/audit', { params });
+        return data;
+    },
+    getMetadata: async () => {
+        const { data } = await api.get('/audit/metadata');
+        return data;
+    },
+    getNotifications: async () => {
+        const { data } = await api.get('/audit/notifications');
         return data;
     }
 };

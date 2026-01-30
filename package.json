@@ -12,6 +12,7 @@
     "@google/genai": "^1.35.0",
     "@types/react-router-dom": "^5.3.3",
     "axios": "^1.13.2",
+    "express-useragent": "^2.1.0",
     "framer-motion": "^12.29.2",
     "jspdf": "^4.0.0",
     "jspdf-autotable": "^5.0.7",
@@ -21,6 +22,7 @@
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.12.0",
     "recharts": "^3.6.0",
+    "request-ip": "^3.3.0",
     "uuid": "^13.0.0",
     "xlsx": "^0.18.5"
   },

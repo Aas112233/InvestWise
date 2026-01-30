@@ -4,10 +4,12 @@ import { TrendingUp, TrendingDown } from 'lucide-react';
 
 interface StatCardProps {
   label: string;
-  value: string; // Keep as string to allow prefixes like $ or suffixes like M/BDT
+  value: string; // Compact formatted value (e.g., "101.5k")
   change: string;
   isPositive?: boolean;
   variant?: 'dark' | 'light' | 'brand';
+  currency?: string; // Optional currency label to display below value
+  rawValue?: number; // Raw number for toggling to full display
 }
 
 const CountUp: React.FC<{ target: string }> = ({ target }) => {
@@ -50,9 +52,15 @@ const CountUp: React.FC<{ target: string }> = ({ target }) => {
   );
 };
 
-const StatCard: React.FC<StatCardProps> = ({ label, value, change, isPositive = true, variant = 'light' }) => {
+const StatCard: React.FC<StatCardProps> = ({ label, value, change, isPositive = true, variant = 'light', currency, rawValue }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const isDarkVariant = variant === 'dark';
   const isBrandVariant = variant === 'brand';
+
+  // Determine display value based on expanded state
+  const displayValue = isExpanded && rawValue !== undefined
+    ? rawValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : value;
 
   let cardClass = "";
   if (isBrandVariant) {
@@ -65,7 +73,8 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, change, isPositive = 
 
   return (
     <div
-      className={`relative p-6 xl:p-8 rounded-[3.5rem] min-w-[240px] flex-1 transition-all duration-700 hover:-translate-y-3 hover:rotate-x-12 perspective-2000 group cursor-default border overflow-hidden ${cardClass}`}
+      onClick={() => rawValue !== undefined && setIsExpanded(!isExpanded)}
+      className={`relative p-6 xl:p-8 rounded-[3.5rem] min-w-[240px] flex-1 transition-all duration-700 hover:-translate-y-3 hover:rotate-x-12 perspective-2000 group ${rawValue !== undefined ? 'cursor-pointer' : 'cursor-default'} border overflow-hidden ${cardClass}`}
     >
       {/* 3D Depth Layer - Dynamic Glow */}
       <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none bg-gradient-to-tr ${isBrandVariant ? 'from-white/40 to-transparent' :
@@ -88,13 +97,52 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, change, isPositive = 
         </div>
 
         <div className="mb-8 transform-gpu transition-transform group-hover:translate-z-20 group-hover:scale-105 duration-700 origin-left">
-          <h3 className={`font-black tracking-tighter leading-none drop-shadow-2xl break-all ${value.length > 12 ? 'text-2xl sm:text-3xl' :
-            value.length > 10 ? 'text-3xl sm:text-4xl' :
-              value.length > 8 ? 'text-4xl sm:text-5xl' :
-                'text-5xl sm:text-6xl'
-            }`}>
-            <CountUp target={value} />
-          </h3>
+          {(() => {
+            // Only split decimal if it's a full number (not compact notation with k/M/B)
+            const hasCompactSuffix = /[kMB]$/.test(displayValue);
+
+            if (hasCompactSuffix || !displayValue.includes('.')) {
+              // Show as-is for compact notation or integers
+              return (
+                <div>
+                  <h3 className={`font-black tracking-tighter leading-none drop-shadow-2xl ${currency ? '' : 'break-all'} ${displayValue.length > 12 ? 'text-2xl sm:text-3xl' :
+                    displayValue.length > 10 ? 'text-3xl sm:text-4xl' :
+                      displayValue.length > 8 ? 'text-4xl sm:text-5xl' :
+                        'text-5xl sm:text-6xl'
+                    }`}>
+                    <CountUp target={displayValue} />
+                  </h3>
+                </div>
+              );
+            }
+
+            // Split displayValue into integer and decimal parts for full numbers
+            const parts = displayValue.split('.');
+            const integerPart = parts[0];
+            const decimalPart = parts[1];
+
+            return (
+              <div>
+                <h3 className={`font-black tracking-tighter leading-none drop-shadow-2xl ${currency ? '' : 'break-all'} ${displayValue.length > 12 ? 'text-2xl sm:text-3xl' :
+                  displayValue.length > 10 ? 'text-3xl sm:text-4xl' :
+                    displayValue.length > 8 ? 'text-4xl sm:text-5xl' :
+                      'text-5xl sm:text-6xl'
+                  }`}>
+                  <CountUp target={integerPart} />
+                </h3>
+                {decimalPart && (
+                  <p className={`font-black mt-1 ${isBrandVariant ? 'text-dark/70' : isDarkVariant ? 'text-white/70 dark:text-dark/70' : 'text-gray-600 dark:text-gray-400'} ${displayValue.length > 12 ? 'text-base' : 'text-lg'}`}>
+                    .{decimalPart}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+          {currency && (
+            <p className={`text-sm font-black uppercase tracking-widest mt-2 ${isBrandVariant ? 'text-dark/60' : isDarkVariant ? 'text-white/60 dark:text-dark/60' : 'text-gray-500 dark:text-gray-400'}`}>
+              {currency}
+            </p>
+          )}
         </div>
 
         {/* Animated 3D Bar Visualizer with depth */}

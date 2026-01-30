@@ -11,7 +11,7 @@ import ExportMenu from './ExportMenu';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { Language, t } from '../i18n/translations';
 
-type ReportType = 'Member Contribution' | 'Project Performance' | 'Expense Audit' | 'Funds Summary' | 'ROI Analysis' | 'Dividend Report' | 'Stakeholder Statement' | 'Venture Growth Matrix' | 'Revenue Analytics' | 'Interest Accruals' | 'Comprehensive Master Ledger' | 'Project Specific Ledger' | 'Member Specific Ledger' | 'Project Expense Audit' | 'Member Deposit History' | 'Fund Specific Ledger';
+type ReportType = 'Member Contribution' | 'Project Performance' | 'Expense Audit' | 'Funds Summary' | 'ROI Analysis' | 'Dividend Report' | 'Stakeholder Statement' | 'Project Growth Matrix' | 'Revenue Analytics' | 'Interest Accruals' | 'Comprehensive Master Ledger' | 'Project Specific Ledger' | 'Member Specific Ledger' | 'Project Expense Audit' | 'Member Deposit History' | 'Fund Specific Ledger';
 type ExportFormat = 'PDF' | 'Excel' | 'JSON';
 type PeriodType = 'Monthly' | 'Quarterly' | 'Yearly' | 'Custom';
 type ReportCategory = 'Ledger' | 'Deposits' | 'Incomes' | 'Expenses' | 'Projects';
@@ -122,7 +122,7 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
     // Projects
     { type: 'Project Performance', category: 'Projects', icon: <Briefcase size={20} />, desc: t('reports.descs.projectPerformance', lang) },
     { type: 'ROI Analysis', category: 'Projects', icon: <PieChart size={20} />, desc: t('reports.descs.roiAnalysis', lang) },
-    { type: 'Venture Growth Matrix', category: 'Projects', icon: <Projector size={20} />, desc: t('reports.descs.ventureGrowth', lang) },
+    { type: 'Project Growth Matrix', category: 'Projects', icon: <Projector size={20} />, desc: t('reports.descs.ventureGrowth', lang) },
   ];
 
   const categories: { id: ReportCategory; icon: React.ReactNode }[] = [
@@ -335,7 +335,7 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
                         .replace(/ProjectExpenseAudit/, 'projectExpenseAudit')
                         .replace(/ProjectPerformance/, 'projectPerformance')
                         .replace(/ROIAnalysis/, 'roiAnalysis')
-                        .replace(/VentureGrowthMatrix/, 'ventureGrowth')
+                        .replace(/ProjectGrowthMatrix/, 'ventureGrowth')
                         .replace(/FundSpecificLedger/, 'fundLedger');
 
                       return (

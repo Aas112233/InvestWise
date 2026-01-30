@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
-import { Plus, Search, Filter, Archive, Wallet, ArrowUpRight, ArrowDownRight, FolderOpen, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
-import { Fund, AccessLevel, AppScreen } from '../types';
-import { useGlobalState } from '../context/GlobalStateContext';
-import ExportMenu from './ExportMenu';
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit2, Archive, DollarSign, TrendingUp, TrendingDown, Wallet, RefreshCw, FolderOpen } from 'lucide-react';
+import { Fund, Member, AccessLevel, AppScreen } from '../types';
 import Toast, { ToastType } from './Toast';
-import { formatCurrency } from '../utils/formatters';
+import { useGlobalState } from '../context/GlobalStateContext';
+import { fundService } from '../services/api';
 import { Language, t } from '../i18n/translations';
+import { formatCurrency } from '../utils/formatters';
+import ExportMenu from './ExportMenu';
 import { ModalForm, FormInput, FormSelect, FormTextarea } from './ui/FormElements';
+import PermissionGuard from './PermissionGuard';
 
 interface FundsManagementProps {
   lang: Language;
@@ -214,7 +216,6 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
         title={t('funds.newFund', lang)}
         subtitle={t('funds.liquidityProv', lang)}
         onSubmit={handleCreateFund}
-        submitLabel={t('funds.createFund', lang)}
         submitLabel={t('funds.createFund', lang)}
         maxWidth="max-w-5xl"
         loading={isSubmitting}

@@ -75,26 +75,26 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
           </div>
 
           <div className="p-8 bg-dark rounded-[2.5rem] border border-white/5">
-             <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
-               <TrendingUp size={16} className="text-brand" /> Health Metrics
-             </h3>
-             <div className="space-y-6">
-                {[
-                  { label: "Cash on Hand", val: "BDT 850K", fill: "80%" },
-                  { label: "Venture Risk", val: "Low", fill: "25%" },
-                  { label: "Member Growth", val: "+12%", fill: "60%" }
-                ].map((m, i) => (
-                  <div key={i}>
-                    <div className="flex justify-between text-[9px] font-black uppercase text-white/30 mb-2">
-                      <span>{m.label}</span>
-                      <span className="text-brand">{m.val}</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                      <div className="h-full bg-brand shadow-[0_0_10px_rgba(191,243,0,0.5)]" style={{ width: m.fill }}></div>
-                    </div>
+            <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
+              <TrendingUp size={16} className="text-brand" /> Health Metrics
+            </h3>
+            <div className="space-y-6">
+              {[
+                { label: "Cash on Hand", val: "BDT 850K", fill: "80%" },
+                { label: "Project Risk", val: "Low", fill: "25%" },
+                { label: "Member Growth", val: "+12%", fill: "60%" }
+              ].map((m, i) => (
+                <div key={i}>
+                  <div className="flex justify-between text-[9px] font-black uppercase text-white/30 mb-2">
+                    <span>{m.label}</span>
+                    <span className="text-brand">{m.val}</span>
                   </div>
-                ))}
-             </div>
+                  <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full bg-brand shadow-[0_0_10px_rgba(191,243,0,0.5)]" style={{ width: m.fill }}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 

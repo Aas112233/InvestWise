@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Filter, X, Calendar, User, Briefcase, CreditCard, ChevronUp, ChevronDown, Download, Layers, Trash2, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Search, Filter, X, Calendar, User, Briefcase, CreditCard, ChevronUp, ChevronDown, Download, Layers, Trash2, Loader2, RefreshCw, Edit2 } from 'lucide-react';
 import { Expense, Member, Project, AccessLevel, AppScreen } from '../types';
 import Toast, { ToastType } from './Toast';
 import { useGlobalState } from '../context/GlobalStateContext';
@@ -10,6 +10,7 @@ import { formatCurrency } from '../utils/formatters';
 import { Language, t } from '../i18n/translations';
 import ActionDialog from './ActionDialog';
 import { ModalForm, FormInput, FormSelect, FormTextarea } from './ui/FormElements';
+import PermissionGuard from './PermissionGuard';
 
 type SortKey = keyof Expense;
 
@@ -35,6 +36,7 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
   const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
     isVisible: false,
@@ -78,6 +80,39 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
     setRefreshing(true);
     await refreshTransactions();
     setTimeout(() => setRefreshing(false), 500);
+  };
+
+  const handleOpenModal = (expense?: Expense) => {
+    if (expense) {
+      setEditingExpense(expense);
+      setFormData({
+        memberId: expense.memberId,
+        projectId: expense.projectId || '',
+        amount: expense.amount.toString(),
+        category: expense.category || 'Operational',
+        reason: expense.reason,
+        date: expense.date.split('T')[0],
+        sourceFundId: (expense as any).sourceFund || '',
+      });
+    } else {
+      setEditingExpense(null);
+      const primary = globalFunds.find(f => f.type === 'Primary') || globalFunds[0];
+      setFormData({
+        memberId: '',
+        projectId: '',
+        amount: '',
+        category: 'Operational',
+        reason: '',
+        date: new Date().toISOString().split('T')[0],
+        sourceFundId: primary?.id || '',
+      });
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingExpense(null);
   };
 
   const handleSort = (key: SortKey) => {
@@ -188,23 +223,18 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
 
     setIsSubmitting(true);
     try {
-      await addExpense(newExpensePayload);
-      showNotification(t('expenses.confirmSuccess', lang).replace('{amount}', amountVal.toLocaleString()));
+      if (editingExpense) {
+        await financeService.editExpense(editingExpense.id, newExpensePayload);
+        showNotification(t('expenses.updateSuccess', lang) || "Expense updated successfully");
+      } else {
+        await addExpense(newExpensePayload);
+        showNotification(t('expenses.confirmSuccess', lang).replace('{amount}', amountVal.toLocaleString()));
+      }
       setIsModalOpen(false);
-      // Reset form
-      const primary = globalFunds.find(f => f.type === 'Primary') || globalFunds[0];
-      setFormData({
-        memberId: '',
-        projectId: '',
-        amount: '',
-        category: 'Operational',
-        reason: '',
-        date: new Date().toISOString().split('T')[0],
-        sourceFundId: primary?.id || '',
-      });
+      setEditingExpense(null);
+      await refreshTransactions();
     } catch (err: any) {
-      // Error handled in context usually, but we ensure UI feedback
-      // Notification already shown by context if error? Context sets lastError.
+      showNotification(err.message || "Failed to save expense", 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -268,14 +298,14 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
             lang={lang}
             targetId="expenses-snapshot-target"
           />
-          {currentUser?.permissions[AppScreen.EXPENSES] === AccessLevel.WRITE && (
+          <PermissionGuard screen={AppScreen.EXPENSES} requiredLevel={AccessLevel.WRITE}>
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => handleOpenModal()}
               className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20"
             >
               <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
             </button>
-          )}
+          </PermissionGuard>
         </div>
       </div>
 
@@ -371,23 +401,31 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
                       BDT {exp.amount.toLocaleString()}
                     </td>
                     <td className="px-10 py-6 text-right">
-                      {currentUser?.permissions[AppScreen.EXPENSES] === AccessLevel.WRITE && (
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleDeleteClick(exp.id, exp.reason);
-                          }}
-                          disabled={!!processingId}
-                          className={`p-2 rounded-xl border transition-all ${processingId === exp.id
-                            ? 'bg-red-50 border-red-100 cursor-wait'
-                            : 'bg-transparent border-transparent text-gray-300 hover:text-red-500 hover:bg-red-50 hover:border-red-100'
-                            }`}
-                          title="Archive Expense"
-                        >
-                          {processingId === exp.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
-                        </button>
-                      )}
+                      <PermissionGuard screen={AppScreen.EXPENSES} requiredLevel={AccessLevel.WRITE}>
+                        <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
+                          <button
+                            onClick={() => handleOpenModal(exp)}
+                            className="p-3 bg-white dark:bg-[#111814] rounded-2xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-brand hover:border-brand/30 transition-all shadow-sm"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleDeleteClick(exp.id, exp.reason);
+                            }}
+                            disabled={!!processingId}
+                            className={`p-3 rounded-2xl border transition-all ${processingId === exp.id
+                              ? 'bg-rose-50 border-rose-100 cursor-wait'
+                              : 'bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-rose-500 hover:border-rose-500/30 shadow-sm'
+                              }`}
+                            title="Archive Expense"
+                          >
+                            {processingId === exp.id ? <Loader2 size={16} className="animate-spin text-rose-500" /> : <Trash2 size={16} />}
+                          </button>
+                        </div>
+                      </PermissionGuard>
                     </td>
                   </tr>
                 ))}
@@ -406,11 +444,11 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
 
       <ModalForm
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={t('expenses.recordOutflow', lang)}
-        subtitle={t('expenses.strategicAllocation', lang)}
+        onClose={handleCloseModal}
+        title={editingExpense ? t('common.edit', lang) + ' ' + t('nav.expenses', lang) : t('expenses.recordOutflow', lang)}
+        subtitle={editingExpense ? t('expenses.modifyAllocation', lang) || "Modify strategic allocation" : t('expenses.strategicAllocation', lang)}
         onSubmit={handleSubmit}
-        submitLabel={t('expenses.postExpense', lang)}
+        submitLabel={editingExpense ? t('common.save', lang) : t('expenses.postExpense', lang)}
         maxWidth="max-w-5xl"
         loading={isSubmitting}
       >

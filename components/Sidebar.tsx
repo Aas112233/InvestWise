@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Menu, ChevronLeft } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { NAVIGATION_ITEMS } from '../constants';
 import { AppScreen, AccessLevel, User } from '../types';
 import { Language, t } from '../i18n/translations';
@@ -11,7 +11,10 @@ interface SidebarProps {
   currentUser?: User | null; // Pass currentUser for permission check
 }
 
+import { useGlobalState } from '../context/GlobalStateContext';
+
 const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
+  const { deposits } = useGlobalState();
   const [isPinned, setIsPinned] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const navigate = useNavigate();
@@ -57,6 +60,10 @@ const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
       })
     })).filter(group => group.items.length > 0);
   }, [currentUser]);
+
+  const pendingDepsCount = useMemo(() => {
+    return deposits.filter(d => d.status === 'Pending' || d.status === 'Processing').length;
+  }, [deposits]);
 
   const toggleSidebar = () => setIsPinned(!isPinned);
 
@@ -112,23 +119,33 @@ const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
 
                 return (
                   <li key={item.id}>
-                    <button
-                      onClick={() => navigate(route)}
+                    <Link
+                      to={route}
                       className={`w-full flex items-center transition-all duration-300 font-bold text-sm group/btn ${isExpanded ? 'px-4 py-3 gap-3 rounded-2xl' : 'p-4 justify-center rounded-2xl'
                         } ${isActive
                           ? 'bg-[#151D18] dark:bg-[#BFF300] text-white dark:text-black shadow-xl shadow-black/10'
                           : 'text-[#64748B] dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5'
                         }`}
                     >
-                      <span className={`${isActive ? (document.documentElement.classList.contains('dark') ? 'text-black' : 'text-[#BFF300]') : 'text-[#94A3B8] dark:text-gray-700'}`}>
+                      <span className={`relative ${isActive ? (document.documentElement.classList.contains('dark') ? 'text-black' : 'text-[#BFF300]') : 'text-[#94A3B8] dark:text-gray-700'}`}>
                         {item.icon}
+                        {item.id === AppScreen.REQUEST_DEPOSIT && pendingDepsCount > 0 && !isExpanded && (
+                          <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white shrink-0 shadow-sm border border-white dark:border-dark">
+                            {pendingDepsCount > 9 ? '9+' : pendingDepsCount}
+                          </span>
+                        )}
                       </span>
                       {isExpanded && (
-                        <span className="truncate">
+                        <span className="truncate flex-1 flex items-center justify-between">
                           {t(item.labelKey, lang)}
+                          {item.id === AppScreen.REQUEST_DEPOSIT && pendingDepsCount > 0 && (
+                            <span className="ml-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                              {pendingDepsCount}
+                            </span>
+                          )}
                         </span>
                       )}
-                    </button>
+                    </Link>
                   </li>
                 );
               })}

@@ -106,7 +106,25 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode, lang }) => {
   const memberCount = globalStats?.totalMembers || 0;
   const yieldIndex = `${(globalStats?.yieldIndex || 0).toFixed(1)}%`;
 
-  const topInvestor = globalStats?.topInvestor || { name: 'N/A', role: 'N/A' };
+
+  // Top Investor - with fallback to calculate from members if backend returns N/A
+  let topInvestor = globalStats?.topInvestor || { name: 'N/A', role: 'N/A' };
+
+  // Fallback: If backend returns N/A but we have members, calculate from context
+  if (topInvestor.name === 'N/A' && members.length > 0) {
+    const activeMembersWithShares = members
+      .filter(m => m.status === 'active' && (m.shares || 0) > 0)
+      .sort((a, b) => (b.shares || 0) - (a.shares || 0));
+
+    if (activeMembersWithShares.length > 0) {
+      const topMember = activeMembersWithShares[0];
+      topInvestor = {
+        name: topMember.name,
+        role: topMember.role || 'Principal Partner'
+      };
+    }
+  }
+
 
   // Calculate Real-time Statistics
   const statCards = useMemo(() => {
@@ -137,15 +155,19 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode, lang }) => {
     return [
       {
         label: t('dashboard.totalDeposits', lang),
-        value: `BDT ${formatCompactNumber(totalDeposits)}`,
+        value: formatCompactNumber(totalDeposits),
         change: depositChange,
-        variant: "brand" as const
+        variant: "brand" as const,
+        currency: t('common.bdt', lang),
+        rawValue: totalDeposits
       },
       {
         label: t('dashboard.investedCapital', lang),
-        value: `BDT ${formatCompactNumber(investedCapital)}`,
+        value: formatCompactNumber(investedCapital),
         change: capitalChange,
-        variant: "dark" as const
+        variant: "dark" as const,
+        currency: t('common.bdt', lang),
+        rawValue: investedCapital
       },
       {
         label: t('dashboard.totalMembers', lang),
@@ -268,8 +290,43 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode, lang }) => {
                     />
                     <YAxis hide />
                     <Tooltip
-                      contentStyle={{ borderRadius: '2.5rem', border: 'none', backgroundColor: isDarkMode ? '#1A221D' : '#FFF', boxShadow: '0 30px 60px -15px rgba(0,0,0,0.5)', padding: '20px' }}
-                      itemStyle={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase' }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const inflow = payload[0]?.value || 0;
+                          const outflow = payload[1]?.value || 0;
+                          const netProfit = inflow - outflow;
+                          return (
+                            <div className="bg-white dark:bg-[#1A221D] p-6 rounded-3xl shadow-2xl border-2 border-gray-100 dark:border-white/10">
+                              <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">{payload[0]?.payload?.name}</p>
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between gap-8">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-brand"></div>
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400">Inflow:</span>
+                                  </div>
+                                  <span className="text-sm font-black text-dark dark:text-white">{formatCompactNumber(inflow)} {t('common.bdt', lang)}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-8">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400">Outflow:</span>
+                                  </div>
+                                  <span className="text-sm font-black text-dark dark:text-white">{formatCompactNumber(outflow)} {t('common.bdt', lang)}</span>
+                                </div>
+                                <div className="pt-3 border-t-2 border-gray-100 dark:border-white/10">
+                                  <div className="flex items-center justify-between gap-8">
+                                    <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Net Profit:</span>
+                                    <span className={`text-lg font-black ${netProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                      {netProfit >= 0 ? '+ ' : '- '}{formatCompactNumber(Math.abs(netProfit))} {t('common.bdt', lang)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
                     />
                     <Area type="monotone" dataKey="inflow" stroke={isDarkMode ? "#BFF300" : "#151D18"} strokeWidth={6} fillOpacity={1} fill="url(#colorInflow)" dot={{ r: 6, fill: '#BFF300', strokeWidth: 3, stroke: '#151D18' }} activeDot={{ r: 10 }} />
                     <Area type="monotone" dataKey="outflow" stroke="#6366F1" strokeWidth={6} fillOpacity={1} fill="url(#colorOutflow)" />
@@ -294,10 +351,11 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode, lang }) => {
             </div>
             <div className="h-[420px] relative transform-gpu hover:scale-105 transition-transform duration-700">
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10 drop-shadow-2xl text-center">
-                <span className="text-5xl font-black text-dark dark:text-white tracking-tighter leading-none">
-                  {pieData.length > 0 ? '100%' : '0%'}
+                <span className="text-4xl font-black text-dark dark:text-white tracking-tighter leading-none">
+                  {formatCompactNumber(pieData.reduce((sum: number, item: any) => sum + item.value, 0))}
                 </span>
-                <span className="text-[12px] font-black text-brand uppercase tracking-[0.4em] mt-2">{t('dashboard.allocated', lang)}</span>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] mt-2">{t('common.bdt', lang)}</span>
+                <span className="text-[11px] font-black text-brand uppercase tracking-[0.3em] mt-1">{t('dashboard.allocated', lang)}</span>
               </div>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -310,6 +368,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode, lang }) => {
                     paddingAngle={8}
                     dataKey="value"
                     stroke="none"
+                    label={({ percent }) => `${(percent * 100).toFixed(1)}%`}
+                    labelLine={false}
                   >
                     {pieData.map((entry: any, index: any) => (
                       <Cell
@@ -320,7 +380,29 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode, lang }) => {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ borderRadius: '2.5rem', border: 'none', backgroundColor: isDarkMode ? '#111814' : '#FFF', boxShadow: '0 30px 60px -15px rgba(0,0,0,0.5)' }}
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0]?.payload;
+                        const total = pieData.reduce((sum: number, item: any) => sum + item.value, 0);
+                        const percentage = total > 0 ? ((data.value / total) * 100).toFixed(1) : '0.0';
+                        return (
+                          <div className="bg-white dark:bg-[#1A221D] p-6 rounded-3xl shadow-2xl border-2 border-gray-100 dark:border-white/10">
+                            <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">{data.name}</p>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-6">
+                                <span className="text-xs font-bold text-gray-600 dark:text-gray-400">Amount:</span>
+                                <span className="text-lg font-black text-dark dark:text-white">{formatCompactNumber(data.value)} {t('common.bdt', lang)}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-6 pt-2 border-t border-gray-100 dark:border-white/10">
+                                <span className="text-xs font-bold text-gray-600 dark:text-gray-400">Share:</span>
+                                <span className="text-lg font-black text-brand">{percentage}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
                   />
                   <Legend verticalAlign="bottom" height={50} iconType="circle" wrapperStyle={{ fontWeight: '900', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1.5px', paddingTop: '20px' }} />
                 </PieChart>
@@ -364,8 +446,24 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode, lang }) => {
                       strokeWidth={3}
                     />
                     <Tooltip
-                      contentStyle={{ borderRadius: '1.5rem', border: 'none', backgroundColor: isDarkMode ? '#1A221D' : '#FFF', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '16px' }}
-                      itemStyle={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: isDarkMode ? '#fff' : '#000' }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0]?.payload;
+                          return (
+                            <div className="bg-white dark:bg-[#1A221D] p-6 rounded-3xl shadow-2xl border-2 border-gray-100 dark:border-white/10">
+                              <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Partner</p>
+                              <div className="space-y-2">
+                                <p className="text-lg font-black text-dark dark:text-white">{data.subject}</p>
+                                <div className="flex items-center justify-between gap-6 pt-2 border-t border-gray-100 dark:border-white/10">
+                                  <span className="text-xs font-bold text-gray-600 dark:text-gray-400">Shares:</span>
+                                  <span className="text-lg font-black text-brand">{formatCompactNumber(data.A)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
                     />
                   </RadarChart>
                 </ResponsiveContainer>
@@ -412,12 +510,12 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode, lang }) => {
                       cursor={{ fill: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' }}
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
+                          const data = payload[0]?.payload;
                           return (
-                            <div className={`p-4 rounded-3xl shadow-2xl border ${isDarkMode ? 'bg-[#1A221D] border-white/10' : 'bg-white border-gray-100'}`}>
-                              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
-                                {(payload[0].payload as any).fullName}
-                              </p>
-                              <div className="space-y-1">
+                            <div className="bg-white dark:bg-[#1A221D] p-6 rounded-3xl shadow-2xl border-2 border-gray-100 dark:border-white/10">
+                              <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Project</p>
+                              <p className="text-lg font-black text-dark dark:text-white mb-4">{data.fullName}</p>
+                              <div className="space-y-2">
                                 {payload.map((entry: any, index: number) => (
                                   <div key={index} className="flex items-center gap-2">
                                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
@@ -521,16 +619,29 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode, lang }) => {
                 <p className="text-2xl font-black dark:text-white uppercase tracking-tighter drop-shadow-sm">{t('dashboard.optimalReserves', lang)}</p>
               </div>
             </div>
+            {/* Dynamic Stability Bars */}
             <div className="flex gap-5 mb-6">
-              {[1, 1, 1, 1, 0.4].map((v, i) => (
-                <div key={i} className="h-5 flex-1 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden shadow-inner">
-                  <div className="h-full bg-brand transition-all duration-1000 shadow-[0_0_15px_rgba(191,243,0,0.5)]" style={{ width: `${v * 100}%` }} />
-                </div>
-              ))}
+              {(() => {
+                const percentage = globalStats?.fundStability || 0;
+                // Distribute percentage across 5 bars (each represents 20%)
+                const bars = [0, 0, 0, 0, 0].map((_, i) => {
+                  const barStart = i * 20;
+                  const barVal = Math.max(0, Math.min(20, percentage - barStart));
+                  return barVal / 20; // Normalize to 0-1
+                });
+
+                return bars.map((v, i) => (
+                  <div key={i} className="h-5 flex-1 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden shadow-inner">
+                    <div className="h-full bg-brand transition-all duration-1000 shadow-[0_0_15px_rgba(191,243,0,0.5)]" style={{ width: `${v * 100}%` }} />
+                  </div>
+                ));
+              })()}
             </div>
             <div className="flex justify-between items-center">
               <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">{t('dashboard.stability', lang)}</p>
-              <p className="text-5xl font-black text-dark dark:text-white tracking-tighter drop-shadow-sm">92.4%</p>
+              <p className="text-5xl font-black text-dark dark:text-white tracking-tighter drop-shadow-sm">
+                {(globalStats?.fundStability || 0).toFixed(1)}%
+              </p>
             </div>
           </div>
 

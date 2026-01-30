@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Filter, X, Calendar, User, CheckSquare, Square, ChevronLeft, ChevronRight, Edit2, Trash2, CheckCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { Plus, Search, Filter, X, Calendar, User, CheckSquare, Square, ChevronLeft, ChevronRight, Edit2, Trash2, CheckCircle, RefreshCw, Loader2, CreditCard } from 'lucide-react';
 import { Deposit, AccessLevel, AppScreen } from '../types';
 import Toast, { ToastType } from './Toast';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { financeService } from '../services/api';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, formatDate } from '../utils/formatters';
 import { Language, t } from '../i18n/translations';
 import ActionDialog from './ActionDialog';
 
@@ -68,12 +68,14 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
 
   const [formData, setFormData] = useState({
     memberId: '',
+    memberDisplayId: '',
     memberName: '',
     shareNumber: '0',
     amount: '0',
     depositMonth: getCurrentMonthYear(),
     cashierName: 'System',
-    fundId: ''
+    fundId: '',
+    depositMethod: 'Bank'
   });
 
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
@@ -99,12 +101,14 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
       // For now, requests might default to Primary if not specified
       setFormData({
         memberId: request.memberId,
+        memberDisplayId: request.memberDisplayId || '',
         memberName: request.memberName,
         shareNumber: request.shareNumber.toString(),
         amount: request.amount.toString(),
         depositMonth: request.depositMonth,
         cashierName: request.cashierName,
-        fundId: '' // We might not have this easily, let user select or default
+        fundId: '', // We might not have this easily, let user select or default
+        depositMethod: request.depositMethod || 'Bank'
       });
       setAutoCalculate(false);
     } else {
@@ -114,12 +118,14 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
 
       setFormData({
         memberId: defaultPartner?.id || '',
+        memberDisplayId: defaultPartner?.memberId || '',
         memberName: defaultPartner?.name || '',
         shareNumber: defaultPartner?.shares.toString() || '0',
         amount: (defaultPartner?.shares * SHARE_WORTH).toString() || '0',
         depositMonth: getCurrentMonthYear(),
         cashierName: defaultFund?.handlingOfficer || 'System',
-        fundId: defaultFund ? defaultFund.id : ''
+        fundId: defaultFund ? defaultFund.id : '',
+        depositMethod: 'Bank'
       });
       setAutoCalculate(true);
     }
@@ -140,6 +146,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
       setFormData({
         ...formData,
         memberId: selectedId,
+        memberDisplayId: partner.memberId,
         memberName: partner.name,
         shareNumber: newShares,
         amount: newAmount
@@ -183,20 +190,23 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
         date: new Date().toISOString(),
         shareNumber: parseInt(formData.shareNumber),
         status: 'Pending',
-        cashierName: formData.cashierName
+        cashierName: formData.cashierName,
+        depositMethod: formData.depositMethod
       };
 
       const newDeposit = await financeService.addDeposit(payload);
       const mappedDeposit: Deposit = {
         id: newDeposit._id || newDeposit.id,
         memberId: formData.memberId,
+        memberDisplayId: formData.memberDisplayId,
         memberName: formData.memberName,
         shareNumber: parseInt(formData.shareNumber),
         amount: parseInt(formData.amount),
         depositMonth: formData.depositMonth,
         cashierName: formData.cashierName,
         status: 'Pending',
-        date: newDeposit.date?.split('T')[0] || new Date().toISOString().split('T')[0]
+        date: newDeposit.date?.split('T')[0] || new Date().toISOString().split('T')[0],
+        depositMethod: formData.depositMethod as any
       };
 
       setRequests(prev => [mappedDeposit, ...prev]);
@@ -352,6 +362,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
                 <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Partner</th>
                 <th className="px-10 py-6 text-center text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Shares</th>
                 <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Period</th>
+                <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('deposits.depositMethod', lang)}</th>
                 <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Amount (BDT)</th>
                 <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Status</th>
                 <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Actions</th>
@@ -363,7 +374,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
                   <td className="px-10 py-6">
                     <div className="flex flex-col">
                       <p className="text-[10px] font-black text-brand uppercase tracking-tighter">#{req.id}</p>
-                      <p className="text-xs font-bold text-gray-400">{req.date}</p>
+                      <span className="text-xs font-bold text-gray-400 whitespace-nowrap">{formatDate(req.date)}</span>
                     </div>
                   </td>
                   <td className="px-10 py-6">
@@ -373,7 +384,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
                       </div>
                       <div>
                         <p className="font-black text-dark dark:text-white text-base leading-none mb-1 group-hover:text-brand transition-colors">{req.memberName}</p>
-                        <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">ID: #{req.memberId}</p>
+                        <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">ID: #{req.memberDisplayId || req.memberId}</p>
                       </div>
                     </div>
                   </td>
@@ -384,6 +395,12 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
                     <div className="flex items-center gap-2 text-xs font-black text-gray-600 dark:text-gray-300">
                       <Calendar size={14} className="text-brand" />
                       {req.depositMonth}
+                    </div>
+                  </td>
+                  <td className="px-10 py-6">
+                    <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-tighter">
+                      <CreditCard size={12} />
+                      {t(`deposits.methods.${(req.depositMethod?.toLowerCase().replace(' ', '') === 'mobilebanking' ? 'mobile' : req.depositMethod?.toLowerCase()) || 'bank'}`, lang)}
                     </div>
                   </td>
                   <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-xl tracking-tighter">
@@ -453,6 +470,27 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
 
               <form onSubmit={handleSubmit}>
                 <div className="grid grid-cols-3 gap-6 mb-8">
+                  {/* Field: Deposit Method */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest px-1">{t('deposits.depositMethod', lang)}</label>
+                    <div className="relative group">
+                      <select
+                        value={formData.depositMethod}
+                        onChange={e => setFormData({ ...formData, depositMethod: e.target.value })}
+                        className="w-full bg-gray-50 dark:bg-[#111814] px-5 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/10 focus:ring-2 focus:ring-dark dark:focus:ring-brand outline-none text-sm font-bold appearance-none cursor-pointer dark:text-white text-dark transition-all"
+                      >
+                        <option value="Cash">{t('deposits.methods.cash', lang)}</option>
+                        <option value="Bank">{t('deposits.methods.bank', lang)}</option>
+                        <option value="Mobile Banking">{t('deposits.methods.mobile', lang)}</option>
+                        <option value="Check">{t('deposits.methods.check', lang)}</option>
+                        <option value="Other">{t('deposits.methods.other', lang)}</option>
+                      </select>
+                      <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-dark dark:group-hover:text-brand transition-colors">
+                        <CreditCard size={18} />
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Field 1: Partner */}
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest px-1">Source Partner</label>

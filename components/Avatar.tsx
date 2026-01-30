@@ -18,6 +18,11 @@ const Avatar: React.FC<AvatarProps> = ({ name, className = '', size = 'md' }) =>
     };
 
     const getColor = (n: string) => {
+        // Return default color if name is undefined/null
+        if (!n) {
+            return 'bg-gradient-to-br from-gray-400 to-gray-600 text-white';
+        }
+
         const colors = [
             'bg-gradient-to-br from-brand to-lime-400 text-dark',
             'bg-gradient-to-br from-indigo-500 to-blue-600 text-white',

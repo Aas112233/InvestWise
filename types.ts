@@ -116,6 +116,7 @@ export interface FundTransfer {
 export interface Deposit {
   id: string;
   memberId: string;
+  memberDisplayId?: string;
   memberName: string;
   shareNumber: number;
   amount: number;
@@ -123,6 +124,8 @@ export interface Deposit {
   cashierName: string;
   status: 'Completed' | 'Pending' | 'Flagged' | 'Processing';
   date: string;
+  fundId?: string;
+  depositMethod?: 'Cash' | 'Bank' | 'Mobile Banking' | 'Check' | 'Other';
 }
 
 export interface Transaction {
@@ -132,9 +135,11 @@ export interface Transaction {
   amount: number;
   member?: string;
   memberId?: string;
+  memberDisplayId?: string;
   projectId?: string;
   description: string;
   status: 'Success' | 'Processing' | 'Failed' | 'Completed';
+  depositMethod?: 'Cash' | 'Bank' | 'Mobile Banking' | 'Check' | 'Other';
 }
 
 export interface DividendDistribution {
@@ -164,6 +169,7 @@ export interface EquityTransfer {
 export interface Expense {
   id: string;
   memberId: string;
+  memberDisplayId?: string;
   memberName: string;
   projectId?: string;
   projectName?: string;

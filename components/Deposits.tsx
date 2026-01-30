@@ -9,6 +9,7 @@ import { formatCurrency } from '../utils/formatters';
 import { Language, t } from '../i18n/translations';
 import ActionDialog from './ActionDialog';
 import { ModalForm, FormInput, FormSelect } from './ui/FormElements';
+import PermissionGuard from './PermissionGuard';
 
 const SHARE_WORTH = 1000;
 const MONTHS = [
@@ -108,7 +109,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
       const defaultFund = funds.find(f => (f.type === 'DEPOSIT' || f.type === 'Primary') && f.status !== 'ARCHIVED');
 
       setFormData({
-        memberId: defaultPartner?.memberId || '',
+        memberId: defaultPartner?.id || '', // ✅ Use id (database ID) not memberId (display ID)
         memberName: defaultPartner?.name || '',
         shareNumber: defaultPartner?.shares.toString() || '0',
         amount: (defaultPartner?.shares * SHARE_WORTH).toString() || '0',
@@ -188,7 +189,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
         throw new Error(t('deposits.selectFundError', lang));
       }
 
-      const selectedMember = activeMembers.find(m => m.memberId === formData.memberId);
+      const selectedMember = activeMembers.find(m => m.id === formData.memberId); // ✅ Compare id with id
       if (!selectedMember) {
         throw new Error(t('deposits.invalidMember', lang));
       }
@@ -306,14 +307,14 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
             lang={lang}
             targetId="deposits-snapshot-target"
           />
-          {currentUser?.permissions[AppScreen.DEPOSITS] === AccessLevel.WRITE && (
+          <PermissionGuard screen={AppScreen.DEPOSITS} requiredLevel={AccessLevel.WRITE}>
             <button
               onClick={() => handleOpenModal()}
               className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20"
             >
               <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
             </button>
-          )}
+          </PermissionGuard>
         </div>
       </div>
 
@@ -418,7 +419,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                       </span>
                     </td>
                     <td className="px-6 py-6 text-right">
-                      {currentUser?.permissions[AppScreen.DEPOSITS] === AccessLevel.WRITE && (
+                      <PermissionGuard screen={AppScreen.DEPOSITS} requiredLevel={AccessLevel.WRITE}>
                         <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
                           <button
                             onClick={(e) => {
@@ -432,7 +433,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                             {processingId === dep.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
                           </button>
                         </div>
-                      )}
+                      </PermissionGuard>
                     </td>
                   </tr>
                 ))}
