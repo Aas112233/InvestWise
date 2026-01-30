@@ -9,7 +9,11 @@ const check = async () => {
         console.log('CONNECTED');
         process.exit(0);
     } catch (err) {
-        console.error('FAILED TO CONNECT:', err.message);
+        console.error('FAILED TO CONNECT');
+        console.error('Error Name:', err.name);
+        console.error('Error Code:', err.code);
+        console.error('Error CodeName:', err.codeName);
+        console.error('Full Error:', err);
         process.exit(1);
     }
 };

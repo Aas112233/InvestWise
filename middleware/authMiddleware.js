@@ -12,12 +12,35 @@ const protect = asyncHandler(async (req, res, next) => {
         try {
             token = req.headers.authorization.split(' ')[1];
 
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            // Verify token
+            let decoded;
+            try {
+                decoded = jwt.verify(token, process.env.JWT_SECRET);
+            } catch (err) {
+                res.status(401);
+                throw new Error('Not authorized, token failed');
+            }
 
-            req.user = await User.findById(decoded.id).select('-password');
+            // Get user from token
+            try {
+                req.user = await User.findById(decoded.id).select('-password');
+            } catch (err) {
+                console.error('Auth Middleware DB Error:', err);
+                res.status(500);
+                throw new Error('Server Error: Database unavailable');
+            }
+
+            if (!req.user) {
+                res.status(401);
+                throw new Error('Not authorized, user not found');
+            }
 
             next();
         } catch (error) {
+            // Rethrow errors that we already handled (with specific status codes)
+            if (res.statusCode !== 200) throw error;
+
+            // Fallback for unexpected errors
             console.error(error);
             res.status(401);
             throw new Error('Not authorized, token failed');
@@ -31,9 +54,12 @@ const protect = asyncHandler(async (req, res, next) => {
 });
 
 const admin = (req, res, next) => {
+    console.log(`[Auth] Checking admin for user: ${req.user?._id}, role: ${req.user?.role}`);
     if (req.user && req.user.role === 'Administrator') {
+        console.log('[Auth] Admin check PASSED');
         next();
     } else {
+        console.log('[Auth] Admin check FAILED');
         res.status(403);
         throw new Error('Not authorized as an admin');
     }
