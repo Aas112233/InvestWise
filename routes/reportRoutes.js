@@ -1,5 +1,4 @@
 import express from 'express';
-import Report from '../models/Report.js';
 import { protect } from '../middleware/authMiddleware.js';
 import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
@@ -20,24 +19,7 @@ const formatDate = (date) => {
   return `${day}-${month}-${year}`;
 };
 
-router.get('/', protect, async (req, res) => {
-  try {
-    const reports = await Report.find().sort({ createdAt: -1 });
-    res.json(reports);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
 
-router.post('/', protect, async (req, res) => {
-  try {
-    const report = new Report({ ...req.body, createdBy: req.user._id });
-    const newReport = await report.save();
-    res.status(201).json(newReport);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
 
 router.post('/export-generic', protect, async (req, res) => {
   try {
@@ -426,13 +408,6 @@ const generateExcel = async (res, data, type, fiscalMonth, lang = 'en') => {
   res.end();
 };
 
-router.delete('/:id', protect, async (req, res) => {
-  try {
-    await Report.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Report deleted' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+
 
 export default router;
