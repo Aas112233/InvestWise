@@ -256,6 +256,67 @@ const onboardMember = asyncHandler(async (req, res) => {
     }
 });
 
+// @desc    Recalculate financial totals for all members based on transaction history
+// @route   POST /api/members/recalculate-financials
+// @access  Private/Admin
+const recalculateMemberFinancials = asyncHandler(async (req, res) => {
+    // 1. Aggregate all deposits by member
+    const depositStats = await Transaction.aggregate([
+        {
+            $match: {
+                type: 'Deposit',
+                status: { $in: ['Success', 'Completed'] }
+            }
+        },
+        {
+            $group: {
+                _id: '$memberId',
+                totalDeposited: { $sum: '$amount' },
+                // If we want to strictly recalculate shares based on history, we can sum shareNumber if available, or amount/1000
+                // Current logic seems to rely on manual shareNumber sometimes.
+                // Best effort: If we have shareNumber in transaction (we added it in AddDeposit), sum it.
+                // But schema might not strictly enforce shareNumber on all past transactions.
+                // Let's stick to totalContributed fix primarily as requested.
+            }
+        }
+    ]);
+
+    // 2. Prepare Bulk Update Operations
+    const bulkOps = depositStats.map(stat => ({
+        updateOne: {
+            filter: { _id: stat._id },
+            update: {
+                $set: {
+                    totalContributed: stat.totalDeposited,
+                    // Optional: Recalculate shares? 
+                    // Risk: If manual adjustments were made to shares without transactions, this overrides them.
+                    // User complained about "Total Deposit" specifically. Let's fix that first.
+                    // shares: Math.floor(stat.totalDeposited / 1000) 
+                }
+            }
+        }
+    }));
+
+    // 3. Execute Bulk Write
+    if (bulkOps.length > 0) {
+        await Member.bulkWrite(bulkOps);
+    }
+
+    // 4. Handle members with NO deposits (reset to 0)
+    const memberIdsWithDeposits = depositStats.map(s => s._id);
+    await Member.updateMany(
+        { _id: { $nin: memberIdsWithDeposits } },
+        { $set: { totalContributed: 0 } }
+    );
+
+    await recalculateAllStats(); // Update global stats too
+
+    res.json({
+        message: 'Financials recalculated successfully',
+        count: bulkOps.length
+    });
+});
+
 export {
     getMembers,
     getMemberById,
@@ -263,4 +324,5 @@ export {
     updateMember,
     deleteMember,
     onboardMember,
+    recalculateMemberFinancials
 };

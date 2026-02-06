@@ -19,18 +19,64 @@ const getTransactions = asyncHandler(async (req, res) => {
         sortOrder: 'desc'
     });
     const search = req.query.search || '';
+    const searchField = req.query.searchField || 'all';
+
+    let query = {};
 
     // Create search filter
-    const query = search
-        ? {
-            $or: [
+    if (search) {
+        if (searchField === 'amount') {
+            const num = Number(search);
+            if (!isNaN(num)) query.amount = num;
+        } else if (searchField === 'id') {
+            // Try to match _id or referenceNumber or partial ID string
+            if (mongoose.Types.ObjectId.isValid(search)) {
+                query._id = search;
+            } else {
+                // partial hex match or ref number
+                query.$or = [
+                    { referenceNumber: { $regex: search, $options: 'i' } }
+                ];
+                // If it looks like a hex string but maybe not full 24 chars, we can't regex _id easily in standard mongo 
+                // without $toString in aggregation. For now valid ObjectId exact match or Reference Number regex.
+                // We can also allow filtering by string ID if stored as string? No, _id is ObjectId.
+            }
+        } else if (searchField === 'memberId') {
+            const members = await Member.find({ memberId: { $regex: search, $options: 'i' } }).select('_id');
+            query.memberId = { $in: members.map(m => m._id) };
+        } else if (searchField === 'memberName') {
+            const members = await Member.find({ name: { $regex: search, $options: 'i' } }).select('_id');
+            query.memberId = { $in: members.map(m => m._id) };
+        } else if (searchField === 'fundName') {
+            const funds = await Fund.find({ name: { $regex: search, $options: 'i' } }).select('_id');
+            query.fundId = { $in: funds.map(f => f._id) };
+        } else {
+            // 'all'
+            const memberMatches = await Member.find({
+                $or: [{ name: { $regex: search, $options: 'i' } }, { memberId: { $regex: search, $options: 'i' } }]
+            }).select('_id');
+
+            const fundMatches = await Fund.find({ name: { $regex: search, $options: 'i' } }).select('_id');
+
+            const orConditions = [
                 { type: { $regex: search, $options: 'i' } },
                 { description: { $regex: search, $options: 'i' } },
                 { status: { $regex: search, $options: 'i' } },
-                { referenceNumber: { $regex: search, $options: 'i' } }
-            ]
+                { referenceNumber: { $regex: search, $options: 'i' } },
+                { memberId: { $in: memberMatches.map(m => m._id) } },
+                { fundId: { $in: fundMatches.map(f => f._id) } }
+            ];
+
+            if (!isNaN(search)) {
+                orConditions.push({ amount: Number(search) });
+            }
+            if (mongoose.Types.ObjectId.isValid(search)) {
+                orConditions.push({ _id: search });
+            }
+
+            query.$or = orConditions;
         }
-        : {};
+    }
 
     // Allow filtering by type and status if provided
     if (req.query.type) query.type = req.query.type;
@@ -45,11 +91,16 @@ const getTransactions = asyncHandler(async (req, res) => {
         .skip(skip)
         .limit(limit);
 
-    // Calculate totals for inflow and outflow
+    // Calculate totals for inflow and outflow (agnostic of pagination)
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
     const totals = await Transaction.aggregate([
         {
             $match: {
-                status: { $in: ['Success', 'Completed'] }
+                ...query,
+                status: { $in: ['Success', 'Completed', 'Processing'] }
             }
         },
         {
@@ -72,17 +123,32 @@ const getTransactions = asyncHandler(async (req, res) => {
                             0
                         ]
                     }
+                },
+                totalMonthly: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $in: ['$type', ['Deposit', 'Earning', 'Investment']] },
+                                    { $gte: ['$date', startOfMonth] }
+                                ]
+                            },
+                            '$amount',
+                            0
+                        ]
+                    }
                 }
             }
         }
     ]);
 
-    const stats = totals[0] || { totalInflow: 0, totalOutflow: 0 };
+    const stats = totals[0] || { totalInflow: 0, totalOutflow: 0, totalMonthly: 0 };
 
     res.json({
         ...formatPaginatedResponse(transactions, page, limit, totalCount),
         totalInflow: stats.totalInflow,
-        totalOutflow: stats.totalOutflow
+        totalOutflow: stats.totalOutflow,
+        totalMonthly: stats.totalMonthly
     });
 });
 
@@ -125,28 +191,26 @@ const addDeposit = asyncHandler(async (req, res) => {
             memberId,
             fundId,
             date: date || Date.now(),
-            status: depositStatus, // 'Success' or 'Pending'
+            status: status || 'Completed', // Default to Completed if not specified
             authorizedBy: req.user._id,
             createdBy: req.user._id,
             updatedBy: req.user._id,
-            handlingOfficer: cashierName || handlingOfficer,
+            handlingOfficer: req.user.name || cashierName || handlingOfficer || 'System',
             depositMethod: depositMethod || 'Cash',
             referenceNumber: req.body.referenceNumber,
             balanceBefore: balanceBefore,
-            balanceAfter: depositStatus === 'Success' ? (balanceBefore + Number(amount)) : balanceBefore
+            balanceAfter: (status === 'Success' || status === 'Completed') ? (balanceBefore + Number(amount)) : balanceBefore
         }], { session });
 
         // Apply financial impact if Success
-        if (depositStatus === 'Success' || depositStatus === 'Completed') {
+        if (status === 'Success' || status === 'Completed') {
             // Update Fund
             fund.balance += Number(amount);
             await fund.save({ session });
 
             // Update Member
             member.totalContributed += Number(amount);
-            if (shareNumber) {
-                member.shares += Number(shareNumber);
-            }
+            // member.shares is a static property, DO NOT increment it via deposits
             await member.save({ session });
         }
 
@@ -188,13 +252,11 @@ const editDeposit = asyncHandler(async (req, res) => {
         const oldAmount = transaction.amount;
         const oldFundId = transaction.fundId;
         const oldMemberId = transaction.memberId;
-        const oldShareImpact = Math.floor(oldAmount / 1000); // Approximation from addDeposit logic
+        const oldStatus = transaction.status;
+        const isCompleted = oldStatus === 'Success' || oldStatus === 'Completed';
 
-        const newAmount = parseInt(amount);
-        const newShareImpact = parseInt(shareNumber);
-
-        // 1. Revert Old Impact
-        if (transaction.status === 'Success' || transaction.status === 'Completed') {
+        // 1. Revert Old Impact (Only if it was previously applied)
+        if (isCompleted) {
             // Revert Fund
             const oldFund = await Fund.findById(oldFundId).session(session);
             if (oldFund) {
@@ -206,26 +268,35 @@ const editDeposit = asyncHandler(async (req, res) => {
             const oldMember = await Member.findById(oldMemberId).session(session);
             if (oldMember) {
                 oldMember.totalContributed -= oldAmount;
-                oldMember.shares -= oldShareImpact;
+                // member.shares is static, do not revert
                 await oldMember.save({ session });
             }
         }
 
-        // 2. Apply New Impact
-        // Find New Fund (or same)
+        // 2. Apply New Impact (We assume edit maintains 'Completed' status or use existing)
+        const newAmount = parseInt(amount);
+        const newShareImpact = parseInt(shareNumber);
+
+        // Find New Fund (even if it's the same as oldFund)
         const newFund = await Fund.findById(fundId).session(session);
-        if (!newFund) throw new Error('Target fund not found');
+        if (!newFund) throw new Error(`Target fund not found: ${fundId}`);
 
-        newFund.balance += newAmount;
-        await newFund.save({ session });
+        // Only apply impact if the transaction is (still) in a completed state
+        // If it was pending, we update the record but don't touch the fund yet
+        if (isCompleted) {
+            newFund.balance += newAmount;
+            await newFund.save({ session });
+        }
 
-        // Find New Member (or same)
+        // Find New Member (even if it's the same as oldMember)
         const newMember = await Member.findById(memberId).session(session);
-        if (!newMember) throw new Error('Target member not found');
+        if (!newMember) throw new Error(`Target partner not found: ${memberId}`);
 
-        newMember.totalContributed += newAmount;
-        newMember.shares += newShareImpact;
-        await newMember.save({ session });
+        if (isCompleted) {
+            newMember.totalContributed += newAmount;
+            // member.shares is a static property, DO NOT modify it via deposit edits
+            await newMember.save({ session });
+        }
 
         // 3. Update Transaction Record
         transaction.amount = newAmount;
@@ -233,7 +304,7 @@ const editDeposit = asyncHandler(async (req, res) => {
         transaction.memberId = memberId;
         transaction.description = description;
         transaction.date = date;
-        transaction.handlingOfficer = cashierName;
+        transaction.handlingOfficer = req.user.name;
         transaction.depositMethod = depositMethod;
         transaction.referenceNumber = req.body.referenceNumber;
         transaction.updatedBy = req.user._id;
@@ -301,15 +372,7 @@ const approveDeposit = asyncHandler(async (req, res) => {
 
         // Update Member
         member.totalContributed += transaction.amount;
-
-        // Estimate Shares if applicable. Ideally this should be stored in transaction meta or recalc.
-        // For simplicity, we assume 1000 BDT = 1 Share if not explicitly stored?
-        // Better: Retrospectively calculate or use a passed param?
-        // Current Schema doesn't store 'shareNumber' on Transaction explicitly, only description usually has it?
-        // Let's assume standard logic: Amount / 1000.
-        const estimatedShares = Math.floor(transaction.amount / 1000);
-        member.shares += estimatedShares;
-
+        // member.shares is a static property, DO NOT modify it via approvals
         await member.save({ session });
 
         // Update Transaction
@@ -409,6 +472,7 @@ const addExpense = asyncHandler(async (req, res) => {
             date: date || Date.now(),
             status: 'Success',
             authorizedBy: req.user._id,
+            handlingOfficer: req.user.name,
             balanceBefore,
             balanceAfter
         }], { session });
@@ -491,6 +555,7 @@ const addEarning = asyncHandler(async (req, res) => {
             date: date || Date.now(),
             status: 'Success',
             authorizedBy: req.user._id,
+            handlingOfficer: req.user.name,
             balanceBefore,
             balanceAfter
         }], { session });
@@ -1121,5 +1186,122 @@ export {
     transferEquity,
     editDeposit,
     editExpense,
-    reconcileFund
+    reconcileFund,
+    bulkAddDeposits
 };
+
+// @desc    Bulk Add Deposits
+// @route   POST /api/finance/deposits/bulk
+// @access  Private (Admin/Manager)
+const bulkAddDeposits = asyncHandler(async (req, res) => {
+    const { fundId, deposits, commonMonth, cashierName } = req.body;
+
+    if (!fundId || !deposits || !Array.isArray(deposits) || deposits.length === 0) {
+        res.status(400);
+        throw new Error('Invalid bulk deposit data');
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const fund = await Fund.findById(fundId).session(session);
+        if (!fund) throw new Error('Target fund not found');
+
+        const batchId = `BLK-${Date.now()}`;
+        const results = [];
+        let totalBatchAmount = 0;
+
+        // Track entries to prevent exact duplicates (Same Member + Same Month)
+        const seenEntries = new Set();
+
+        for (const dep of deposits) {
+            const { memberId, amount, shareNumber, depositMonth } = dep;
+            const month = depositMonth || commonMonth;
+            const entryKey = `${memberId}-${month}`;
+
+            if (seenEntries.has(entryKey)) {
+                throw new Error(`Duplicate entry detected: Member ID ${memberId} is already in this batch for ${month}`);
+            }
+            seenEntries.add(entryKey);
+
+            const member = await Member.findById(memberId).session(session);
+            if (!member) throw new Error(`Member with ID ${memberId} not found`);
+
+            const depositAmount = Number(amount);
+            if (isNaN(depositAmount) || depositAmount <= 0) {
+                throw new Error(`Invalid amount for member ${member.name}`);
+            }
+
+            // Update Member
+            member.totalContributed += depositAmount;
+            // member.shares is a static property, DO NOT increment it via bulk deposits
+            await member.save({ session });
+
+            // Create Transaction
+            const transaction = await Transaction.create([{
+                type: 'Deposit',
+                amount: depositAmount,
+                description: `Bulk Deposit [${month}]`,
+                memberId: member._id,
+                fundId: fund._id,
+                date: Date.now(),
+                status: 'Completed',
+                authorizedBy: req.user._id,
+                createdBy: req.user._id,
+                updatedBy: req.user._id,
+                handlingOfficer: req.user.name,
+                depositMethod: 'Cash',
+                referenceNumber: batchId,
+                balanceBefore: fund.balance + totalBatchAmount,
+                balanceAfter: fund.balance + totalBatchAmount + depositAmount
+            }], { session });
+
+            totalBatchAmount += depositAmount;
+            results.push({
+                member: member.name,
+                amount: depositAmount,
+                txId: transaction[0]._id
+            });
+        }
+
+        // Update Fund Balance
+        fund.balance += totalBatchAmount;
+        await fund.save({ session });
+
+        // Audit Log
+        await AuditLog.create([{
+            user: req.user._id,
+            userName: req.user.name,
+            action: 'BULK_DEPOSIT',
+            resourceType: 'Finance',
+            details: {
+                batchId,
+                totalAmount: totalBatchAmount,
+                count: deposits.length,
+                fundName: fund.name,
+                month: commonMonth
+            },
+            status: 'SUCCESS'
+        }], { session });
+
+        await session.commitTransaction();
+        await recalculateAllStats();
+
+        res.status(201).json({
+            success: true,
+            batchId,
+            totalAmount: totalBatchAmount,
+            count: deposits.length,
+            results
+        });
+
+    } catch (error) {
+        await session.abortTransaction();
+        console.error('Bulk Deposit Failed:', error);
+        res.status(400);
+        throw new Error(error.message || 'Bulk deposit failed');
+    } finally {
+        session.endSession();
+    }
+});
