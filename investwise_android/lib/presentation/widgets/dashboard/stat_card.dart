@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../../../core/constants/app_colors.dart';
 
 class StatCard extends StatelessWidget {
   final String title;

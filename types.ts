@@ -30,7 +30,7 @@ export interface User {
   memberId?: string; // Optional link to a member record
   name: string;
   email: string;
-  role: 'Administrator' | 'Manager' | 'Auditor' | 'Investor';
+  role: 'Admin' | 'Administrator' | 'Manager' | 'Audit' | 'Investor' | 'Member';
   avatar: string;
   lastLogin: string;
   permissions: UserPermissions;
@@ -65,6 +65,8 @@ export interface ProjectUpdateRecord {
   amount: number;
   description: string;
   date: string;
+  balanceBefore?: number;
+  balanceAfter?: number;
 }
 
 export interface Project {
@@ -93,6 +95,7 @@ export interface Project {
 export interface Fund {
   id: string;
   name: string;
+  accountNumber?: string;
   type: 'DEPOSIT' | 'PROJECT' | 'OTHER' | 'Primary' | 'Reserve';
   status: 'ACTIVE' | 'ARCHIVED';
   balance: number;
@@ -101,6 +104,9 @@ export interface Fund {
   description: string;
   handlingOfficer?: string;
   lastUpdated: string;
+  lastReconciledAt?: string;
+  reconciliationStatus?: 'VERIFIED' | 'DISCREPANCY' | 'PENDING';
+  isSystemAsset?: boolean;
 }
 
 export interface FundTransfer {
@@ -125,13 +131,16 @@ export interface Deposit {
   status: 'Completed' | 'Pending' | 'Flagged' | 'Processing';
   date: string;
   fundId?: string;
+  fundName?: string;
   depositMethod?: 'Cash' | 'Bank' | 'Mobile Banking' | 'Check' | 'Other';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Transaction {
   id: string;
   date: string;
-  type: 'Deposit' | 'Withdrawal' | 'Investment' | 'Expense' | 'Earning' | 'Dividend' | 'Equity-Transfer';
+  type: 'Deposit' | 'Withdrawal' | 'Investment' | 'Expense' | 'Earning' | 'Dividend' | 'Equity-Transfer' | 'Adjustment' | 'Transfer';
   amount: number;
   member?: string;
   memberId?: string;
@@ -140,6 +149,8 @@ export interface Transaction {
   description: string;
   status: 'Success' | 'Processing' | 'Failed' | 'Completed';
   depositMethod?: 'Cash' | 'Bank' | 'Mobile Banking' | 'Check' | 'Other';
+  balanceBefore?: number;
+  balanceAfter?: number;
 }
 
 export interface DividendDistribution {

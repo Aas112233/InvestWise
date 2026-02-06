@@ -94,7 +94,7 @@ export const authService = {
 };
 
 export const memberService = {
-    getAll: async (params?: { page?: number; limit?: number; search?: string }) => {
+    getAll: async (params?: { page?: number; limit?: number; search?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' }) => {
         const { data } = await api.get('/members', { params });
         return data;
     },
@@ -108,6 +108,14 @@ export const memberService = {
     },
     delete: async (id: string) => {
         const { data } = await api.delete(`/members/${id}`);
+        return data;
+    },
+    recalculateFinancials: async () => {
+        const { data } = await api.post('/members/recalculate-financials');
+        return data;
+    },
+    onboard: async (onboardData: any) => {
+        const { data } = await api.post('/members/onboard', onboardData);
         return data;
     }
 };
@@ -159,12 +167,16 @@ export const fundService = {
 };
 
 export const financeService = {
-    getTransactions: async (params?: { page?: number; limit?: number; search?: string }) => {
+    getTransactions: async (params?: { page?: number; limit?: number; search?: string; searchField?: string; sortBy?: string; sortOrder?: 'asc' | 'desc'; type?: string; status?: string }) => {
         const { data } = await api.get('/finance/transactions', { params });
         return data;
     },
     addDeposit: async (depositData: any) => {
         const { data } = await api.post('/finance/deposits', depositData);
+        return data;
+    },
+    bulkAddDeposit: async (bulkData: any) => {
+        const { data } = await api.post('/finance/deposits/bulk', bulkData);
         return data;
     },
     editDeposit: async (id: string, depositData: any) => {
@@ -177,6 +189,10 @@ export const financeService = {
     },
     addExpense: async (expenseData: any) => {
         const { data } = await api.post('/finance/expenses', expenseData);
+        return data;
+    },
+    addEarning: async (earningData: any) => {
+        const { data } = await api.post('/finance/earnings', earningData);
         return data;
     },
     editExpense: async (id: string, expenseData: any) => {
@@ -193,6 +209,14 @@ export const financeService = {
     },
     transferEquity: async (transferData: any) => {
         const { data } = await api.post('/finance/equity/transfer', transferData, { timeout: 60000 });
+        return data;
+    },
+    transferFunds: async (transferData: any) => {
+        const { data } = await api.post('/finance/transfer', transferData);
+        return data;
+    },
+    reconcileFund: async (id: string) => {
+        const { data } = await api.post(`/finance/funds/${id}/reconcile`);
         return data;
     }
 };
@@ -275,6 +299,17 @@ export const goalService = {
     },
     delete: async (id: string) => {
         const { data } = await api.delete(`/goals/${id}`);
+        return data;
+    }
+};
+
+export const settingsService = {
+    get: async () => {
+        const { data } = await api.get('/settings');
+        return data;
+    },
+    update: async (settingsData: any) => {
+        const { data } = await api.put('/settings', settingsData);
         return data;
     }
 };

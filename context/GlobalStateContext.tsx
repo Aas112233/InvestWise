@@ -1,9 +1,26 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Member, Project, Deposit, Expense, Fund, User, AccessLevel, AppScreen, Transaction } from '../types';
-import api, { memberService, projectService, fundService, financeService, authService, analyticsService, auditService, isNetworkError } from '../services/api';
+import api, { memberService, projectService, fundService, financeService, authService, analyticsService, auditService, isNetworkError, settingsService } from '../services/api';
 
+// ... imports
 export type ConnectionStatus = 'online' | 'offline' | 'degraded';
+
+export interface SystemSettings {
+  financial: {
+    fiscalYearStart: string;
+    baseCurrency: string;
+    taxRate: number;
+    accountingMethod: string;
+  };
+  system: {
+    language: string;
+    refreshInterval: string;
+    theme: string;
+    dateFormat: string;
+    isMaintenanceMode: boolean;
+  };
+}
 
 interface GlobalState {
   members: Member[];
@@ -13,6 +30,7 @@ interface GlobalState {
   funds: Fund[];
   systemUsers: User[];
   currentUser: User | null;
+  settings: SystemSettings | null;
   addDescription?: string; // Optional
   addMember: (m: Member) => void;
   updateMember: (m: Member) => Promise<void>;
@@ -28,10 +46,12 @@ interface GlobalState {
   addFund: (f: Fund) => Promise<void>;
   updateFund: (f: Fund) => Promise<void>;
   addSystemUser: (u: User) => void;
-  updateUserPermissions: (userId: string, screen: AppScreen, level: AccessLevel) => void;
+  updateUser: (userId: string, data: Partial<User>) => Promise<void>;
   updateUserPassword: (userId: string, newPass: string) => void;
   deleteUser: (userId: string) => void;
   deleteMember: (id: string) => Promise<void>;
+  onboardMember: (data: any) => Promise<void>;
+  updateSettings: (s: Partial<SystemSettings>) => Promise<void>;
   connectionStatus: ConnectionStatus;
   lastOnlineAt: number | null;
   checkConnection: () => Promise<void>;
@@ -44,6 +64,8 @@ interface GlobalState {
   refreshData: () => Promise<void>;
   distributeDividends: (data: any) => Promise<void>;
   transferEquity: (data: any) => Promise<void>;
+  transferFunds: (data: any) => Promise<any>;
+  reconcileFund: (id: string) => Promise<any>;
   transactions: Transaction[];
   globalStats: any;
   refreshAnalytics: () => Promise<void>;
@@ -56,8 +78,9 @@ const GlobalStateContext = createContext<GlobalState | undefined>(undefined);
 const getDefaultPermissions = (role: User['role']) => {
   const perms: any = {};
   Object.values(AppScreen).forEach(screen => {
-    if (role === 'Administrator') perms[screen] = AccessLevel.WRITE;
+    if (role === 'Admin' || role === 'Administrator') perms[screen] = AccessLevel.WRITE;
     else if (role === 'Manager') perms[screen] = screen.includes('SETTINGS') ? AccessLevel.NONE : AccessLevel.WRITE;
+    else if (role === 'Audit') perms[screen] = AccessLevel.READ;
     else if (role === 'Investor') {
       if ([AppScreen.DASHBOARD, AppScreen.DEPOSITS, AppScreen.PROJECT_MANAGEMENT, AppScreen.ANALYSIS].includes(screen)) {
         perms[screen] = AccessLevel.READ;
@@ -65,7 +88,14 @@ const getDefaultPermissions = (role: User['role']) => {
         perms[screen] = AccessLevel.NONE;
       }
     }
-    else perms[screen] = AccessLevel.READ;
+    else if (role === 'Member') {
+      if ([AppScreen.DASHBOARD, AppScreen.DEPOSITS].includes(screen)) {
+        perms[screen] = AccessLevel.READ;
+      } else {
+        perms[screen] = AccessLevel.NONE;
+      }
+    }
+    else perms[screen] = AccessLevel.NONE;
   });
   return perms;
 };
@@ -78,6 +108,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
   const [funds, setFunds] = useState<Fund[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [systemUsers, setSystemUsers] = useState<User[]>([]);
+  const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('online');
   const [lastOnlineAt, setLastOnlineAt] = useState<number | null>(Date.now());
   const [lastError, setLastError] = useState<{ message: string; type: 'error' | 'warning' } | null>(null);
@@ -126,6 +157,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       const data = response.data || [];
       setMembers(data.map((m: any) => ({ ...m, id: m._id || m.id })));
     } catch (e: any) { console.error("Fetch members failed", e); }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const data = await settingsService.get();
+      setSettings(data);
+    } catch (e: any) { console.error("Fetch settings failed", e); }
   };
 
   const fetchProjects = async () => {
@@ -188,7 +226,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
   };
 
   const fetchSystemUsers = async () => {
-    if (!user || (user.role !== 'Administrator' && user.role !== 'Manager')) return;
+    if (!user || (user.role !== 'Admin' && user.role !== 'Manager' && user.role !== 'Administrator')) return;
     try {
       const data = await authService.getAllUsers();
       const standardized = data.map((u: any) => ({
@@ -209,7 +247,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
   };
 
   const fetchNotifications = async () => {
-    if (!user || user.role !== 'Administrator') return;
+    if (!user || (user.role !== 'Admin' && user.role !== 'Administrator')) return;
     try {
       const data = await auditService.getNotifications();
       setNotifications({ count: data.count, items: data.notifications });
@@ -224,10 +262,12 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       fetchFunds();
       fetchTransactions();
       fetchAnalytics();
-      if (user.role === 'Administrator' || user.role === 'Manager') {
+      fetchSettings();
+      fetchSettings();
+      if (user.role === 'Admin' || user.role === 'Manager' || user.role === 'Administrator') {
         fetchSystemUsers();
       }
-      if (user.role === 'Administrator') {
+      if (user.role === 'Admin' || user.role === 'Administrator') {
         fetchNotifications();
       }
     }
@@ -278,6 +318,26 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       fetchAnalytics();
     } catch (e: any) {
       setLastError({ message: e.message || 'Failed to delete member', type: 'error' });
+      throw e;
+    }
+  };
+
+  const onboardMember = async (data: any) => {
+    if (connectionStatus === 'offline') {
+      setLastError({ message: 'Cannot onboard member while offline.', type: 'warning' });
+      return;
+    }
+    try {
+      const newItem = await memberService.onboard(data);
+      const standardized = { ...newItem, id: newItem._id || newItem.id };
+      setMembers(prev => [standardized, ...prev]);
+      fetchMembers();
+      fetchAnalytics();
+      if (data.systemAccess) {
+        fetchSystemUsers();
+      }
+    } catch (e: any) {
+      setLastError({ message: e.message || 'Failed to onboard member', type: 'error' });
       throw e;
     }
   };
@@ -523,18 +583,19 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     }
   };
 
-  const updateUserPermissions = async (userId: string, screen: AppScreen, level: AccessLevel) => {
+  const updateUser = async (userId: string, data: Partial<User>) => {
     try {
-      const userToUpdate = systemUsers.find(u => u.id === userId);
-      if (!userToUpdate) return;
+      await authService.updateUser(userId, data);
 
-      const updatedPermissions = { ...userToUpdate.permissions, [screen]: level };
-      await authService.updateUser(userId, { permissions: updatedPermissions });
+      setSystemUsers(prev => prev.map(u =>
+        u.id === userId ? { ...u, ...data } : u
+      ));
 
-      setSystemUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions: updatedPermissions } : u));
+      // Background refresh to ensure consistency
       fetchSystemUsers();
     } catch (e: any) {
-      setLastError({ message: 'Failed to update user permissions', type: 'error' });
+      setLastError({ message: 'Failed to update user', type: 'error' });
+      throw e;
     }
   };
 
@@ -559,14 +620,49 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
     }
   };
 
+  const updateSettings = async (s: Partial<SystemSettings>) => {
+    try {
+      const updated = await settingsService.update(s);
+      setSettings(updated);
+      setLastError({ message: 'Settings saved successfully', type: 'warning' });
+    } catch (e: any) {
+      setLastError({ message: 'Failed to update settings', type: 'error' });
+      throw e;
+    }
+  };
+
   const distributeDividends = async (data: any) => {
-    await financeService.distributeDividends(data);
-    await refreshData();
+    try {
+      await financeService.distributeDividends(data);
+      await refreshData();
+    } catch (e: any) {
+      setLastError({ message: e.response?.data?.message || 'Dividend distribution failed', type: 'error' });
+      throw e;
+    }
   };
 
   const transferEquity = async (data: any) => {
-    await financeService.transferEquity(data);
-    await refreshData();
+    try {
+      await financeService.transferEquity(data);
+      await refreshData();
+    } catch (e: any) {
+      setLastError({ message: e.response?.data?.message || 'Equity transfer failed', type: 'error' });
+      throw e;
+    }
+  };
+
+  const transferFunds = async (data: any) => {
+    const result = await financeService.transferFunds(data);
+    await fetchFunds();
+    await fetchTransactions();
+    await fetchAnalytics();
+    return result;
+  };
+
+  const reconcileFund = async (id: string) => {
+    const result = await financeService.reconcileFund(id);
+    await fetchFunds(); // Refresh fund status (ReconciliationStatus)
+    return result;
   };
 
   const refreshData = async () => {
@@ -577,23 +673,27 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       fetchTransactions(),
       fetchSystemUsers(),
       fetchAnalytics(),
-      user?.role === 'Administrator' ? fetchNotifications() : Promise.resolve()
+      fetchSettings(),
+      user?.role === 'Admin' || user?.role === 'Administrator' ? fetchNotifications() : Promise.resolve()
     ]);
   };
 
   return (
     <GlobalStateContext.Provider value={{
       members, projects, deposits, expenses, funds, systemUsers, transactions, currentUser: user,
+      settings,
       globalStats,
       addMember, updateMember, deleteMember, addProject, addDeposit, addExpense, editExpense, updateProject, deleteProject, addProjectUpdate, editProjectUpdate, deleteProjectUpdate,
       addFund, updateFund,
-      addSystemUser, updateUserPermissions, updateUserPassword, deleteUser,
+      addSystemUser, updateUser, updateUserPassword, deleteUser,
+      onboardMember,
+      updateSettings,
       connectionStatus, lastOnlineAt, checkConnection, lastError, clearError,
       refreshMembers: fetchMembers, refreshProjects: fetchProjects, refreshFunds: fetchFunds, refreshTransactions: fetchTransactions,
       refreshAnalytics: fetchAnalytics,
       notifications,
       refreshNotifications: fetchNotifications,
-      refreshData, distributeDividends, transferEquity
+      refreshData, distributeDividends, transferEquity, transferFunds, reconcileFund
     }}>
       {children}
     </GlobalStateContext.Provider>

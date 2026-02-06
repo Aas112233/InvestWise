@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Filter, ArrowUpRight, ArrowDownLeft, Briefcase, CreditCard, ChevronUp, ChevronDown, Download, Trash2, Loader2, RefreshCw } from 'lucide-react';
 import { Transaction } from '../types';
 import { useGlobalState } from '../context/GlobalStateContext';
@@ -23,31 +23,45 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
   const { transactions, refreshTransactions } = useGlobalState();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('All');
-  const [sortKey, setSortKey] = useState<SortKey>('date');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [paginatedTransactions, setPaginatedTransactions] = useState<{
+  const [paginatedData, setPaginatedData] = useState<{
     data: Transaction[];
     total: number;
     pages: number;
     totalInflow: number;
     totalOutflow: number;
+    meta?: any;
   }>({ data: [], total: 0, pages: 0, totalInflow: 0, totalOutflow: 0 });
   const [loading, setLoading] = useState(true);
 
-  const fetchPaginatedTransactions = async (page: number, search: string, limit: number) => {
+  const fetchPaginatedTransactions = async (page: number, limit: number, search: string, sort: string, order: 'asc' | 'desc', type: string) => {
     setLoading(true);
     try {
-      const result = await financeService.getTransactions({ page, limit, search });
-      setPaginatedTransactions({
+      const params: any = {
+        page,
+        limit,
+        search,
+        sortBy: sort,
+        sortOrder: order
+      };
+
+      if (type !== 'All') {
+        params.type = type;
+      }
+
+      const result = await financeService.getTransactions(params);
+      setPaginatedData({
         data: result.data.map((t: any) => ({ ...t, id: t._id || t.id })),
         total: result.total,
         pages: result.pages,
         totalInflow: result.totalInflow,
-        totalOutflow: result.totalOutflow
+        totalOutflow: result.totalOutflow,
+        meta: result.meta
       });
     } catch (err) {
       console.error('Failed to fetch paginated transactions:', err);
@@ -57,9 +71,9 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
     }
   };
 
-  React.useEffect(() => {
-    fetchPaginatedTransactions(currentPage, searchQuery, rowsPerPage);
-  }, [currentPage, searchQuery, rowsPerPage]);
+  useEffect(() => {
+    fetchPaginatedTransactions(currentPage, rowsPerPage, searchQuery, sortBy, sortOrder, filterType);
+  }, [currentPage, rowsPerPage, searchQuery, sortBy, sortOrder, filterType, transactions]);
   const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
     isVisible: false,
     message: '',
@@ -100,8 +114,8 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchPaginatedTransactions(currentPage, searchQuery, rowsPerPage);
     await refreshTransactions();
+    await fetchPaginatedTransactions(currentPage, rowsPerPage, searchQuery, sortBy, sortOrder, filterType);
     setTimeout(() => setRefreshing(false), 500);
   };
 
@@ -120,7 +134,7 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
       setProcessingId(transactionId);
       await financeService.deleteTransaction(transactionId);
       showNotification(t('transactions.archiveSuccess', lang));
-      fetchPaginatedTransactions(currentPage, searchQuery, rowsPerPage);
+      fetchPaginatedTransactions(currentPage, rowsPerPage, searchQuery, sortBy, sortOrder, filterType);
       await refreshTransactions();
       setDeleteDialog({ isOpen: false, transactionId: '', transactionDesc: '' });
     } catch (error: any) {
@@ -132,78 +146,27 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
 
 
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortKey(key);
-      setSortOrder('desc');
+      setSortBy(field);
+      setSortOrder(field === 'amount' ? 'desc' : 'asc');
     }
+    setCurrentPage(1);
   };
 
-  const filteredAndSortedTransactions = useMemo(() => {
-    return transactions
-      .filter(tx => {
-        const query = searchQuery.toLowerCase();
-        const memberName = (tx as any).memberId?.name || tx.member || '';
-        const matchesSearch =
-          tx.id?.toLowerCase().includes(query) ||
-          tx.description?.toLowerCase().includes(query) ||
-          memberName.toLowerCase().includes(query) ||
-          tx.type?.toLowerCase().includes(query);
+  // Removed client-side filteredAndSortedTransactions as we use server-side logic now
 
-        const matchesType = filterType === 'All' || tx.type === filterType;
-
-        return matchesSearch && matchesType;
-      })
-      .sort((a, b) => {
-        let aValue: any = a[sortKey as keyof Transaction];
-        let bValue: any = b[sortKey as keyof Transaction];
-
-        // Handle nested member name
-        if (sortKey === 'member') {
-          aValue = (a as any).memberId?.name || a.member || '';
-          bValue = (b as any).memberId?.name || b.member || '';
-        }
-
-        if (typeof aValue === 'string' && typeof bValue === 'string') {
-          return sortOrder === 'asc'
-            ? aValue.localeCompare(bValue)
-            : bValue.localeCompare(aValue);
-        }
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
-        }
-
-        // Default date sort if date is string
-        if (sortKey === 'date') {
-          return sortOrder === 'asc'
-            ? new Date(a.date).getTime() - new Date(b.date).getTime()
-            : new Date(b.date).getTime() - new Date(a.date).getTime();
-        }
-
-        return 0;
-      });
-  }, [transactions, searchQuery, sortKey, sortOrder, filterType]);
-
-  const totalInflow = transactions
-    .filter(t => (t.type === 'Deposit' || t.type === 'Earning') && (t.status === 'Success' || t.status as any === 'Completed'))
-    .reduce((acc, curr) => acc + curr.amount, 0);
-
-  const totalOutflow = transactions
-    .filter(t => (t.type === 'Investment' || t.type === 'Expense' || t.type === 'Withdrawal') && (t.status === 'Success' || t.status as any === 'Completed'))
-    .reduce((acc, curr) => acc + curr.amount, 0);
-
-  const SortIcon = ({ column }: { column: SortKey }) => {
-    if (sortKey !== column) return null;
-    return sortOrder === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortBy !== column) return <ChevronUp className="opacity-0 group-hover:opacity-30 transition-opacity" size={14} />;
+    return sortOrder === 'asc' ? <ChevronUp size={14} className="text-brand" /> : <ChevronDown size={14} className="text-brand" />;
   };
 
   const totals = useMemo(() => ({
-    inflow: paginatedTransactions.totalInflow,
-    outflow: paginatedTransactions.totalOutflow
-  }), [paginatedTransactions]);
+    inflow: paginatedData.totalInflow,
+    outflow: paginatedData.totalOutflow
+  }), [paginatedData]);
 
   const getTypeIcon = (type: Transaction['type']) => {
     switch (type) {
@@ -266,7 +229,7 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
           </div>
         </div>
         <ExportMenu
-          data={paginatedTransactions.data}
+          data={paginatedData.data}
           columns={exportColumns}
           fileName={`transactions_${new Date().toISOString().split('T')[0]}`}
           title={t('transactions.globalReport', lang)}
@@ -327,20 +290,23 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-gray-50/30 dark:bg-white/5">
-                  <th onClick={() => handleSort('id')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                    <div className="flex items-center gap-2">{t('transactions.txRef', lang)} <SortIcon column="id" /></div>
-                  </th>
-                  <th onClick={() => handleSort('date')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                  <th onClick={() => handleSort('date')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap hover:text-brand transition-colors">
                     <div className="flex items-center gap-2">{t('transactions.date', lang)} <SortIcon column="date" /></div>
                   </th>
-                  <th onClick={() => handleSort('type')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                  <th onClick={() => handleSort('id')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap hover:text-brand transition-colors">
+                    <div className="flex items-center gap-2">{t('transactions.txRef', lang)} <SortIcon column="id" /></div>
+                  </th>
+                  <th onClick={() => handleSort('type')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap hover:text-brand transition-colors">
                     <div className="flex items-center gap-2">{t('transactions.type', lang)} <SortIcon column="type" /></div>
                   </th>
                   <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">{t('transactions.description', lang)}</th>
-                  <th onClick={() => handleSort('amount')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                  <th onClick={() => handleSort('amount')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap hover:text-brand transition-colors">
                     <div className="flex items-center justify-end gap-2">{t('transactions.valuation', lang)} <SortIcon column="amount" /></div>
                   </th>
-                  <th onClick={() => handleSort('status')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                  <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    {t('masterForm.runningBalance', lang) || 'Running Balance'}
+                  </th>
+                  <th onClick={() => handleSort('status')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap hover:text-brand transition-colors">
                     <div className="flex items-center justify-end gap-2">{t('transactions.status', lang)} <SortIcon column="status" /></div>
                   </th>
                   <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
@@ -358,14 +324,14 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
                       </div>
                     </td>
                   </tr>
-                ) : paginatedTransactions.data.length === 0 ? (
+                ) : paginatedData.data.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-10 py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-xs">
                       {t('transactions.noTransactions', lang)}
                     </td>
                   </tr>
                 ) : (
-                  paginatedTransactions.data.map((tx) => (
+                  paginatedData.data.map((tx) => (
                     <tr key={tx.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
                       <td className="px-10 py-6">
                         <span className="text-[10px] font-black text-brand uppercase tracking-tighter" title={tx.id}>#{tx.id.substring(0, 8)}...</span>
@@ -398,6 +364,15 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
                         BDT {tx.amount.toLocaleString()}
                       </td>
                       <td className="px-10 py-6 text-right">
+                        {tx.balanceAfter !== undefined ? (
+                          <span className="text-xs font-black text-gray-400 dark:text-gray-500">
+                            {formatCurrency(tx.balanceAfter)}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-gray-300">N/A</span>
+                        )}
+                      </td>
+                      <td className="px-10 py-6 text-right">
                         <span className={`inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${tx.status === 'Success' || tx.status as any === 'Completed' ? 'bg-emerald-500/10 text-emerald-500' :
                           tx.status === 'Processing' || tx.status as any === 'Pending' ? 'bg-amber-400/10 text-amber-500' :
                             'bg-rose-500/10 text-rose-500'
@@ -425,10 +400,15 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
             </table>
           </div>
 
-          <div className="px-10 py-8 border-t border-gray-50 dark:border-white/5">
+          <div className="px-10 py-8 border-t border-gray-50 dark:border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+              {paginatedData.meta && (
+                <>Showing {paginatedData.meta.from} to {paginatedData.meta.to} of {paginatedData.meta.total} records</>
+              )}
+            </div>
             <Pagination
               currentPage={currentPage}
-              totalPages={paginatedTransactions.pages}
+              totalPages={paginatedData.pages}
               onPageChange={setCurrentPage}
               rowsPerPage={rowsPerPage}
               onRowsPerPageChange={(newLimit) => {

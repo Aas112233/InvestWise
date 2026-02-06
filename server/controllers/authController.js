@@ -52,7 +52,7 @@ const registerUser = asyncHandler(async (req, res) => {
         name,
         email,
         password,
-        role: role || 'Investor',
+        role: role || 'Member',
         memberId,
         permissions: permissions || {}
     });

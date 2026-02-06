@@ -68,16 +68,16 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, change, isPositive = 
   } else if (isDarkVariant) {
     cardClass = "bg-dark text-white dark:bg-brand dark:text-dark shadow-[0_30px_60px_-15px_rgba(0,0,0,0.4)] border-transparent";
   } else {
-    cardClass = "bg-white/80 dark:bg-white/5 backdrop-blur-2xl border border-white/20 dark:border-white/5 text-dark dark:text-white transition-all hover:shadow-2xl hover:scale-[1.02] hover:border-brand/30 dark:hover:border-brand/30";
+    cardClass = "bg-white/80 dark:bg-white/5 backdrop-blur-2xl border-white/20 dark:border-white/5 text-dark dark:text-white hover:shadow-2xl hover:border-brand/30 dark:hover:border-brand/30";
   }
 
   return (
     <div
       onClick={() => rawValue !== undefined && setIsExpanded(!isExpanded)}
-      className={`relative p-6 xl:p-8 rounded-[3.5rem] min-w-[240px] flex-1 transition-all duration-700 hover:-translate-y-3 hover:rotate-x-12 perspective-2000 group ${rawValue !== undefined ? 'cursor-pointer' : 'cursor-default'} border overflow-hidden ${cardClass}`}
+      className={`relative p-6 xl:p-8 rounded-[3.5rem] min-w-[240px] flex-1 group ${rawValue !== undefined ? 'cursor-pointer' : 'cursor-default'} border overflow-hidden ${cardClass} transform-gpu will-change-transform transition-transform duration-500 ease-out hover:-translate-y-2 hover:scale-[1.02]`}
     >
-      {/* 3D Depth Layer - Dynamic Glow */}
-      <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none bg-gradient-to-tr ${isBrandVariant ? 'from-white/40 to-transparent' :
+      {/* Glow Layer */}
+      <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none bg-gradient-to-tr ${isBrandVariant ? 'from-white/40 to-transparent' :
         isDarkVariant ? 'from-brand/10 to-transparent' : 'from-brand/5 to-transparent'
         }`} />
 
@@ -96,7 +96,7 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, change, isPositive = 
           </div>
         </div>
 
-        <div className="mb-8 transform-gpu transition-transform group-hover:translate-z-20 group-hover:scale-105 duration-700 origin-left">
+        <div className="mb-8 transform-gpu transition-transform duration-500 ease-out group-hover:scale-[1.03] origin-left">
           {(() => {
             // Only split decimal if it's a full number (not compact notation with k/M/B)
             const hasCompactSuffix = /[kMB]$/.test(displayValue);
@@ -145,23 +145,29 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, change, isPositive = 
           )}
         </div>
 
-        {/* Animated 3D Bar Visualizer with depth */}
+        {/* Bar Visualizer */}
         <div className="h-14 w-full flex items-end gap-[6px]">
           {[45, 75, 55, 90, 60, 100, 80, 110].map((h, i) => (
             <div
               key={i}
-              className={`flex-1 rounded-t-2xl transition-all duration-1000 group-hover:translate-y-[-8px] group-hover:shadow-2xl ${isBrandVariant ? 'bg-dark/20' :
+              className={`flex-1 rounded-t-2xl transform-gpu transition-transform duration-700 ease-out group-hover:-translate-y-1 ${isBrandVariant ? 'bg-dark/20' :
                 isDarkVariant ? 'bg-brand/30 dark:bg-dark/30' :
                   'bg-gray-200/50 dark:bg-brand/20'
                 }`}
-              style={{ height: `${Math.min(h, 100)}%`, opacity: (i + 1) / 8, transitionDelay: `${i * 40}ms` }}
+              style={{
+                height: `${Math.min(h, 100)}%`,
+                opacity: (i + 1) / 8,
+                transitionDelay: `${i * 30}ms`
+              }}
             />
           ))}
         </div>
       </div>
 
-      {/* Premium depth sheen */}
-      <div className="absolute top-[-100%] left-[-100%] w-[300%] h-[300%] bg-gradient-to-br from-white/20 via-transparent to-transparent rotate-45 translate-y-[100%] group-hover:translate-y-[-100%] transition-transform duration-[2000ms] pointer-events-none" />
+      {/* Shine effect - simplified */}
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none overflow-hidden">
+        <div className="absolute top-0 -left-full w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12 group-hover:left-full transition-all duration-1000 ease-out" />
+      </div>
     </div>
   );
 };

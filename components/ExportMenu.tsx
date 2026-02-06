@@ -242,7 +242,7 @@ const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title,
                     </div>
 
                     <div className="bg-gray-50/50 dark:bg-white/5 px-6 py-3 border-t border-gray-100 dark:border-white/5">
-                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest text-center">Standard ISO Export Protocol</p>
+
                     </div>
                 </div>
             )}

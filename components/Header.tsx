@@ -59,7 +59,9 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, isDarkMode, toggleTheme
         <div className="relative group">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-black dark:group-focus-within:text-white transition-colors" size={18} />
           <input
-            type="text"
+            type="search"
+            name="app-search"
+            autoComplete="off"
             placeholder={t('common.search', lang)}
             className="w-full bg-white dark:bg-[#1A221D] pl-14 pr-16 py-3.5 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/5 focus:ring-2 focus:ring-[#151D18] dark:focus:ring-[#BFF300] outline-none text-sm transition-all card-shadow dark:text-white dark:placeholder-gray-500"
           />
@@ -109,7 +111,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, isDarkMode, toggleTheme
           <button
             onClick={() => {
               setShowNotifications(!showNotifications);
-              if (!showNotifications && user.role === 'Administrator') refreshNotifications();
+              if (!showNotifications && user.role === 'Admin') refreshNotifications();
             }}
             className="p-3 bg-white dark:bg-[#1A221D] rounded-xl ring-1 ring-gray-100 dark:ring-white/5 text-gray-500 hover:text-black dark:hover:text-white transition-colors relative"
           >

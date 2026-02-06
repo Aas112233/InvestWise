@@ -21,10 +21,11 @@ import { projectService } from '../services/api';
 import { ModalForm, FormInput, FormSelect, FormTextarea, FormLabel } from './ui/FormElements';
 import PermissionGuard from './PermissionGuard';
 import { usePermission } from '../hooks/usePermission';
+import ProjectTransactionMaster from './ProjectTransactionMaster';
 
 const SHARE_VALUE = 1000;
 
-type TabType = 'Portfolio' | 'Capital Flow' | 'Ops Update' | 'Performance';
+type TabType = 'Portfolio' | 'Capital Flow' | 'Project Transactions' | 'Performance';
 
 interface ProjectManagementProps {
   lang: Language;
@@ -163,25 +164,9 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
 
   const [tempShares, setTempShares] = useState('10');
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [isMasterTxModalOpen, setIsMasterTxModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
-  const [editingUpdate, setEditingUpdate] = useState<{ projectId: string; updateId: string } | null>(null);
-
-  // Form State for Updates
-  const [updateForm, setUpdateForm] = useState({
-    projectId: '',
-    type: 'Earning' as 'Earning' | 'Expense',
-    amount: '',
-    description: '',
-    date: new Date().toISOString().split('T')[0],
-  });
-
-  // Initialize updateForm.projectId
-  useEffect(() => {
-    if (globalProjects.length > 0 && !updateForm.projectId) {
-      setUpdateForm(prev => ({ ...prev, projectId: globalProjects[0].id }));
-    }
-  }, [globalProjects]);
 
   const showNotification = (message: string, type: ToastType = 'success') => {
     setToast({ isVisible: true, message, type });
@@ -254,6 +239,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
     setParticipationList([]);
     setIsEditMode(false);
     setEditingProjectId(null);
+    setIsModalOpen(false);
   };
 
   const handleEditClick = (project: Project) => {
@@ -300,17 +286,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
     });
   };
 
-  const handleEditUpdate = (update: any) => {
-    setUpdateForm({
-      projectId: update.projectId,
-      type: update.type,
-      amount: update.amount.toString(),
-      description: update.description,
-      date: new Date(update.date).toISOString().split('T')[0],
-    });
-    setEditingUpdate({ projectId: update.projectId, updateId: update._id || update.id });
-    setIsUpdateModalOpen(true);
-  };
+  // Removed handleEditUpdate as per instructions. Existing updates are for audit only.
 
   const handleDeleteUpdate = (update: any) => {
     setDialog({
@@ -339,63 +315,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
     });
   };
 
-  const executeProjectUpdate = async () => {
-    setIsSubmitting(true);
-    try {
-      const payload = {
-        ...updateForm,
-        date: new Date(updateForm.date)
-      };
-
-      if (editingUpdate) {
-        await editProjectUpdate(editingUpdate.projectId, editingUpdate.updateId, payload);
-        showNotification("Project update record modified successfully", 'success');
-      } else {
-        await addProjectUpdate(updateForm.projectId, payload);
-        showNotification(t('projects.updateSuccess', lang)
-          .replace('{type}', updateForm.type === 'Earning' ? t('projects.earning', lang) : t('projects.expense', lang))
-          .replace('{amount}', formatCurrency(parseFloat(updateForm.amount))), 'success');
-      }
-
-      setIsUpdateModalOpen(false);
-      closeDialog();
-      setUpdateForm({ ...updateForm, amount: '', description: '' });
-      setEditingUpdate(null);
-    } catch (error: any) {
-      showNotification(error.message || "Failed to record update", 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleReviewUpdate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!updateForm.projectId || !updateForm.amount || !updateForm.description) {
-      showNotification(t('analysis.fillAll', lang) || "Please fill all required fields", 'error');
-      return;
-    }
-    const amount = parseFloat(updateForm.amount);
-    if (!amount || amount <= 0) {
-      showNotification("Enter a valid amount.", "error");
-      return;
-    }
-
-    const project = globalProjects.find(p => p.id === updateForm.projectId);
-
-    setDialog({
-      isOpen: true,
-      type: 'review',
-      title: editingUpdate ? 'Confirm Modification' : t('projects.authorizeLedger', lang),
-      message: editingUpdate ? 'Are you sure you want to modify this historical record? This will adjust the ledger and fund balances.' : t('projects.ledgerConfirm', lang),
-      details: [
-        { label: t('projects.sectorClassification', lang), value: project?.title || 'Unknown' },
-        { label: t('projects.entryType', lang), value: t(`projects.${updateForm.type.toLowerCase() === 'earning' ? 'earning' : 'expense'}`, lang) },
-        { label: t('projects.magnitude', lang), value: `${t('common.bdt', lang)} ${amount.toLocaleString()}` },
-        { label: t('projects.strategicEventMemo', lang), value: updateForm.description }
-      ],
-      onConfirm: executeProjectUpdate
-    });
-  };
+  // Removed executeProjectUpdate and handleReviewUpdate as per instructions.
 
   const handleStatusChange = (project: Project, newStatus: Project['status']) => {
     updateProject({ ...project, status: newStatus });
@@ -528,12 +448,14 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
             targetId="projects-snapshot-target"
           />
           <PermissionGuard screen={AppScreen.PROJECT_MANAGEMENT} requiredLevel={AccessLevel.WRITE}>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20 active:scale-95"
-            >
-              <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20 active:scale-95"
+              >
+                <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
+              </button>
+            </div>
           </PermissionGuard>
         </div>
       </div>
@@ -542,7 +464,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
       <div id="projects-snapshot-target" className="space-y-10">
         <div className="bg-white/50 dark:bg-white/5 rounded-[2.5rem] p-2 backdrop-blur-xl border border-gray-100 dark:border-white/5 flex items-center gap-6 justify-between mb-8">
           <div className="flex gap-4">
-            {(['Portfolio', 'Capital Flow', 'Ops Update', 'Performance'] as TabType[]).map((tab) => {
+            {(['Portfolio', 'Capital Flow', 'Project Transactions', 'Performance'] as TabType[]).map((tab) => {
               const tabKey = tab.split(' ').map((word, i) => i === 0 ? word.toLowerCase() : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join('');
               return (
                 <button
@@ -763,23 +685,21 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
             </div>
           )}
 
-          {activeTab === 'Ops Update' && (
+          {activeTab === 'Project Transactions' && (
             <div className="space-y-10 animate-in fade-in duration-500">
               <div className="flex items-center justify-between px-6">
                 <div>
-                  <h3 className="text-3xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none mb-2">{t('projects.opsUpdate', lang)}</h3>
-                  <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('dashboard.trendDesc', lang)}</p>
+                  <h3 className="text-3xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none mb-2">{t('masterForm.title', lang)}</h3>
+                  <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('masterForm.subtitle', lang)}</p>
                 </div>
                 <PermissionGuard screen={AppScreen.PROJECT_MANAGEMENT} requiredLevel={AccessLevel.WRITE}>
                   <button
                     onClick={() => {
-                      setEditingUpdate(null);
-                      setUpdateForm({ projectId: globalProjects[0]?.id || '', type: 'Earning', amount: '', description: '', date: new Date().toISOString().split('T')[0] });
-                      setIsUpdateModalOpen(true);
+                      setIsMasterTxModalOpen(true);
                     }}
                     className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20"
                   >
-                    <Plus size={20} strokeWidth={3} /> {t('projects.recordEvent', lang)}
+                    <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
                   </button>
                 </PermissionGuard>
               </div>
@@ -803,7 +723,8 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
                         <th className="px-10 py-5">{t('projects.ventureEntity', lang)}</th>
                         <th className="px-10 py-5">{t('projects.eventDetail', lang)}</th>
                         <th className="px-10 py-5">{t('projects.timestamp', lang)}</th>
-                        <th className="px-10 py-5 text-right">{t('projects.ledgerImpact', lang)}</th>
+                        <th className="px-10 py-5 text-right">{t('masterForm.preBalance', lang) || 'Prev Balance'}</th>
+                        <th className="px-10 py-5 text-right font-black text-dark dark:text-brand">{t('masterForm.postBalance', lang) || 'New Balance'}</th>
                         {hasWritePermission && (
                           <th className="px-10 py-5 text-right">Actions</th>
                         )}
@@ -818,19 +739,19 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
                             <span className={`text-[9px] font-black uppercase tracking-widest ${update.type === 'Earning' ? 'text-emerald-500' : 'text-rose-500'}`}>{update.type === 'Earning' ? t('projects.earning', lang) : t('projects.expense', lang)}</span>
                           </td>
                           <td className="px-10 py-8 text-[11px] font-bold text-gray-400 font-mono tracking-tighter">{new Date(update.date).toLocaleDateString()}</td>
-                          <td className={`px-10 py-8 text-right font-black text-xl tracking-tighter ${update.type === 'Earning' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                            {update.type === 'Earning' ? '+' : '-'}{formatCurrency(update.amount)}
+                          <td className={`px-10 py-8 text-right font-black text-xl tracking-tighter ${update.type === 'Earning' ? '+' : '-'} ${update.type === 'Earning' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                            {formatCurrency(update.amount)}
+                          </td>
+                          <td className="px-10 py-8 text-right text-[11px] font-bold text-gray-400">
+                            {formatCurrency(update.balanceBefore || 0)}
+                          </td>
+                          <td className="px-10 py-8 text-right text-[11px] font-black dark:text-white">
+                            {formatCurrency(update.balanceAfter || 0)}
                           </td>
                           {hasWritePermission && (
                             <td className="px-10 py-8 text-right">
                               <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  onClick={() => handleEditUpdate(update)}
-                                  className="p-2 bg-gray-100 dark:bg-white/5 text-dark dark:text-gray-400 rounded-xl hover:bg-brand hover:text-white transition-all shadow-sm"
-                                  title="Edit Record"
-                                >
-                                  <Edit2 size={14} />
-                                </button>
+                                {/* Edit button removed as per instructions */}
                                 <button
                                   onClick={() => handleDeleteUpdate(update)}
                                   className="p-2 bg-rose-50 dark:bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm"
@@ -1118,66 +1039,17 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
         </div>
       </ModalForm>
 
-      {/* RECORD UPDATE MODAL */}
-      <ModalForm
-        isOpen={isUpdateModalOpen}
-        onClose={() => {
-          setIsUpdateModalOpen(false);
-          setEditingUpdate(null);
+      <ProjectTransactionMaster
+        lang={lang}
+        isOpen={isMasterTxModalOpen}
+        onClose={() => setIsMasterTxModalOpen(false)}
+        onSuccess={() => {
+          fetchPaginatedProjects(currentPage, searchQuery, rowsPerPage);
+          handleRefresh();
         }}
-        title={t('projects.ventureUpdate', lang)}
-        subtitle={t('projects.ledgerEntry', lang)}
-        onSubmit={handleReviewUpdate}
-        submitLabel={t('projects.commitEntry', lang)}
+        initialProjectId={selectedProjectId || undefined}
+      />
 
-        loading={isSubmitting}
-      >
-        <div className="space-y-6">
-          <div className="bg-brand/10 p-6 rounded-3xl border border-brand/20 mb-6">
-            <p className="text-[10px] font-black text-brand uppercase tracking-widest mb-1">{t('projects.projectContext', lang)}</p>
-            <p className="text-xl font-black text-dark dark:text-white">
-              {globalProjects.find(p => p.id === updateForm.projectId)?.title || t('projects.selectProject', lang)}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-6">
-            <FormSelect
-              label={t('projects.eventType', lang)}
-              value={updateForm.type}
-              onChange={e => setUpdateForm({ ...updateForm, type: e.target.value as any })}
-              options={[
-                { value: "Earning", label: t('projects.earning', lang) },
-                { value: "Expense", label: t('projects.expense', lang) }
-              ]}
-              required
-            />
-            <FormSelect
-              label={t('projects.selectProject', lang)}
-              value={updateForm.projectId}
-              onChange={e => setUpdateForm({ ...updateForm, projectId: e.target.value })}
-              options={globalProjects.map(p => ({ value: p.id, label: p.title }))}
-              required
-            />
-          </div>
-
-          <FormInput
-            label={t('deposits.amountBDT', lang)}
-            type="number"
-            value={updateForm.amount}
-            onChange={e => setUpdateForm({ ...updateForm, amount: e.target.value })}
-            placeholder="0.00"
-            required
-          />
-
-          <FormTextarea
-            label={t('projects.eventDescription', lang)}
-            value={updateForm.description}
-            onChange={e => setUpdateForm({ ...updateForm, description: e.target.value })}
-            placeholder={t('projects.descPlaceholder', lang)}
-            required
-          />
-        </div>
-      </ModalForm>
       <ActionDialog
         isOpen={dialog.isOpen}
         type={dialog.type || 'confirm'}

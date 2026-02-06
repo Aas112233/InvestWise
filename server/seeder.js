@@ -52,7 +52,7 @@ const importData = async () => {
             name: 'Admin User',
             email: 'admin@investwise.com',
             password: 'password123', // Will be hashed by pre-save hook
-            role: 'Administrator',
+            role: 'Admin',
             permissions: {
                 DASHBOARD: 'WRITE',
                 MEMBERS: 'WRITE',

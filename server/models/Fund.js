@@ -25,18 +25,36 @@ const fundSchema = mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Project',
         },
+        accountNumber: {
+            type: String,
+            unique: true,
+            sparse: true,
+            uppercase: true,
+            index: true
+        },
         balance: {
             type: Number,
             required: true,
             default: 0,
         },
-        description: {
+        lastReconciledAt: {
+            type: Date,
+        },
+        reconciliationStatus: {
             type: String,
+            enum: ['VERIFIED', 'DISCREPANCY', 'PENDING'],
+            default: 'PENDING'
         },
         handlingOfficer: {
             type: String, // Name of the person responsible for this fund
         },
-        // Potentially track history here or in Transaction model
+        description: {
+            type: String,
+        },
+        isSystemAsset: {
+            type: Boolean,
+            default: false
+        }
     },
     {
         timestamps: true,
