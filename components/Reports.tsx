@@ -79,15 +79,6 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
       const fileName = `${activeType.replace(/\s+/g, '_')}_${periodValue}.${format.toLowerCase() === 'excel' ? 'xlsx' : format.toLowerCase()}`;
       const blob = await reportService.generate(activeType, params.toString());
 
-      const reportData = {
-        name: fileName,
-        type: activeType,
-        size: `${(blob.size / (1024 * 1024)).toFixed(1)} MB`,
-        format: format,
-        fiscalMonth: periodValue
-      };
-
-      await reportService.create(reportData);
       triggerDownload(fileName, blob);
       showNotification(`${activeType} report generated and downloaded.`, 'success');
     } catch (error) {
@@ -162,7 +153,7 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
             { header: 'Description', key: 'desc' }
           ]}
           fileName={`reporting_templates_${new Date().toISOString().split('T')[0]}`}
-          title="Intelligence Template Catalog"
+          title="Report Template Catalog"
           lang={lang}
           targetId="reports-config-capture"
         />
