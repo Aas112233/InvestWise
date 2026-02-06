@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Mail, Phone, MoreVertical, Plus, Edit2, Trash2, X, Search, Filter, Hash, UserCheck, Lock, User as UserIcon, ShieldCheck, Key, Info, RefreshCw } from 'lucide-react';
+import { Mail, Phone, MoreVertical, Plus, Edit2, Trash2, X, Search, Filter, Hash, UserCheck, Lock, User as UserIcon, ShieldCheck, Key, Info, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Member, User, AccessLevel, AppScreen } from '../types';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { memberService } from '../services/api';
@@ -17,18 +17,15 @@ import PermissionGuard from './PermissionGuard';
 
 const SHARE_VALUE = 1000;
 
-const generateId = () => {
-  // Use a cleaner, slightly more robust random string if not using a full UUID library on frontend
-  // Ideally this should come from backend, but for immediate pre-fill:
-  return Math.floor(100000 + Math.random() * 900000).toString();
-};
+// Member ID is now handled by server-side sequential logic or explicit user input.
+// Initial pre-fill can be empty or a simple placeholder.
 
 interface MembersProps {
   lang: Language;
 }
 
 const Members: React.FC<MembersProps> = ({ lang }) => {
-  const { members, addMember, updateMember, deleteMember, addSystemUser, systemUsers, refreshMembers, currentUser } = useGlobalState();
+  const { members, addMember, updateMember, deleteMember, addSystemUser, onboardMember, systemUsers, refreshMembers, currentUser } = useGlobalState();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [createUserAccess, setCreateUserAccess] = useState(false);
@@ -36,22 +33,26 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [sortBy, setSortBy] = useState('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [paginatedMembers, setPaginatedMembers] = useState<{
     data: Member[];
     total: number;
     pages: number;
+    meta?: any;
   }>({ data: [], total: 0, pages: 0 });
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchPaginatedMembers = async (page: number, search: string, limit: number) => {
+  const fetchPaginatedMembers = async (page: number, search: string, limit: number, sort: string, order: 'asc' | 'desc') => {
     setLoading(true);
     try {
-      const result = await memberService.getAll({ page, limit, search });
+      const response = await memberService.getAll({ page, limit, search, sortBy: sort, sortOrder: order });
       setPaginatedMembers({
-        data: result.data.map((m: any) => ({ ...m, id: m._id || m.id })),
-        total: result.total,
-        pages: result.pages
+        data: response.data.map((m: any) => ({ ...m, id: m._id || m.id })),
+        total: response.meta.total,
+        pages: response.meta.pages,
+        meta: response.meta
       });
     } catch (err) {
       console.error('Failed to fetch paginated members:', err);
@@ -62,12 +63,22 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
   };
 
   React.useEffect(() => {
-    fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage);
-  }, [currentPage, searchQuery, rowsPerPage]);
+    fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage, sortBy, sortOrder);
+  }, [currentPage, searchQuery, rowsPerPage, sortBy, sortOrder]);
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+    setCurrentPage(1);
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage);
+    await fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage, sortBy, sortOrder);
     await refreshMembers();
     setTimeout(() => setRefreshing(false), 500);
   };
@@ -137,7 +148,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
         email: '',
         role: 'Associate Member',
         shares: '0',
-        memberId: generateId(),
+        memberId: '', // Server will generate if empty
         password: '',
         userRole: 'Investor'
       });
@@ -162,71 +173,48 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
     });
   };
 
-  const createSystemAccess = async (member: Member) => {
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      memberId: member.memberId,
-      name: member.name,
-      email: member.email,
-      role: formData.userRole,
-      avatar: member.avatar,
-      lastLogin: 'Never',
-      password: formData.password,
-      permissions: {} as any
-    };
-
-    try {
-      await addSystemUser(newUser);
-      await createSystemAccess(member);
-      showNotification(t('members.onboardedAccess', lang).replace('{name}', member.name));
-    } catch (err: any) {
-      showNotification(t('members.portalProvisionError', lang).replace('{error}', err.message), "error");
-    }
-  };
+  // Onboarding is now handled via unified onboardMember backend logic.
+  // This legacy function is removed for atomicity.
 
   const executeSubmit = async () => {
     setIsSubmitting(true);
     try {
       const sharesNum = parseInt(formData.shares) || 0;
 
-      const newMember: Member = {
-        id: editingMember?.id || Math.random().toString(36).substr(2, 9),
-        memberId: formData.memberId,
-        name: formData.name,
-        phone: formData.phone,
-        email: formData.email,
-        role: formData.role,
-        shares: editingMember ? editingMember.shares : sharesNum,
-        totalContributed: editingMember ? editingMember.totalContributed : (sharesNum * SHARE_VALUE),
-        lastActive: 'Just now',
-        avatar: '', // Letter avatars are generated from name on-the-fly
-        status: 'active',
-        hasUserAccess: createUserAccess
-      };
-
       if (!editingMember) {
-        await addMember(newMember);
-
-        if (createUserAccess) {
-          await createSystemAccess(newMember);
-        } else {
-          showNotification(t('members.onboarded', lang).replace('{name}', formData.name));
-        }
+        // Unified Onboarding (Enterprise Grade)
+        await onboardMember({
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          role: formData.role,
+          shares: sharesNum,
+          systemAccess: createUserAccess,
+          password: formData.password,
+          userRole: formData.userRole,
+          status: 'active'
+        });
+        showNotification(createUserAccess ? t('members.onboardedAccess', lang).replace('{name}', formData.name) : t('members.onboarded', lang).replace('{name}', formData.name));
       } else {
-        await updateMember(newMember);
-
-        if (createUserAccess && !editingMember.hasUserAccess) {
-          await createSystemAccess(newMember);
-        } else {
-          showNotification(t('members.updated', lang).replace('{name}', formData.name));
-        }
+        // Standard Update (Profile Only - Financials are immutable here)
+        const updatedMember: any = {
+          id: editingMember.id, // Explicit ID for service
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          role: formData.role,
+          hasUserAccess: createUserAccess
+        };
+        await updateMember(updatedMember);
+        showNotification(t('members.updated', lang).replace('{name}', formData.name));
       }
 
       handleCloseModal();
       closeDialog();
-      fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage);
+      fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage, sortBy, sortOrder);
     } catch (err: any) {
-      showNotification(err.message || t('members.processError', lang), "error");
+      const errorMessage = err.response?.data?.message || err.message || t('members.processError', lang);
+      showNotification(errorMessage, "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -264,7 +252,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
       await deleteMember(memberId); // Use Context method
       showNotification(t('members.deleteSuccess', lang).replace('{name}', member.name));
       closeDialog();
-      fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage);
+      fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage, sortBy, sortOrder);
     } catch (err: any) {
       // Error handling is actually done in Context too, but we catch re-thrown error here to close dialog/show UI
       // Context sets lastError, but we also want local toast if desired.
@@ -308,6 +296,29 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             >
               <RefreshCw size={20} />
             </button>
+            <PermissionGuard screen={AppScreen.MEMBERS} requiredLevel={AccessLevel.WRITE}>
+              <button
+                onClick={async () => {
+                  if (confirm(t('members.confirmRecalculate', lang) || "Recalculate all financial data? This may take a moment.")) {
+                    setRefreshing(true);
+                    try {
+                      const res = await memberService.recalculateFinancials();
+                      showNotification(res.message);
+                      await handleRefresh();
+                    } catch (err: any) {
+                      showNotification(err.message || "Recalculation failed", "error");
+                    } finally {
+                      setRefreshing(false);
+                    }
+                  }
+                }}
+                className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 transition-all ${refreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title="Recalculate Financials"
+                disabled={refreshing}
+              >
+                <Hash size={20} />
+              </button>
+            </PermissionGuard>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -370,12 +381,32 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-gray-50/30 dark:bg-white/5 text-[11px] font-black text-gray-500 uppercase tracking-widest">
-                  <th className="px-10 py-6 text-left">{t('members.partnerIdentity', lang)}</th>
-                  <th className="px-10 py-6 text-left">{t('members.memberId', lang)}</th>
+                  <th className="px-10 py-6 text-left cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('name')}>
+                    <div className="flex items-center gap-2">
+                      {t('members.partnerIdentity', lang)}
+                      {sortBy === 'name' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+                    </div>
+                  </th>
+                  <th className="px-10 py-6 text-left cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('memberId')}>
+                    <div className="flex items-center gap-2">
+                      {t('members.memberId', lang)}
+                      {sortBy === 'memberId' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+                    </div>
+                  </th>
                   <th className="px-10 py-6 text-left">{t('members.contactInfo', lang)}</th>
                   <th className="px-10 py-6 text-center">{t('members.systemAccess', lang)}</th>
-                  <th className="px-10 py-6 text-center">{t('members.shares', lang)}</th>
-                  <th className="px-10 py-6 text-right">{t('members.valuation', lang)}</th>
+                  <th className="px-10 py-6 text-center cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('shares')}>
+                    <div className="flex items-center justify-center gap-2">
+                      {t('members.shares', lang)}
+                      {sortBy === 'shares' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+                    </div>
+                  </th>
+                  <th className="px-10 py-6 text-right cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('totalContributed')}>
+                    <div className="flex items-center justify-end gap-2">
+                      {t('members.valuation', lang)}
+                      {sortBy === 'totalContributed' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+                    </div>
+                  </th>
                   <th className="px-10 py-6 text-right">{t('members.action', lang)}</th>
                 </tr>
               </thead>
@@ -445,7 +476,12 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             </table>
           </div>
 
-          <div className="px-10 py-8 border-t border-gray-50 dark:border-white/5">
+          <div className="px-10 py-8 border-t border-gray-50 dark:border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+              {paginatedMembers.meta && (
+                <>Showing {paginatedMembers.meta.from} to {paginatedMembers.meta.to} of {paginatedMembers.meta.total} stakeholders</>
+              )}
+            </div>
             <Pagination
               currentPage={currentPage}
               totalPages={paginatedMembers.pages}
@@ -539,9 +575,11 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                     value={formData.userRole}
                     onChange={e => setFormData({ ...formData, userRole: e.target.value as any })}
                     options={[
-                      { value: "Investor", label: "Investor (View Only)" },
-                      { value: "Manager", label: "Manager (Edit Access)" },
-                      { value: "Auditor", label: "Auditor (Compliance)" }
+                      { value: "Admin", label: t('members.adminRole', lang) },
+                      { value: "Manager", label: t('members.managerRole', lang) },
+                      { value: "Audit", label: t('members.auditRole', lang) },
+                      { value: "Investor", label: t('members.investorRole', lang) },
+                      { value: "Member", label: t('members.memberRole', lang) }
                     ]}
                     icon={<UserCheck size={14} className="text-brand" />}
                   />
@@ -564,9 +602,11 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                       {formData.userRole} Permissions:
                     </p>
                     <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 leading-relaxed">
-                      {formData.userRole === 'Investor' && t('members.investorDesc', lang)}
+                      {formData.userRole === 'Admin' && t('members.adminDesc', lang)}
                       {formData.userRole === 'Manager' && t('members.managerDesc', lang)}
-                      {formData.userRole === 'Auditor' && t('members.auditorDesc', lang)}
+                      {formData.userRole === 'Audit' && t('members.auditDesc', lang)}
+                      {formData.userRole === 'Investor' && t('members.investorDesc', lang)}
+                      {formData.userRole === 'Member' && t('members.memberDesc', lang)}
                     </p>
                   </div>
                 </div>

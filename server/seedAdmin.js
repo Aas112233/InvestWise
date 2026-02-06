@@ -40,7 +40,7 @@ const seedAdmin = async () => {
                 name: 'System Administrator',
                 email: 'admin@investwise.com',
                 password: 'Admin@123456',
-                role: 'Administrator',
+                role: 'Admin',
                 avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin',
                 permissions: fullPermissions
             });
@@ -49,7 +49,7 @@ const seedAdmin = async () => {
 
         console.log('📧 Email: admin@investwise.com');
         console.log('🔐 Password: Admin@123456');
-        console.log('👤 Role: Administrator');
+        console.log('👤 Role: Admin');
         console.log('🔓 Access: All modules (WRITE)');
         process.exit(0);
 

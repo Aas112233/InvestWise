@@ -98,7 +98,7 @@ class _DepositsScreenState extends State<DepositsScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                   Icon(
+                   const Icon(
                     Icons.account_balance_wallet_outlined,
                     size: 64,
                     color: AppColors.grey400,
@@ -138,8 +138,8 @@ class _DepositsScreenState extends State<DepositsScreen>
         onPressed: () =>
             Navigator.pushNamed(context, AppRoutes.requestDeposit),
         backgroundColor: AppColors.brand,
-        child: const Icon(Icons.add, color: AppColors.dark),
         tooltip: 'Request Deposit',
+        child: const Icon(Icons.add, color: AppColors.dark),
       ),
     );
   }

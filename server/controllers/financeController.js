@@ -14,34 +14,93 @@ import { recalculateAllStats } from './analyticsController.js';
 // @route   GET /api/finance/transactions
 // @access  Private
 const getTransactions = asyncHandler(async (req, res) => {
-    const { page, limit, skip } = getPaginationParams(req.query);
+    const { page, limit, skip, sortOptions } = getPaginationParams(req.query, {
+        sortBy: 'date',
+        sortOrder: 'desc'
+    });
     const search = req.query.search || '';
+    const searchField = req.query.searchField || 'all';
+
+    let query = {};
 
     // Create search filter
-    const query = search
-        ? {
-            $or: [
+    if (search) {
+        if (searchField === 'amount') {
+            const num = Number(search);
+            if (!isNaN(num)) query.amount = num;
+        } else if (searchField === 'id') {
+            // Try to match _id or referenceNumber or partial ID string
+            if (mongoose.Types.ObjectId.isValid(search)) {
+                query._id = search;
+            } else {
+                // partial hex match or ref number
+                query.$or = [
+                    { referenceNumber: { $regex: search, $options: 'i' } }
+                ];
+                // If it looks like a hex string but maybe not full 24 chars, we can't regex _id easily in standard mongo 
+                // without $toString in aggregation. For now valid ObjectId exact match or Reference Number regex.
+                // We can also allow filtering by string ID if stored as string? No, _id is ObjectId.
+            }
+        } else if (searchField === 'memberId') {
+            const members = await Member.find({ memberId: { $regex: search, $options: 'i' } }).select('_id');
+            query.memberId = { $in: members.map(m => m._id) };
+        } else if (searchField === 'memberName') {
+            const members = await Member.find({ name: { $regex: search, $options: 'i' } }).select('_id');
+            query.memberId = { $in: members.map(m => m._id) };
+        } else if (searchField === 'fundName') {
+            const funds = await Fund.find({ name: { $regex: search, $options: 'i' } }).select('_id');
+            query.fundId = { $in: funds.map(f => f._id) };
+        } else {
+            // 'all'
+            const memberMatches = await Member.find({
+                $or: [{ name: { $regex: search, $options: 'i' } }, { memberId: { $regex: search, $options: 'i' } }]
+            }).select('_id');
+
+            const fundMatches = await Fund.find({ name: { $regex: search, $options: 'i' } }).select('_id');
+
+            const orConditions = [
                 { type: { $regex: search, $options: 'i' } },
                 { description: { $regex: search, $options: 'i' } },
-                { status: { $regex: search, $options: 'i' } }
-            ]
+                { status: { $regex: search, $options: 'i' } },
+                { referenceNumber: { $regex: search, $options: 'i' } },
+                { memberId: { $in: memberMatches.map(m => m._id) } },
+                { fundId: { $in: fundMatches.map(f => f._id) } }
+            ];
+
+            if (!isNaN(search)) {
+                orConditions.push({ amount: Number(search) });
+            }
+            if (mongoose.Types.ObjectId.isValid(search)) {
+                orConditions.push({ _id: search });
+            }
+
+            query.$or = orConditions;
         }
-        : {};
+    }
+
+    // Allow filtering by type and status if provided
+    if (req.query.type) query.type = req.query.type;
+    if (req.query.status) query.status = req.query.status;
 
     const totalCount = await Transaction.countDocuments(query);
     const transactions = await Transaction.find(query)
         .populate('memberId', 'memberId name email')
         .populate('projectId', 'title')
         .populate('fundId', 'name')
-        .sort({ date: -1 })
+        .sort(sortOptions)
         .skip(skip)
         .limit(limit);
 
-    // Calculate totals for inflow and outflow
+    // Calculate totals for inflow and outflow (agnostic of pagination)
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
     const totals = await Transaction.aggregate([
         {
             $match: {
-                status: { $in: ['Success', 'Completed'] }
+                ...query,
+                status: { $in: ['Success', 'Completed', 'Processing'] }
             }
         },
         {
@@ -64,17 +123,32 @@ const getTransactions = asyncHandler(async (req, res) => {
                             0
                         ]
                     }
+                },
+                totalMonthly: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $in: ['$type', ['Deposit', 'Earning', 'Investment']] },
+                                    { $gte: ['$date', startOfMonth] }
+                                ]
+                            },
+                            '$amount',
+                            0
+                        ]
+                    }
                 }
             }
         }
     ]);
 
-    const stats = totals[0] || { totalInflow: 0, totalOutflow: 0 };
+    const stats = totals[0] || { totalInflow: 0, totalOutflow: 0, totalMonthly: 0 };
 
     res.json({
         ...formatPaginatedResponse(transactions, page, limit, totalCount),
         totalInflow: stats.totalInflow,
-        totalOutflow: stats.totalOutflow
+        totalOutflow: stats.totalOutflow,
+        totalMonthly: stats.totalMonthly
     });
 });
 
@@ -103,7 +177,11 @@ const addDeposit = asyncHandler(async (req, res) => {
     session.startTransaction();
 
     try {
-        const depositStatus = status || 'Success';
+        const fund = await Fund.findById(fundId).session(session);
+        const member = await Member.findById(memberId).session(session);
+        if (!fund || !member) throw new Error('Fund or Member not found');
+
+        const balanceBefore = fund.balance;
 
         // 1. Create Transaction Record
         const transaction = await Transaction.create([{
@@ -113,29 +191,26 @@ const addDeposit = asyncHandler(async (req, res) => {
             memberId,
             fundId,
             date: date || Date.now(),
-            status: depositStatus, // 'Success' or 'Pending'
+            status: status || 'Completed', // Default to Completed if not specified
             authorizedBy: req.user._id,
-            handlingOfficer: cashierName || handlingOfficer, // Save the officer name
-            depositMethod: depositMethod || 'Cash' // Default to Cash if not provided
+            createdBy: req.user._id,
+            updatedBy: req.user._id,
+            handlingOfficer: req.user.name || cashierName || handlingOfficer || 'System',
+            depositMethod: depositMethod || 'Cash',
+            referenceNumber: req.body.referenceNumber,
+            balanceBefore: balanceBefore,
+            balanceAfter: (status === 'Success' || status === 'Completed') ? (balanceBefore + Number(amount)) : balanceBefore
         }], { session });
 
-        // IF status is 'Success' (Direct Deposit), apply financial impact immediately.
-        // IF 'Pending', we skip this.
-        if (depositStatus === 'Success' || depositStatus === 'Completed') {
-            const fund = await Fund.findById(fundId).session(session);
-            const member = await Member.findById(memberId).session(session);
-
-            if (!fund || !member) throw new Error('Fund or Member not found for immediate deposit');
-
+        // Apply financial impact if Success
+        if (status === 'Success' || status === 'Completed') {
             // Update Fund
             fund.balance += Number(amount);
             await fund.save({ session });
 
             // Update Member
             member.totalContributed += Number(amount);
-            if (shareNumber) {
-                member.shares += Number(shareNumber);
-            }
+            // member.shares is a static property, DO NOT increment it via deposits
             await member.save({ session });
         }
 
@@ -177,13 +252,11 @@ const editDeposit = asyncHandler(async (req, res) => {
         const oldAmount = transaction.amount;
         const oldFundId = transaction.fundId;
         const oldMemberId = transaction.memberId;
-        const oldShareImpact = Math.floor(oldAmount / 1000); // Approximation from addDeposit logic
+        const oldStatus = transaction.status;
+        const isCompleted = oldStatus === 'Success' || oldStatus === 'Completed';
 
-        const newAmount = parseInt(amount);
-        const newShareImpact = parseInt(shareNumber);
-
-        // 1. Revert Old Impact
-        if (transaction.status === 'Success' || transaction.status === 'Completed') {
+        // 1. Revert Old Impact (Only if it was previously applied)
+        if (isCompleted) {
             // Revert Fund
             const oldFund = await Fund.findById(oldFundId).session(session);
             if (oldFund) {
@@ -195,26 +268,35 @@ const editDeposit = asyncHandler(async (req, res) => {
             const oldMember = await Member.findById(oldMemberId).session(session);
             if (oldMember) {
                 oldMember.totalContributed -= oldAmount;
-                oldMember.shares -= oldShareImpact;
+                // member.shares is static, do not revert
                 await oldMember.save({ session });
             }
         }
 
-        // 2. Apply New Impact
-        // Find New Fund (or same)
+        // 2. Apply New Impact (We assume edit maintains 'Completed' status or use existing)
+        const newAmount = parseInt(amount);
+        const newShareImpact = parseInt(shareNumber);
+
+        // Find New Fund (even if it's the same as oldFund)
         const newFund = await Fund.findById(fundId).session(session);
-        if (!newFund) throw new Error('Target fund not found');
+        if (!newFund) throw new Error(`Target fund not found: ${fundId}`);
 
-        newFund.balance += newAmount;
-        await newFund.save({ session });
+        // Only apply impact if the transaction is (still) in a completed state
+        // If it was pending, we update the record but don't touch the fund yet
+        if (isCompleted) {
+            newFund.balance += newAmount;
+            await newFund.save({ session });
+        }
 
-        // Find New Member (or same)
+        // Find New Member (even if it's the same as oldMember)
         const newMember = await Member.findById(memberId).session(session);
-        if (!newMember) throw new Error('Target member not found');
+        if (!newMember) throw new Error(`Target partner not found: ${memberId}`);
 
-        newMember.totalContributed += newAmount;
-        newMember.shares += newShareImpact;
-        await newMember.save({ session });
+        if (isCompleted) {
+            newMember.totalContributed += newAmount;
+            // member.shares is a static property, DO NOT modify it via deposit edits
+            await newMember.save({ session });
+        }
 
         // 3. Update Transaction Record
         transaction.amount = newAmount;
@@ -222,9 +304,10 @@ const editDeposit = asyncHandler(async (req, res) => {
         transaction.memberId = memberId;
         transaction.description = description;
         transaction.date = date;
-        transaction.handlingOfficer = cashierName;
+        transaction.handlingOfficer = req.user.name;
         transaction.depositMethod = depositMethod;
-        // transaction.shareNumber -- Transaction schema might not have this, but Member does.
+        transaction.referenceNumber = req.body.referenceNumber;
+        transaction.updatedBy = req.user._id;
         await transaction.save({ session });
 
         // 4. Audit Log (System Activity)
@@ -289,20 +372,13 @@ const approveDeposit = asyncHandler(async (req, res) => {
 
         // Update Member
         member.totalContributed += transaction.amount;
-
-        // Estimate Shares if applicable. Ideally this should be stored in transaction meta or recalc.
-        // For simplicity, we assume 1000 BDT = 1 Share if not explicitly stored?
-        // Better: Retrospectively calculate or use a passed param?
-        // Current Schema doesn't store 'shareNumber' on Transaction explicitly, only description usually has it?
-        // Let's assume standard logic: Amount / 1000.
-        const estimatedShares = Math.floor(transaction.amount / 1000);
-        member.shares += estimatedShares;
-
+        // member.shares is a static property, DO NOT modify it via approvals
         await member.save({ session });
 
         // Update Transaction
         transaction.status = 'Completed';
-        transaction.authorizedBy = req.user._id; // Approver
+        transaction.authorizedBy = req.user._id;
+        transaction.updatedBy = req.user._id;
         await transaction.save({ session });
 
         await session.commitTransaction();
@@ -330,29 +406,15 @@ const addExpense = asyncHandler(async (req, res) => {
     session.startTransaction();
 
     try {
-        // Enforce Project-Fund Integrity
-        if (projectId) {
-            const project = await Project.findById(projectId).session(session);
-            if (!project) throw new Error('Project not found');
-
-            // If the project has a linked fund, it MUST be the source fund
-            if (project.linkedFundId) {
-                fundId = project.linkedFundId;
-            }
-
-            // Update Project internal tracking
-            project.currentFundBalance -= Number(amount);
-            project.totalExpenses = (project.totalExpenses || 0) + Number(amount);
-            await project.save({ session });
-
-            // Enrich description with project context
-            if (description && typeof description === 'string' && !description.includes(`[${project.title}]`)) {
-                description = `[${project.title}] ${description}`;
-            }
-        }
-
         const fund = await Fund.findById(fundId).session(session);
         if (!fund) throw new Error('Source Fund not found');
+
+        // Capture snapshot before impact
+        let balanceBefore = fund.balance;
+        if (projectId) {
+            const project = await Project.findById(projectId).session(session);
+            if (project) balanceBefore = project.currentFundBalance;
+        }
 
         // Prevent using project funds for non-project expenses
         if (!projectId && fund.type === 'PROJECT') {
@@ -363,9 +425,40 @@ const addExpense = asyncHandler(async (req, res) => {
             throw new Error('Insufficient balance in ' + fund.name);
         }
 
+        // Apply Project Impact
+        if (projectId) {
+            const project = await Project.findById(projectId).session(session);
+
+            // Record Balance Snapshot for the UPDATE record
+            const projBalanceBefore = project.currentFundBalance;
+
+            project.currentFundBalance -= Number(amount);
+            project.totalExpenses = (project.totalExpenses || 0) + Number(amount);
+
+            // Sync with Project Updates for visibility in Project Management
+            project.updates.push({
+                type: 'Expense',
+                amount: Number(amount),
+                description: description,
+                date: date || Date.now(),
+                balanceBefore: projBalanceBefore,
+                balanceAfter: project.currentFundBalance
+            });
+
+            await project.save({ session });
+
+            if (description && typeof description === 'string' && !description.includes(`[${project.title}]`)) {
+                description = `[${project.title}] ${description}`;
+            }
+        }
+
         // Update Fund
         fund.balance -= Number(amount);
         await fund.save({ session });
+
+        const balanceAfter = projectId
+            ? (await Project.findById(projectId).session(session)).currentFundBalance
+            : fund.balance;
 
         // Create Transaction
         const transaction = await Transaction.create([{
@@ -375,10 +468,13 @@ const addExpense = asyncHandler(async (req, res) => {
             category: category || 'Operational',
             fundId,
             projectId,
-            memberId, // Added memberId
+            memberId,
             date: date || Date.now(),
             status: 'Success',
-            authorizedBy: req.user._id
+            authorizedBy: req.user._id,
+            handlingOfficer: req.user.name,
+            balanceBefore,
+            balanceAfter
         }], { session });
 
         await session.commitTransaction();
@@ -411,19 +507,41 @@ const addEarning = asyncHandler(async (req, res) => {
         const fund = await Fund.findById(fundId).session(session);
         if (!fund) throw new Error('Target Fund not found');
 
+        let balanceBefore = fund.balance;
+        if (projectId) {
+            const project = await Project.findById(projectId).session(session);
+            if (project) balanceBefore = project.currentFundBalance;
+        }
+
         // Update Fund
         fund.balance += Number(amount);
         await fund.save({ session });
 
-        // Update Project if linked (though projectController has its own, this provides synergy)
         if (projectId) {
             const project = await Project.findById(projectId).session(session);
             if (project) {
+                const projBalanceBefore = project.currentFundBalance;
+
                 project.currentFundBalance += Number(amount);
                 project.totalEarnings += Number(amount);
+
+                // Sync with Project Updates
+                project.updates.push({
+                    type: 'Earning',
+                    amount: Number(amount),
+                    description: description || 'General Earning',
+                    date: date || Date.now(),
+                    balanceBefore: projBalanceBefore,
+                    balanceAfter: project.currentFundBalance
+                });
+
                 await project.save({ session });
             }
         }
+
+        const balanceAfter = projectId
+            ? (await Project.findById(projectId).session(session)).currentFundBalance
+            : fund.balance;
 
         // Create Transaction
         const transaction = await Transaction.create([{
@@ -436,7 +554,10 @@ const addEarning = asyncHandler(async (req, res) => {
             memberId,
             date: date || Date.now(),
             status: 'Success',
-            authorizedBy: req.user._id
+            authorizedBy: req.user._id,
+            handlingOfficer: req.user.name,
+            balanceBefore,
+            balanceAfter
         }], { session });
 
         await session.commitTransaction();
@@ -558,6 +679,9 @@ const deleteTransaction = asyncHandler(async (req, res) => {
 const transferFunds = asyncHandler(async (req, res) => {
     const { sourceFundId, targetFundId, amount, description } = req.body;
 
+    if (!amount || amount <= 0) throw new Error('Transfer amount must be positive');
+    if (sourceFundId === targetFundId) throw new Error('Source and Target funds must be different');
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -566,43 +690,64 @@ const transferFunds = asyncHandler(async (req, res) => {
         const targetFund = await Fund.findById(targetFundId).session(session);
 
         if (!sourceFund || !targetFund) {
-            throw new Error('Fund not found');
+            throw new Error('One or both funds not found');
         }
 
         if (sourceFund.balance < amount) {
-            throw new Error('Insufficient source balance');
+            throw new Error(`Insufficient funds in ${sourceFund.name}. Gap: ${amount - sourceFund.balance}`);
         }
 
-        // Debit Source
+        const sourceBalBefore = sourceFund.balance;
+        const targetBalBefore = targetFund.balance;
+
+        // 1. Debit Source
         sourceFund.balance -= Number(amount);
         await sourceFund.save({ session });
 
-        // Credit Target
+        // 2. Credit Target
         targetFund.balance += Number(amount);
         await targetFund.save({ session });
 
-        // Record Transaction
-        const transaction = await Transaction.create([{
+        // 3. Record "Out" Transaction on Source
+        const outTx = await Transaction.create([{
+            type: 'Withdrawal',
+            amount: Number(amount),
+            description: `[Transfer OUT] to ${targetFund.name}: ${description || ''}`,
+            fundId: sourceFundId,
+            authorizedBy: req.user._id,
+            balanceBefore: sourceBalBefore,
+            balanceAfter: sourceFund.balance,
+            status: 'Success',
+            date: Date.now()
+        }], { session });
+
+        // 4. Record "In" Transaction on Target
+        const inTx = await Transaction.create([{
             type: 'Investment',
             amount: Number(amount),
-            description: description || `Transfer from ${sourceFund.name} to ${targetFund.name}`,
-            fundId: targetFundId, // Technically this is an internal transfer, might need better schema support
-            authorizedBy: req.user._id
+            description: `[Transfer IN] from ${sourceFund.name}: ${description || ''}`,
+            fundId: targetFundId,
+            authorizedBy: req.user._id,
+            balanceBefore: targetBalBefore,
+            balanceAfter: targetFund.balance,
+            status: 'Success',
+            date: Date.now()
         }], { session });
 
         await session.commitTransaction();
+        await recalculateAllStats();
 
         // Audit Log
         await logAudit({
             req,
             user: req.user,
-            action: 'TRANSFER_FUNDS',
+            action: 'FUND_TRANSFER',
             resourceType: 'Fund',
             resourceId: targetFundId,
-            details: { amount, sourceFundId, targetFundId, description }
+            details: { amount, source: sourceFund.name, target: targetFund.name, txIds: [outTx[0]._id, inTx[0]._id] }
         });
 
-        res.status(201).json(transaction[0]);
+        res.status(201).json({ sourceTx: outTx[0], targetTx: inTx[0] });
     } catch (error) {
         await session.abortTransaction();
         res.status(400);
@@ -617,7 +762,8 @@ const transferFunds = asyncHandler(async (req, res) => {
 // @route   POST /api/finance/dividends
 // @access  Private (Admin)
 const distributeDividends = asyncHandler(async (req, res) => {
-    const { type, amount, projectId, sourceFundId, description } = req.body;
+    const { type, amount: requestedAmount, projectId, sourceFundId, description } = req.body;
+    const amount = Number(requestedAmount);
 
     if (!amount || amount <= 0) {
         res.status(400);
@@ -628,47 +774,101 @@ const distributeDividends = asyncHandler(async (req, res) => {
     session.startTransaction();
 
     try {
-        const members = await Member.find({ status: 'active' }).session(session);
-        const totalShares = members.reduce((sum, m) => sum + m.shares, 0);
+        // Idempotency / Reference for the batch
+        const batchId = `DIV-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-        if (totalShares === 0) throw new Error('No active shares found for distribution');
+        const members = await Member.find({ status: 'active', shares: { $gt: 0 } }).session(session);
+        const totalActiveShares = members.reduce((sum, m) => sum + m.shares, 0);
 
-        // Check source fund/project balance
+        if (totalActiveShares === 0) throw new Error('No active shares available for distribution');
+
+        const ratePerShare = amount / totalActiveShares;
+
+        // 1. Calculate precise distribution
+        let totalDisbursed = 0;
+        const dividendTransactions = members
+            .map(member => {
+                // Enterprise precision: Round down to 2 decimal places to ensure we never overbalance
+                const memberReward = Math.floor((member.shares * ratePerShare) * 100) / 100;
+                if (memberReward <= 0) return null;
+
+                totalDisbursed += memberReward;
+
+                return {
+                    type: 'Dividend',
+                    amount: memberReward,
+                    description: description || `Dividend Distribution: ${type} Settlement [${batchId}]`,
+                    memberId: member._id,
+                    projectId: type === 'Project' ? projectId : null,
+                    fundId: type === 'Global' ? sourceFundId : null,
+                    date: Date.now(),
+                    status: 'Success',
+                    referenceNumber: batchId,
+                    authorizedBy: req.user._id,
+                    createdBy: req.user._id,
+                    updatedBy: req.user._id
+                };
+            })
+            .filter(Boolean);
+
+        if (dividendTransactions.length === 0) throw new Error('Calculated reward per member is too small for distribution');
+
+        // 2. Adjust Source (Project or Fund) by the ACTUAL disbursed amount
+        let sourceDisplayName = '';
         if (type === 'Project') {
             const project = await Project.findById(projectId).session(session);
-            if (!project) throw new Error('Project not found');
-            if (project.currentFundBalance < amount) throw new Error('Insufficient project fund balance');
-            project.currentFundBalance -= amount;
+            if (!project) throw new Error('Target Project not found');
+            if (project.currentFundBalance < totalDisbursed) {
+                throw new Error(`Insufficient project balance. Required: ${totalDisbursed}, Available: ${project.currentFundBalance}`);
+            }
+            project.currentFundBalance -= totalDisbursed;
+            sourceDisplayName = `Project: ${project.title}`;
             await project.save({ session });
         } else {
             const fund = await Fund.findById(sourceFundId).session(session);
-            if (!fund) throw new Error('Source fund not found');
-            if (fund.balance < amount) throw new Error('Insufficient fund balance');
-            fund.balance -= amount;
+            if (!fund) throw new Error('Source Fund not found');
+            if (fund.balance < totalDisbursed) {
+                throw new Error(`Insufficient fund balance. Required: ${totalDisbursed}, Available: ${fund.balance}`);
+            }
+            fund.balance -= totalDisbursed;
+            sourceDisplayName = `Fund: ${fund.name}`;
             await fund.save({ session });
         }
 
-        const payoutRecords = [];
-        for (const member of members) {
-            const memberReward = (member.shares / totalShares) * amount;
-            if (memberReward <= 0) continue;
+        // 3. Batch insert transactions
+        await Transaction.insertMany(dividendTransactions, { session });
 
-            const tx = await Transaction.create([{
-                type: 'Dividend',
-                amount: memberReward,
-                description: description || `Dividend Distribution: ${type} - ${projectId || 'Global'}`,
-                memberId: member._id,
-                projectId: type === 'Project' ? projectId : null,
-                date: Date.now(),
-                status: 'Success',
-                authorizedBy: req.user._id
-            }], { session });
-
-            payoutRecords.push(tx[0]);
-        }
+        // 4. Audit Log
+        await AuditLog.create([{
+            user: req.user._id,
+            userName: req.user.name,
+            action: 'DISTRIBUTE_DIVIDENDS',
+            resourceType: 'Finance',
+            details: {
+                batchId,
+                type,
+                requestedAmount: amount,
+                actualDisbursed: totalDisbursed,
+                residual: Math.max(0, amount - totalDisbursed),
+                ratePerShare,
+                totalActiveShares,
+                recipientsCount: dividendTransactions.length,
+                source: sourceDisplayName
+            },
+            status: 'SUCCESS'
+        }], { session });
 
         await session.commitTransaction();
-        res.status(201).json({ message: 'Dividends distributed successfully', count: payoutRecords.length });
+        await recalculateAllStats();
+
+        res.status(201).json({
+            success: true,
+            batchId,
+            message: 'Dividends distributed successfully',
+            count: dividendTransactions.length,
+            totalDisbursed,
+            residual: amount - totalDisbursed
+        });
     } catch (error) {
         await session.abortTransaction();
         res.status(400);
@@ -684,10 +884,16 @@ const distributeDividends = asyncHandler(async (req, res) => {
 const transferEquity = asyncHandler(async (req, res) => {
     const { fromMemberId, transfers, reason } = req.body; // transfers: [{ toMemberId, amount, shares }]
 
+    if (!fromMemberId || !transfers || !Array.isArray(transfers) || transfers.length === 0) {
+        res.status(400);
+        throw new Error('Invalid transfer request');
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
+        const batchId = `EQT-${Date.now()}`;
         const sourceMember = await Member.findById(fromMemberId).session(session);
         if (!sourceMember) throw new Error('Source member not found');
 
@@ -695,36 +901,50 @@ const transferEquity = asyncHandler(async (req, res) => {
         const totalSharesTransferred = transfers.reduce((sum, t) => sum + Number(t.shares || 0), 0);
 
         if (totalBeingTransferred > sourceMember.totalContributed) {
-            throw new Error('Transfer amount exceeds member contribution');
+            throw new Error(`Insufficient contribution balance. Transfer: ${totalBeingTransferred}, Owned: ${sourceMember.totalContributed}`);
         }
         if (totalSharesTransferred > sourceMember.shares) {
-            throw new Error('Transfer shares exceed member holdings');
+            throw new Error(`Insufficient shares. Transfer: ${totalSharesTransferred}, Owned: ${sourceMember.shares}`);
         }
 
+        const recipientTransactions = [];
         for (const t of transfers) {
+            if (t.toMemberId.toString() === fromMemberId.toString()) {
+                throw new Error('Self-transfer of equity is not permitted');
+            }
+
             const targetMember = await Member.findById(t.toMemberId).session(session);
             if (!targetMember) throw new Error(`Target member ${t.toMemberId} not found`);
+            if (targetMember.status !== 'active') throw new Error(`Target member ${targetMember.name} is not active`);
 
             targetMember.totalContributed += Number(t.amount);
             targetMember.shares += Number(t.shares);
             await targetMember.save({ session });
 
             // Record the transfer for the recipient
-            await Transaction.create([{
+            recipientTransactions.push({
                 type: 'Equity-Transfer',
                 amount: Number(t.amount),
-                description: `Equity Received from ${sourceMember.name}: ${reason}`,
+                description: `Equity Migration: Received from ${sourceMember.name} [Reference: ${reason}]`,
                 memberId: targetMember._id,
                 date: Date.now(),
                 status: 'Success',
-                authorizedBy: req.user._id
-            }], { session });
+                referenceNumber: batchId,
+                authorizedBy: req.user._id,
+                createdBy: req.user._id,
+                updatedBy: req.user._id
+            });
+        }
+
+        if (recipientTransactions.length > 0) {
+            await Transaction.insertMany(recipientTransactions, { session });
         }
 
         // Deduct from source
         sourceMember.totalContributed -= totalBeingTransferred;
         sourceMember.shares -= totalSharesTransferred;
 
+        // Auto-inactivate if fully drained
         if (sourceMember.totalContributed === 0 && sourceMember.shares === 0) {
             sourceMember.status = 'inactive';
         }
@@ -734,15 +954,37 @@ const transferEquity = asyncHandler(async (req, res) => {
         await Transaction.create([{
             type: 'Equity-Transfer',
             amount: totalBeingTransferred,
-            description: `Equity Transferred to Others: ${reason}`,
+            description: `Equity Migration: Transferred to ${transfers.length} recipient(s) [Reference: ${reason}]`,
             memberId: sourceMember._id,
             date: Date.now(),
             status: 'Success',
-            authorizedBy: req.user._id
+            referenceNumber: batchId,
+            authorizedBy: req.user._id,
+            createdBy: req.user._id,
+            updatedBy: req.user._id
+        }], { session });
+
+        // Audit Log
+        await AuditLog.create([{
+            user: req.user._id,
+            userName: req.user.name,
+            action: 'TRANSFER_EQUITY',
+            resourceType: 'Member',
+            resourceId: fromMemberId,
+            details: {
+                batchId,
+                from: sourceMember.name,
+                totalAmount: totalBeingTransferred,
+                totalShares: totalSharesTransferred,
+                recipients: transfers.map(t => ({ id: t.toMemberId, amount: t.amount, shares: t.shares })),
+                reason
+            },
+            status: 'SUCCESS'
         }], { session });
 
         await session.commitTransaction();
-        res.status(200).json({ message: 'Equity transfer completed successfully' });
+        await recalculateAllStats();
+        res.status(200).json({ success: true, batchId, message: 'Equity transfer completed successfully' });
     } catch (error) {
         await session.abortTransaction();
         res.status(400);
@@ -870,6 +1112,68 @@ const editExpense = asyncHandler(async (req, res) => {
     }
 });
 
+// @desc    Reconcile Fund (Audit Balance Integrity)
+// @route   POST /api/finance/funds/:id/reconcile
+// @access  Private (Admin)
+const reconcileFund = asyncHandler(async (req, res) => {
+    const fund = await Fund.findById(req.params.id);
+    if (!fund) {
+        res.status(404);
+        throw new Error('Fund not found');
+    }
+
+    // Aggregate all successful transactions for this fund
+    const txSummary = await Transaction.aggregate([
+        {
+            $match: {
+                fundId: fund._id,
+                status: { $in: ['Success', 'Completed'] }
+            }
+        },
+        {
+            $group: {
+                _id: null,
+                totalIn: {
+                    $sum: {
+                        $cond: [
+                            { $in: ['$type', ['Deposit', 'Earning', 'Investment']] },
+                            '$amount',
+                            0
+                        ]
+                    }
+                },
+                totalOut: {
+                    $sum: {
+                        $cond: [
+                            { $in: ['$type', ['Expense', 'Withdrawal', 'Dividend', 'Adjustment']] },
+                            '$amount',
+                            0
+                        ]
+                    }
+                }
+            }
+        }
+    ]);
+
+    const stats = txSummary[0] || { totalIn: 0, totalOut: 0 };
+    const calculatedBalance = stats.totalIn - stats.totalOut;
+    const isMatched = Math.abs(calculatedBalance - fund.balance) < 0.01;
+
+    fund.lastReconciledAt = Date.now();
+    fund.reconciliationStatus = isMatched ? 'VERIFIED' : 'DISCREPANCY';
+    await fund.save();
+
+    res.json({
+        fund: fund.name,
+        actualBalance: fund.balance,
+        calculatedBalance,
+        isMatched,
+        inflow: stats.totalIn,
+        outflow: stats.totalOut,
+        discrepancy: calculatedBalance - fund.balance
+    });
+});
+
 export {
     getTransactions,
     addDeposit,
@@ -881,7 +1185,123 @@ export {
     distributeDividends,
     transferEquity,
     editDeposit,
-    editExpense
+    editExpense,
+    reconcileFund,
+    bulkAddDeposits
 };
 
+// @desc    Bulk Add Deposits
+// @route   POST /api/finance/deposits/bulk
+// @access  Private (Admin/Manager)
+const bulkAddDeposits = asyncHandler(async (req, res) => {
+    const { fundId, deposits, commonMonth, cashierName } = req.body;
 
+    if (!fundId || !deposits || !Array.isArray(deposits) || deposits.length === 0) {
+        res.status(400);
+        throw new Error('Invalid bulk deposit data');
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const fund = await Fund.findById(fundId).session(session);
+        if (!fund) throw new Error('Target fund not found');
+
+        const batchId = `BLK-${Date.now()}`;
+        const results = [];
+        let totalBatchAmount = 0;
+
+        // Track entries to prevent exact duplicates (Same Member + Same Month)
+        const seenEntries = new Set();
+
+        for (const dep of deposits) {
+            const { memberId, amount, shareNumber, depositMonth } = dep;
+            const month = depositMonth || commonMonth;
+            const entryKey = `${memberId}-${month}`;
+
+            if (seenEntries.has(entryKey)) {
+                throw new Error(`Duplicate entry detected: Member ID ${memberId} is already in this batch for ${month}`);
+            }
+            seenEntries.add(entryKey);
+
+            const member = await Member.findById(memberId).session(session);
+            if (!member) throw new Error(`Member with ID ${memberId} not found`);
+
+            const depositAmount = Number(amount);
+            if (isNaN(depositAmount) || depositAmount <= 0) {
+                throw new Error(`Invalid amount for member ${member.name}`);
+            }
+
+            // Update Member
+            member.totalContributed += depositAmount;
+            // member.shares is a static property, DO NOT increment it via bulk deposits
+            await member.save({ session });
+
+            // Create Transaction
+            const transaction = await Transaction.create([{
+                type: 'Deposit',
+                amount: depositAmount,
+                description: `Bulk Deposit [${month}]`,
+                memberId: member._id,
+                fundId: fund._id,
+                date: Date.now(),
+                status: 'Completed',
+                authorizedBy: req.user._id,
+                createdBy: req.user._id,
+                updatedBy: req.user._id,
+                handlingOfficer: req.user.name,
+                depositMethod: 'Cash',
+                referenceNumber: batchId,
+                balanceBefore: fund.balance + totalBatchAmount,
+                balanceAfter: fund.balance + totalBatchAmount + depositAmount
+            }], { session });
+
+            totalBatchAmount += depositAmount;
+            results.push({
+                member: member.name,
+                amount: depositAmount,
+                txId: transaction[0]._id
+            });
+        }
+
+        // Update Fund Balance
+        fund.balance += totalBatchAmount;
+        await fund.save({ session });
+
+        // Audit Log
+        await AuditLog.create([{
+            user: req.user._id,
+            userName: req.user.name,
+            action: 'BULK_DEPOSIT',
+            resourceType: 'Finance',
+            details: {
+                batchId,
+                totalAmount: totalBatchAmount,
+                count: deposits.length,
+                fundName: fund.name,
+                month: commonMonth
+            },
+            status: 'SUCCESS'
+        }], { session });
+
+        await session.commitTransaction();
+        await recalculateAllStats();
+
+        res.status(201).json({
+            success: true,
+            batchId,
+            totalAmount: totalBatchAmount,
+            count: deposits.length,
+            results
+        });
+
+    } catch (error) {
+        await session.abortTransaction();
+        console.error('Bulk Deposit Failed:', error);
+        res.status(400);
+        throw new Error(error.message || 'Bulk deposit failed');
+    } finally {
+        session.endSession();
+    }
+});

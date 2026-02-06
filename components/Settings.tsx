@@ -1,10 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User, Shield, Bell, Globe, CreditCard, Save,
   Moon, Sun, Eye, EyeOff, CheckCircle2, AlertTriangle,
   Terminal, Database, Lock, Sliders, Info, Users, Trash2, Key,
-  Check, X, ShieldCheck, ChevronRight, RefreshCw
+  Check, X, ShieldCheck, ChevronRight, RefreshCw, Activity
 } from 'lucide-react';
 import { User as UserType, AccessLevel, AppScreen } from '../types';
 import { useGlobalState } from '../context/GlobalStateContext';
@@ -21,13 +21,36 @@ interface SettingsProps {
 }
 
 const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
-  const { systemUsers, members, updateMember, updateUserPermissions, updateUserPassword, deleteUser } = useGlobalState();
+  const { systemUsers, members, updateMember, updateUser, updateUserPassword, deleteUser, settings, updateSettings } = useGlobalState();
   const [activeTab, setActiveTab] = useState<'General' | 'Financial' | 'System' | 'Users' | 'Profiles' | 'Audit'>('General');
   const [selectedAuditUser, setSelectedAuditUser] = useState<string | null>(null);
   const [selectedMemberProfile, setSelectedMemberProfile] = useState<Member | null>(null);
   const [memberFormData, setMemberFormData] = useState<Partial<Member>>({});
   const [newPassword, setNewPassword] = useState<string>('');
   const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // Local state for settings forms
+  const [financialConfig, setFinancialConfig] = useState({
+    fiscalYearStart: 'July',
+    baseCurrency: 'BDT',
+    taxRate: 15.0,
+    accountingMethod: 'Cash'
+  });
+
+  const [systemConfig, setSystemConfig] = useState({
+    language: 'English',
+    refreshInterval: 'Real-time',
+    theme: 'System Default',
+    dateFormat: 'DD/MM/YYYY',
+    isMaintenanceMode: false
+  });
+
+  useEffect(() => {
+    if (settings) {
+      if (settings.financial) setFinancialConfig({ ...financialConfig, ...settings.financial });
+      if (settings.system) setSystemConfig({ ...systemConfig, ...settings.system });
+    }
+  }, [settings]);
 
   // Batch permission management
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -64,6 +87,30 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
     }
   };
 
+  const handleSaveFinancial = async () => {
+    try {
+      setProcessingId('financial-save');
+      await updateSettings({ financial: financialConfig });
+      showNotification("Fiscal configuration saved successfully.");
+    } catch (error) {
+      showNotification("Failed to save financial settings", "error");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleSaveSystem = async () => {
+    try {
+      setProcessingId('system-save');
+      await updateSettings({ system: systemConfig });
+      showNotification("System preferences saved successfully.");
+    } catch (error) {
+      showNotification("Failed to save system settings", "error");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   const handleSelectMember = (member: Member) => {
     setSelectedMemberProfile(member);
     setMemberFormData({
@@ -89,12 +136,22 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
     if (!userPending || userPending.size === 0) return;
 
     try {
-      setProcessingId('batch-save');
+      const userToUpdate = systemUsers.find(u => u.id === selectedUserId);
+      if (!userToUpdate) return;
 
-      // Save all pending permissions for this user
+      const currentPermissions = userToUpdate.permissions instanceof Map
+        ? Object.fromEntries(userToUpdate.permissions)
+        : (userToUpdate.permissions || {});
+
+      const updatedPermissions = { ...currentPermissions };
+
+      // Merge pending changes
       for (const [screen, level] of userPending.entries()) {
-        await updateUserPermissions(selectedUserId, screen, level);
+        updatedPermissions[screen] = level;
       }
+
+      setProcessingId('batch-save');
+      await updateUser(selectedUserId, { permissions: updatedPermissions });
 
       // Clear pending changes
       pendingPermissions.delete(selectedUserId);
@@ -197,9 +254,10 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
         <div className="lg:w-80 space-y-4">
           <div className="bg-white dark:bg-[#1A221D] p-4 rounded-[3rem] card-shadow border border-gray-100 dark:border-white/5 space-y-2">
             {tabItems.filter(item => {
-              if (item.id === 'Audit' && currentUser?.role !== 'Administrator') return false;
-              if (item.id === 'Users' && currentUser?.role !== 'Administrator') return false; // Security/Users usually admin only too?
-              if (item.id === 'Profiles' && currentUser?.role !== 'Administrator') return false;
+              const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Administrator';
+              if (item.id === 'Audit' && !isAdmin) return false;
+              if (item.id === 'Users' && !isAdmin) return false;
+              if (item.id === 'Profiles' && !isAdmin) return false;
               return true;
             }).map((item) => (
               <button
@@ -290,8 +348,8 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                       setSelectedAuditUser(null);
                     }}
                     className={`p-8 rounded-[2.5rem] border-2 transition-all text-left group ${selectedUserId === user.id
-                        ? 'bg-brand/10 border-brand scale-105 shadow-2xl shadow-brand/20'
-                        : 'bg-white dark:bg-[#1A221D] border-gray-200 dark:border-white/10 hover:border-brand/50 hover:shadow-xl'
+                      ? 'bg-brand/10 border-brand scale-105 shadow-2xl shadow-brand/20'
+                      : 'bg-white dark:bg-[#1A221D] border-gray-200 dark:border-white/10 hover:border-brand/50 hover:shadow-xl'
                       }`}
                   >
                     <div className="flex items-start gap-4 mb-4">
@@ -302,9 +360,9 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                       </div>
                     </div>
                     <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-white/10">
-                      <span className={`px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest ${user.role === 'Administrator' ? 'bg-rose-500/20 text-rose-500 border border-rose-500/30' :
-                          user.role === 'Manager' ? 'bg-blue-500/20 text-blue-500 border border-blue-500/30' :
-                            'bg-gray-500/20 text-gray-500 border border-gray-500/30'
+                      <span className={`px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest ${user.role === 'Admin' || user.role === 'Administrator' ? 'bg-rose-500/20 text-rose-500 border border-rose-500/30' :
+                        user.role === 'Manager' ? 'bg-blue-500/20 text-blue-500 border border-blue-500/30' :
+                          'bg-gray-500/20 text-gray-500 border border-gray-500/30'
                         }`}>{user.role}</span>
                       <ChevronRight className={`transition-transform ${selectedUserId === user.id ? 'rotate-90 text-brand' : 'text-gray-400'}`} size={20} />
                     </div>
@@ -345,8 +403,8 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                           <div
                             key={module}
                             className={`p-5 rounded-2xl border-2 transition-all ${isChanged
-                                ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-400 dark:border-amber-500/50'
-                                : 'bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10'
+                              ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-400 dark:border-amber-500/50'
+                              : 'bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10'
                               }`}
                           >
                             <div className="flex items-center justify-between">
@@ -369,12 +427,12 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                                     disabled={currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE}
                                     onClick={() => handlePermissionChange(user.id, module, level)}
                                     className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed ${currentLevel === level
-                                        ? color === 'gray' ? 'bg-gray-600 text-white shadow-lg scale-105' :
-                                          color === 'blue' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30 scale-105' :
-                                            'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 scale-105'
-                                        : color === 'gray' ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700' :
-                                          color === 'blue' ? 'bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-500/20' :
-                                            'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-500/20'
+                                      ? color === 'gray' ? 'bg-gray-600 text-white shadow-lg scale-105' :
+                                        color === 'blue' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30 scale-105' :
+                                          'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 scale-105'
+                                      : color === 'gray' ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700' :
+                                        color === 'blue' ? 'bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-500/20' :
+                                          'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-500/20'
                                       }`}
                                   >
                                     {label}
@@ -489,6 +547,126 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
           )}
 
 
+
+          {activeTab === 'Financial' && (
+            <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-white dark:bg-[#1A221D] p-12 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5">
+                <div className="flex justify-between items-start mb-10">
+                  <div>
+                    <h3 className="text-3xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none mb-3">Fiscal Config</h3>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Financial Year & Currency Standards</p>
+                  </div>
+                  <div className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl shadow-2xl shadow-emerald-500/20">
+                    <CreditCard size={24} strokeWidth={3} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <FormSelect
+                    label="Fiscal Year Start"
+                    options={['January', 'April', 'July', 'October'].map(v => ({ value: v, label: v }))}
+                    value={financialConfig.fiscalYearStart}
+                    onChange={(e) => setFinancialConfig({ ...financialConfig, fiscalYearStart: e.target.value })}
+                  />
+                  <FormInput
+                    label="Base Currency"
+                    value={financialConfig.baseCurrency}
+                    readOnly
+                    className="opacity-60 cursor-not-allowed"
+                  />
+                  <FormInput
+                    label="Default Tax/VAT Rate (%)"
+                    value={financialConfig.taxRate.toString()}
+                    onChange={(e) => setFinancialConfig({ ...financialConfig, taxRate: parseFloat(e.target.value) || 0 })}
+                    type="number"
+                  />
+                  <FormSelect
+                    label="Accounting Method"
+                    options={['Accrual', 'Cash'].map(v => ({ value: v, label: v }))}
+                    value={financialConfig.accountingMethod}
+                    onChange={(e) => setFinancialConfig({ ...financialConfig, accountingMethod: e.target.value })}
+                  />
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-gray-100 dark:border-white/5 flex justify-end">
+                  <button
+                    className="bg-brand text-dark px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-transform shadow-xl disabled:opacity-50"
+                    onClick={handleSaveFinancial}
+                    disabled={processingId === 'financial-save'}
+                  >
+                    {processingId === 'financial-save' ? 'Saving...' : 'Save Configuration'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'System' && (
+            <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-white dark:bg-[#1A221D] p-12 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5">
+                <div className="flex justify-between items-start mb-10">
+                  <div>
+                    <h3 className="text-3xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none mb-3">System Preferences</h3>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Environment & Localization</p>
+                  </div>
+                  <div className="p-4 bg-blue-500/10 text-blue-500 rounded-2xl shadow-2xl shadow-blue-500/20">
+                    <Sliders size={24} strokeWidth={3} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <FormSelect
+                    label="Interface Language"
+                    options={['English', 'Bengali'].map(v => ({ value: v, label: v }))}
+                    value={systemConfig.language}
+                    onChange={(e) => setSystemConfig({ ...systemConfig, language: e.target.value })}
+                  />
+                  <FormSelect
+                    label="Data Refresh Interval"
+                    options={['Real-time', '1 Minute', '5 Minutes', 'Manual'].map(v => ({ value: v, label: v }))}
+                    value={systemConfig.refreshInterval}
+                    onChange={(e) => setSystemConfig({ ...systemConfig, refreshInterval: e.target.value })}
+                  />
+                  <FormSelect
+                    label="Theme Preference"
+                    options={['System Default', 'Dark Mode', 'Light Mode'].map(v => ({ value: v, label: v }))}
+                    value={systemConfig.theme}
+                    onChange={(e) => setSystemConfig({ ...systemConfig, theme: e.target.value })}
+                  />
+                  <FormSelect
+                    label="Date Format"
+                    options={['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'].map(v => ({ value: v, label: v }))}
+                    value={systemConfig.dateFormat}
+                    onChange={(e) => setSystemConfig({ ...systemConfig, dateFormat: e.target.value })}
+                  />
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-gray-100 dark:border-white/5 flex justify-end">
+                  <button
+                    className="bg-brand text-dark px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-transform shadow-xl disabled:opacity-50"
+                    onClick={handleSaveSystem}
+                    disabled={processingId === 'system-save'}
+                  >
+                    {processingId === 'system-save' ? 'Saving...' : 'Save Preferences'}
+                  </button>
+                </div>
+
+                <div className="mt-10 pt-10 border-t border-gray-100 dark:border-white/5">
+                  <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-6">Maintenance Operations</h4>
+                  <div className="flex gap-4">
+                    <button className="flex items-center gap-3 px-6 py-4 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-2xl transition-all">
+                      <RefreshCw size={16} />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Clear App Cache</span>
+                    </button>
+                    <button className="flex items-center gap-3 px-6 py-4 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-rose-500 rounded-2xl transition-all">
+                      <Activity size={16} />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Restart Services</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {activeTab === 'Profiles' && (
             <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">

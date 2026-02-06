@@ -14,9 +14,38 @@ dotenv.config();
 
 const app = express();
 
+// Trust Proxy for Render/Heroku (required for correctly logging IP and rate limiting)
+if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+}
+
+// Production CORS Configuration
+const allowedOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
+    : ['http://localhost:5173', 'http://localhost:3000'];
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Allow requests with no origin (mobile apps, curl, Postman)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+            callback(null, true);
+        } else {
+            console.warn(`CORS blocked origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    maxAge: 86400 // 24 hours
+};
+
 app.use(helmet());
 app.use(compression());
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(logger);
@@ -49,6 +78,9 @@ import goalRoutes from './routes/goalRoutes.js';
 app.use('/api/goals', apiLimiter, goalRoutes);
 import auditRoutes from './routes/auditRoutes.js';
 app.use('/api/audit', apiLimiter, auditRoutes);
+
+import settingsRoutes from './routes/settingsRoutes.js';
+app.use('/api/settings', apiLimiter, settingsRoutes);
 
 // Error Handling
 app.use(notFound);

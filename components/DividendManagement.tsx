@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-    History,
+    History as HistoryIcon,
     ArrowRightLeft,
     PieChart,
     TrendingUp,
@@ -14,14 +14,18 @@ import {
     CheckCircle2,
     MinusCircle,
     PlusCircle,
-    Info
+    Info,
+    RefreshCw,
+    Eye
 } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { Member, Project, Fund, AccessLevel, AppScreen } from '../types';
 import Toast, { ToastType } from './Toast';
 import { formatCurrency } from '../utils/formatters';
-import axios from 'axios';
 import { Language, t } from '../i18n/translations';
+import { financeService } from '../services/api';
+import Pagination from './Pagination';
+import SearchBar from './SearchBar';
 
 interface DividendManagementProps {
     lang: Language;
@@ -36,6 +40,39 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
     const [selectedFundId, setSelectedFundId] = useState<string>('');
     const [payoutAmount, setPayoutAmount] = useState<number>(0);
     const [description, setDescription] = useState<string>('');
+    const [showPreview, setShowPreview] = useState(false);
+
+    // History Pagination State
+    const [history, setHistory] = useState<any[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [rowsPerPage, setRowsPerPage] = useState(10);
+    const [historyMeta, setHistoryMeta] = useState<any>(null);
+
+    const fetchHistory = async () => {
+        setHistoryLoading(true);
+        try {
+            const response = await financeService.getTransactions({
+                page: currentPage,
+                limit: rowsPerPage,
+                type: 'Dividend', // We can also include 'Equity-Transfer' if we want unified history
+                sortBy: 'date',
+                sortOrder: 'desc'
+            });
+            setHistory(response.data);
+            setTotalPages(response.pages);
+            setHistoryMeta(response.meta);
+        } catch (err) {
+            console.error('Failed to fetch dividend history', err);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchHistory();
+    }, [currentPage, rowsPerPage]);
 
     // Handle Deep Linking
     useEffect(() => {
@@ -73,18 +110,22 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
     );
 
     const projectMetrics = useMemo(() => {
-        if (!selectedProject) return { surplus: 0, balance: 0, earnings: 0, expenses: 0, investment: 0 };
+        if (!selectedProject) return { surplus: 0, balance: 0, earnings: 0, expenses: 0, investment: 0, isNegative: false };
         const earnings = selectedProject.totalEarnings || 0;
         const expenses = selectedProject.totalExpenses || 0;
         const investment = selectedProject.initialInvestment || 0;
-        // Business Rule: Surplus = Revenue - (Ops Costs + Capital Injected)
-        const surplus = earnings - (expenses + investment);
+
+        // Distributable Surplus: Profit above initial capital
+        const calculatedSurplus = earnings - expenses - investment;
+        const surplus = Math.max(0, calculatedSurplus);
+
         return {
             surplus,
             balance: selectedProject.currentFundBalance || 0,
             earnings,
             expenses,
-            investment
+            investment,
+            isNegative: calculatedSurplus < 0
         };
     }, [selectedProject]);
 
@@ -98,6 +139,13 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
         if (distributionType === 'Global' && !selectedFundId) return showToast(t('dividends.selectFundError', lang), 'error');
         if (payoutAmount <= 0) return showToast(t('dividends.invalidAmount', lang), 'error');
 
+        // Validate sufficient balance
+        if (distributionType === 'Project' && selectedProject) {
+            if (payoutAmount > selectedProject.currentFundBalance) {
+                return showToast(t('dividends.payoutExceedsBalance', lang), 'error');
+            }
+        }
+
         try {
             await distributeDividends({
                 type: distributionType,
@@ -109,10 +157,32 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
 
             showToast(t('dividends.distSuccess', lang));
             await refreshData();
+            await fetchHistory();
             setPayoutAmount(0);
             setDescription('');
+            setShowPreview(false);
         } catch (error: any) {
-            showToast(error.response?.data?.message || t('dividends.distError', lang), 'error');
+            // Extract detailed error message
+            let errorMessage = t('dividends.distError', lang);
+
+            if (error.response?.data?.message) {
+                errorMessage = error.response.data.message;
+            } else if (error.response?.data?.error) {
+                errorMessage = error.response.data.error;
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+
+            // User-friendly translations
+            if (errorMessage.includes('Insufficient')) {
+                errorMessage = t('dividends.insufficientBalance', lang);
+            } else if (errorMessage.includes('No active shares')) {
+                errorMessage = t('dividends.noActiveShares', lang);
+            } else if (errorMessage.includes('not found')) {
+                errorMessage = t('dividends.projectNotFound', lang);
+            }
+
+            showToast(errorMessage, 'error');
         }
     };
 
@@ -136,6 +206,22 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
             return showToast(t('dividends.accuracyError', lang), 'error');
         }
 
+        // Validate: can't transfer to self
+        if (transfers.some(t => t.toMemberId === fromMemberId)) {
+            return showToast(t('dividends.selfTransferError', lang), 'error');
+        }
+
+        // Validate: total doesn't exceed source
+        const totalAmount = transfers.reduce((sum, t) => sum + t.amount, 0);
+        const totalShares = transfers.reduce((sum, t) => sum + t.shares, 0);
+
+        if (fromMember && totalAmount > fromMember.totalContributed) {
+            return showToast(t('dividends.insufficientContribution', lang), 'error');
+        }
+        if (fromMember && totalShares > fromMember.shares) {
+            return showToast(t('dividends.insufficientShares', lang), 'error');
+        }
+
         try {
             await transferEquity({
                 fromMemberId,
@@ -148,7 +234,31 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
             setFromMemberId('');
             setTransfers([{ toMemberId: '', amount: 0, shares: 0 }]);
         } catch (error: any) {
-            showToast(error.response?.data?.message || t('dividends.transferError', lang), 'error');
+            // Extract detailed error message from backend response
+            let errorMessage = t('dividends.transferError', lang);
+
+            if (error.response?.data?.message) {
+                errorMessage = error.response.data.message;
+            } else if (error.response?.data?.error) {
+                errorMessage = error.response.data.error;
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+
+            // Common error translations
+            if (errorMessage.includes('Insufficient contribution')) {
+                errorMessage = t('dividends.insufficientContribution', lang);
+            } else if (errorMessage.includes('Insufficient shares')) {
+                errorMessage = t('dividends.insufficientShares', lang);
+            } else if (errorMessage.includes('not found')) {
+                errorMessage = t('dividends.memberNotFound', lang);
+            } else if (errorMessage.includes('not active')) {
+                errorMessage = t('dividends.targetNotActive', lang);
+            } else if (errorMessage.includes('Self-transfer')) {
+                errorMessage = t('dividends.selfTransferError', lang);
+            }
+
+            showToast(errorMessage, 'error');
         }
     };
 
@@ -274,7 +384,7 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                         <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">{t('dividends.payoutAmount', lang)}</label>
                                         {distributionType === 'Project' && selectedProject && (
                                             <div className="flex gap-4">
-                                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-400/10 px-3 py-1 rounded-full">
+                                                <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${projectMetrics.isNegative ? 'text-amber-500 bg-amber-500/10' : 'text-emerald-400 bg-emerald-400/10'}`}>
                                                     {t('dividends.surplus', lang)} {formatCurrency(projectMetrics.surplus)}
                                                 </span>
                                                 <span className="text-[10px] font-black text-brand uppercase tracking-widest bg-brand/10 px-3 py-1 rounded-full">
@@ -323,19 +433,59 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                                 />
                             </div>
 
-                            {currentUser?.permissions[AppScreen.DIVIDENDS] === AccessLevel.WRITE ? (
-                                <button
-                                    onClick={handleDistribute}
-                                    disabled={payoutAmount <= 0}
-                                    className="w-full bg-dark dark:bg-brand text-white dark:text-dark py-10 rounded-[2.5rem] font-black uppercase tracking-[0.2em] text-sm shadow-2xl shadow-brand/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:scale-100"
-                                >
-                                    <ShieldCheck size={20} strokeWidth={3} />
-                                    {t('dividends.authorize', lang)}
-                                </button>
-                            ) : (
-                                <div className="p-10 rounded-[2.5rem] bg-amber-500/5 border border-amber-500/20 text-center">
-                                    <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{t('dividends.readOnlyMode', lang)}</p>
-                                    <p className="text-xs font-bold text-gray-400 mt-1">{t('dividends.restrictedOfficer', lang)}</p>
+                            <div className="flex gap-4">
+                                {currentUser?.permissions[AppScreen.DIVIDENDS] === AccessLevel.WRITE ? (
+                                    <>
+                                        <button
+                                            onClick={() => setShowPreview(!showPreview)}
+                                            disabled={payoutAmount <= 0}
+                                            className="flex-1 bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 text-dark dark:text-white py-10 rounded-[2.5rem] font-black uppercase tracking-[0.2em] text-sm hover:bg-gray-50 dark:hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center gap-4 disabled:opacity-50"
+                                        >
+                                            <Eye size={20} />
+                                            {showPreview ? t('common.hidePreview', lang) || 'Hide Preview' : t('common.preview', lang) || 'Preview Payout'}
+                                        </button>
+                                        <button
+                                            onClick={handleDistribute}
+                                            disabled={payoutAmount <= 0}
+                                            className="flex-[2] bg-dark dark:bg-brand text-white dark:text-dark py-10 rounded-[2.5rem] font-black uppercase tracking-[0.2em] text-sm shadow-2xl shadow-brand/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:scale-100"
+                                        >
+                                            <ShieldCheck size={20} strokeWidth={3} />
+                                            {t('dividends.authorize', lang)}
+                                        </button>
+                                    </>
+                                ) : (
+                                    <div className="w-full p-10 rounded-[2.5rem] bg-amber-500/5 border border-amber-500/20 text-center">
+                                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{t('dividends.readOnlyMode', lang)}</p>
+                                        <p className="text-xs font-bold text-gray-400 mt-1">{t('dividends.restrictedOfficer', lang)}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Preview Panel */}
+                            {showPreview && payoutAmount > 0 && (
+                                <div className="mt-10 bg-gray-50 dark:bg-black/20 p-10 rounded-[3rem] border border-brand/20 animate-in slide-in-from-top-6">
+                                    <h4 className="text-[11px] font-black text-brand uppercase tracking-widest mb-6 flex items-center gap-2">
+                                        <HistoryIcon size={14} />
+                                        {t('dividends.payoutPreview', lang) || 'Payout Distribution Preview'}
+                                    </h4>
+                                    <div className="space-y-3">
+                                        {activeMembers.slice(0, 5).map(m => (
+                                            <div key={m.id} className="flex justify-between items-center p-4 bg-white dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5">
+                                                <div>
+                                                    <p className="text-xs font-black dark:text-white">{m.name}</p>
+                                                    <p className="text-[9px] font-bold text-gray-400 uppercase">{m.shares} Shares ({(m.shares / totalShares * 100).toFixed(2)}%)</p>
+                                                </div>
+                                                <p className="text-sm font-black text-brand">{formatCurrency((m.shares / totalShares) * payoutAmount)}</p>
+                                            </div>
+                                        ))}
+                                        {activeMembers.length > 5 && (
+                                            <p className="text-center text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">...and {activeMembers.length - 5} more members</p>
+                                        )}
+                                    </div>
+                                    <div className="mt-8 pt-8 border-t border-gray-100 dark:border-white/10 flex justify-between items-center">
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Distribution</span>
+                                        <span className="text-xl font-black dark:text-white">{formatCurrency(payoutAmount)}</span>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -431,13 +581,28 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                             <div className="space-y-8 mb-12">
                                 <div className="flex items-center justify-between border-b border-gray-50 dark:border-white/5 pb-4">
                                     <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">{t('dividends.reallocationPlan', lang)}</h4>
-                                    <button
-                                        onClick={addTransferRow}
-                                        className="flex items-center gap-2 text-brand font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all"
-                                    >
-                                        <PlusCircle size={16} />
-                                        {t('dividends.addTarget', lang)}
-                                    </button>
+                                    {currentUser?.permissions[AppScreen.DIVIDENDS] === AccessLevel.WRITE && (
+                                        <div className="flex items-center gap-6">
+                                            <button
+                                                onClick={() => {
+                                                    const totalContributed = fromMember?.totalContributed || 0;
+                                                    const totalShares = fromMember?.shares || 0;
+                                                    setTransfers([{ toMemberId: '', amount: totalContributed, shares: totalShares }]);
+                                                }}
+                                                className="text-[10px] font-black text-brand uppercase tracking-widest hover:underline flex items-center gap-2"
+                                            >
+                                                <TrendingUp size={12} />
+                                                {t('dividends.distFullEquity', lang) || 'Distribute Full Equity'}
+                                            </button>
+                                            <button
+                                                onClick={() => setTransfers([...transfers, { toMemberId: '', amount: 0, shares: 0 }])}
+                                                className="flex items-center gap-2 text-brand font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all"
+                                            >
+                                                <PlusCircle size={16} />
+                                                {t('dividends.addTarget', lang)}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="space-y-4">
@@ -518,6 +683,100 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
                         </div>
                     </div>
                 )}
+            </div>
+
+            {/* Global Dividend History */}
+            <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow border border-gray-100 dark:border-white/5 overflow-hidden">
+                <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between">
+                    <div>
+                        <h4 className="text-xl font-black dark:text-white uppercase italic tracking-tight">{t('dividends.globalLedger', lang) || 'Dividend Ledger'}</h4>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Audit trail of all distributed rewards</p>
+                    </div>
+                    <button
+                        onClick={fetchHistory}
+                        className={`p-3 rounded-2xl bg-gray-50 dark:bg-white/5 text-gray-400 hover:text-brand transition-all ${historyLoading ? 'animate-spin' : ''}`}
+                    >
+                        <HistoryIcon size={18} />
+                    </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                        <thead>
+                            <tr className="bg-gray-50/30 dark:bg-white/5">
+                                <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Date</th>
+                                <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Description</th>
+                                <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Recipient</th>
+                                <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Payout</th>
+                                <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                            {historyLoading ? (
+                                <tr>
+                                    <td colSpan={5} className="py-20 text-center">
+                                        <div className="flex flex-col items-center gap-4">
+                                            <RefreshCw className="animate-spin text-brand" size={32} />
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Rebuilding Audit Trail...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : history.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="py-20 text-center text-gray-400 font-black uppercase text-[10px] tracking-widest">
+                                        No historical distributions found
+                                    </td>
+                                </tr>
+                            ) : (
+                                history.map((tx: any) => (
+                                    <tr key={tx._id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
+                                        <td className="px-10 py-6 text-xs font-bold text-gray-400">
+                                            {new Date(tx.date).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-10 py-6">
+                                            <p className="text-sm font-black dark:text-white leading-tight">{tx.description}</p>
+                                            {tx.projectId && (
+                                                <p className="text-[9px] font-black text-brand uppercase mt-1 tracking-widest">Project Settlement</p>
+                                            )}
+                                        </td>
+                                        <td className="px-10 py-6">
+                                            <div className="flex flex-col">
+                                                <span className="text-xs font-black dark:text-white uppercase">{tx.memberId?.name || 'N/A'}</span>
+                                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">ID: {tx.memberId?.memberId || 'UNKNOWN'}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-10 py-6 text-right font-black text-brand text-sm">
+                                            {formatCurrency(tx.amount)}
+                                        </td>
+                                        <td className="px-10 py-6 text-right">
+                                            <span className="inline-block px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-widest">
+                                                Distributed
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="px-10 py-8 border-t border-gray-50 dark:border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                        {historyMeta && (
+                            <>Showing {historyMeta.from} to {historyMeta.to} of {historyMeta.total} records</>
+                        )}
+                    </div>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                        rowsPerPage={rowsPerPage}
+                        onRowsPerPageChange={(newLimit) => {
+                            setRowsPerPage(newLimit);
+                            setCurrentPage(1);
+                        }}
+                    />
+                </div>
             </div>
         </div>
     );

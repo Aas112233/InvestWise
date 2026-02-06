@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:investwise_android/core/constants/app_colors.dart';
 import 'package:investwise_android/presentation/providers/transaction_provider.dart';
 import 'package:investwise_android/presentation/providers/fund_provider.dart';
-import 'package:investwise_android/presentation/providers/member_provider.dart';
 import 'package:investwise_android/presentation/providers/auth_provider.dart';
 
 class RequestDepositScreen extends StatefulWidget {
@@ -230,7 +229,7 @@ class _RequestDepositScreenState extends State<RequestDepositScreen> {
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Text(
         title.toUpperCase(),
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.bold,
           color: AppColors.grey600,
@@ -261,7 +260,7 @@ class _RequestDepositScreenState extends State<RequestDepositScreen> {
         fillColor: Colors.white,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.grey300),
+          borderSide: const BorderSide(color: AppColors.grey300),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -306,7 +305,7 @@ class _RequestDepositScreenState extends State<RequestDepositScreen> {
 
   Widget _buildMethodDropdown() {
     return DropdownButtonFormField<String>(
-      value: _selectedMethod,
+      initialValue: _selectedMethod,
       decoration: InputDecoration(
         labelText: 'Payment Method',
         prefixIcon: const Icon(Icons.payment, color: AppColors.primary),

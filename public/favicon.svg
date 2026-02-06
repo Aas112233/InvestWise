@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Background with rounded corners -->
+  <rect width="32" height="32" rx="7" fill="#151D18"/>
+  
+  <!-- Subtle inner highlight -->
+  <rect x="1.5" y="1.5" width="29" height="29" rx="6" stroke="url(#highlight)" stroke-width="0.5" fill="none" opacity="0.3"/>
+  
+  <!-- Rising bars behind the line - 4 bars -->
+  <rect x="5" y="21" width="4" height="6" rx="1" fill="#BFF300" opacity="0.3"/>
+  <rect x="10" y="17" width="4" height="10" rx="1" fill="#BFF300" opacity="0.45"/>
+  <rect x="15" y="19" width="4" height="8" rx="1" fill="#BFF300" opacity="0.6"/>
+  <rect x="20" y="8" width="4" height="19" rx="1" fill="#BFF300" opacity="0.8"/>
+  
+  <!-- Base line -->
+  <path d="M5 27h22" stroke="#BFF300" stroke-width="2.5" stroke-linecap="round"/>
+  
+  <!-- Growth line with dip -->
+  <path d="M5 22 L12 14 L17 19 L27 7" stroke="#BFF300" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  
+  <!-- Arrow head -->
+  <path d="M23 6 H28 V11" stroke="#BFF300" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  
+  <!-- Gradient definitions -->
+  <defs>
+    <linearGradient id="highlight" x1="0" y1="0" x2="32" y2="32">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+</svg>

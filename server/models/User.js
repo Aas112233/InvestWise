@@ -18,8 +18,8 @@ const userSchema = mongoose.Schema(
         },
         role: {
             type: String,
-            enum: ['Administrator', 'Manager', 'Auditor', 'Investor'],
-            default: 'Investor',
+            enum: ['Admin', 'Manager', 'Audit', 'Investor', 'Member'],
+            default: 'Member',
         },
         permissions: {
             // Allow flexible permissions object

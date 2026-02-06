@@ -74,29 +74,116 @@ const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
       className={`bg-white/80 dark:bg-[#1A221D]/90 backdrop-blur-xl h-screen border-r border-gray-200/50 dark:border-white/5 flex flex-col py-8 shrink-0 overflow-hidden transition-all duration-500 ease-in-out relative z-30 shadow-[10px_0_30px_rgba(0,0,0,0.02)] ${isExpanded ? 'w-[280px] px-6' : 'w-[88px] px-3'
         }`}
     >
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          toggleSidebar();
-        }}
-        className={`absolute top-8 p-3 rounded-2xl bg-gray-50 dark:bg-white/5 text-gray-500 hover:text-dark dark:hover:text-brand transition-all z-40 shadow-sm border border-gray-100 dark:border-white/5 ${isExpanded ? 'right-6' : 'right-1/2 translate-x-1/2'
-          }`}
-      >
-        {isPinned ? <ChevronLeft size={20} /> : <Menu size={20} />}
-      </button>
+      {/* Header Section with Logo and Toggle */}
+      <div className={`mb-8 flex flex-col transition-all duration-500 ${isExpanded ? 'items-start' : 'items-center'}`}>
 
-      <div className={`mb-16 flex flex-col transition-all duration-500 ${isExpanded ? 'px-2 items-start' : 'items-center px-0'}`}>
-        <h2 className="text-2xl font-black tracking-tighter flex items-center gap-1 dark:text-white">
-          <span className="text-dark dark:text-white">I</span>
-          {isExpanded && (
-            <span className="animate-in fade-in slide-in-from-left-2 duration-500">
-              nvestWise<span className="text-brand">.</span>
-            </span>
-          )}
-          {!isExpanded && <span className="text-brand">.</span>}
-        </h2>
-        {isExpanded && (
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Enterprise IMS</p>
+        {/* Expanded: Logo + Toggle in row */}
+        {isExpanded ? (
+          <div className="w-full flex items-center justify-between">
+            {/* Logo Container */}
+            <div className="relative">
+              {/* Glow effect behind logo */}
+              <div className="absolute inset-0 bg-gradient-to-r from-brand/30 via-emerald-400/20 to-brand/30 blur-xl opacity-70 rounded-full scale-150" />
+
+              {/* Logo Mark */}
+              <div className="relative flex items-center gap-3">
+                {/* Premium SVG Icon */}
+                <div className="relative flex items-center justify-center rounded-2xl bg-gradient-to-br from-[#151D18] via-[#1E2A22] to-[#151D18] dark:from-[#BFF300] dark:via-[#D4FF33] dark:to-[#BFF300] shadow-xl w-11 h-11 overflow-hidden">
+                  <div className="absolute inset-[2px] rounded-xl bg-gradient-to-br from-white/10 to-transparent dark:from-black/10" />
+                  {/* Custom Investment Growth Icon */}
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="relative w-6 h-6"
+                  >
+                    {/* Rising bars representing growth */}
+                    <rect x="4" y="14" width="3" height="6" rx="1" className="fill-brand dark:fill-[#151D18]" opacity="0.5" />
+                    <rect x="9" y="10" width="3" height="10" rx="1" className="fill-brand dark:fill-[#151D18]" opacity="0.7" />
+                    <rect x="14" y="6" width="3" height="14" rx="1" className="fill-brand dark:fill-[#151D18]" opacity="0.9" />
+                    {/* Upward arrow/trend line */}
+                    <path
+                      d="M19 4L19 9M19 4L14 4M19 4L10 13"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="stroke-brand dark:stroke-[#151D18]"
+                    />
+                  </svg>
+                </div>
+
+                {/* Wordmark */}
+                <div className="flex flex-col animate-in fade-in slide-in-from-left-4 duration-500">
+                  <h2 className="text-[20px] font-black tracking-tight leading-none flex items-baseline">
+                    <span className="bg-gradient-to-r from-[#151D18] via-[#2A3830] to-[#151D18] dark:from-white dark:via-gray-200 dark:to-white bg-clip-text text-transparent">
+                      Invest
+                    </span>
+                    <span className="bg-gradient-to-r from-brand via-emerald-400 to-brand bg-clip-text text-transparent">
+                      Wise
+                    </span>
+                    <span className="text-brand ml-0.5 animate-pulse">.</span>
+                  </h2>
+                  <p className="text-[8px] font-bold text-gray-400/80 dark:text-gray-500 uppercase tracking-[0.2em] mt-0.5">
+                    Enterprise IMS
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Toggle Button - Expanded */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSidebar();
+              }}
+              className="p-2.5 rounded-xl bg-gray-100/80 dark:bg-white/5 text-gray-500 hover:text-dark dark:hover:text-brand transition-all shadow-sm border border-gray-200/50 dark:border-white/5 hover:bg-gray-200/80 dark:hover:bg-white/10"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          </div>
+        ) : (
+          /* Collapsed: Stacked layout */
+          <div className="flex flex-col items-center gap-4">
+            {/* Logo Container */}
+            <div className="relative">
+              {/* Glow effect behind logo */}
+              <div className="absolute inset-0 bg-gradient-to-r from-brand/30 via-emerald-400/20 to-brand/30 blur-xl opacity-70 rounded-full scale-150" />
+
+              {/* Premium SVG Icon */}
+              <div className="relative flex items-center justify-center rounded-2xl bg-gradient-to-br from-[#151D18] via-[#1E2A22] to-[#151D18] dark:from-[#BFF300] dark:via-[#D4FF33] dark:to-[#BFF300] shadow-xl w-12 h-12 overflow-hidden">
+                <div className="absolute inset-[2px] rounded-xl bg-gradient-to-br from-white/10 to-transparent dark:from-black/10" />
+                {/* Custom Investment Growth Icon */}
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="relative w-7 h-7"
+                >
+                  {/* Rising bars representing growth */}
+                  <rect x="4" y="14" width="3" height="6" rx="1" className="fill-brand dark:fill-[#151D18]" opacity="0.5" />
+                  <rect x="9" y="10" width="3" height="10" rx="1" className="fill-brand dark:fill-[#151D18]" opacity="0.7" />
+                  <rect x="14" y="6" width="3" height="14" rx="1" className="fill-brand dark:fill-[#151D18]" opacity="0.9" />
+                  {/* Upward arrow/trend line */}
+                  <path
+                    d="M19 4L19 9M19 4L14 4M19 4L10 13"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="stroke-brand dark:stroke-[#151D18]"
+                  />
+                </svg>
+              </div>
+            </div>
+
+            {/* Toggle Button - Collapsed */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSidebar();
+              }}
+              className="p-2.5 rounded-xl bg-gray-100/80 dark:bg-white/5 text-gray-500 hover:text-dark dark:hover:text-brand transition-all shadow-sm border border-gray-200/50 dark:border-white/5 hover:bg-gray-200/80 dark:hover:bg-white/10"
+            >
+              <Menu size={18} />
+            </button>
+          </div>
         )}
       </div>
 
