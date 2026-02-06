@@ -55,7 +55,7 @@ const protect = asyncHandler(async (req, res, next) => {
 
 const admin = (req, res, next) => {
     console.log(`[Auth] Checking admin for user: ${req.user?._id}, role: ${req.user?.role}`);
-    if (req.user && req.user.role === 'Administrator') {
+    if (req.user && (req.user.role === 'Admin' || req.user.role === 'Administrator')) {
         console.log('[Auth] Admin check PASSED');
         next();
     } else {
@@ -66,7 +66,7 @@ const admin = (req, res, next) => {
 };
 
 const managerOrAdmin = (req, res, next) => {
-    if (req.user && (req.user.role === 'Administrator' || req.user.role === 'Manager')) {
+    if (req.user && (req.user.role === 'Admin' || req.user.role === 'Administrator' || req.user.role === 'Manager')) {
         next();
     } else {
         res.status(403);

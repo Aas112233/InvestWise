@@ -463,6 +463,7 @@ const addProjectUpdate = asyncHandler(async (req, res) => {
 
         const updateDate = date || Date.now();
         const updateAmount = Number(amount);
+        const balanceBefore = project.currentFundBalance;
 
         // 1. Update Project Totals
         if (type === 'Earning') {
@@ -473,11 +474,15 @@ const addProjectUpdate = asyncHandler(async (req, res) => {
             project.totalExpenses += updateAmount;
         }
 
+        const balanceAfter = project.currentFundBalance;
+
         project.updates.push({
             type,
             amount: updateAmount,
             description,
             date: updateDate,
+            balanceBefore,
+            balanceAfter
         });
 
         await project.save({ session });
@@ -504,7 +509,9 @@ const addProjectUpdate = asyncHandler(async (req, res) => {
             fundId: project.linkedFundId,
             date: updateDate,
             status: 'Success',
-            authorizedBy: req.user._id
+            authorizedBy: req.user._id,
+            balanceBefore,
+            balanceAfter
         }], { session });
 
         // 4. Audit Log (System Activity)
