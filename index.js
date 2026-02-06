@@ -14,6 +14,11 @@ dotenv.config();
 
 const app = express();
 
+// Trust Proxy for Render/Heroku (required for correctly logging IP and rate limiting)
+if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+}
+
 // Production CORS Configuration
 const allowedOrigins = process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
