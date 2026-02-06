@@ -1,0 +1,7 @@
+node_modules
+.env
+*.log
+jwt.txt
+attacker_jwt.txt
+.DS_Store
+.vscode
