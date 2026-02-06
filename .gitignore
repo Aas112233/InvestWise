@@ -1,0 +1,14 @@
+node_modules
+.env
+*.log
+jwt.txt
+attacker_jwt.txt
+.DS_Store
+.vscode
+seed-everything.js
+seedAdmin.js
+seedData.js
+seedJSON.js
+seeder.js
+check_db.js
+temp_*.js

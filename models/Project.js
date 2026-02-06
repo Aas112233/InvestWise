@@ -5,6 +5,8 @@ const updateSchema = mongoose.Schema({
     amount: { type: Number, required: true },
     description: { type: String, required: true },
     date: { type: Date, default: Date.now },
+    balanceBefore: { type: Number },
+    balanceAfter: { type: Number },
 });
 
 const projectSchema = mongoose.Schema(
