@@ -12,7 +12,8 @@ import {
     transferEquity,
     editDeposit,
     editExpense,
-    reconcileFund
+    reconcileFund,
+    bulkAddDeposits
 } from '../controllers/financeController.js';
 import { protect, requirePermission } from '../middleware/authMiddleware.js';
 import { transactionValidation } from '../middleware/businessValidator.js';
@@ -23,6 +24,7 @@ router.route('/transactions/:id').delete(protect, requirePermission('EXPENSES', 
 
 // Deposits - WRITE access to create/edit
 router.route('/deposits').post(protect, requirePermission('DEPOSITS', 'WRITE'), transactionValidation, addDeposit);
+router.route('/deposits/bulk').post(protect, requirePermission('DEPOSITS', 'WRITE'), bulkAddDeposits);
 router.route('/deposits/:id').put(protect, requirePermission('DEPOSITS', 'WRITE'), editDeposit);
 router.route('/deposits/:id/approve').put(protect, requirePermission('DEPOSITS', 'WRITE'), approveDeposit);
 
