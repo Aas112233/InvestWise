@@ -29,7 +29,8 @@ const corsOptions = {
         // Allow requests with no origin (mobile apps, curl, Postman)
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        // Allow any localhost origin for development (Flutter web, etc.)
+        if (allowedOrigins.includes(origin) || allowedOrigins.includes('*') || origin.startsWith('http://localhost')) {
             callback(null, true);
         } else {
             console.warn(`CORS blocked origin: ${origin}`);
