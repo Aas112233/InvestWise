@@ -12,6 +12,7 @@ interface SidebarProps {
 }
 
 import { useGlobalState } from '../context/GlobalStateContext';
+import '../premium-ui.css';
 
 const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
   const { deposits } = useGlobalState();
@@ -136,6 +137,7 @@ const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
                 toggleSidebar();
               }}
               className="p-2.5 rounded-xl bg-gray-100/80 dark:bg-white/5 text-gray-500 hover:text-dark dark:hover:text-brand transition-all shadow-sm border border-gray-200/50 dark:border-white/5 hover:bg-gray-200/80 dark:hover:bg-white/10"
+              aria-label="Collapse sidebar"
             >
               <ChevronLeft size={18} />
             </button>
@@ -180,6 +182,7 @@ const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
                 toggleSidebar();
               }}
               className="p-2.5 rounded-xl bg-gray-100/80 dark:bg-white/5 text-gray-500 hover:text-dark dark:hover:text-brand transition-all shadow-sm border border-gray-200/50 dark:border-white/5 hover:bg-gray-200/80 dark:hover:bg-white/10"
+              aria-label="Expand sidebar"
             >
               <Menu size={18} />
             </button>

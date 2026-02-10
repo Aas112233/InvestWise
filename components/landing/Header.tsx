@@ -26,8 +26,8 @@ const LandingHeader: React.FC = () => {
     return (
         <header
             className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-500 ${isScrolled
-                    ? 'py-4 bg-white/80 dark:bg-dark/80 backdrop-blur-xl border-b border-gray-200 dark:border-white/5'
-                    : 'py-6 bg-transparent'
+                ? 'py-4 bg-white/80 dark:bg-dark/80 backdrop-blur-xl border-b border-gray-200 dark:border-white/5'
+                : 'py-6 bg-transparent'
                 }`}
         >
             <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
@@ -75,6 +75,7 @@ const LandingHeader: React.FC = () => {
                 <button
                     className="md:hidden p-2 text-dark dark:text-white"
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
                 >
                     {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
                 </button>

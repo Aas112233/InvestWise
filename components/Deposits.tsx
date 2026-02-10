@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Filter, X, Calendar, User, CheckSquare, Square, ChevronLeft, ChevronRight, Edit2, Trash2, Loader2, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload } from 'lucide-react';
-import * as XLSX from 'xlsx';
+// Dynamically imported: import * as XLSX from 'xlsx';
 import { Deposit, AccessLevel, AppScreen } from '../types';
 import Toast, { ToastType } from './Toast';
 import { useGlobalState } from '../context/GlobalStateContext';
@@ -467,8 +467,9 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
     }
   };
 
-  const downloadBulkTemplate = () => {
+  const downloadBulkTemplate = async () => {
     try {
+      const XLSX = await import('xlsx');
       // Prepare data for Excel - helpful for users to see who needs to pay
       const data = activeMembers.map(m => ({
         'Partner Name': m.name,
@@ -509,8 +510,9 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
+        const XLSX = await import('xlsx');
         const bstr = evt.target?.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];

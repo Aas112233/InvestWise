@@ -103,6 +103,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, isDarkMode, toggleTheme
         <button
           onClick={toggleTheme}
           className="p-3 bg-white dark:bg-[#1A221D] rounded-xl ring-1 ring-gray-100 dark:ring-white/5 text-gray-500 hover:text-black dark:hover:text-[#BFF300] transition-colors"
+          aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
         >
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
         </button>
@@ -114,6 +115,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, isDarkMode, toggleTheme
               if (!showNotifications && user.role === 'Admin') refreshNotifications();
             }}
             className="p-3 bg-white dark:bg-[#1A221D] rounded-xl ring-1 ring-gray-100 dark:ring-white/5 text-gray-500 hover:text-black dark:hover:text-white transition-colors relative"
+            aria-label="Toggle notifications"
           >
             <Bell size={20} />
             {notifications?.count > 0 && (
@@ -171,6 +173,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, isDarkMode, toggleTheme
             onClick={onLogout}
             className="p-2 text-gray-400 hover:text-red-500 transition-colors"
             title="Terminate Session"
+            aria-label="Log out"
           >
             <LogOut size={20} />
           </button>

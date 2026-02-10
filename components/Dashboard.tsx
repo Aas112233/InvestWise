@@ -12,6 +12,7 @@ import { Language, t } from '../i18n/translations';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { formatCompactNumber } from '../utils/formatters';
 import { analyticsService } from '../services/api';
+import '../premium-ui.css';
 
 interface DashboardProps {
   isDarkMode: boolean;

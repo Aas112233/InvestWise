@@ -52,9 +52,9 @@ const registerUser = asyncHandler(async (req, res) => {
         name,
         email,
         password,
-        role: role || 'Member',
+        role: 'Member',
         memberId,
-        permissions: permissions || {}
+        permissions: {}
     });
 
     if (user) {
@@ -154,10 +154,17 @@ const deleteUser = asyncHandler(async (req, res) => {
 // @route   PUT /api/auth/users/:id/password
 // @access  Private/Admin
 const updateUserPassword = asyncHandler(async (req, res) => {
+    const { password } = req.body;
+
+    if (!password) {
+        res.status(400);
+        throw new Error('Password is required');
+    }
+
     const user = await User.findById(req.params.id);
 
     if (user) {
-        user.password = req.body.password;
+        user.password = password;
         await user.save();
         res.json({ message: 'Password updated successfully' });
     } else {
