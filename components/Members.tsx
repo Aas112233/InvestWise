@@ -25,7 +25,7 @@ interface MembersProps {
 }
 
 const Members: React.FC<MembersProps> = ({ lang }) => {
-  const { members, addMember, updateMember, deleteMember, addSystemUser, onboardMember, systemUsers, refreshMembers, currentUser } = useGlobalState();
+  const { members, addMember, updateMember, deleteMember, addSystemUser, onboardMember, systemUsers, refreshMembers, currentUser, updateUserPassword } = useGlobalState();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [createUserAccess, setCreateUserAccess] = useState(false);
@@ -206,6 +206,22 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
           hasUserAccess: createUserAccess
         };
         await updateMember(updatedMember);
+
+        // Handle System Access & Password Update
+        const linkedUser = systemUsers.find(u => u.memberId === editingMember.memberId);
+        if (createUserAccess && formData.password && linkedUser) {
+          try {
+            await updateUserPassword(linkedUser.id, formData.password);
+          } catch (pwErr) {
+            console.error("Failed to update password during member edit", pwErr);
+            showNotification("Member updated, but password reset failed", "warning");
+            return;
+          }
+        } else if (createUserAccess && !linkedUser) {
+          // Logic to create user if access is granted but no user exists could be added here
+          // For now, we focus on the password update for existing users as requested
+        }
+
         showNotification(t('members.updated', lang).replace('{name}', formData.name));
       }
 

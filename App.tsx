@@ -1,27 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import Sidebar from './components/Sidebar';
-import Header from './components/Header';
-import Dashboard from './components/Dashboard';
-import Members from './components/Members';
-import Deposits from './components/Deposits';
-import RequestDeposit from './components/RequestDeposit';
-import ProjectManagement from './components/ProjectManagement';
-import FundsManagement from './components/FundsManagement';
-import Transactions from './components/Transactions';
-import Expenses from './components/Expenses';
-import Analysis from './components/Analysis';
-import Reports from './components/Reports';
-import Settings from './components/Settings';
-import Login from './components/Login';
-import LandingPage from './components/landing/LandingPage';
-import ProtectedRoute from './components/ProtectedRoute';
-import DividendManagement from './components/DividendManagement';
-import AIAdvisorSidebar from './components/AIAdvisorSidebar';
-import Goals from './components/Goals';
-import Forbidden from './components/Forbidden';
-import NotFound from './components/NotFound';
 import { User, AppScreen, AccessLevel } from './types';
 import { Language } from './i18n/translations';
 import { GlobalStateProvider } from './context/GlobalStateContext';
@@ -29,10 +8,88 @@ import { Sparkles } from 'lucide-react';
 import { authService, isNetworkError } from './services/api';
 import ConnectionBanner from './components/ConnectionBanner';
 
+// Layout Components (Lazy)
+const Sidebar = React.lazy(() => import('./components/Sidebar'));
+const Header = React.lazy(() => import('./components/Header'));
+const AIAdvisorSidebar = React.lazy(() => import('./components/AIAdvisorSidebar'));
+const Forbidden = React.lazy(() => import('./components/Forbidden'));
+const NotFound = React.lazy(() => import('./components/NotFound'));
+const Login = React.lazy(() => import('./components/Login'));
+
+// Static Components
+import ProtectedRoute from './components/ProtectedRoute';
+
+// Lazy Loaded Route Components
+const LandingPage = React.lazy(() => import('./components/landing/LandingPage'));
+const Dashboard = React.lazy(() => import('./components/Dashboard'));
+const Members = React.lazy(() => import('./components/Members'));
+const Deposits = React.lazy(() => import('./components/Deposits'));
+const RequestDeposit = React.lazy(() => import('./components/RequestDeposit'));
+const ProjectManagement = React.lazy(() => import('./components/ProjectManagement'));
+const FundsManagement = React.lazy(() => import('./components/FundsManagement'));
+const Transactions = React.lazy(() => import('./components/Transactions'));
+const Expenses = React.lazy(() => import('./components/Expenses'));
+const Analysis = React.lazy(() => import('./components/Analysis'));
+const Reports = React.lazy(() => import('./components/Reports'));
+const Settings = React.lazy(() => import('./components/Settings'));
+const DividendManagement = React.lazy(() => import('./components/DividendManagement'));
+const Goals = React.lazy(() => import('./components/Goals'));
+
+// Extracted AppLayout component
+const AppLayout = ({ children, user, lang, isDarkMode, toggleTheme, setLang, onLogout }: {
+  children: React.ReactNode,
+  user: User | null,
+  lang: Language,
+  isDarkMode: boolean,
+  toggleTheme: () => void,
+  setLang: (l: Language) => void,
+  onLogout: () => void
+}) => {
+  const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
+
+  if (!user) return null;
+
+  return (
+    <div className="flex h-screen w-full bg-[#F8FAFC] dark:bg-[#111814] overflow-hidden transition-colors duration-300">
+      <Sidebar lang={lang} currentUser={user} />
+      <div className="flex-1 flex flex-col min-w-0 relative">
+        <ConnectionBanner />
+        <Header
+          user={user}
+          onLogout={onLogout}
+          isDarkMode={isDarkMode}
+          toggleTheme={toggleTheme}
+          lang={lang}
+          setLang={setLang}
+        />
+        <main className="flex-1 overflow-y-auto p-10">
+          <div className="max-w-[1600px] mx-auto pb-20">
+            {children}
+          </div>
+        </main>
+
+        <button
+          onClick={() => setIsAISidebarOpen(true)}
+          className="fixed bottom-10 right-10 w-20 h-20 bg-dark dark:bg-brand text-white dark:text-dark rounded-[2.5rem] shadow-2xl shadow-brand/20 flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-[90]"
+          aria-label="Open AI Advisor"
+        >
+          <div className="absolute inset-0 bg-brand/20 rounded-[2.5rem] animate-ping group-hover:animate-none opacity-40"></div>
+          <Sparkles size={32} strokeWidth={3} className="relative z-10" />
+        </button>
+
+        <AIAdvisorSidebar
+          isOpen={isAISidebarOpen}
+          onClose={() => setIsAISidebarOpen(false)}
+          lang={lang}
+        />
+      </div>
+    </div>
+  );
+};
+
 const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => void; isLoading: boolean }> = ({ user, setUser, isLoading }) => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [lang, setLang] = useState<Language>('en');
-  const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -100,161 +157,114 @@ const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => voi
   }
 
   return (
-    <Routes>
-      {/* Public Route */}
-      <Route
-        path="/login"
-        element={user ? <Navigate to="/dashboard" replace /> : <Login onLogin={handleLogin} lang={lang} />}
-      />
-
-      {/* Root Route - Landing Page */}
-      <Route path="/" element={<LandingPage />} />
-
-      {/* Protected Routes */}
-      <Route path="/dashboard" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.DASHBOARD} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <Dashboard isDarkMode={isDarkMode} lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/members" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.MEMBERS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <Members lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/goals" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.GOALS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <Goals lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/deposits" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.DEPOSITS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <Deposits lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/request-deposit" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.REQUEST_DEPOSIT} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <RequestDeposit lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/transactions" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.TRANSACTIONS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <Transactions lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/expenses" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.EXPENSES} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <Expenses lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/projects" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.PROJECT_MANAGEMENT} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <ProjectManagement lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/dividends" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.DIVIDENDS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <DividendManagement lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/funds" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.FUNDS_MANAGEMENT} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <FundsManagement lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/analysis" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.ANALYSIS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <Analysis lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/reports" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.REPORTS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <Reports lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/settings" element={
-        <ProtectedRoute user={user} requiredScreen={AppScreen.SETTINGS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
-          <Settings currentUser={user!} lang={lang} />
-        </ProtectedRoute>
-      } />
-
-      {/* 404 Route */}
-      <Route path="*" element={
-        user ? (
-          <AppLayout user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout}>
-            <NotFound />
-          </AppLayout>
-        ) : (
-          <Navigate to="/login" replace />
-        )
-      } />
-    </Routes>
-  );
-};
-
-// Extracted AppLayout component
-const AppLayout = ({ children, user, lang, isDarkMode, toggleTheme, setLang, onLogout }: {
-  children: React.ReactNode,
-  user: User | null,
-  lang: Language,
-  isDarkMode: boolean,
-  toggleTheme: () => void,
-  setLang: (l: Language) => void,
-  onLogout: () => void
-}) => {
-  const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
-
-  if (!user) return null;
-
-  return (
-    <div className="flex h-screen w-full bg-[#F8FAFC] dark:bg-[#111814] overflow-hidden transition-colors duration-300">
-      <Sidebar lang={lang} currentUser={user} />
-      <div className="flex-1 flex flex-col min-w-0 relative">
-        <ConnectionBanner />
-        <Header
-          user={user}
-          onLogout={onLogout}
-          isDarkMode={isDarkMode}
-          toggleTheme={toggleTheme}
-          lang={lang}
-          setLang={setLang}
-        />
-        <main className="flex-1 overflow-y-auto p-10">
-          <div className="max-w-[1600px] mx-auto pb-20">
-            {children}
-          </div>
-        </main>
-
-        <button
-          onClick={() => setIsAISidebarOpen(true)}
-          className="fixed bottom-10 right-10 w-20 h-20 bg-dark dark:bg-brand text-white dark:text-dark rounded-[2.5rem] shadow-2xl shadow-brand/20 flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-[90]"
-        >
-          <div className="absolute inset-0 bg-brand/20 rounded-[2.5rem] animate-ping group-hover:animate-none opacity-40"></div>
-          <Sparkles size={32} strokeWidth={3} className="relative z-10" />
-        </button>
-
-        <AIAdvisorSidebar
-          isOpen={isAISidebarOpen}
-          onClose={() => setIsAISidebarOpen(false)}
-          lang={lang}
-        />
+    <React.Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-[#F8FAFC] dark:bg-[#111814]">
+        <div className="w-16 h-16 border-4 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
       </div>
-    </div>
+    }>
+      <Routes>
+        {/* Public Route */}
+        <Route
+          path="/login"
+          element={user ? <Navigate to="/dashboard" replace /> : <Login onLogin={handleLogin} lang={lang} />}
+        />
+
+        {/* Root Route - Landing Page */}
+        <Route path="/" element={<LandingPage />} />
+
+        {/* Protected Routes */}
+        <Route path="/dashboard" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.DASHBOARD} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <Dashboard isDarkMode={isDarkMode} lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/members" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.MEMBERS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <Members lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/goals" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.GOALS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <Goals lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/deposits" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.DEPOSITS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <Deposits lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/request-deposit" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.REQUEST_DEPOSIT} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <RequestDeposit lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/transactions" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.TRANSACTIONS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <Transactions lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/expenses" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.EXPENSES} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <Expenses lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/projects" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.PROJECT_MANAGEMENT} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <ProjectManagement lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/dividends" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.DIVIDENDS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <DividendManagement lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/funds" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.FUNDS_MANAGEMENT} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <FundsManagement lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/analysis" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.ANALYSIS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <Analysis lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/reports" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.REPORTS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <Reports lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/settings" element={
+          <ProtectedRoute user={user} requiredScreen={AppScreen.SETTINGS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+            <Settings currentUser={user!} lang={lang} />
+          </ProtectedRoute>
+        } />
+
+        {/* 404 Route */}
+        <Route path="*" element={
+          user ? (
+            <AppLayout user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout}>
+              <NotFound />
+            </AppLayout>
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        } />
+      </Routes>
+    </React.Suspense>
   );
 };
-
-
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);

@@ -1,8 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Download, FileSpreadsheet, FileText, Image as ImageIcon, ChevronDown, Check, Loader2 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import html2canvas from 'html2canvas';
+// dynamic imports will be used instead
 import { reportService } from '../services/api';
 
 interface Column {
@@ -88,9 +86,13 @@ const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title,
         }
     };
 
-    const handleExportPDF = () => {
+    const handleExportPDF = async () => {
         setExporting('pdf');
         try {
+            const { jsPDF } = await import('jspdf');
+            const autoTableBase = await import('jspdf-autotable');
+            const autoTable = autoTableBase.default;
+
             const formattedData = getFormattedData();
             const headers = columns.map(c => c.header);
             const rows = formattedData.map(row => headers.map(h => row[h]));
@@ -151,6 +153,9 @@ const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title,
 
         setExporting('jpeg');
         try {
+            const html2canvasModule = await import('html2canvas');
+            const html2canvas = html2canvasModule.default;
+
             const element = document.getElementById(targetId);
             if (!element) throw new Error("Target element not found");
 

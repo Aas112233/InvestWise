@@ -280,7 +280,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
             <div className="bg-white dark:bg-[#1A221D] p-12 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5 animate-in slide-in-from-bottom-4 duration-500">
               <div className="flex flex-col md:flex-row gap-12">
                 <div className="flex flex-col items-center gap-6">
-                  <img src={currentUser.avatar} className="w-48 h-48 rounded-[4rem] border-8 border-gray-50 dark:border-[#111814] shadow-2xl" alt="" />
+                  <img src={currentUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}`} className="w-48 h-48 rounded-[4rem] border-8 border-gray-50 dark:border-[#111814] shadow-2xl" alt="" />
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Active System ID: #{currentUser.id?.split('-')?.[0] || currentUser.id}</p>
                 </div>
                 <div className="flex-1 space-y-8">
@@ -353,7 +353,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                       }`}
                   >
                     <div className="flex items-start gap-4 mb-4">
-                      <img src={user.avatar} className="w-16 h-16 rounded-2xl shadow-lg" alt="" />
+                      <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`} className="w-16 h-16 rounded-2xl shadow-lg" alt="" />
                       <div className="flex-1">
                         <p className="font-black text-dark dark:text-white uppercase tracking-tight text-lg leading-none mb-2">{user.name}</p>
                         <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{user.email}</p>
@@ -379,7 +379,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                   <div className="bg-white dark:bg-[#1A221D] p-10 rounded-[4rem] border border-gray-200 dark:border-white/10 shadow-2xl animate-in slide-in-from-bottom-6 duration-500">
                     <div className="flex items-center justify-between mb-8">
                       <div className="flex items-center gap-4">
-                        <img src={user.avatar} className="w-12 h-12 rounded-xl shadow-lg" alt="" />
+                        <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`} className="w-12 h-12 rounded-xl shadow-lg" alt="" />
                         <div>
                           <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{user.name}</h4>
                           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Configuring Access Permissions</p>

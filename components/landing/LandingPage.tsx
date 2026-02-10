@@ -4,6 +4,7 @@ import Hero from './Hero';
 import Comparison from './ProblemSolution';
 import Education from './Education';
 import Footer from './Footer';
+import '../../premium-ui.css';
 
 const LandingPage: React.FC = () => {
     useEffect(() => {

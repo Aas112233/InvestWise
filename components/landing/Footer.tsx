@@ -24,8 +24,17 @@ const Footer: React.FC = () => {
                             Enterprise-grade wealth management platform. Empowering investment firms with precision, security, and automated growth.
                         </p>
                         <div className="flex items-center gap-4">
-                            {[Twitter, Linkedin, Github].map((Icon, i) => (
-                                <a key={i} href="#" className="w-10 h-10 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center text-gray-400 hover:text-brand hover:border-brand/40 transition-all">
+                            {[
+                                { Icon: Twitter, label: 'Twitter' },
+                                { Icon: Linkedin, label: 'LinkedIn' },
+                                { Icon: Github, label: 'GitHub' }
+                            ].map(({ Icon, label }, i) => (
+                                <a
+                                    key={i}
+                                    href="#"
+                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center text-gray-400 hover:text-brand hover:border-brand/40 transition-all"
+                                    aria-label={label}
+                                >
                                     <Icon size={18} />
                                 </a>
                             ))}
