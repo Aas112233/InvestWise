@@ -162,7 +162,6 @@ const updateUserPassword = asyncHandler(async (req, res) => {
     }
 
     const user = await User.findById(req.params.id);
-
     if (user) {
         user.password = password;
         await user.save();
@@ -173,6 +172,38 @@ const updateUserPassword = asyncHandler(async (req, res) => {
     }
 });
 
+// @desc    Change current user password
+// @route   PUT /api/auth/profile/password
+// @access  Private
+const changeCurrentUserPassword = asyncHandler(async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+
+    if (!newPassword) {
+        res.status(400);
+        throw new Error('New password is required');
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (user && (await user.matchPassword(oldPassword))) {
+        user.password = newPassword;
+        await user.save();
+
+        await logAudit({
+            req,
+            user,
+            action: 'PASSWORD_CHANGE',
+            resourceType: 'Auth',
+            details: { email: user.email }
+        });
+
+        res.json({ message: 'Password updated successfully' });
+    } else {
+        res.status(401);
+        throw new Error('Invalid old password');
+    }
+});
+
 export {
     authUser,
     registerUser,
@@ -180,5 +211,6 @@ export {
     getUsers,
     updateUser,
     deleteUser,
-    updateUserPassword
+    updateUserPassword,
+    changeCurrentUserPassword
 };
