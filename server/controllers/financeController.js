@@ -82,6 +82,17 @@ const getTransactions = asyncHandler(async (req, res) => {
     if (req.query.type) query.type = req.query.type;
     if (req.query.status) query.status = req.query.status;
 
+    // Additional: Month/Year filtering for specific searches
+    if (req.query.month && req.query.year) {
+        const month = parseInt(req.query.month);
+        const year = parseInt(req.query.year);
+        if (!isNaN(month) && !isNaN(year)) {
+            const startDate = new Date(year, month - 1, 1);
+            const endDate = new Date(year, month, 0, 23, 59, 59);
+            query.date = { $gte: startDate, $lte: endDate };
+        }
+    }
+
     const totalCount = await Transaction.countDocuments(query);
     const transactions = await Transaction.find(query)
         .populate('memberId', 'memberId name email')
