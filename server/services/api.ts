@@ -1,0 +1,478 @@
+import axios from 'axios';
+
+const api = axios.create({
+    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    timeout: 30000,
+});
+
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+const MAX_RETRY_DELAY = 10000; // 10 seconds
+
+// Token refresh lock to prevent multiple simultaneous refresh requests
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+// Subscribe to token refresh
+const subscribeTokenRefresh = (cb: (token: string) => void) => {
+    refreshSubscribers.push(cb);
+};
+
+// Call all refresh subscribers
+const onRefreshed = (token: string) => {
+    refreshSubscribers.forEach(cb => cb(token));
+    refreshSubscribers = [];
+};
+
+// Helper function to delay execution
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Helper function to check if error is retryable
+const isRetryableError = (error: any): boolean => {
+    // Don't retry on 4xx errors (client errors)
+    if (error.response?.status >= 400 && error.response?.status < 500) {
+        return false;
+    }
+
+    // Retry on network errors, timeouts, or 5xx errors
+    return !error.response ||
+           error.code === 'ERR_NETWORK' ||
+           error.code === 'ECONNABORTED' ||
+           error.code === 'ETIMEDOUT' ||
+           error.code === 'ECONNRESET' ||
+           (error.response?.status >= 500) ||
+           error.message?.includes('Network Error');
+};
+
+// Enhanced request interceptor with retry logic
+api.interceptors.request.use(
+    (config) => {
+        const userInfo = localStorage.getItem('userInfo');
+        if (userInfo) {
+            try {
+                const { accessToken, token } = JSON.parse(userInfo);
+                // Use accessToken if available (new format), otherwise fallback to token (legacy)
+                const authToken = accessToken || token;
+                if (authToken) {
+                    config.headers.Authorization = `Bearer ${authToken}`;
+                }
+            } catch (error) {
+                console.error('Failed to parse user info:', error);
+            }
+        }
+
+        // Initialize retry count if not present
+        if (!config.metadata) {
+            config.metadata = {};
+        }
+        (config.metadata as any).retryCount = (config.metadata as any).retryCount || 0;
+
+        return config;
+    },
+    (error) => Promise.reject(error)
+);
+
+// Enhanced response interceptor with retry logic
+api.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        const config = error.config;
+        const originalRequest = config;
+
+        // Check if we should retry
+        if (config && isRetryableError(error) && (config.metadata?.retryCount || 0) < MAX_RETRIES) {
+            config.metadata.retryCount = (config.metadata.retryCount || 0) + 1;
+
+            // Calculate delay with exponential backoff
+            const retryDelay = Math.min(RETRY_DELAY * Math.pow(2, config.metadata.retryCount - 1), MAX_RETRY_DELAY);
+
+            console.warn(`⚠️ Request failed. Retrying (${config.metadata.retryCount}/${MAX_RETRIES}) in ${retryDelay}ms...`);
+
+            await delay(retryDelay);
+            return api(config);
+        }
+
+        // Handle 401 - Token expired, try to refresh
+        if (error.response?.status === 401 && !config.sent) {
+            config.sent = true;
+
+            const userInfo = localStorage.getItem('userInfo');
+            if (userInfo) {
+                try {
+                    const { refreshToken } = JSON.parse(userInfo);
+
+                    if (refreshToken && !isRefreshing) {
+                        isRefreshing = true;
+
+                        try {
+                            // Try to refresh the token
+                            const { data } = await api.post('/auth/refresh', { refreshToken });
+
+                            // Update stored user info with new tokens
+                            const updatedUserInfo = {
+                                ...JSON.parse(userInfo),
+                                accessToken: data.accessToken,
+                                refreshToken: data.refreshToken,
+                            };
+                            localStorage.setItem('userInfo', JSON.stringify(updatedUserInfo));
+
+                            isRefreshing = false;
+                            onRefreshed(data.accessToken);
+
+                            // Retry original request with new token
+                            originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+                            return api(originalRequest);
+                        } catch (refreshError) {
+                            isRefreshing = false;
+                            // Refresh failed, logout user
+                            console.warn('Token refresh failed, logging out');
+                            localStorage.removeItem('userInfo');
+                            window.location.href = '/login?session=expired';
+                            return Promise.reject(refreshError);
+                        }
+                    } else if (refreshToken && isRefreshing) {
+                        // Wait for the refresh to complete
+                        return new Promise((resolve) => {
+                            subscribeTokenRefresh((token: string) => {
+                                originalRequest.headers.Authorization = `Bearer ${token}`;
+                                resolve(api(originalRequest));
+                            });
+                        });
+                    }
+                } catch (parseError) {
+                    console.error('Failed to parse user info for refresh:', parseError);
+                }
+            }
+
+            // No refresh token available, logout
+            if (!error.config.sent) {
+                localStorage.removeItem('userInfo');
+                window.location.href = '/login?session=expired';
+            }
+        }
+
+        // Only logout on confirmed 401 Unauthorized (without refresh token)
+        if (error.response?.status === 401 && !error.config.sent) {
+            console.warn('Unauthorized access - logging out');
+            localStorage.removeItem('userInfo');
+            const currentPath = window.location.pathname;
+            if (currentPath !== '/login') {
+                window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+            } else {
+                window.location.href = '/login';
+            }
+        }
+
+        const message = error.response?.data?.message || error.message || 'An error occurred';
+
+        // Enhance error object with network status info if applicable
+        if (!error.response) {
+            error.isNetworkError = true;
+        }
+
+        // Add database connection error detection
+        if (error.response?.data?.error === 'SERVICE_UNAVAILABLE' ||
+            error.response?.data?.error === 'DATABASE_UNREACHABLE') {
+            error.isDatabaseError = true;
+            error.retryAfter = error.response?.data?.retryAfter || 5;
+        }
+
+        return Promise.reject(error);
+    }
+);
+
+export const isNetworkError = (error: any): boolean => {
+    return !error.response ||
+        error.code === 'ERR_NETWORK' ||
+        error.code === 'ECONNABORTED' ||
+        error.message.includes('Network Error');
+};
+
+export const isDatabaseError = (error: any): boolean => {
+    return error.isDatabaseError === true ||
+        error.response?.data?.error === 'SERVICE_UNAVAILABLE' ||
+        error.response?.data?.error === 'DATABASE_UNREACHABLE' ||
+        error.response?.status === 503;
+};
+
+export const authService = {
+    login: async (email: string, password: string) => {
+        const { data } = await api.post('/auth/login', { email, password });
+        if (data.accessToken) {
+            localStorage.setItem('userInfo', JSON.stringify(data));
+        }
+        return data;
+    },
+    logout: async () => {
+        const userInfo = localStorage.getItem('userInfo');
+        if (userInfo) {
+            try {
+                const { refreshToken } = JSON.parse(userInfo);
+                await api.post('/auth/logout', { refreshToken });
+            } catch (error) {
+                console.error('Logout error:', error);
+            } finally {
+                localStorage.removeItem('userInfo');
+            }
+        }
+    },
+    logoutAllDevices: async () => {
+        await api.post('/auth/logout-all');
+        localStorage.removeItem('userInfo');
+    },
+    refreshToken: async (refreshToken: string) => {
+        const { data } = await api.post('/auth/refresh', { refreshToken });
+        return data;
+    },
+    register: async (userData: any) => {
+        const { data } = await api.post('/auth/register', userData);
+        return data;
+    },
+    getProfile: async () => {
+        const { data } = await api.get('/auth/profile');
+        return data;
+    },
+    getAllUsers: async () => {
+        const { data } = await api.get('/auth/users');
+        return data;
+    },
+    updateUser: async (id: string, data: any) => {
+        const { data: responseData } = await api.put(`/auth/users/${id}`, data);
+        return responseData;
+    },
+    deleteUser: async (id: string) => {
+        const { data } = await api.delete(`/auth/users/${id}`);
+        return data;
+    },
+    updateUserPassword: async (id: string, password: any) => {
+        const { data } = await api.put(`/auth/users/${id}/password`, { password });
+        return data;
+    },
+};
+
+export const memberService = {
+    getAll: async (params?: { page?: number; limit?: number; search?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' }) => {
+        const { data } = await api.get('/members', { params });
+        return data;
+    },
+    create: async (memberData: any) => {
+        const { data } = await api.post('/members', memberData);
+        return data;
+    },
+    update: async (id: string, memberData: any) => {
+        const { data } = await api.put(`/members/${id}`, memberData);
+        return data;
+    },
+    delete: async (id: string) => {
+        const { data } = await api.delete(`/members/${id}`);
+        return data;
+    },
+    recalculateFinancials: async () => {
+        const { data } = await api.post('/members/recalculate-financials');
+        return data;
+    },
+    onboard: async (onboardData: any) => {
+        const { data } = await api.post('/members/onboard', onboardData);
+        return data;
+    }
+};
+
+export const projectService = {
+    getAll: async (params?: { page?: number; limit?: number; search?: string }) => {
+        const { data } = await api.get('/projects', { params });
+        return data;
+    },
+    create: async (projectData: any) => {
+        const { data } = await api.post('/projects', projectData);
+        return data;
+    },
+    update: async (id: string, projectData: any) => {
+        const { data } = await api.put(`/projects/${id}`, projectData);
+        return data;
+    },
+    addUpdate: async (id: string, updateData: any) => {
+        const { data } = await api.post(`/projects/${id}/updates`, updateData);
+        return data;
+    },
+    editUpdate: async (id: string, updateId: string, updateData: any) => {
+        const { data } = await api.put(`/projects/${id}/updates/${updateId}`, updateData);
+        return data;
+    },
+    deleteUpdate: async (id: string, updateId: string) => {
+        const { data } = await api.delete(`/projects/${id}/updates/${updateId}`);
+        return data;
+    },
+    delete: async (id: string) => {
+        const { data } = await api.delete(`/projects/${id}`);
+        return data;
+    }
+};
+
+export const fundService = {
+    getAll: async () => {
+        const { data } = await api.get('/funds');
+        return data;
+    },
+    create: async (fundData: any) => {
+        const { data } = await api.post('/funds', fundData);
+        return data;
+    },
+    update: async (id: string, fundData: any) => {
+        const { data } = await api.put(`/funds/${id}`, fundData);
+        return data;
+    }
+};
+
+export const financeService = {
+    getTransactions: async (params?: { page?: number; limit?: number; search?: string; searchField?: string; sortBy?: string; sortOrder?: 'asc' | 'desc'; type?: string; status?: string }) => {
+        const { data } = await api.get('/finance/transactions', { params });
+        return data;
+    },
+    addDeposit: async (depositData: any) => {
+        const { data } = await api.post('/finance/deposits', depositData);
+        return data;
+    },
+    bulkAddDeposit: async (bulkData: any) => {
+        const { data } = await api.post('/finance/deposits/bulk', bulkData);
+        return data;
+    },
+    editDeposit: async (id: string, depositData: any) => {
+        const { data } = await api.put(`/finance/deposits/${id}`, depositData);
+        return data;
+    },
+    approveDeposit: async (id: string) => {
+        const { data } = await api.put(`/finance/deposits/${id}/approve`);
+        return data;
+    },
+    addExpense: async (expenseData: any) => {
+        const { data } = await api.post('/finance/expenses', expenseData);
+        return data;
+    },
+    addEarning: async (earningData: any) => {
+        const { data } = await api.post('/finance/earnings', earningData);
+        return data;
+    },
+    editExpense: async (id: string, expenseData: any) => {
+        const { data } = await api.put(`/finance/expenses/${id}`, expenseData);
+        return data;
+    },
+    deleteTransaction: async (id: string) => {
+        const { data } = await api.delete(`/finance/transactions/${id}`);
+        return data;
+    },
+    distributeDividends: async (dividendData: any) => {
+        const { data } = await api.post('/finance/dividends', dividendData, { timeout: 60000 });
+        return data;
+    },
+    transferEquity: async (transferData: any) => {
+        const { data } = await api.post('/finance/equity/transfer', transferData, { timeout: 60000 });
+        return data;
+    },
+    transferFunds: async (transferData: any) => {
+        const { data } = await api.post('/finance/transfer', transferData);
+        return data;
+    },
+    reconcileFund: async (id: string) => {
+        const { data } = await api.post(`/finance/funds/${id}/reconcile`);
+        return data;
+    }
+};
+
+export const reportService = {
+    getAll: async () => {
+        const { data } = await api.get('/reports');
+        return data;
+    },
+    create: async (reportData: any) => {
+        const { data } = await api.post('/reports', reportData);
+        return data;
+    },
+    delete: async (id: string) => {
+        const { data } = await api.delete(`/reports/${id}`);
+        return data;
+    },
+    download: async (type: string, format: string, fiscalMonth: string) => {
+        const response = await api.get(`/reports/generate/${encodeURIComponent(type)}/${format}`, {
+            params: { fiscalMonth },
+            responseType: 'blob',
+            timeout: 60000
+        });
+        return response.data;
+    },
+    generate: async (type: string, queryString: string) => {
+        const response = await api.get(`/reports/generate/${encodeURIComponent(type)}?${queryString}`, {
+            responseType: 'blob',
+            timeout: 60000
+        });
+        return response.data;
+    },
+    exportGeneric: async (payload: { title?: string, columns: any[], data: any[], fileName: string, lang?: string }) => {
+        const response = await api.post('/reports/export-generic', payload, {
+            responseType: 'blob',
+            timeout: 60000
+        });
+        return response.data;
+    }
+};
+
+export const analyticsService = {
+    getStats: async () => {
+        const { data } = await api.get('/analytics/stats');
+        return data;
+    },
+    recalculate: async () => {
+        const { data } = await api.post('/analytics/recalculate');
+        return data;
+    }
+};
+
+export const auditService = {
+    getLogs: async (params?: any) => {
+        const { data } = await api.get('/audit', { params });
+        return data;
+    },
+    getMetadata: async () => {
+        const { data } = await api.get('/audit/metadata');
+        return data;
+    },
+    getNotifications: async () => {
+        const { data } = await api.get('/audit/notifications');
+        return data;
+    }
+};
+
+export const goalService = {
+    getAll: async () => {
+        const { data } = await api.get('/goals');
+        return data;
+    },
+    create: async (goalData: any) => {
+        const { data } = await api.post('/goals', goalData);
+        return data;
+    },
+    update: async (id: string, goalData: any) => {
+        const { data } = await api.put(`/goals/${id}`, goalData);
+        return data;
+    },
+    delete: async (id: string) => {
+        const { data } = await api.delete(`/goals/${id}`);
+        return data;
+    }
+};
+
+export const settingsService = {
+    get: async () => {
+        const { data } = await api.get('/settings');
+        return data;
+    },
+    update: async (settingsData: any) => {
+        const { data } = await api.put('/settings', settingsData);
+        return data;
+    }
+};
+
+export default api;

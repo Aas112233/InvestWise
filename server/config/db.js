@@ -2,7 +2,11 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
 // Load backend environment variables
+<<<<<<< HEAD
 dotenv.config({ path: '.env' });
+=======
+dotenv.config({ path: '../.env' });
+>>>>>>> ed09dec2872d0de8166310824c2c266af199c066
 
 // Connection retry configuration
 const MAX_RETRIES = 5;

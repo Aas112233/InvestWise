@@ -6,9 +6,13 @@ import connectDB from './config/db.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { logger } from './middleware/logger.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
+<<<<<<< HEAD
 import { checkDbConnection } from './middleware/dbConnectionMiddleware.js';
 import { getSecurityConfig } from './middleware/securityHeaders.js';
 import { apiVersioning, API_VERSION, SUPPORTED_VERSIONS } from './middleware/apiVersioning.js';
+=======
+import { getSecurityConfig } from './middleware/securityHeaders.js';
+>>>>>>> ed09dec2872d0de8166310824c2c266af199c066
 
 // Load backend environment variables from server/.env
 dotenv.config({ path: '.env' });

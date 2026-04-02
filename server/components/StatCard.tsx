@@ -1,0 +1,175 @@
+
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, TrendingDown } from 'lucide-react';
+
+interface StatCardProps {
+  label: string;
+  value: string; // Compact formatted value (e.g., "101.5k")
+  change: string;
+  isPositive?: boolean;
+  variant?: 'dark' | 'light' | 'brand';
+  currency?: string; // Optional currency label to display below value
+  rawValue?: number; // Raw number for toggling to full display
+}
+
+const CountUp: React.FC<{ target: string }> = ({ target }) => {
+  const [count, setCount] = useState(0);
+
+  // Extract numeric part, prefix and suffix
+  const match = target.match(/^([^0-9.]*)([0-9.]+)(.*)$/);
+  const prefix = match ? match[1] : '';
+  const numericStr = match ? match[2] : '0';
+  const suffix = match ? match[3] : '';
+  const targetNum = parseFloat(numericStr);
+
+  useEffect(() => {
+    let startTimestamp: number | null = null;
+    const duration = 1500; // 1.5 seconds animation
+
+    const step = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+
+      // Easing function: easeOutExpo
+      const easedProgress = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+
+      setCount(easedProgress * targetNum);
+
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      }
+    };
+
+    window.requestAnimationFrame(step);
+  }, [targetNum]);
+
+  // Format the count to match the original precision
+  const decimalPlaces = numericStr.includes('.') ? numericStr.split('.')[1].length : 0;
+  const formattedCount = count.toFixed(decimalPlaces);
+
+  return (
+    <span>{prefix}{formattedCount}{suffix}</span>
+  );
+};
+
+const StatCard: React.FC<StatCardProps> = ({ label, value, change, isPositive = true, variant = 'light', currency, rawValue }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isDarkVariant = variant === 'dark';
+  const isBrandVariant = variant === 'brand';
+
+  // Determine display value based on expanded state
+  const displayValue = isExpanded && rawValue !== undefined
+    ? rawValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : value;
+
+  let cardClass = "";
+  if (isBrandVariant) {
+    cardClass = "bg-brand text-dark shadow-[0_40px_80px_-20px_rgba(191,243,0,0.3)] border-dark/5";
+  } else if (isDarkVariant) {
+    cardClass = "bg-dark text-white dark:bg-brand dark:text-dark shadow-[0_30px_60px_-15px_rgba(0,0,0,0.4)] border-transparent";
+  } else {
+    cardClass = "bg-white/80 dark:bg-white/5 backdrop-blur-2xl border-white/20 dark:border-white/5 text-dark dark:text-white hover:shadow-2xl hover:border-brand/30 dark:hover:border-brand/30";
+  }
+
+  return (
+    <div
+      onClick={() => rawValue !== undefined && setIsExpanded(!isExpanded)}
+      className={`relative p-6 xl:p-8 rounded-[3.5rem] min-w-[240px] flex-1 group ${rawValue !== undefined ? 'cursor-pointer' : 'cursor-default'} border overflow-hidden ${cardClass} transform-gpu will-change-transform transition-transform duration-500 ease-out hover:-translate-y-2 hover:scale-[1.02]`}
+    >
+      {/* Glow Layer */}
+      <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none bg-gradient-to-tr ${isBrandVariant ? 'from-white/40 to-transparent' :
+        isDarkVariant ? 'from-brand/10 to-transparent' : 'from-brand/5 to-transparent'
+        }`} />
+
+      <div className="relative z-10">
+        <div className="flex justify-between items-start mb-6">
+          <span className={`text-[10px] font-black px-4 py-2 rounded-full uppercase tracking-[0.2em] shadow-inner transition-colors ${isBrandVariant ? 'bg-dark/10 text-dark/70' :
+            isDarkVariant ? 'bg-white/10 dark:bg-dark/10 text-white/60 dark:text-dark/60' :
+              'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400'
+            }`}>
+            {label}
+          </span>
+          <div className={`flex items-center gap-1.5 text-[11px] font-black drop-shadow-sm ${isPositive ? (isBrandVariant ? 'text-dark/80' : 'text-emerald-500') : 'text-rose-500'
+            }`}>
+            {isPositive ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+            {change}
+          </div>
+        </div>
+
+        <div className="mb-8 transform-gpu transition-transform duration-500 ease-out group-hover:scale-[1.03] origin-left">
+          {(() => {
+            // Only split decimal if it's a full number (not compact notation with k/M/B)
+            const hasCompactSuffix = /[kMB]$/.test(displayValue);
+
+            if (hasCompactSuffix || !displayValue.includes('.')) {
+              // Show as-is for compact notation or integers
+              return (
+                <div>
+                  <h3 className={`font-black tracking-tighter leading-none drop-shadow-2xl ${currency ? '' : 'break-all'} ${displayValue.length > 12 ? 'text-2xl sm:text-3xl' :
+                    displayValue.length > 10 ? 'text-3xl sm:text-4xl' :
+                      displayValue.length > 8 ? 'text-4xl sm:text-5xl' :
+                        'text-5xl sm:text-6xl'
+                    }`}>
+                    <CountUp target={displayValue} />
+                  </h3>
+                </div>
+              );
+            }
+
+            // Split displayValue into integer and decimal parts for full numbers
+            const parts = displayValue.split('.');
+            const integerPart = parts[0];
+            const decimalPart = parts[1];
+
+            return (
+              <div>
+                <h3 className={`font-black tracking-tighter leading-none drop-shadow-2xl ${currency ? '' : 'break-all'} ${displayValue.length > 12 ? 'text-2xl sm:text-3xl' :
+                  displayValue.length > 10 ? 'text-3xl sm:text-4xl' :
+                    displayValue.length > 8 ? 'text-4xl sm:text-5xl' :
+                      'text-5xl sm:text-6xl'
+                  }`}>
+                  <CountUp target={integerPart} />
+                </h3>
+                {decimalPart && (
+                  <p className={`font-black mt-1 ${isBrandVariant ? 'text-dark/70' : isDarkVariant ? 'text-white/70 dark:text-dark/70' : 'text-gray-600 dark:text-gray-400'} ${displayValue.length > 12 ? 'text-base' : 'text-lg'}`}>
+                    .{decimalPart}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+          {currency && (
+            <p className={`text-sm font-black uppercase tracking-widest mt-2 ${isBrandVariant ? 'text-dark/60' : isDarkVariant ? 'text-white/60 dark:text-dark/60' : 'text-gray-500 dark:text-gray-400'}`}>
+              {currency}
+            </p>
+          )}
+        </div>
+
+        {/* Bar Visualizer */}
+        <div className="h-14 w-full flex items-end gap-[6px]">
+          {[45, 75, 55, 90, 60, 100, 80, 110].map((h, i) => (
+            <div
+              key={i}
+              className={`flex-1 rounded-t-2xl transform-gpu transition-transform duration-700 ease-out group-hover:-translate-y-1 ${isBrandVariant ? 'bg-dark/20' :
+                isDarkVariant ? 'bg-brand/30 dark:bg-dark/30' :
+                  'bg-gray-200/50 dark:bg-brand/20'
+                }`}
+              style={{
+                height: `${Math.min(h, 100)}%`,
+                opacity: (i + 1) / 8,
+                transitionDelay: `${i * 30}ms`
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Shine effect - simplified */}
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none overflow-hidden">
+        <div className="absolute top-0 -left-full w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12 group-hover:left-full transition-all duration-1000 ease-out" />
+      </div>
+    </div>
+  );
+};
+
+export default StatCard;
