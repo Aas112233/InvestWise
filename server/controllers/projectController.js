@@ -25,11 +25,15 @@ const getProjects = asyncHandler(async (req, res) => {
         }
         : {};
 
-    const totalCount = await Project.countDocuments(query);
-    const projects = await Project.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit);
+    const [totalCount, projects] = await Promise.all([
+        Project.countDocuments(query),
+        Project.find(query)
+            .lean()
+            .select('-__v') // Exclude version key
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+    ]);
 
     res.json(formatPaginatedResponse(projects, page, limit, totalCount));
 });

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useGlobalState } from '../context/GlobalStateContext';
-import { WifiOff, RefreshCw, AlertTriangle } from 'lucide-react';
+import { WifiOff, RefreshCw, AlertTriangle, Database } from 'lucide-react';
 import Toast from './Toast';
 
 const ConnectionBanner: React.FC = () => {
@@ -27,6 +27,10 @@ const ConnectionBanner: React.FC = () => {
             setToastMessage('You are offline. Check your internet connection.');
             setToastType('warning');
             setShowToast(true);
+        } else if (connectionStatus === 'degraded') {
+            setToastMessage('Connection is slow. Some operations may take longer.');
+            setToastType('warning');
+            setShowToast(true);
         }
         prevStatus.current = connectionStatus;
     }, [connectionStatus]);
@@ -48,17 +52,23 @@ const ConnectionBanner: React.FC = () => {
     }
 
     const isOffline = connectionStatus === 'offline';
+    const isDegraded = connectionStatus === 'degraded';
 
     return (
         <>
-            <div className={`w-full py-2 px-4 flex items-center justify-between text-sm font-medium z-[50] ${isOffline ? 'bg-red-500/10 text-red-400 border-b border-red-500/20' : 'bg-amber-500/10 text-amber-400 border-b border-amber-500/20'
+            <div className={`w-full py-2 px-4 flex items-center justify-between text-sm font-medium z-[50] ${
+                isOffline
+                    ? 'bg-red-500/10 text-red-400 border-b border-red-500/20'
+                    : 'bg-amber-500/10 text-amber-400 border-b border-amber-500/20'
                 }`}>
                 <div className="flex items-center gap-3">
-                    {isOffline ? <WifiOff size={16} /> : <AlertTriangle size={16} />}
+                    {isOffline ? <WifiOff size={16} /> : isDegraded ? <Database size={16} /> : <AlertTriangle size={16} />}
                     <span>
                         {isOffline
                             ? "Server offline. You can keep working; changes will not be saved until connection returns."
-                            : "Connection unstable. Some actions may fail."}
+                            : isDegraded
+                                ? "Database connection slow. Some actions may take longer."
+                                : "Connection unstable. Some actions may fail."}
                     </span>
                 </div>
                 <button

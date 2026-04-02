@@ -95,9 +95,16 @@ const transactionSchema = mongoose.Schema(
     }
 );
 
+// Indexes for common queries
+transactionSchema.index({ memberId: 1, date: -1 });
+transactionSchema.index({ fundId: 1, date: -1 });
+transactionSchema.index({ projectId: 1, date: -1 });
+transactionSchema.index({ type: 1, status: 1 });
+transactionSchema.index({ date: -1, type: 1 });
+transactionSchema.index({ memberId: 1, type: 1, date: -1 });
+
 // Comprehensive search index
 transactionSchema.index({ description: 'text', type: 'text', referenceNumber: 'text' });
-transactionSchema.index({ createdAt: -1 });
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 

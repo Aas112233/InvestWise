@@ -23,50 +23,50 @@ const getTransactions = asyncHandler(async (req, res) => {
 
     let query = {};
 
-    // Create search filter
+    // Create search filter - optimized with parallel queries
     if (search) {
         if (searchField === 'amount') {
             const num = Number(search);
             if (!isNaN(num)) query.amount = num;
         } else if (searchField === 'id') {
-            // Try to match _id or referenceNumber or partial ID string
             if (mongoose.Types.ObjectId.isValid(search)) {
                 query._id = search;
             } else {
-                // partial hex match or ref number
                 query.$or = [
                     { referenceNumber: { $regex: search, $options: 'i' } }
                 ];
-                // If it looks like a hex string but maybe not full 24 chars, we can't regex _id easily in standard mongo 
-                // without $toString in aggregation. For now valid ObjectId exact match or Reference Number regex.
-                // We can also allow filtering by string ID if stored as string? No, _id is ObjectId.
             }
         } else if (searchField === 'memberId') {
-            const members = await Member.find({ memberId: { $regex: search, $options: 'i' } }).select('_id');
+            const members = await Member.find({ memberId: { $regex: search, $options: 'i' } }).select('_id').lean();
             query.memberId = { $in: members.map(m => m._id) };
         } else if (searchField === 'memberName') {
-            const members = await Member.find({ name: { $regex: search, $options: 'i' } }).select('_id');
+            const members = await Member.find({ name: { $regex: search, $options: 'i' } }).select('_id').lean();
             query.memberId = { $in: members.map(m => m._id) };
         } else if (searchField === 'fundName') {
-            const funds = await Fund.find({ name: { $regex: search, $options: 'i' } }).select('_id');
+            const funds = await Fund.find({ name: { $regex: search, $options: 'i' } }).select('_id').lean();
             query.fundId = { $in: funds.map(f => f._id) };
         } else {
-            // 'all'
-            const memberMatches = await Member.find({
-                $or: [{ name: { $regex: search, $options: 'i' } }, { memberId: { $regex: search, $options: 'i' } }]
-            }).select('_id');
-
-            const fundMatches = await Fund.find({ name: { $regex: search, $options: 'i' } }).select('_id');
+            // 'all' - optimized parallel search
+            const [memberMatches, fundMatches] = await Promise.all([
+                Member.find({
+                    $or: [{ name: { $regex: search, $options: 'i' } }, { memberId: { $regex: search, $options: 'i' } }]
+                }).select('_id').lean(),
+                Fund.find({ name: { $regex: search, $options: 'i' } }).select('_id').lean()
+            ]);
 
             const orConditions = [
                 { type: { $regex: search, $options: 'i' } },
                 { description: { $regex: search, $options: 'i' } },
                 { status: { $regex: search, $options: 'i' } },
-                { referenceNumber: { $regex: search, $options: 'i' } },
-                { memberId: { $in: memberMatches.map(m => m._id) } },
-                { fundId: { $in: fundMatches.map(f => f._id) } }
+                { referenceNumber: { $regex: search, $options: 'i' } }
             ];
 
+            if (memberMatches.length > 0) {
+                orConditions.push({ memberId: { $in: memberMatches.map(m => m._id) } });
+            }
+            if (fundMatches.length > 0) {
+                orConditions.push({ fundId: { $in: fundMatches.map(f => f._id) } });
+            }
             if (!isNaN(search)) {
                 orConditions.push({ amount: Number(search) });
             }
@@ -93,14 +93,25 @@ const getTransactions = asyncHandler(async (req, res) => {
         }
     }
 
-    const totalCount = await Transaction.countDocuments(query);
-    const transactions = await Transaction.find(query)
-        .populate('memberId', 'memberId name email')
-        .populate('projectId', 'title')
-        .populate('fundId', 'name')
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limit);
+    const [totalCount, transactions] = await Promise.all([
+        Transaction.countDocuments(query),
+        Transaction.find(query)
+            .lean()
+            .select('-__v')
+            .sort(sortOptions)
+            .skip(skip)
+            .limit(limit)
+    ]);
+
+    // Populate only if there are results (saves queries on empty results)
+    let populatedTransactions = transactions;
+    if (transactions.length > 0) {
+        populatedTransactions = await Transaction.populate(transactions, [
+            { path: 'memberId', select: 'memberId name email' },
+            { path: 'projectId', select: 'title' },
+            { path: 'fundId', select: 'name' }
+        ]);
+    }
 
     // Calculate totals for inflow and outflow (agnostic of pagination)
     const startOfMonth = new Date();
@@ -156,7 +167,7 @@ const getTransactions = asyncHandler(async (req, res) => {
     const stats = totals[0] || { totalInflow: 0, totalOutflow: 0, totalMonthly: 0 };
 
     res.json({
-        ...formatPaginatedResponse(transactions, page, limit, totalCount),
+        ...formatPaginatedResponse(populatedTransactions, page, limit, totalCount),
         totalInflow: stats.totalInflow,
         totalOutflow: stats.totalOutflow,
         totalMonthly: stats.totalMonthly

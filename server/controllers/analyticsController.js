@@ -3,6 +3,7 @@ import GlobalStats from '../models/GlobalStats.js';
 import Member from '../models/Member.js';
 import Project from '../models/Project.js';
 import Transaction from '../models/Transaction.js';
+import cache from '../utils/cache.js';
 
 // @desc    Get global statistics for dashboard
 // @route   GET /api/analytics/stats
@@ -22,6 +23,9 @@ const getStats = asyncHandler(async (req, res) => {
 // @route   POST /api/analytics/recalculate
 // @access  Private (Admin)
 const triggerRecalculate = asyncHandler(async (req, res) => {
+    // Clear cached stats
+    cache.del('analytics:stats');
+
     const stats = await recalculateAllStats();
     res.json({ message: 'Stats recalculated successfully', stats });
 });
@@ -31,96 +35,114 @@ const triggerRecalculate = asyncHandler(async (req, res) => {
  * This can be called from controllers when data changes
  */
 const recalculateAllStats = async () => {
-    const totalMembers = await Member.countDocuments({ status: 'active' });
+    // Calculate date range for trend data
+    const now = new Date();
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
-    const projectAggregation = await Project.aggregate([
-        {
-            $group: {
-                _id: null,
-                investedCapital: { $sum: '$initialInvestment' },
-                avgYield: { $avg: { $toDouble: '$projectedReturn' } }
+    // Run all aggregations in parallel for better performance
+    const [
+        totalMembers,
+        projectAggregation,
+        memberAggregation,
+        transactionAggregation,
+        trendAggregation,
+        sectorDiversification,
+        topPartners,
+        topProjects,
+        cashFlowParams
+    ] = await Promise.all([
+        Member.countDocuments({ status: 'active' }),
+        Project.aggregate([
+            {
+                $group: {
+                    _id: null,
+                    investedCapital: { $sum: '$initialInvestment' },
+                    avgYield: { $avg: { $toDouble: '$projectedReturn' } }
+                }
             }
-        }
-    ]);
-
-    const memberAggregation = await Member.aggregate([
-        { $match: { status: 'active' } },
-        { $group: { _id: null, totalShares: { $sum: '$shares' } } }
-    ]);
-
-    const transactionAggregation = await Transaction.aggregate([
-        { $match: { status: { $in: ['Success', 'Completed'] } } },
-        {
-            $group: {
-                _id: null,
-                totalDeposits: {
-                    $sum: {
-                        $cond: [{ $in: ['$type', ['Deposit', 'Earning']] }, '$amount', 0]
+        ]),
+        Member.aggregate([
+            { $match: { status: 'active' } },
+            { $group: { _id: null, totalShares: { $sum: '$shares' } } }
+        ]),
+        Transaction.aggregate([
+            { $match: { status: { $in: ['Success', 'Completed'] } } },
+            {
+                $group: {
+                    _id: null,
+                    totalDeposits: {
+                        $sum: {
+                            $cond: [{ $in: ['$type', ['Deposit', 'Earning']] }, '$amount', 0]
+                        }
                     }
                 }
             }
-        }
-    ]);
-
-    // Trend Data (Last 6 Months)
-    const months = [];
-    const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        months.push(d);
-    }
-
-    const trendData = await Promise.all(months.map(async (monthStart) => {
-        const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59);
-        const monthName = monthStart.toLocaleString('default', { month: 'short' });
-
-        const monthlyStats = await Transaction.aggregate([
+        ]),
+        Transaction.aggregate([
             {
                 $match: {
-                    date: { $gte: monthStart, $lte: monthEnd },
+                    date: { $gte: sixMonthsAgo },
                     status: { $in: ['Success', 'Completed'] }
                 }
             },
             {
                 $group: {
-                    _id: null,
+                    _id: {
+                        year: { $year: '$date' },
+                        month: { $month: '$date' }
+                    },
                     inflow: { $sum: { $cond: [{ $in: ['$type', ['Deposit', 'Earning', 'Investment']] }, '$amount', 0] } },
                     outflow: { $sum: { $cond: [{ $in: ['$type', ['Expense', 'Withdrawal', 'Dividend']] }, '$amount', 0] } }
                 }
+            },
+            { $sort: { '_id.year': 1, '_id.month': 1 } }
+        ]),
+        Project.aggregate([
+            {
+                $group: {
+                    _id: '$category',
+                    value: { $sum: '$initialInvestment' }
+                }
+            },
+            { $project: { _id: 0, category: '$_id', value: 1 } }
+        ]),
+        Member.find({ status: 'active' }).lean().sort({ shares: -1 }).limit(6).select('name shares'),
+        Project.find({}).lean().sort({ projectedReturn: -1 }).limit(4).select('title projectedReturn'),
+        Transaction.aggregate([
+            { $match: { status: { $in: ['Success', 'Completed'] } } },
+            {
+                $group: {
+                    _id: null,
+                    totalInflow: { $sum: { $cond: [{ $in: ['$type', ['Deposit', 'Earning', 'Investment', 'Dividend']] }, '$amount', 0] } },
+                    totalOutflow: { $sum: { $cond: [{ $in: ['$type', ['Withdrawal', 'Expense']] }, '$amount', 0] } }
+                }
             }
-        ]);
-
-        return {
-            month: monthName,
-            inflow: monthlyStats[0]?.inflow || 0,
-            outflow: monthlyStats[0]?.outflow || 0
-        };
-    }));
-
-    // Sector Distribution
-    const sectorDiversification = await Project.aggregate([
-        {
-            $group: {
-                _id: '$category',
-                value: { $sum: '$initialInvestment' }
-            }
-        },
-        { $project: { _id: 0, category: '$_id', value: 1 } }
+        ])
     ]);
 
-    // Top Partners by shares for Radar Chart
-    const topPartners = await Member.find({ status: 'active' })
-        .sort({ shares: -1 })
-        .limit(6)
-        .select('name shares');
+    // Convert aggregation result to trend data format
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const trendDataMap = new Map();
+    trendAggregation.forEach(item => {
+        const key = `${item._id.year}-${item._id.month}`;
+        trendDataMap.set(key, { inflow: item.inflow, outflow: item.outflow });
+    });
 
+    // Use 'now' from earlier declaration
+    const trendData = [];
+    for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+        const data = trendDataMap.get(key) || { inflow: 0, outflow: 0 };
+        trendData.push({
+            month: monthNames[d.getMonth()],
+            inflow: data.inflow,
+            outflow: data.outflow
+        });
+    }
+
+    // Process results from parallel queries
     const maxShares = topPartners.length > 0 ? topPartners[0].shares : 100;
-
-    // Top Projects by ROI for Efficiency Matrix
-    const topProjects = await Project.find({})
-        .sort({ projectedReturn: -1 })
-        .limit(4)
-        .select('title projectedReturn');
 
     const formattedTopProjects = topProjects.map(p => ({
         title: p.title,
@@ -133,29 +155,13 @@ const recalculateAllStats = async () => {
         : { name: 'N/A', role: 'N/A' };
 
     // Calculate Fund Stability (NAV Ratio)
-    // Assets = Invested Capital + Cash Balance
-    // Liabilities = Total Deposits
-
-    const cashFlowParams = await Transaction.aggregate([
-        { $match: { status: { $in: ['Success', 'Completed'] } } },
-        {
-            $group: {
-                _id: null,
-                totalInflow: { $sum: { $cond: [{ $in: ['$type', ['Deposit', 'Earning', 'Investment', 'Dividend']] }, '$amount', 0] } },
-                totalOutflow: { $sum: { $cond: [{ $in: ['$type', ['Withdrawal', 'Expense']] }, '$amount', 0] } }
-            }
-        }
-    ]);
-
-    const totalDepositsVal = transactionAggregation[0]?.totalDeposits || 1; // Avoid division by zero
+    const totalDepositsVal = transactionAggregation[0]?.totalDeposits || 1;
     const totalInflow = cashFlowParams[0]?.totalInflow || 0;
     const totalOutflow = cashFlowParams[0]?.totalOutflow || 0;
-    const cashBalance = totalInflow - totalOutflow - (projectAggregation[0]?.investedCapital || 0);
+    const investedCapital = projectAggregation[0]?.investedCapital || 0;
+    const cashBalance = totalInflow - totalOutflow - investedCapital;
 
-    // NAV Ratio = (Invested Capital + Cash Balance) / Total Deposits * 100
-    // Simplified: (Total Assets / Total Liabilities) * 100
-    // Note: This approximates the "Are we solvent?" question
-    const totalAssets = (projectAggregation[0]?.investedCapital || 0) + Math.max(0, cashBalance);
+    const totalAssets = investedCapital + Math.max(0, cashBalance);
     const fundStability = Math.min(100, (totalAssets / totalDepositsVal) * 100).toFixed(1);
 
     const statsData = {

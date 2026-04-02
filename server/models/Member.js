@@ -6,7 +6,6 @@ const memberSchema = mongoose.Schema(
             type: String,
             required: [true, 'Member ID is required'],
             unique: true,
-            index: true,
             trim: true,
         },
         name: {
@@ -84,6 +83,10 @@ const memberSchema = mongoose.Schema(
 );
 
 // Indexes for common searches
+memberSchema.index({ memberId: 1 });
+memberSchema.index({ status: 1, name: 1 });
+memberSchema.index({ email: 1, status: 1 });
+memberSchema.index({ createdAt: -1 });
 memberSchema.index({ name: 'text', email: 'text', memberId: 'text' });
 
 const Member = mongoose.model('Member', memberSchema);

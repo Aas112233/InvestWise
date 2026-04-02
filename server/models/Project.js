@@ -90,6 +90,12 @@ const projectSchema = mongoose.Schema(
     }
 );
 
+// Indexes for common searches
+projectSchema.index({ status: 1, createdAt: -1 });
+projectSchema.index({ category: 1, status: 1 });
+projectSchema.index({ title: 'text', description: 'text', category: 'text' });
+projectSchema.index({ createdAt: -1 });
+
 const Project = mongoose.model('Project', projectSchema);
 
 export default Project;

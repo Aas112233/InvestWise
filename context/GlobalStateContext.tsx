@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Member, Project, Deposit, Expense, Fund, User, AccessLevel, AppScreen, Transaction } from '../types';
-import api, { memberService, projectService, fundService, financeService, authService, analyticsService, auditService, isNetworkError, settingsService } from '../services/api';
+import api, { memberService, projectService, fundService, financeService, authService, analyticsService, auditService, isNetworkError, isDatabaseError, settingsService } from '../services/api';
 
 // ... imports
 export type ConnectionStatus = 'online' | 'offline' | 'degraded';
@@ -120,20 +120,48 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
   const checkConnection = async () => {
     try {
       const start = Date.now();
-      await api.get('/health');
+      const response = await api.get('/health', { timeout: 5000 });
       const latency = Date.now() - start;
 
-      if (connectionStatus !== 'online') {
-        setConnectionStatus('online');
-      }
-      setLastOnlineAt(Date.now());
-      if (latency > 1000) setConnectionStatus('degraded');
-      else setConnectionStatus('online');
-    } catch (error: any) {
-      if (isNetworkError(error)) {
+      const dbStatus = response.data.database?.status;
+
+      // Check if database is healthy
+      if (dbStatus === 'disconnected' || dbStatus === 'unreachable') {
         setConnectionStatus('offline');
+        setLastError({
+          message: 'Database connection lost. Some features may not work.',
+          type: 'error'
+        });
+      } else if (dbStatus === 'slow' || latency > 1000) {
+        setConnectionStatus('degraded');
+        setLastError({
+          message: 'Connection is slow. Performance may be affecteded.',
+          type: 'warning'
+        });
+      } else {
+        setConnectionStatus('online');
+        setLastOnlineAt(Date.now());
+        clearError();
+      }
+    } catch (error: any) {
+      if (isDatabaseError(error)) {
+        setConnectionStatus('offline');
+        setLastError({
+          message: 'Database unavailable. Retrying...',
+          type: 'error'
+        });
+      } else if (isNetworkError(error)) {
+        setConnectionStatus('offline');
+        setLastError({
+          message: 'Server offline. You can keep working; changes will not be saved until connection returns.',
+          type: 'warning'
+        });
       } else if (error.response?.status >= 500) {
         setConnectionStatus('degraded');
+        setLastError({
+          message: 'Server error. Please try again.',
+          type: 'error'
+        });
       } else {
         setConnectionStatus('online');
       }
@@ -156,14 +184,22 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       const response = await memberService.getAll();
       const data = response.data || [];
       setMembers(data.map((m: any) => ({ ...m, id: m._id || m.id })));
-    } catch (e: any) { console.error("Fetch members failed", e); }
+    } catch (e: any) {
+      console.error("Fetch members failed", e);
+      if (isDatabaseError(e)) {
+        setLastError({ message: 'Unable to load members. Database unavailable.', type: 'error' });
+      }
+    }
   };
 
   const fetchSettings = async () => {
     try {
       const data = await settingsService.get();
       setSettings(data);
-    } catch (e: any) { console.error("Fetch settings failed", e); }
+    } catch (e: any) {
+      console.error("Fetch settings failed", e);
+      // Don't show error for settings - it's not critical
+    }
   };
 
   const fetchProjects = async () => {
@@ -171,14 +207,24 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
       const response = await projectService.getAll();
       const data = response.data || [];
       setProjects(data.map((p: any) => ({ ...p, id: p._id || p.id })));
-    } catch (e: any) { console.error("Fetch projects failed", e); }
+    } catch (e: any) {
+      console.error("Fetch projects failed", e);
+      if (isDatabaseError(e)) {
+        setLastError({ message: 'Unable to load projects. Database unavailable.', type: 'error' });
+      }
+    }
   };
 
   const fetchFunds = async () => {
     try {
       const data = await fundService.getAll();
       setFunds(data.map((f: any) => ({ ...f, id: f._id || f.id })));
-    } catch (e: any) { console.error("Fetch funds failed", e); }
+    } catch (e: any) {
+      console.error("Fetch funds failed", e);
+      if (isDatabaseError(e)) {
+        setLastError({ message: 'Unable to load funds. Database unavailable.', type: 'error' });
+      }
+    }
   };
 
   const fetchTransactions = async () => {
@@ -222,7 +268,12 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
         sourceFund: t.fundId?._id || t.fundId
       }));
       setExpenses(expensesList);
-    } catch (e: any) { console.error("Fetch transactions failed", e); }
+    } catch (e: any) {
+      console.error("Fetch transactions failed", e);
+      if (isDatabaseError(e)) {
+        setLastError({ message: 'Unable to load transactions. Database unavailable.', type: 'error' });
+      }
+    }
   };
 
   const fetchSystemUsers = async () => {
