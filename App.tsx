@@ -7,6 +7,9 @@ import { GlobalStateProvider } from './context/GlobalStateContext';
 import { Sparkles } from 'lucide-react';
 import { authService, isNetworkError } from './services/api';
 import ConnectionBanner from './components/ConnectionBanner';
+import ErrorBoundary from './components/ErrorBoundary';
+import SessionTimeoutDialog from './components/SessionTimeoutDialog';
+import { useInactivityTimeout } from './hooks/useInactivityTimeout';
 
 // Layout Components (Lazy)
 const Sidebar = React.lazy(() => import('./components/Sidebar'));
@@ -92,6 +95,36 @@ const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => voi
   const [lang, setLang] = useState<Language>('en');
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Inactivity timeout hook
+  const { showWarning, timeRemaining, extendSession, logout: timeoutLogout } = useInactivityTimeout({
+    timeoutMs: 2 * 60 * 1000,  // 2 minutes of inactivity before warning
+    warningDurationMs: 60 * 1000,  // 60 seconds warning
+    onLogout: () => {
+      authService.logout();
+      setUser(null);
+      navigate('/login?session=timeout');
+    },
+    enabled: !!user,  // Only enable when user is logged in
+  });
+
+  // Handle logout with session extension
+  const handleExtendSession = async () => {
+    try {
+      // Refresh the token to extend session
+      const userInfo = localStorage.getItem('userInfo');
+      if (userInfo) {
+        const { refreshToken } = JSON.parse(userInfo);
+        if (refreshToken) {
+          await authService.refreshToken(refreshToken);
+        }
+      }
+      extendSession();
+    } catch (error) {
+      console.error('Failed to extend session:', error);
+      timeoutLogout();
+    }
+  };
 
   useEffect(() => {
     const getPageTitle = (path: string) => {
@@ -262,6 +295,14 @@ const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => voi
           )
         } />
       </Routes>
+
+      {/* Session Timeout Dialog */}
+      <SessionTimeoutDialog
+        isOpen={showWarning}
+        timeRemaining={timeRemaining}
+        onExtend={handleExtendSession}
+        onLogout={timeoutLogout}
+      />
     </React.Suspense>
   );
 };
@@ -315,11 +356,13 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <GlobalStateProvider user={user}>
-      <Router>
-        <AppContent user={user} setUser={setUser} isLoading={isLoading} />
-      </Router>
-    </GlobalStateProvider>
+    <ErrorBoundary>
+      <GlobalStateProvider user={user}>
+        <Router>
+          <AppContent user={user} setUser={setUser} isLoading={isLoading} />
+        </Router>
+      </GlobalStateProvider>
+    </ErrorBoundary>
   );
 };
 

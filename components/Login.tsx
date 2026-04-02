@@ -191,6 +191,29 @@ const Login: React.FC<LoginProps> = ({ onLogin, lang }) => {
   const navigate = useNavigate();
   const illustrationRef = useRef<HTMLDivElement>(null);
 
+  // Check for session timeout/expiry message from URL
+  React.useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const sessionStatus = searchParams.get('session');
+
+    if (sessionStatus === 'timeout') {
+      setError({
+        type: 'server',
+        message: 'Session Expired',
+        details: 'You were logged out due to inactivity. Please sign in again.'
+      });
+      // Clean up the URL
+      navigate('/login', { replace: true });
+    } else if (sessionStatus === 'expired') {
+      setError({
+        type: 'server',
+        message: 'Session Expired',
+        details: 'Your session has expired for security reasons. Please sign in again.'
+      });
+      navigate('/login', { replace: true });
+    }
+  }, [location.search, navigate]);
+
   const from = location.state?.from?.pathname ||
     new URLSearchParams(location.search).get('redirect') ||
     "/dashboard";

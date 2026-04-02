@@ -33,13 +33,15 @@ const getMembers = asyncHandler(async (req, res) => {
     if (req.query.status) query.status = req.query.status;
     if (req.query.role) query.role = req.query.role;
 
-    const totalCount = await Member.countDocuments(query);
-    const members = await Member.find(query)
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limit)
-        .populate('createdBy', 'name email')
-        .populate('userId', 'name email lastLogin');
+    const [totalCount, members] = await Promise.all([
+        Member.countDocuments(query),
+        Member.find(query)
+            .lean()
+            .sort(sortOptions)
+            .skip(skip)
+            .limit(limit)
+            .select('-__v') // Exclude version key
+    ]);
 
     res.json(formatPaginatedResponse(members, page, limit, totalCount));
 });

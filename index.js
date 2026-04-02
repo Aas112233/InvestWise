@@ -1,12 +1,12 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import helmet from 'helmet';
 import compression from 'compression';
 import connectDB from './config/db.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { logger } from './middleware/logger.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
+import { getSecurityConfig } from './middleware/securityHeaders.js';
 
 dotenv.config();
 
@@ -44,7 +44,11 @@ const corsOptions = {
     maxAge: 86400 // 24 hours
 };
 
-app.use(helmet());
+// Apply Security Headers (CSP, HSTS, X-Frame-Options, etc.)
+const { helmet, additional } = getSecurityConfig();
+app.use(helmet);
+app.use(additional);
+
 app.use(compression());
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
@@ -92,15 +96,18 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
     try {
+        // Try to connect to DB, but don't fail completely if it doesn't work
         await connectDB();
-
-        app.listen(PORT, () => {
-            console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-        });
+        console.log('✅ Database connection established');
     } catch (error) {
-        console.error('Failed to connect to the database. Server not started.');
-        process.exit(1);
+        console.warn('⚠️  Failed to connect to database. Server will start but API calls may fail.');
+        console.warn('⚠️  The database connection will be retried automatically.');
     }
+
+    app.listen(PORT, () => {
+        console.log(`✅ Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+        console.log(`✅ Health check: http://localhost:${PORT}/api/health`);
+    });
 };
 
 startServer();
