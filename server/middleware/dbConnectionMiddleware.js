@@ -3,15 +3,11 @@ import mongoose from 'mongoose';
 // Middleware to check database connection before processing requests
 const checkDbConnection = (req, res, next) => {
   const dbState = mongoose.connection.readyState;
-  
+
   // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
   if (dbState === 0 || dbState === 3) {
-<<<<<<< HEAD
     console.warn(`⚠️ Request blocked - Database disconnected: ${req.method} ${req.url}`);
-=======
-    console.warn(` Request blocked - Database disconnected: ${req.method} ${req.url}`);
->>>>>>> ed09dec2872d0de8166310824c2c266af199c066
-    
+
     return res.status(503).json({
       success: false,
       message: 'Database connection unavailable. Please try again in a few moments.',
@@ -19,14 +15,10 @@ const checkDbConnection = (req, res, next) => {
       retryAfter: 5 // Suggest client to retry after 5 seconds
     });
   }
-  
+
   if (dbState === 2) {
-<<<<<<< HEAD
     console.warn(`⚠️ Request delayed - Database connecting: ${req.method} ${req.url}`);
-=======
-    console.warn(` Request delayed - Database connecting: ${req.method} ${req.url}`);
->>>>>>> ed09dec2872d0de8166310824c2c266af199c066
-    
+
     return res.status(503).json({
       success: false,
       message: 'Database connection in progress. Please try again shortly.',
@@ -34,7 +26,7 @@ const checkDbConnection = (req, res, next) => {
       retryAfter: 3
     });
   }
-  
+
   // Connection is healthy (readyState === 1)
   next();
 };
@@ -46,12 +38,8 @@ const verifyDbConnectivity = async (req, res, next) => {
     await mongoose.connection.db.admin().ping({ maxTimeMS: 2000 });
     next();
   } catch (error) {
-<<<<<<< HEAD
     console.error('❌ Database ping failed:', error.message);
-=======
-    console.error(' Database ping failed:', error.message);
->>>>>>> ed09dec2872d0de8166310824c2c266af199c066
-    
+
     return res.status(503).json({
       success: false,
       message: 'Database is not responding. Our team has been notified.',
@@ -64,7 +52,7 @@ const verifyDbConnectivity = async (req, res, next) => {
 // Optional middleware - only logs connection state, doesn't block
 const logDbState = (req, res, next) => {
   const start = Date.now();
-  
+
   // Log connection state at start of request
   const dbState = mongoose.connection.readyState;
   const stateMap = {
@@ -73,29 +61,21 @@ const logDbState = (req, res, next) => {
     2: 'connecting',
     3: 'disconnecting'
   };
-  
-<<<<<<< HEAD
+
   console.log(`📊 DB State: ${stateMap[dbState]} | ${req.method} ${req.url}`);
-  
+
   // Listen for disconnect during request
   const disconnectHandler = () => {
     console.warn(`⚠️ Database disconnected during request: ${req.method} ${req.url}`);
-=======
-  console.log(` DB State: ${stateMap[dbState]} | ${req.method} ${req.url}`);
-  
-  // Listen for disconnect during request
-  const disconnectHandler = () => {
-    console.warn(` Database disconnected during request: ${req.method} ${req.url}`);
->>>>>>> ed09dec2872d0de8166310824c2c266af199c066
   };
-  
+
   mongoose.connection.once('disconnected', disconnectHandler);
-  
+
   // Clean up listener after response
   res.on('finish', () => {
     mongoose.connection.removeListener('disconnected', disconnectHandler);
   });
-  
+
   next();
 };
 
