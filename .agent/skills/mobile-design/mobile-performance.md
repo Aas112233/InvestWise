@@ -10,12 +10,12 @@
 ### Why Mobile Performance is Different
 
 ```
-DESKTOP:                          MOBILE:
-├── Unlimited power               ├── Battery matters
-├── Abundant RAM                  ├── RAM is shared, limited
-├── Stable network                ├── Network is unreliable
-├── CPU always available          ├── CPU throttles when hot
-└── User expects fast anyway      └── User expects INSTANT
+DESKTOP: MOBILE:
+├── Unlimited power ├── Battery matters
+├── Abundant RAM ├── RAM is shared, limited
+├── Stable network ├── Network is unreliable
+├── CPU always available ├── CPU throttles when hot
+└── User expects fast anyway └── User expects INSTANT
 ```
 
 ### Performance Budget Concept
@@ -35,14 +35,14 @@ If your code takes longer:
 
 ## 2. React Native Performance
 
-### 🚫 The #1 AI Mistake: ScrollView for Lists
+### The #1 AI Mistake: ScrollView for Lists
 
 ```javascript
-// ❌ NEVER DO THIS - AI's favorite mistake
+// NEVER DO THIS - AI's favorite mistake
 <ScrollView>
-  {items.map(item => (
-    <ItemComponent key={item.id} item={item} />
-  ))}
+ {items.map(item => (
+ <ItemComponent key={item.id} item={item} />
+ ))}
 </ScrollView>
 
 // Why it's catastrophic:
@@ -51,32 +51,32 @@ If your code takes longer:
 // ├── Initial render takes seconds
 // └── Scroll becomes janky
 
-// ✅ ALWAYS USE FlatList
+// ALWAYS USE FlatList
 <FlatList
-  data={items}
-  renderItem={renderItem}
-  keyExtractor={item => item.id}
+ data={items}
+ renderItem={renderItem}
+ keyExtractor={item => item.id}
 />
 ```
 
 ### FlatList Optimization Checklist
 
 ```javascript
-// ✅ CORRECT: All optimizations applied
+// CORRECT: All optimizations applied
 
 // 1. Memoize the item component
 const ListItem = React.memo(({ item }: { item: Item }) => {
-  return (
-    <Pressable style={styles.item}>
-      <Text>{item.title}</Text>
-    </Pressable>
-  );
+ return (
+ <Pressable style={styles.item}>
+ <Text>{item.title}</Text>
+ </Pressable>
+ );
 });
 
 // 2. Memoize renderItem with useCallback
 const renderItem = useCallback(
-  ({ item }: { item: Item }) => <ListItem item={item} />,
-  [] // Empty deps = never recreated
+ ({ item }: { item: Item }) => <ListItem item={item} />,
+ [] // Empty deps = never recreated
 );
 
 // 3. Stable keyExtractor (NEVER use index!)
@@ -84,26 +84,26 @@ const keyExtractor = useCallback((item: Item) => item.id, []);
 
 // 4. Provide getItemLayout for fixed-height items
 const getItemLayout = useCallback(
-  (data: Item[] | null, index: number) => ({
-    length: ITEM_HEIGHT, // Fixed height
-    offset: ITEM_HEIGHT * index,
-    index,
-  }),
-  []
+ (data: Item[] | null, index: number) => ({
+ length: ITEM_HEIGHT, // Fixed height
+ offset: ITEM_HEIGHT * index,
+ index,
+ }),
+ []
 );
 
 // 5. Apply to FlatList
 <FlatList
-  data={items}
-  renderItem={renderItem}
-  keyExtractor={keyExtractor}
-  getItemLayout={getItemLayout}
-  // Performance props
-  removeClippedSubviews={true} // Android: detach off-screen
-  maxToRenderPerBatch={10} // Items per batch
-  windowSize={5} // Render window (5 = 2 screens each side)
-  initialNumToRender={10} // Initial items
-  updateCellsBatchingPeriod={50} // Batching delay
+ data={items}
+ renderItem={renderItem}
+ keyExtractor={keyExtractor}
+ getItemLayout={getItemLayout}
+ // Performance props
+ removeClippedSubviews={true} // Android: detach off-screen
+ maxToRenderPerBatch={10} // Items per batch
+ windowSize={5} // Render window (5 = 2 screens each side)
+ initialNumToRender={10} // Initial items
+ updateCellsBatchingPeriod={50} // Batching delay
 />
 ```
 
@@ -111,13 +111,13 @@ const getItemLayout = useCallback(
 
 | Optimization | What It Prevents | Impact |
 |--------------|------------------|--------|
-| `React.memo` | Re-render on parent change | 🔴 Critical |
-| `useCallback renderItem` | New function every render | 🔴 Critical |
-| Stable `keyExtractor` | Wrong item recycling | 🔴 Critical |
-| `getItemLayout` | Async layout calculation | 🟡 High |
-| `removeClippedSubviews` | Memory from off-screen | 🟡 High |
-| `maxToRenderPerBatch` | Blocking main thread | 🟢 Medium |
-| `windowSize` | Memory usage | 🟢 Medium |
+| `React.memo` | Re-render on parent change | Critical |
+| `useCallback renderItem` | New function every render | Critical |
+| Stable `keyExtractor` | Wrong item recycling | Critical |
+| `getItemLayout` | Async layout calculation | � High |
+| `removeClippedSubviews` | Memory from off-screen | � High |
+| `maxToRenderPerBatch` | Blocking main thread | � Medium |
+| `windowSize` | Memory usage | � Medium |
 
 ### FlashList: The Better Option
 
@@ -126,10 +126,10 @@ const getItemLayout = useCallback(
 import { FlashList } from "@shopify/flash-list";
 
 <FlashList
-  data={items}
-  renderItem={renderItem}
-  estimatedItemSize={ITEM_HEIGHT}
-  keyExtractor={keyExtractor}
+ data={items}
+ renderItem={renderItem}
+ estimatedItemSize={ITEM_HEIGHT}
+ keyExtractor={keyExtractor}
 />
 
 // Benefits over FlatList:
@@ -142,18 +142,18 @@ import { FlashList } from "@shopify/flash-list";
 ### Animation Performance
 
 ```javascript
-// ❌ JS-driven animation (blocks JS thread)
+// JS-driven animation (blocks JS thread)
 Animated.timing(value, {
-  toValue: 1,
-  duration: 300,
-  useNativeDriver: false, // BAD!
+ toValue: 1,
+ duration: 300,
+ useNativeDriver: false, // BAD!
 }).start();
 
-// ✅ Native-driver animation (runs on UI thread)
+// Native-driver animation (runs on UI thread)
 Animated.timing(value, {
-  toValue: 1,
-  duration: 300,
-  useNativeDriver: true, // GOOD!
+ toValue: 1,
+ duration: 300,
+ useNativeDriver: true, // GOOD!
 }).start();
 
 // Native driver supports ONLY:
@@ -173,19 +173,19 @@ Animated.timing(value, {
 // For animations native driver can't handle, use Reanimated 3
 
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
+ useSharedValue,
+ useAnimatedStyle,
+ withSpring,
 } from 'react-native-reanimated';
 
 const Component = () => {
-  const offset = useSharedValue(0);
+ const offset = useSharedValue(0);
 
-  const animatedStyles = useAnimatedStyle(() => ({
-    transform: [{ translateX: withSpring(offset.value) }],
-  }));
+ const animatedStyles = useAnimatedStyle(() => ({
+ transform: [{ translateX: withSpring(offset.value) }],
+ }));
 
-  return <Animated.View style={animatedStyles} />;
+ return <Animated.View style={animatedStyles} />;
 };
 
 // Benefits:
@@ -198,21 +198,21 @@ const Component = () => {
 ### Memory Leak Prevention
 
 ```javascript
-// ❌ Memory leak: uncleared interval
+// Memory leak: uncleared interval
 useEffect(() => {
-  const interval = setInterval(() => {
-    fetchData();
-  }, 5000);
-  // Missing cleanup!
+ const interval = setInterval(() => {
+ fetchData();
+ }, 5000);
+ // Missing cleanup!
 }, []);
 
-// ✅ Proper cleanup
+// Proper cleanup
 useEffect(() => {
-  const interval = setInterval(() => {
-    fetchData();
-  }, 5000);
-  
-  return () => clearInterval(interval); // CLEANUP!
+ const interval = setInterval(() => {
+ fetchData();
+ }, 5000);
+ 
+ return () => clearInterval(interval); // CLEANUP!
 }, []);
 
 // Common memory leak sources:
@@ -250,62 +250,62 @@ useEffect(() => {
 
 ## 3. Flutter Performance
 
-### 🚫 The #1 AI Mistake: setState Overuse
+### The #1 AI Mistake: setState Overuse
 
 ```dart
-// ❌ WRONG: setState rebuilds ENTIRE widget tree
+// WRONG: setState rebuilds ENTIRE widget tree
 class BadCounter extends StatefulWidget {
-  @override
-  State<BadCounter> createState() => _BadCounterState();
+ @override
+ State<BadCounter> createState() => _BadCounterState();
 }
 
 class _BadCounterState extends State<BadCounter> {
-  int _counter = 0;
-  
-  void _increment() {
-    setState(() {
-      _counter++; // This rebuilds EVERYTHING below!
-    });
-  }
-  
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text('Counter: $_counter'),
-        ExpensiveWidget(), // Rebuilds unnecessarily!
-        AnotherExpensiveWidget(), // Rebuilds unnecessarily!
-      ],
-    );
-  }
+ int _counter = 0;
+ 
+ void _increment() {
+ setState(() {
+ _counter++; // This rebuilds EVERYTHING below!
+ });
+ }
+ 
+ @override
+ Widget build(BuildContext context) {
+ return Column(
+ children: [
+ Text('Counter: $_counter'),
+ ExpensiveWidget(), // Rebuilds unnecessarily!
+ AnotherExpensiveWidget(), // Rebuilds unnecessarily!
+ ],
+ );
+ }
 }
 ```
 
 ### The `const` Constructor Revolution
 
 ```dart
-// ✅ CORRECT: const prevents rebuilds
+// CORRECT: const prevents rebuilds
 
 class GoodCounter extends StatefulWidget {
-  const GoodCounter({super.key}); // CONST constructor!
-  
-  @override
-  State<GoodCounter> createState() => _GoodCounterState();
+ const GoodCounter({super.key}); // CONST constructor!
+ 
+ @override
+ State<GoodCounter> createState() => _GoodCounterState();
 }
 
 class _GoodCounterState extends State<GoodCounter> {
-  int _counter = 0;
-  
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text('Counter: $_counter'),
-        const ExpensiveWidget(), // Won't rebuild!
-        const AnotherExpensiveWidget(), // Won't rebuild!
-      ],
-    );
-  }
+ int _counter = 0;
+ 
+ @override
+ Widget build(BuildContext context) {
+ return Column(
+ children: [
+ Text('Counter: $_counter'),
+ const ExpensiveWidget(), // Won't rebuild!
+ const AnotherExpensiveWidget(), // Won't rebuild!
+ ],
+ );
+ }
 }
 
 // RULE: Add `const` to EVERY widget that doesn't depend on state
@@ -314,87 +314,87 @@ class _GoodCounterState extends State<GoodCounter> {
 ### Targeted State Management
 
 ```dart
-// ❌ setState rebuilds whole tree
+// setState rebuilds whole tree
 setState(() => _value = newValue);
 
-// ✅ ValueListenableBuilder: surgical rebuilds
+// ValueListenableBuilder: surgical rebuilds
 class TargetedState extends StatelessWidget {
-  final ValueNotifier<int> counter = ValueNotifier(0);
-  
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Only this rebuilds when counter changes
-        ValueListenableBuilder<int>(
-          valueListenable: counter,
-          builder: (context, value, child) => Text('$value'),
-          child: const Icon(Icons.star), // Won't rebuild!
-        ),
-        const ExpensiveWidget(), // Never rebuilds
-      ],
-    );
-  }
+ final ValueNotifier<int> counter = ValueNotifier(0);
+ 
+ @override
+ Widget build(BuildContext context) {
+ return Column(
+ children: [
+ // Only this rebuilds when counter changes
+ ValueListenableBuilder<int>(
+ valueListenable: counter,
+ builder: (context, value, child) => Text('$value'),
+ child: const Icon(Icons.star), // Won't rebuild!
+ ),
+ const ExpensiveWidget(), // Never rebuilds
+ ],
+ );
+ }
 }
 ```
 
 ### Riverpod/Provider Best Practices
 
 ```dart
-// ❌ WRONG: Reading entire provider in build
+// WRONG: Reading entire provider in build
 Widget build(BuildContext context) {
-  final state = ref.watch(myProvider); // Rebuilds on ANY change
-  return Text(state.name);
+ final state = ref.watch(myProvider); // Rebuilds on ANY change
+ return Text(state.name);
 }
 
-// ✅ CORRECT: Select only what you need
+// CORRECT: Select only what you need
 Widget build(BuildContext context) {
-  final name = ref.watch(myProvider.select((s) => s.name));
-  return Text(name); // Only rebuilds when name changes
+ final name = ref.watch(myProvider.select((s) => s.name));
+ return Text(name); // Only rebuilds when name changes
 }
 ```
 
 ### ListView Optimization
 
 ```dart
-// ❌ WRONG: ListView without builder (renders all)
+// WRONG: ListView without builder (renders all)
 ListView(
-  children: items.map((item) => ItemWidget(item)).toList(),
+ children: items.map((item) => ItemWidget(item)).toList(),
 )
 
-// ✅ CORRECT: ListView.builder (lazy rendering)
+// CORRECT: ListView.builder (lazy rendering)
 ListView.builder(
-  itemCount: items.length,
-  itemBuilder: (context, index) => ItemWidget(items[index]),
-  // Additional optimizations:
-  itemExtent: 56, // Fixed height = faster layout
-  cacheExtent: 100, // Pre-render distance
+ itemCount: items.length,
+ itemBuilder: (context, index) => ItemWidget(items[index]),
+ // Additional optimizations:
+ itemExtent: 56, // Fixed height = faster layout
+ cacheExtent: 100, // Pre-render distance
 )
 
-// ✅ EVEN BETTER: ListView.separated for dividers
+// EVEN BETTER: ListView.separated for dividers
 ListView.separated(
-  itemCount: items.length,
-  itemBuilder: (context, index) => ItemWidget(items[index]),
-  separatorBuilder: (context, index) => const Divider(),
+ itemCount: items.length,
+ itemBuilder: (context, index) => ItemWidget(items[index]),
+ separatorBuilder: (context, index) => const Divider(),
 )
 ```
 
 ### Image Optimization
 
 ```dart
-// ❌ WRONG: No caching, full resolution
+// WRONG: No caching, full resolution
 Image.network(url)
 
-// ✅ CORRECT: Cached with proper sizing
+// CORRECT: Cached with proper sizing
 CachedNetworkImage(
-  imageUrl: url,
-  width: 100,
-  height: 100,
-  fit: BoxFit.cover,
-  memCacheWidth: 200, // Cache at 2x for retina
-  memCacheHeight: 200,
-  placeholder: (context, url) => const Skeleton(),
-  errorWidget: (context, url, error) => const Icon(Icons.error),
+ imageUrl: url,
+ width: 100,
+ height: 100,
+ fit: BoxFit.cover,
+ memCacheWidth: 200, // Cache at 2x for retina
+ memCacheHeight: 200,
+ placeholder: (context, url) => const Skeleton(),
+ errorWidget: (context, url, error) => const Icon(Icons.error),
 )
 ```
 
@@ -402,34 +402,34 @@ CachedNetworkImage(
 
 ```dart
 class MyWidget extends StatefulWidget {
-  @override
-  State<MyWidget> createState() => _MyWidgetState();
+ @override
+ State<MyWidget> createState() => _MyWidgetState();
 }
 
 class _MyWidgetState extends State<MyWidget> {
-  late final StreamSubscription _subscription;
-  late final AnimationController _controller;
-  late final TextEditingController _textController;
-  
-  @override
-  void initState() {
-    super.initState();
-    _subscription = stream.listen((_) {});
-    _controller = AnimationController(vsync: this);
-    _textController = TextEditingController();
-  }
-  
-  @override
-  void dispose() {
-    // ALWAYS dispose in reverse order of creation
-    _textController.dispose();
-    _controller.dispose();
-    _subscription.cancel();
-    super.dispose();
-  }
-  
-  @override
-  Widget build(BuildContext context) => Container();
+ late final StreamSubscription _subscription;
+ late final AnimationController _controller;
+ late final TextEditingController _textController;
+ 
+ @override
+ void initState() {
+ super.initState();
+ _subscription = stream.listen((_) {});
+ _controller = AnimationController(vsync: this);
+ _textController = TextEditingController();
+ }
+ 
+ @override
+ void dispose() {
+ // ALWAYS dispose in reverse order of creation
+ _textController.dispose();
+ _controller.dispose();
+ _subscription.cancel();
+ super.dispose();
+ }
+ 
+ @override
+ Widget build(BuildContext context) => Container();
 }
 ```
 
@@ -480,12 +480,12 @@ NEVER ship < 60fps animations.
 ### GPU vs CPU Animation
 
 ```
-GPU-ACCELERATED (FAST):          CPU-BOUND (SLOW):
-├── transform: translate          ├── width, height
-├── transform: scale              ├── top, left, right, bottom
-├── transform: rotate             ├── margin, padding
-├── opacity                       ├── border-radius (animated)
-└── (Composited, off main)        └── box-shadow (animated)
+GPU-ACCELERATED (FAST): CPU-BOUND (SLOW):
+├── transform: translate ├── width, height
+├── transform: scale ├── top, left, right, bottom
+├── transform: rotate ├── margin, padding
+├── opacity ├── border-radius (animated)
+└── (Composited, off main) └── box-shadow (animated)
 
 RULE: Only animate transform and opacity.
 Everything else causes layout recalculation.
@@ -506,21 +506,21 @@ Everything else causes layout recalculation.
 ```javascript
 // React Native Reanimated
 withSpring(targetValue, {
-  damping: 15,      // How quickly it settles (higher = faster stop)
-  stiffness: 150,   // How "tight" the spring (higher = faster)
-  mass: 1,          // Weight of the object
+ damping: 15, // How quickly it settles (higher = faster stop)
+ stiffness: 150, // How "tight" the spring (higher = faster)
+ mass: 1, // Weight of the object
 })
 
 // Flutter
 SpringSimulation(
-  SpringDescription(
-    mass: 1,
-    stiffness: 150,
-    damping: 15,
-  ),
-  start,
-  end,
-  velocity,
+ SpringDescription(
+ mass: 1,
+ stiffness: 150,
+ damping: 15,
+ ),
+ start,
+ end,
+ velocity,
 )
 
 // Natural feel ranges:
@@ -579,12 +579,12 @@ Flutter:
 
 | Source | Impact | Mitigation |
 |--------|--------|------------|
-| **Screen on** | 🔴 Highest | Dark mode on OLED |
-| **GPS continuous** | 🔴 Very high | Use significant change |
-| **Network requests** | 🟡 High | Batch, cache aggressively |
-| **Animations** | 🟡 Medium | Reduce when low battery |
-| **Background work** | 🟡 Medium | Defer non-critical |
-| **CPU computation** | 🟢 Lower | Offload to backend |
+| **Screen on** | Highest | Dark mode on OLED |
+| **GPS continuous** | Very high | Use significant change |
+| **Network requests** | � High | Batch, cache aggressively |
+| **Animations** | � Medium | Reduce when low battery |
+| **Background work** | � Medium | Defer non-critical |
+| **CPU computation** | � Lower | Offload to backend |
 
 ### OLED Battery Saving
 
@@ -623,17 +623,17 @@ Android:
 ### Offline-First Architecture
 
 ```
-                    ┌──────────────┐
-                    │     UI       │
-                    └──────┬───────┘
-                           │
-                    ┌──────▼───────┐
-                    │   Cache      │ ← Read from cache FIRST
-                    └──────┬───────┘
-                           │
-                    ┌──────▼───────┐
-                    │   Network    │ ← Update cache from network
-                    └──────────────┘
+ ┌──────────────┐
+ │ UI │
+ └──────┬───────┘
+ │
+ ┌──────▼───────┐
+ │ Cache │ ← Read from cache FIRST
+ └──────┬───────┘
+ │
+ ┌──────▼───────┐
+ │ Network │ ← Update cache from network
+ └──────────────┘
 
 Benefits:
 ├── Instant UI (no loading spinner for cached data)
@@ -679,12 +679,12 @@ COMPRESS: Reduce payload size
 ### Test on Real Devices
 
 ```
-⚠️ NEVER trust only:
+ NEVER trust only:
 ├── Simulator/emulator (faster than real)
 ├── Dev mode (slower than release)
 ├── High-end devices only
 
-✅ ALWAYS test on:
+ ALWAYS test on:
 ├── Low-end Android (< $200 phone)
 ├── Older iOS device (iPhone 8 or SE)
 ├── Release/profile build
@@ -718,10 +718,10 @@ COMPRESS: Reduce payload size
 ```javascript
 // List: Always use
 <FlatList
-  data={data}
-  renderItem={useCallback(({item}) => <MemoItem item={item} />, [])}
-  keyExtractor={useCallback(item => item.id, [])}
-  getItemLayout={useCallback((_, i) => ({length: H, offset: H*i, index: i}), [])}
+ data={data}
+ renderItem={useCallback(({item}) => <MemoItem item={item} />, [])}
+ keyExtractor={useCallback(item => item.id, [])}
+ getItemLayout={useCallback((_, i) => ({length: H, offset: H*i, index: i}), [])}
 />
 
 // Animation: Always native
@@ -729,7 +729,7 @@ useNativeDriver: true
 
 // Cleanup: Always present
 useEffect(() => {
-  return () => cleanup();
+ return () => cleanup();
 }, []);
 ```
 
@@ -748,8 +748,8 @@ ValueListenableBuilder() or ref.watch(provider.select(...))
 // Dispose: Always cleanup
 @override
 void dispose() {
-  controller.dispose();
-  super.dispose();
+ controller.dispose();
+ super.dispose();
 }
 ```
 

@@ -13,8 +13,8 @@
 **Enforcement:**
 ```
 IF task.type == "implementation" AND !exists(spec_file):
-    BLOCK with error: "SPEC_MISSING"
-    REQUIRE: Create OpenAPI spec first
+ BLOCK with error: "SPEC_MISSING"
+ REQUIRE: Create OpenAPI spec first
 ```
 
 **Rationale:** Specs are contracts. Code is implementation. Contract before implementation.
@@ -25,9 +25,9 @@ IF task.type == "implementation" AND !exists(spec_file):
 **Enforcement:**
 ```
 ON task.status == "completed":
-    git add <modified_files>
-    git commit -m "[Loki] Task ${task.id}: ${task.title}"
-    UPDATE CONTINUITY.md with commit SHA
+ git add <modified_files>
+ git commit -m "[Loki] Task ${task.id}: ${task.title}"
+ UPDATE CONTINUITY.md with commit SHA
 ```
 
 **Rationale:** Git history is proof of progress. Every task is a save point.
@@ -38,10 +38,10 @@ ON task.status == "completed":
 **Enforcement:**
 ```
 ON agent.spawn():
-    agent.context.parent_id = spawner.agent_id
-    agent.context.lineage = [...spawner.lineage, spawner.agent_id]
-    agent.context.inherited_memory = spawner.memory.export()
-    WRITE .agent/sub-agents/${agent.agent_id}.json
+ agent.context.parent_id = spawner.agent_id
+ agent.context.lineage = [...spawner.lineage, spawner.agent_id]
+ agent.context.inherited_memory = spawner.memory.export()
+ WRITE .agent/sub-agents/${agent.agent_id}.json
 ```
 
 **Rationale:** Context drift kills multi-agent systems. Lineage is truth.
@@ -52,13 +52,13 @@ ON agent.spawn():
 **Enforcement:**
 ```
 WHILE generating_spec:
-    IF ambiguity_detected OR assumption_required:
-        questions = generate_clarifying_questions()
-        IF orchestrator_mode:
-            answers = infer_from_prd()
-        ELSE:
-            answers = ask_user(questions)
-        UPDATE spec WITH answers
+ IF ambiguity_detected OR assumption_required:
+ questions = generate_clarifying_questions()
+ IF orchestrator_mode:
+ answers = infer_from_prd()
+ ELSE:
+ answers = ask_user(questions)
+ UPDATE spec WITH answers
 ```
 
 **Rationale:** Assumptions create bugs. Questions create clarity.
@@ -69,10 +69,10 @@ WHILE generating_spec:
 **Enforcement:**
 ```
 rules/
-├── pre-commit.schema.json     # Validation rules
-├── quality-gates.yaml         # Quality thresholds
-├── agent-contracts.json       # Agent responsibilities
-└── invariants.ts              # Runtime assertions
+├── pre-commit.schema.json # Validation rules
+├── quality-gates.yaml # Quality thresholds
+├── agent-contracts.json # Agent responsibilities
+└── invariants.ts # Runtime assertions
 ```
 
 **Rationale:** Humans read markdown. Machines enforce JSON/YAML.
@@ -157,43 +157,43 @@ rules/
 ### Pre-Commit Hook (BLOCKING)
 ```yaml
 quality_gates:
-  linting:
-    enabled: true
-    auto_fix: true
-    block_on_failure: true
+ linting:
+ enabled: true
+ auto_fix: true
+ block_on_failure: true
 
-  type_checking:
-    enabled: true
-    strict_mode: true
-    block_on_failure: true
+ type_checking:
+ enabled: true
+ strict_mode: true
+ block_on_failure: true
 
-  contract_tests:
-    enabled: true
-    min_coverage: 80%
-    block_on_failure: true
+ contract_tests:
+ enabled: true
+ min_coverage: 80%
+ block_on_failure: true
 
-  spec_validation:
-    enabled: true
-    validator: spectral
-    block_on_failure: true
+ spec_validation:
+ enabled: true
+ validator: spectral
+ block_on_failure: true
 ```
 
 ### Post-Implementation Review (AUTO-FIX)
 ```yaml
 auto_review:
-  static_analysis:
-    tools: [eslint, prettier, tsc]
-    auto_fix: true
+ static_analysis:
+ tools: [eslint, prettier, tsc]
+ auto_fix: true
 
-  security_scan:
-    tools: [semgrep, snyk]
-    severity_threshold: medium
-    auto_create_issues: true
+ security_scan:
+ tools: [semgrep, snyk]
+ severity_threshold: medium
+ auto_create_issues: true
 
-  performance_check:
-    lighthouse_score: 90
-    bundle_size_limit: 500kb
-    warn_only: true
+ performance_check:
+ lighthouse_score: 90
+ bundle_size_limit: 500kb
+ warn_only: true
 ```
 
 ---
@@ -231,30 +231,30 @@ auto_review:
 
 ```json
 {
-  "agent_id": "eng-001-backend-api",
-  "agent_type": "general-purpose",
-  "model": "haiku",
-  "spawned_at": "2026-01-04T05:30:00Z",
-  "spawned_by": "orchestrator-main",
-  "lineage": ["orchestrator-main", "eng-001-backend-api"],
-  "inherited_context": {
-    "phase": "development",
-    "current_task": "task-005",
-    "spec_reference": ".loki/specs/openapi.yaml#/paths/~1api~1todos",
-    "tech_stack": ["Node.js", "Express", "TypeScript", "SQLite"]
-  },
-  "decisions_made": [
-    {
-      "timestamp": "2026-01-04T05:31:15Z",
-      "question": "Should we use Prisma or raw SQL?",
-      "answer": "Raw SQL with better-sqlite3 for simplicity",
-      "rationale": "PRD requires minimal dependencies, synchronous ops preferred"
-    }
-  ],
-  "tasks_completed": ["task-005"],
-  "commits_created": ["abc123f", "def456a"],
-  "status": "completed",
-  "completed_at": "2026-01-04T05:45:00Z"
+ "agent_id": "eng-001-backend-api",
+ "agent_type": "general-purpose",
+ "model": "haiku",
+ "spawned_at": "2026-01-04T05:30:00Z",
+ "spawned_by": "orchestrator-main",
+ "lineage": ["orchestrator-main", "eng-001-backend-api"],
+ "inherited_context": {
+ "phase": "development",
+ "current_task": "task-005",
+ "spec_reference": ".loki/specs/openapi.yaml#/paths/~1api~1todos",
+ "tech_stack": ["Node.js", "Express", "TypeScript", "SQLite"]
+ },
+ "decisions_made": [
+ {
+ "timestamp": "2026-01-04T05:31:15Z",
+ "question": "Should we use Prisma or raw SQL?",
+ "answer": "Raw SQL with better-sqlite3 for simplicity",
+ "rationale": "PRD requires minimal dependencies, synchronous ops preferred"
+ }
+ ],
+ "tasks_completed": ["task-005"],
+ "commits_created": ["abc123f", "def456a"],
+ "status": "completed",
+ "completed_at": "2026-01-04T05:45:00Z"
 }
 ```
 
@@ -298,37 +298,37 @@ Tests: backend/tests/todos.contract.test.ts
 // .loki/rules/invariants.ts
 
 export const INVARIANTS = {
-  // Spec must exist before implementation
-  SPEC_BEFORE_CODE: (task: Task) => {
-    if (task.type === 'implementation') {
-      assert(exists(task.spec_reference), 'SPEC_MISSING');
-    }
-  },
+ // Spec must exist before implementation
+ SPEC_BEFORE_CODE: (task: Task) => {
+ if (task.type === 'implementation') {
+ assert(exists(task.spec_reference), 'SPEC_MISSING');
+ }
+ },
 
-  // All tasks must have git commits
-  TASK_HAS_COMMIT: (task: Task) => {
-    if (task.status === 'completed') {
-      assert(task.git_commit_sha, 'COMMIT_MISSING');
-    }
-  },
+ // All tasks must have git commits
+ TASK_HAS_COMMIT: (task: Task) => {
+ if (task.status === 'completed') {
+ assert(task.git_commit_sha, 'COMMIT_MISSING');
+ }
+ },
 
-  // Agent lineage must be preserved
-  AGENT_HAS_LINEAGE: (agent: Agent) => {
-    assert(agent.lineage.length > 0, 'LINEAGE_MISSING');
-    assert(agent.spawned_by, 'PARENT_MISSING');
-  },
+ // Agent lineage must be preserved
+ AGENT_HAS_LINEAGE: (agent: Agent) => {
+ assert(agent.lineage.length > 0, 'LINEAGE_MISSING');
+ assert(agent.spawned_by, 'PARENT_MISSING');
+ },
 
-  // CONTINUITY.md must always exist
-  CONTINUITY_EXISTS: () => {
-    assert(exists('.loki/CONTINUITY.md'), 'CONTINUITY_MISSING');
-  },
+ // CONTINUITY.md must always exist
+ CONTINUITY_EXISTS: () => {
+ assert(exists('.loki/CONTINUITY.md'), 'CONTINUITY_MISSING');
+ },
 
-  // Quality gates must pass before merge
-  QUALITY_GATES_PASSED: (task: Task) => {
-    if (task.status === 'completed') {
-      assert(task.quality_checks.all_passed, 'QUALITY_GATE_FAILED');
-    }
-  }
+ // Quality gates must pass before merge
+ QUALITY_GATES_PASSED: (task: Task) => {
+ if (task.status === 'completed') {
+ assert(task.quality_checks.all_passed, 'QUALITY_GATE_FAILED');
+ }
+ }
 };
 ```
 
@@ -343,16 +343,16 @@ export const INVARIANTS = {
 **Example - Authentication Flow:**
 ```mermaid
 sequenceDiagram
-    participant C as Client
-    participant A as API
-    participant D as Database
+ participant C as Client
+ participant A as API
+ participant D as Database
 
-    C->>A: POST /api/auth/login
-    A->>A: Validate credentials
-    A->>D: Query user
-    D-->>A: User record
-    A->>A: Generate JWT token
-    A-->>C: 200 OK {token}
+ C->>A: POST /api/auth/login
+ A->>A: Validate credentials
+ A->>D: Query user
+ D-->>A: User record
+ A->>A: Generate JWT token
+ A-->>C: 200 OK {token}
 ```
 
 **Storage Location:** `.loki/diagrams/${feature_name}.mmd`

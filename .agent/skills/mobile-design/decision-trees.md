@@ -11,60 +11,60 @@
 
 ```
 WHAT ARE YOU BUILDING?
-        │
-        ├── Need OTA updates without app store review?
-        │   │
-        │   ├── Yes → React Native + Expo
-        │   │         ├── Expo Go for development
-        │   │         ├── EAS Update for production OTA
-        │   │         └── Best for: rapid iteration, web teams
-        │   │
-        │   └── No → Continue ▼
-        │
-        ├── Need pixel-perfect custom UI across platforms?
-        │   │
-        │   ├── Yes → Flutter
-        │   │         ├── Custom rendering engine
-        │   │         ├── Single UI for iOS + Android
-        │   │         └── Best for: branded, visual apps
-        │   │
-        │   └── No → Continue ▼
-        │
-        ├── Heavy native features (ARKit, HealthKit, specific sensors)?
-        │   │
-        │   ├── iOS only → SwiftUI / UIKit
-        │   │              └── Maximum native capability
-        │   │
-        │   ├── Android only → Kotlin + Jetpack Compose
-        │   │                  └── Maximum native capability
-        │   │
-        │   └── Both → Consider native with shared logic
-        │              └── Kotlin Multiplatform for shared
-        │
-        ├── Existing web team + TypeScript codebase?
-        │   │
-        │   └── Yes → React Native
-        │             ├── Familiar paradigm for React devs
-        │             ├── Share code with web (limited)
-        │             └── Large ecosystem
-        │
-        └── Enterprise with existing Flutter team?
-            │
-            └── Yes → Flutter
-                      └── Leverage existing expertise
+ │
+ ├── Need OTA updates without app store review?
+ │ │
+ │ ├── Yes → React Native + Expo
+ │ │ ├── Expo Go for development
+ │ │ ├── EAS Update for production OTA
+ │ │ └── Best for: rapid iteration, web teams
+ │ │
+ │ └── No → Continue ▼
+ │
+ ├── Need pixel-perfect custom UI across platforms?
+ │ │
+ │ ├── Yes → Flutter
+ │ │ ├── Custom rendering engine
+ │ │ ├── Single UI for iOS + Android
+ │ │ └── Best for: branded, visual apps
+ │ │
+ │ └── No → Continue ▼
+ │
+ ├── Heavy native features (ARKit, HealthKit, specific sensors)?
+ │ │
+ │ ├── iOS only → SwiftUI / UIKit
+ │ │ └── Maximum native capability
+ │ │
+ │ ├── Android only → Kotlin + Jetpack Compose
+ │ │ └── Maximum native capability
+ │ │
+ │ └── Both → Consider native with shared logic
+ │ └── Kotlin Multiplatform for shared
+ │
+ ├── Existing web team + TypeScript codebase?
+ │ │
+ │ └── Yes → React Native
+ │ ├── Familiar paradigm for React devs
+ │ ├── Share code with web (limited)
+ │ └── Large ecosystem
+ │
+ └── Enterprise with existing Flutter team?
+ │
+ └── Yes → Flutter
+ └── Leverage existing expertise
 ```
 
 ### Framework Comparison
 
 | Factor | React Native | Flutter | Native (Swift/Kotlin) |
 |--------|-------------|---------|----------------------|
-| **OTA Updates** | ✅ Expo | ❌ No | ❌ No |
+| **OTA Updates** | Expo | No | No |
 | **Learning Curve** | Low (React devs) | Medium | Higher |
 | **Performance** | Good | Excellent | Best |
 | **UI Consistency** | Platform-native | Identical | Platform-native |
 | **Bundle Size** | Medium | Larger | Smallest |
 | **Native Access** | Via bridges | Via channels | Direct |
-| **Hot Reload** | ✅ | ✅ | ✅ (Xcode 15+) |
+| **Hot Reload** | | | (Xcode 15+) |
 
 ### When to Choose Native
 
@@ -93,76 +93,76 @@ AVOID NATIVE WHEN:
 
 ```
 WHAT'S YOUR STATE COMPLEXITY?
-        │
-        ├── Simple app, few screens, minimal shared state
-        │   │
-        │   └── Zustand (or just useState/Context)
-        │       ├── Minimal boilerplate
-        │       ├── Easy to understand
-        │       └── Scales OK to medium
-        │
-        ├── Primarily server data (API-driven)
-        │   │
-        │   └── TanStack Query (React Query) + Zustand
-        │       ├── Query for server state
-        │       ├── Zustand for UI state
-        │       └── Excellent caching, refetching
-        │
-        ├── Complex app with many features
-        │   │
-        │   └── Redux Toolkit + RTK Query
-        │       ├── Predicable, debuggable
-        │       ├── RTK Query for API
-        │       └── Good for large teams
-        │
-        └── Atomic, granular state needs
-            │
-            └── Jotai
-                ├── Atom-based (like Recoil)
-                ├── Minimizes re-renders
-                └── Good for derived state
+ │
+ ├── Simple app, few screens, minimal shared state
+ │ │
+ │ └── Zustand (or just useState/Context)
+ │ ├── Minimal boilerplate
+ │ ├── Easy to understand
+ │ └── Scales OK to medium
+ │
+ ├── Primarily server data (API-driven)
+ │ │
+ │ └── TanStack Query (React Query) + Zustand
+ │ ├── Query for server state
+ │ ├── Zustand for UI state
+ │ └── Excellent caching, refetching
+ │
+ ├── Complex app with many features
+ │ │
+ │ └── Redux Toolkit + RTK Query
+ │ ├── Predicable, debuggable
+ │ ├── RTK Query for API
+ │ └── Good for large teams
+ │
+ └── Atomic, granular state needs
+ │
+ └── Jotai
+ ├── Atom-based (like Recoil)
+ ├── Minimizes re-renders
+ └── Good for derived state
 ```
 
 ### Flutter State Decision
 
 ```
 WHAT'S YOUR STATE COMPLEXITY?
-        │
-        ├── Simple app, learning Flutter
-        │   │
-        │   └── Provider (or setState)
-        │       ├── Official, simple
-        │       ├── Built into Flutter
-        │       └── Good for small apps
-        │
-        ├── Modern, type-safe, testable
-        │   │
-        │   └── Riverpod 2.0
-        │       ├── Compile-time safety
-        │       ├── Code generation
-        │       ├── Excellent for medium-large apps
-        │       └── Recommended for new projects
-        │
-        ├── Enterprise, strict patterns needed
-        │   │
-        │   └── BLoC
-        │       ├── Event → State pattern
-        │       ├── Very testable
-        │       ├── More boilerplate
-        │       └── Good for large teams
-        │
-        └── Quick prototyping
-            │
-            └── GetX (with caution)
-                ├── Fast to implement
-                ├── Less strict patterns
-                └── Can become messy at scale
+ │
+ ├── Simple app, learning Flutter
+ │ │
+ │ └── Provider (or setState)
+ │ ├── Official, simple
+ │ ├── Built into Flutter
+ │ └── Good for small apps
+ │
+ ├── Modern, type-safe, testable
+ │ │
+ │ └── Riverpod 2.0
+ │ ├── Compile-time safety
+ │ ├── Code generation
+ │ ├── Excellent for medium-large apps
+ │ └── Recommended for new projects
+ │
+ ├── Enterprise, strict patterns needed
+ │ │
+ │ └── BLoC
+ │ ├── Event → State pattern
+ │ ├── Very testable
+ │ ├── More boilerplate
+ │ └── Good for large teams
+ │
+ └── Quick prototyping
+ │
+ └── GetX (with caution)
+ ├── Fast to implement
+ ├── Less strict patterns
+ └── Can become messy at scale
 ```
 
 ### State Management Anti-Patterns
 
 ```
-❌ DON'T:
+ DON'T:
 ├── Use global state for everything
 ├── Mix state management approaches
 ├── Store server state in local state
@@ -170,7 +170,7 @@ WHAT'S YOUR STATE COMPLEXITY?
 ├── Overuse Context (re-render heavy)
 └── Put navigation state in app state
 
-✅ DO:
+ DO:
 ├── Server state → Query library
 ├── UI state → Minimal, local first
 ├── Lift state only when needed
@@ -184,25 +184,25 @@ WHAT'S YOUR STATE COMPLEXITY?
 
 ```
 HOW MANY TOP-LEVEL DESTINATIONS?
-        │
-        ├── 2 destinations
-        │   └── Consider: Top tabs or simple stack
-        │
-        ├── 3-5 destinations (equal importance)
-        │   └── ✅ Tab Bar / Bottom Navigation
-        │       ├── Most common pattern
-        │       └── Easy discovery
-        │
-        ├── 5+ destinations
-        │   │
-        │   ├── All important → Drawer Navigation
-        │   │                   └── Hidden but many options
-        │   │
-        │   └── Some less important → Tab bar + drawer hybrid
-        │
-        └── Single linear flow?
-            └── Stack Navigation only
-                └── Onboarding, checkout, etc.
+ │
+ ├── 2 destinations
+ │ └── Consider: Top tabs or simple stack
+ │
+ ├── 3-5 destinations (equal importance)
+ │ └── Tab Bar / Bottom Navigation
+ │ ├── Most common pattern
+ │ └── Easy discovery
+ │
+ ├── 5+ destinations
+ │ │
+ │ ├── All important → Drawer Navigation
+ │ │ └── Hidden but many options
+ │ │
+ │ └── Some less important → Tab bar + drawer hybrid
+ │
+ └── Single linear flow?
+ └── Stack Navigation only
+ └── Onboarding, checkout, etc.
 ```
 
 ### Navigation by App Type
@@ -222,48 +222,48 @@ HOW MANY TOP-LEVEL DESTINATIONS?
 
 ```
 WHAT TYPE OF DATA?
-        │
-        ├── Sensitive (tokens, passwords, keys)
-        │   │
-        │   └── ✅ Secure Storage
-        │       ├── iOS: Keychain
-        │       ├── Android: EncryptedSharedPreferences
-        │       └── RN: expo-secure-store / react-native-keychain
-        │
-        ├── User preferences (settings, theme)
-        │   │
-        │   └── ✅ Key-Value Storage
-        │       ├── iOS: UserDefaults
-        │       ├── Android: SharedPreferences
-        │       └── RN: AsyncStorage / MMKV
-        │
-        ├── Structured data (entities, relationships)
-        │   │
-        │   └── ✅ Database
-        │       ├── SQLite (expo-sqlite, sqflite)
-        │       ├── Realm (NoSQL, reactive)
-        │       └── WatermelonDB (large datasets)
-        │
-        ├── Large files (images, documents)
-        │   │
-        │   └── ✅ File System
-        │       ├── iOS: Documents / Caches directory
-        │       ├── Android: Internal/External storage
-        │       └── RN: react-native-fs / expo-file-system
-        │
-        └── Cached API data
-            │
-            └── ✅ Query Library Cache
-                ├── TanStack Query (RN)
-                ├── Riverpod async (Flutter)
-                └── Automatic invalidation
+ │
+ ├── Sensitive (tokens, passwords, keys)
+ │ │
+ │ └── Secure Storage
+ │ ├── iOS: Keychain
+ │ ├── Android: EncryptedSharedPreferences
+ │ └── RN: expo-secure-store / react-native-keychain
+ │
+ ├── User preferences (settings, theme)
+ │ │
+ │ └── Key-Value Storage
+ │ ├── iOS: UserDefaults
+ │ ├── Android: SharedPreferences
+ │ └── RN: AsyncStorage / MMKV
+ │
+ ├── Structured data (entities, relationships)
+ │ │
+ │ └── Database
+ │ ├── SQLite (expo-sqlite, sqflite)
+ │ ├── Realm (NoSQL, reactive)
+ │ └── WatermelonDB (large datasets)
+ │
+ ├── Large files (images, documents)
+ │ │
+ │ └── File System
+ │ ├── iOS: Documents / Caches directory
+ │ ├── Android: Internal/External storage
+ │ └── RN: react-native-fs / expo-file-system
+ │
+ └── Cached API data
+ │
+ └── Query Library Cache
+ ├── TanStack Query (RN)
+ ├── Riverpod async (Flutter)
+ └── Automatic invalidation
 ```
 
 ### Storage Comparison
 
 | Storage | Speed | Security | Capacity | Use Case |
 |---------|-------|----------|----------|----------|
-| Secure Storage | Medium | 🔒 High | Small | Tokens, secrets |
+| Secure Storage | Medium | High | Small | Tokens, secrets |
 | Key-Value | Fast | Low | Medium | Settings |
 | SQLite | Fast | Low | Large | Structured data |
 | File System | Medium | Low | Very Large | Media, documents |
@@ -275,45 +275,45 @@ WHAT TYPE OF DATA?
 
 ```
 HOW CRITICAL IS OFFLINE?
-        │
-        ├── Nice to have (works when possible)
-        │   │
-        │   └── Cache last data + show stale
-        │       ├── Simple implementation
-        │       ├── TanStack Query with staleTime
-        │       └── Show "last updated" timestamp
-        │
-        ├── Essential (core functionality offline)
-        │   │
-        │   └── Offline-first architecture
-        │       ├── Local database as source of truth
-        │       ├── Sync to server when online
-        │       ├── Conflict resolution strategy
-        │       └── Queue actions for later sync
-        │
-        └── Real-time critical (collaboration, chat)
-            │
-            └── WebSocket + local queue
-                ├── Optimistic updates
-                ├── Eventual consistency
-                └── Complex conflict handling
+ │
+ ├── Nice to have (works when possible)
+ │ │
+ │ └── Cache last data + show stale
+ │ ├── Simple implementation
+ │ ├── TanStack Query with staleTime
+ │ └── Show "last updated" timestamp
+ │
+ ├── Essential (core functionality offline)
+ │ │
+ │ └── Offline-first architecture
+ │ ├── Local database as source of truth
+ │ ├── Sync to server when online
+ │ ├── Conflict resolution strategy
+ │ └── Queue actions for later sync
+ │
+ └── Real-time critical (collaboration, chat)
+ │
+ └── WebSocket + local queue
+ ├── Optimistic updates
+ ├── Eventual consistency
+ └── Complex conflict handling
 ```
 
 ### Offline Implementation Patterns
 
 ```
 1. CACHE-FIRST (Simple)
-   Request → Check cache → If stale, fetch → Update cache
-   
+ Request → Check cache → If stale, fetch → Update cache
+ 
 2. STALE-WHILE-REVALIDATE
-   Request → Return cached → Fetch update → Update UI
-   
+ Request → Return cached → Fetch update → Update UI
+ 
 3. OFFLINE-FIRST (Complex)
-   Action → Write to local DB → Queue sync → Sync when online
-   
+ Action → Write to local DB → Queue sync → Sync when online
+ 
 4. SYNC ENGINE
-   Use: Firebase, Realm Sync, Supabase realtime
-   Handles conflict resolution automatically
+ Use: Firebase, Realm Sync, Supabase realtime
+ Handles conflict resolution automatically
 ```
 
 ---
@@ -322,45 +322,45 @@ HOW CRITICAL IS OFFLINE?
 
 ```
 WHAT AUTH TYPE NEEDED?
-        │
-        ├── Simple email/password
-        │   │
-        │   └── Token-based (JWT)
-        │       ├── Store refresh token securely
-        │       ├── Access token in memory
-        │       └── Silent refresh flow
-        │
-        ├── Social login (Google, Apple, etc.)
-        │   │
-        │   └── OAuth 2.0 + PKCE
-        │       ├── Use platform SDKs
-        │       ├── Deep link callback
-        │       └── Apple Sign-In required for iOS
-        │
-        ├── Enterprise/SSO
-        │   │
-        │   └── OIDC / SAML
-        │       ├── Web view or system browser
-        │       └── Handle redirect properly
-        │
-        └── Biometric (FaceID, fingerprint)
-            │
-            └── Local auth + secure token
-                ├── Biometrics unlock stored token
-                ├── Not a replacement for server auth
-                └── Fallback to PIN/password
+ │
+ ├── Simple email/password
+ │ │
+ │ └── Token-based (JWT)
+ │ ├── Store refresh token securely
+ │ ├── Access token in memory
+ │ └── Silent refresh flow
+ │
+ ├── Social login (Google, Apple, etc.)
+ │ │
+ │ └── OAuth 2.0 + PKCE
+ │ ├── Use platform SDKs
+ │ ├── Deep link callback
+ │ └── Apple Sign-In required for iOS
+ │
+ ├── Enterprise/SSO
+ │ │
+ │ └── OIDC / SAML
+ │ ├── Web view or system browser
+ │ └── Handle redirect properly
+ │
+ └── Biometric (FaceID, fingerprint)
+ │
+ └── Local auth + secure token
+ ├── Biometrics unlock stored token
+ ├── Not a replacement for server auth
+ └── Fallback to PIN/password
 ```
 
 ### Auth Token Storage
 
 ```
-❌ NEVER store tokens in:
+ NEVER store tokens in:
 ├── AsyncStorage (plain text)
 ├── Redux/state (not persisted correctly)
 ├── Local storage equivalent
 └── Logs or debug output
 
-✅ ALWAYS store tokens in:
+ ALWAYS store tokens in:
 ├── iOS: Keychain
 ├── Android: EncryptedSharedPreferences
 ├── Expo: SecureStore
@@ -446,29 +446,29 @@ KEY DECISIONS:
 If project details are vague, ASK:
 
 1. "Will this need OTA updates without app store review?"
-   → Affects framework choice (Expo = yes)
+ → Affects framework choice (Expo = yes)
 
 2. "Do iOS and Android need identical UI?"
-   → Affects framework (Flutter = identical)
+ → Affects framework (Flutter = identical)
 
 3. "What's the offline requirement?"
-   → Affects architecture complexity
+ → Affects architecture complexity
 
 4. "Is there an existing backend/auth system?"
-   → Affects auth and API approach
+ → Affects auth and API approach
 
 5. "What devices? Phone only, or tablet?"
-   → Affects navigation and layout
+ → Affects navigation and layout
 
 6. "Enterprise or consumer?"
-   → Affects auth (SSO), security, compliance
+ → Affects auth (SSO), security, compliance
 ```
 
 ---
 
 ## 9. Anti-Pattern Decisions
 
-### ❌ Decision Anti-Patterns
+### Decision Anti-Patterns
 
 | Anti-Pattern | Why It's Bad | Better Approach |
 |--------------|--------------|-----------------|
@@ -486,29 +486,29 @@ If project details are vague, ASK:
 ### Framework Quick Pick
 
 ```
-OTA needed?           → React Native + Expo
-Identical UI?         → Flutter
-Maximum performance?  → Native
-Web team?            → React Native
-Quick prototype?     → Expo
+OTA needed? → React Native + Expo
+Identical UI? → Flutter
+Maximum performance? → Native
+Web team? → React Native
+Quick prototype? → Expo
 ```
 
 ### State Quick Pick
 
 ```
-Simple app?          → Zustand / Provider
-Server-heavy?        → TanStack Query / Riverpod
-Enterprise?          → Redux / BLoC
-Atomic state?        → Jotai
+Simple app? → Zustand / Provider
+Server-heavy? → TanStack Query / Riverpod
+Enterprise? → Redux / BLoC
+Atomic state? → Jotai
 ```
 
 ### Storage Quick Pick
 
 ```
-Secrets?             → SecureStore / Keychain
-Settings?            → AsyncStorage / UserDefaults
-Structured data?     → SQLite
-API cache?           → Query library
+Secrets? → SecureStore / Keychain
+Settings? → AsyncStorage / UserDefaults
+Structured data? → SQLite
+API cache? → Query library
 ```
 
 ---

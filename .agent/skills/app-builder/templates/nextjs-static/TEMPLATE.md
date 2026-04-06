@@ -23,18 +23,18 @@ description: Next.js static site template principles. Landing pages, portfolios,
 ```
 project-name/
 ├── src/
-│   ├── app/
-│   │   ├── layout.tsx
-│   │   ├── page.tsx      # Landing
-│   │   ├── about/
-│   │   ├── contact/
-│   │   └── blog/
-│   ├── components/
-│   │   ├── layout/       # Header, Footer
-│   │   ├── sections/     # Hero, Features, CTA
-│   │   └── ui/
-│   └── lib/
-├── content/              # Markdown content
+│ ├── app/
+│ │ ├── layout.tsx
+│ │ ├── page.tsx # Landing
+│ │ ├── about/
+│ │ ├── contact/
+│ │ └── blog/
+│ ├── components/
+│ │ ├── layout/ # Header, Footer
+│ │ ├── sections/ # Hero, Features, CTA
+│ │ └── ui/
+│ └── lib/
+├── content/ # Markdown content
 ├── public/
 └── next.config.js
 ```
@@ -46,9 +46,9 @@ project-name/
 ```javascript
 // next.config.js
 const nextConfig = {
-  output: 'export',
-  images: { unoptimized: true },
-  trailingSlash: true,
+ output: 'export',
+ images: { unoptimized: true },
+ trailingSlash: true,
 };
 ```
 

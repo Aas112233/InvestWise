@@ -3,7 +3,7 @@ name: github-workflow-automation
 description: "Automate GitHub workflows with AI assistance. Includes PR reviews, issue triage, CI/CD integration, and Git operations. Use when automating GitHub workflows, setting up PR review automation, creating GitHub Actions, or triaging issues."
 ---
 
-# 🔧 GitHub Workflow Automation
+# GitHub Workflow Automation
 
 > Patterns for automating GitHub workflows with AI assistance, inspired by [Gemini CLI](https://github.com/google-gemini/gemini-cli) and modern DevOps practices.
 
@@ -28,75 +28,75 @@ Use this skill when:
 name: AI Code Review
 
 on:
-  pull_request:
-    types: [opened, synchronize]
+ pull_request:
+ types: [opened, synchronize]
 
 jobs:
-  review:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
+ review:
+ runs-on: ubuntu-latest
+ permissions:
+ contents: read
+ pull-requests: write
 
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+ steps:
+ - uses: actions/checkout@v4
+ with:
+ fetch-depth: 0
 
-      - name: Get changed files
-        id: changed
-        run: |
-          files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
-          echo "files<<EOF" >> $GITHUB_OUTPUT
-          echo "$files" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+ - name: Get changed files
+ id: changed
+ run: |
+ files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+ echo "files<<EOF" >> $GITHUB_OUTPUT
+ echo "$files" >> $GITHUB_OUTPUT
+ echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Get diff
-        id: diff
-        run: |
-          diff=$(git diff origin/${{ github.base_ref }}...HEAD)
-          echo "diff<<EOF" >> $GITHUB_OUTPUT
-          echo "$diff" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+ - name: Get diff
+ id: diff
+ run: |
+ diff=$(git diff origin/${{ github.base_ref }}...HEAD)
+ echo "diff<<EOF" >> $GITHUB_OUTPUT
+ echo "$diff" >> $GITHUB_OUTPUT
+ echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: AI Review
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { Anthropic } = require('@anthropic-ai/sdk');
-            const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+ - name: AI Review
+ uses: actions/github-script@v7
+ with:
+ script: |
+ const { Anthropic } = require('@anthropic-ai/sdk');
+ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-            const response = await client.messages.create({
-              model: "claude-3-sonnet-20240229",
-              max_tokens: 4096,
-              messages: [{
-                role: "user",
-                content: `Review this PR diff and provide feedback:
-                
-                Changed files: ${{ steps.changed.outputs.files }}
-                
-                Diff:
-                ${{ steps.diff.outputs.diff }}
-                
-                Provide:
-                1. Summary of changes
-                2. Potential issues or bugs
-                3. Suggestions for improvement
-                4. Security concerns if any
-                
-                Format as GitHub markdown.`
-              }]
-            });
+ const response = await client.messages.create({
+ model: "claude-3-sonnet-20240229",
+ max_tokens: 4096,
+ messages: [{
+ role: "user",
+ content: `Review this PR diff and provide feedback:
+ 
+ Changed files: ${{ steps.changed.outputs.files }}
+ 
+ Diff:
+ ${{ steps.diff.outputs.diff }}
+ 
+ Provide:
+ 1. Summary of changes
+ 2. Potential issues or bugs
+ 3. Suggestions for improvement
+ 4. Security concerns if any
+ 
+ Format as GitHub markdown.`
+ }]
+ });
 
-            await github.rest.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              body: response.content[0].text,
-              event: 'COMMENT'
-            });
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+ await github.rest.pulls.createReview({
+ owner: context.repo.owner,
+ repo: context.repo.repo,
+ pull_number: context.issue.number,
+ body: response.content[0].text,
+ event: 'COMMENT'
+ });
+ env:
+ ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 ### 1.2 Review Comment Patterns
@@ -104,38 +104,38 @@ jobs:
 ````markdown
 # AI Review Structure
 
-## 📋 Summary
+## Summary
 
 Brief description of what this PR does.
 
-## ✅ What looks good
+## What looks good
 
 - Well-structured code
 - Good test coverage
 - Clear naming conventions
 
-## ⚠️ Potential Issues
+## Potential Issues
 
 1. **Line 42**: Possible null pointer exception
-   ```javascript
-   // Current
-   user.profile.name;
-   // Suggested
-   user?.profile?.name ?? "Unknown";
-   ```
+ ```javascript
+ // Current
+ user.profile.name;
+ // Suggested
+ user?.profile?.name ?? "Unknown";
+ ```
 ````
 
 2. **Line 78**: Consider error handling
-   ```javascript
-   // Add try-catch or .catch()
-   ```
+ ```javascript
+ // Add try-catch or .catch()
+ ```
 
-## 💡 Suggestions
+## Suggestions
 
 - Consider extracting the validation logic into a separate function
 - Add JSDoc comments for public methods
 
-## 🔒 Security Notes
+## Security Notes
 
 - No sensitive data exposure detected
 - API key handling looks correct
@@ -147,23 +147,23 @@ Brief description of what this PR does.
 ```yaml
 # Review only specific file types
 - name: Filter code files
-  run: |
-    files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | \
-            grep -E '\.(ts|tsx|js|jsx|py|go)$' || true)
-    echo "code_files=$files" >> $GITHUB_OUTPUT
+ run: |
+ files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | \
+ grep -E '\.(ts|tsx|js|jsx|py|go)$' || true)
+ echo "code_files=$files" >> $GITHUB_OUTPUT
 
 # Review with context
 - name: AI Review with context
-  run: |
-    # Include relevant context files
-    context=""
-    for file in ${{ steps.changed.outputs.files }}; do
-      if [[ -f "$file" ]]; then
-        context+="=== $file ===\n$(cat $file)\n\n"
-      fi
-    done
+ run: |
+ # Include relevant context files
+ context=""
+ for file in ${{ steps.changed.outputs.files }}; do
+ if [[ -f "$file" ]]; then
+ context+="=== $file ===\n$(cat $file)\n\n"
+ fi
+ done
 
-    # Send to AI with full file context
+ # Send to AI with full file context
 ````
 
 ---
@@ -177,55 +177,55 @@ Brief description of what this PR does.
 name: Issue Triage
 
 on:
-  issues:
-    types: [opened]
+ issues:
+ types: [opened]
 
 jobs:
-  triage:
-    runs-on: ubuntu-latest
-    permissions:
-      issues: write
+ triage:
+ runs-on: ubuntu-latest
+ permissions:
+ issues: write
 
-    steps:
-      - name: Analyze issue
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const issue = context.payload.issue;
+ steps:
+ - name: Analyze issue
+ uses: actions/github-script@v7
+ with:
+ script: |
+ const issue = context.payload.issue;
 
-            // Call AI to analyze
-            const analysis = await analyzeIssue(issue.title, issue.body);
+ // Call AI to analyze
+ const analysis = await analyzeIssue(issue.title, issue.body);
 
-            // Apply labels
-            const labels = [];
+ // Apply labels
+ const labels = [];
 
-            if (analysis.type === 'bug') {
-              labels.push('bug');
-              if (analysis.severity === 'high') labels.push('priority: high');
-            } else if (analysis.type === 'feature') {
-              labels.push('enhancement');
-            } else if (analysis.type === 'question') {
-              labels.push('question');
-            }
+ if (analysis.type === 'bug') {
+ labels.push('bug');
+ if (analysis.severity === 'high') labels.push('priority: high');
+ } else if (analysis.type === 'feature') {
+ labels.push('enhancement');
+ } else if (analysis.type === 'question') {
+ labels.push('question');
+ }
 
-            if (analysis.area) {
-              labels.push(`area: ${analysis.area}`);
-            }
+ if (analysis.area) {
+ labels.push(`area: ${analysis.area}`);
+ }
 
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issue.number,
-              labels: labels
-            });
+ await github.rest.issues.addLabels({
+ owner: context.repo.owner,
+ repo: context.repo.repo,
+ issue_number: issue.number,
+ labels: labels
+ });
 
-            // Add initial response
-            if (analysis.type === 'bug' && !analysis.hasReproSteps) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.number,
-                body: `Thanks for reporting this issue!
+ // Add initial response
+ if (analysis.type === 'bug' && !analysis.hasReproSteps) {
+ await github.rest.issues.createComment({
+ owner: context.repo.owner,
+ repo: context.repo.repo,
+ issue_number: issue.number,
+ body: `Thanks for reporting this issue!
 
 To help us investigate, could you please provide:
 - Steps to reproduce the issue
@@ -233,9 +233,9 @@ To help us investigate, could you please provide:
 - Actual behavior
 - Environment (OS, version, etc.)
 
-This will help us resolve your issue faster. 🙏`
-              });
-            }
+This will help us resolve your issue faster. `
+ });
+ }
 ```
 
 ### 2.2 Issue Analysis Prompt
@@ -249,14 +249,14 @@ Body: {body}
 
 Return JSON with:
 {
-  "type": "bug" | "feature" | "question" | "docs" | "other",
-  "severity": "low" | "medium" | "high" | "critical",
-  "area": "frontend" | "backend" | "api" | "docs" | "ci" | "other",
-  "summary": "one-line summary",
-  "hasReproSteps": boolean,
-  "isFirstContribution": boolean,
-  "suggestedLabels": ["label1", "label2"],
-  "suggestedAssignees": ["username"] // based on area expertise
+ "type": "bug" | "feature" | "question" | "docs" | "other",
+ "severity": "low" | "medium" | "high" | "critical",
+ "area": "frontend" | "backend" | "api" | "docs" | "ci" | "other",
+ "summary": "one-line summary",
+ "hasReproSteps": boolean,
+ "isFirstContribution": boolean,
+ "suggestedLabels": ["label1", "label2"],
+ "suggestedAssignees": ["username"] // based on area expertise
 }
 `;
 ```
@@ -268,35 +268,35 @@ Return JSON with:
 name: Manage Stale Issues
 
 on:
-  schedule:
-    - cron: "0 0 * * *" # Daily
+ schedule:
+ - cron: "0 0 * * *" # Daily
 
 jobs:
-  stale:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/stale@v9
-        with:
-          stale-issue-message: |
-            This issue has been automatically marked as stale because it has not had 
-            recent activity. It will be closed in 14 days if no further activity occurs.
+ stale:
+ runs-on: ubuntu-latest
+ steps:
+ - uses: actions/stale@v9
+ with:
+ stale-issue-message: |
+ This issue has been automatically marked as stale because it has not had 
+ recent activity. It will be closed in 14 days if no further activity occurs.
 
-            If this issue is still relevant:
-            - Add a comment with an update
-            - Remove the `stale` label
+ If this issue is still relevant:
+ - Add a comment with an update
+ - Remove the `stale` label
 
-            Thank you for your contributions! 🙏
+ Thank you for your contributions! 
 
-          stale-pr-message: |
-            This PR has been automatically marked as stale. Please update it or it 
-            will be closed in 14 days.
+ stale-pr-message: |
+ This PR has been automatically marked as stale. Please update it or it 
+ will be closed in 14 days.
 
-          days-before-stale: 60
-          days-before-close: 14
-          stale-issue-label: "stale"
-          stale-pr-label: "stale"
-          exempt-issue-labels: "pinned,security,in-progress"
-          exempt-pr-labels: "pinned,security"
+ days-before-stale: 60
+ days-before-close: 14
+ stale-issue-label: "stale"
+ stale-pr-label: "stale"
+ exempt-issue-labels: "pinned,security,in-progress"
+ exempt-pr-labels: "pinned,security"
 ```
 
 ---
@@ -310,64 +310,64 @@ jobs:
 name: Smart Test Selection
 
 on:
-  pull_request:
+ pull_request:
 
 jobs:
-  analyze:
-    runs-on: ubuntu-latest
-    outputs:
-      test_suites: ${{ steps.analyze.outputs.suites }}
+ analyze:
+ runs-on: ubuntu-latest
+ outputs:
+ test_suites: ${{ steps.analyze.outputs.suites }}
 
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+ steps:
+ - uses: actions/checkout@v4
+ with:
+ fetch-depth: 0
 
-      - name: Analyze changes
-        id: analyze
-        run: |
-          # Get changed files
-          changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+ - name: Analyze changes
+ id: analyze
+ run: |
+ # Get changed files
+ changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
 
-          # Determine which test suites to run
-          suites="[]"
+ # Determine which test suites to run
+ suites="[]"
 
-          if echo "$changed" | grep -q "^src/api/"; then
-            suites=$(echo $suites | jq '. + ["api"]')
-          fi
+ if echo "$changed" | grep -q "^src/api/"; then
+ suites=$(echo $suites | jq '. + ["api"]')
+ fi
 
-          if echo "$changed" | grep -q "^src/frontend/"; then
-            suites=$(echo $suites | jq '. + ["frontend"]')
-          fi
+ if echo "$changed" | grep -q "^src/frontend/"; then
+ suites=$(echo $suites | jq '. + ["frontend"]')
+ fi
 
-          if echo "$changed" | grep -q "^src/database/"; then
-            suites=$(echo $suites | jq '. + ["database", "api"]')
-          fi
+ if echo "$changed" | grep -q "^src/database/"; then
+ suites=$(echo $suites | jq '. + ["database", "api"]')
+ fi
 
-          # If nothing specific, run all
-          if [ "$suites" = "[]" ]; then
-            suites='["all"]'
-          fi
+ # If nothing specific, run all
+ if [ "$suites" = "[]" ]; then
+ suites='["all"]'
+ fi
 
-          echo "suites=$suites" >> $GITHUB_OUTPUT
+ echo "suites=$suites" >> $GITHUB_OUTPUT
 
-  test:
-    needs: analyze
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        suite: ${{ fromJson(needs.analyze.outputs.test_suites) }}
+ test:
+ needs: analyze
+ runs-on: ubuntu-latest
+ strategy:
+ matrix:
+ suite: ${{ fromJson(needs.analyze.outputs.test_suites) }}
 
-    steps:
-      - uses: actions/checkout@v4
+ steps:
+ - uses: actions/checkout@v4
 
-      - name: Run tests
-        run: |
-          if [ "${{ matrix.suite }}" = "all" ]; then
-            npm test
-          else
-            npm test -- --suite ${{ matrix.suite }}
-          fi
+ - name: Run tests
+ run: |
+ if [ "${{ matrix.suite }}" = "all" ]; then
+ npm test
+ else
+ npm test -- --suite ${{ matrix.suite }}
+ fi
 ```
 
 ### 3.2 Deployment with AI Validation
@@ -377,69 +377,69 @@ jobs:
 name: Deploy with AI Validation
 
 on:
-  push:
-    branches: [main]
+ push:
+ branches: [main]
 
 jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+ validate:
+ runs-on: ubuntu-latest
+ steps:
+ - uses: actions/checkout@v4
 
-      - name: Get deployment changes
-        id: changes
-        run: |
-          # Get commits since last deployment
-          last_deploy=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$last_deploy" ]; then
-            changes=$(git log --oneline $last_deploy..HEAD)
-          else
-            changes=$(git log --oneline -10)
-          fi
-          echo "changes<<EOF" >> $GITHUB_OUTPUT
-          echo "$changes" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+ - name: Get deployment changes
+ id: changes
+ run: |
+ # Get commits since last deployment
+ last_deploy=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+ if [ -n "$last_deploy" ]; then
+ changes=$(git log --oneline $last_deploy..HEAD)
+ else
+ changes=$(git log --oneline -10)
+ fi
+ echo "changes<<EOF" >> $GITHUB_OUTPUT
+ echo "$changes" >> $GITHUB_OUTPUT
+ echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: AI Risk Assessment
-        id: assess
-        uses: actions/github-script@v7
-        with:
-          script: |
-            // Analyze changes for deployment risk
-            const prompt = `
-            Analyze these changes for deployment risk:
+ - name: AI Risk Assessment
+ id: assess
+ uses: actions/github-script@v7
+ with:
+ script: |
+ // Analyze changes for deployment risk
+ const prompt = `
+ Analyze these changes for deployment risk:
 
-            ${process.env.CHANGES}
+ ${process.env.CHANGES}
 
-            Return JSON:
-            {
-              "riskLevel": "low" | "medium" | "high",
-              "concerns": ["concern1", "concern2"],
-              "recommendations": ["rec1", "rec2"],
-              "requiresManualApproval": boolean
-            }
-            `;
+ Return JSON:
+ {
+ "riskLevel": "low" | "medium" | "high",
+ "concerns": ["concern1", "concern2"],
+ "recommendations": ["rec1", "rec2"],
+ "requiresManualApproval": boolean
+ }
+ `;
 
-            // Call AI and parse response
-            const analysis = await callAI(prompt);
+ // Call AI and parse response
+ const analysis = await callAI(prompt);
 
-            if (analysis.riskLevel === 'high') {
-              core.setFailed('High-risk deployment detected. Manual review required.');
-            }
+ if (analysis.riskLevel === 'high') {
+ core.setFailed('High-risk deployment detected. Manual review required.');
+ }
 
-            return analysis;
-        env:
-          CHANGES: ${{ steps.changes.outputs.changes }}
+ return analysis;
+ env:
+ CHANGES: ${{ steps.changes.outputs.changes }}
 
-  deploy:
-    needs: validate
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Deploy
-        run: |
-          echo "Deploying to production..."
-          # Deployment commands here
+ deploy:
+ needs: validate
+ runs-on: ubuntu-latest
+ environment: production
+ steps:
+ - name: Deploy
+ run: |
+ echo "Deploying to production..."
+ # Deployment commands here
 ```
 
 ### 3.3 Rollback Automation
@@ -449,49 +449,49 @@ jobs:
 name: Automated Rollback
 
 on:
-  workflow_dispatch:
-    inputs:
-      reason:
-        description: "Reason for rollback"
-        required: true
+ workflow_dispatch:
+ inputs:
+ reason:
+ description: "Reason for rollback"
+ required: true
 
 jobs:
-  rollback:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+ rollback:
+ runs-on: ubuntu-latest
+ steps:
+ - uses: actions/checkout@v4
+ with:
+ fetch-depth: 0
 
-      - name: Find last stable version
-        id: stable
-        run: |
-          # Find last successful deployment
-          stable=$(git tag -l 'v*' --sort=-version:refname | head -1)
-          echo "version=$stable" >> $GITHUB_OUTPUT
+ - name: Find last stable version
+ id: stable
+ run: |
+ # Find last successful deployment
+ stable=$(git tag -l 'v*' --sort=-version:refname | head -1)
+ echo "version=$stable" >> $GITHUB_OUTPUT
 
-      - name: Rollback
-        run: |
-          git checkout ${{ steps.stable.outputs.version }}
-          # Deploy stable version
-          npm run deploy
+ - name: Rollback
+ run: |
+ git checkout ${{ steps.stable.outputs.version }}
+ # Deploy stable version
+ npm run deploy
 
-      - name: Notify team
-        uses: slackapi/slack-github-action@v1
-        with:
-          payload: |
-            {
-              "text": "🔄 Production rolled back to ${{ steps.stable.outputs.version }}",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Rollback executed*\n• Version: `${{ steps.stable.outputs.version }}`\n• Reason: ${{ inputs.reason }}\n• Triggered by: ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
+ - name: Notify team
+ uses: slackapi/slack-github-action@v1
+ with:
+ payload: |
+ {
+ "text": " Production rolled back to ${{ steps.stable.outputs.version }}",
+ "blocks": [
+ {
+ "type": "section",
+ "text": {
+ "type": "mrkdwn",
+ "text": "*Rollback executed*\n• Version: `${{ steps.stable.outputs.version }}`\n• Reason: ${{ inputs.reason }}\n• Triggered by: ${{ github.actor }}"
+ }
+ }
+ ]
+ }
 ```
 
 ---
@@ -505,49 +505,49 @@ jobs:
 name: Auto Rebase
 
 on:
-  issue_comment:
-    types: [created]
+ issue_comment:
+ types: [created]
 
 jobs:
-  rebase:
-    if: github.event.issue.pull_request && contains(github.event.comment.body, '/rebase')
-    runs-on: ubuntu-latest
+ rebase:
+ if: github.event.issue.pull_request && contains(github.event.comment.body, '/rebase')
+ runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+ steps:
+ - uses: actions/checkout@v4
+ with:
+ fetch-depth: 0
+ token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+ - name: Setup Git
+ run: |
+ git config user.name "github-actions[bot]"
+ git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Rebase PR
-        run: |
-          # Fetch PR branch
-          gh pr checkout ${{ github.event.issue.number }}
+ - name: Rebase PR
+ run: |
+ # Fetch PR branch
+ gh pr checkout ${{ github.event.issue.number }}
 
-          # Rebase onto main
-          git fetch origin main
-          git rebase origin/main
+ # Rebase onto main
+ git fetch origin main
+ git rebase origin/main
 
-          # Force push
-          git push --force-with-lease
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+ # Force push
+ git push --force-with-lease
+ env:
+ GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Comment result
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: '✅ Successfully rebased onto main!'
-            })
+ - name: Comment result
+ uses: actions/github-script@v7
+ with:
+ script: |
+ github.rest.issues.createComment({
+ owner: context.repo.owner,
+ repo: context.repo.repo,
+ issue_number: context.issue.number,
+ body: ' Successfully rebased onto main!'
+ })
 ```
 
 ### 4.2 Smart Cherry-Pick
@@ -555,47 +555,47 @@ jobs:
 ```typescript
 // AI-assisted cherry-pick that handles conflicts
 async function smartCherryPick(commitHash: string, targetBranch: string) {
-  // Get commit info
-  const commitInfo = await exec(`git show ${commitHash} --stat`);
+ // Get commit info
+ const commitInfo = await exec(`git show ${commitHash} --stat`);
 
-  // Check for potential conflicts
-  const targetDiff = await exec(
-    `git diff ${targetBranch}...HEAD -- ${affectedFiles}`
-  );
+ // Check for potential conflicts
+ const targetDiff = await exec(
+ `git diff ${targetBranch}...HEAD -- ${affectedFiles}`
+ );
 
-  // AI analysis
-  const analysis = await ai.analyze(`
-    I need to cherry-pick this commit to ${targetBranch}:
-    
-    ${commitInfo}
-    
-    Current state of affected files on ${targetBranch}:
-    ${targetDiff}
-    
-    Will there be conflicts? If so, suggest resolution strategy.
-  `);
+ // AI analysis
+ const analysis = await ai.analyze(`
+ I need to cherry-pick this commit to ${targetBranch}:
+ 
+ ${commitInfo}
+ 
+ Current state of affected files on ${targetBranch}:
+ ${targetDiff}
+ 
+ Will there be conflicts? If so, suggest resolution strategy.
+ `);
 
-  if (analysis.willConflict) {
-    // Create branch for manual resolution
-    await exec(
-      `git checkout -b cherry-pick-${commitHash.slice(0, 7)} ${targetBranch}`
-    );
-    const result = await exec(`git cherry-pick ${commitHash}`, {
-      allowFail: true,
-    });
+ if (analysis.willConflict) {
+ // Create branch for manual resolution
+ await exec(
+ `git checkout -b cherry-pick-${commitHash.slice(0, 7)} ${targetBranch}`
+ );
+ const result = await exec(`git cherry-pick ${commitHash}`, {
+ allowFail: true,
+ });
 
-    if (result.failed) {
-      // AI-assisted conflict resolution
-      const conflicts = await getConflicts();
-      for (const conflict of conflicts) {
-        const resolution = await ai.resolveConflict(conflict);
-        await applyResolution(conflict.file, resolution);
-      }
-    }
-  } else {
-    await exec(`git checkout ${targetBranch}`);
-    await exec(`git cherry-pick ${commitHash}`);
-  }
+ if (result.failed) {
+ // AI-assisted conflict resolution
+ const conflicts = await getConflicts();
+ for (const conflict of conflicts) {
+ const resolution = await ai.resolveConflict(conflict);
+ await applyResolution(conflict.file, resolution);
+ }
+ }
+ } else {
+ await exec(`git checkout ${targetBranch}`);
+ await exec(`git cherry-pick ${commitHash}`);
+ }
 }
 ```
 
@@ -606,40 +606,40 @@ async function smartCherryPick(commitHash: string, targetBranch: string) {
 name: Branch Cleanup
 
 on:
-  schedule:
-    - cron: '0 0 * * 0'  # Weekly
-  workflow_dispatch:
+ schedule:
+ - cron: '0 0 * * 0' # Weekly
+ workflow_dispatch:
 
 jobs:
-  cleanup:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+ cleanup:
+ runs-on: ubuntu-latest
+ steps:
+ - uses: actions/checkout@v4
+ with:
+ fetch-depth: 0
 
-      - name: Find stale branches
-        id: stale
-        run: |
-          # Branches not updated in 30 days
-          stale=$(git for-each-ref --sort=-committerdate refs/remotes/origin \
-            --format='%(refname:short) %(committerdate:relative)' | \
-            grep -E '[3-9][0-9]+ days|[0-9]+ months|[0-9]+ years' | \
-            grep -v 'origin/main\|origin/develop' | \
-            cut -d' ' -f1 | sed 's|origin/||')
+ - name: Find stale branches
+ id: stale
+ run: |
+ # Branches not updated in 30 days
+ stale=$(git for-each-ref --sort=-committerdate refs/remotes/origin \
+ --format='%(refname:short) %(committerdate:relative)' | \
+ grep -E '[3-9][0-9]+ days|[0-9]+ months|[0-9]+ years' | \
+ grep -v 'origin/main\|origin/develop' | \
+ cut -d' ' -f1 | sed 's|origin/||')
 
-          echo "branches<<EOF" >> $GITHUB_OUTPUT
-          echo "$stale" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+ echo "branches<<EOF" >> $GITHUB_OUTPUT
+ echo "$stale" >> $GITHUB_OUTPUT
+ echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Create cleanup PR
-        if: steps.stale.outputs.branches != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const branches = `${{ steps.stale.outputs.branches }}`.split('\n').filter(Boolean);
+ - name: Create cleanup PR
+ if: steps.stale.outputs.branches != ''
+ uses: actions/github-script@v7
+ with:
+ script: |
+ const branches = `${{ steps.stale.outputs.branches }}`.split('\n').filter(Boolean);
 
-            const body = `## 🧹 Stale Branch Cleanup
+ const body = `## Stale Branch Cleanup
 
 The following branches haven't been updated in over 30 days:
 
@@ -651,13 +651,13 @@ ${branches.map(b => `- \`${b}\``).join('\n')}
 - Comment \`/keep branch-name\` to preserve specific branches
 `;
 
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: 'Stale Branch Cleanup',
-              body: body,
-              labels: ['housekeeping']
-            });
+ await github.rest.issues.create({
+ owner: context.repo.owner,
+ repo: context.repo.repo,
+ title: 'Stale Branch Cleanup',
+ body: body,
+ labels: ['housekeeping']
+ });
 ```
 
 ---
@@ -671,61 +671,61 @@ ${branches.map(b => `- \`${b}\``).join('\n')}
 name: AI Mention Bot
 
 on:
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
+ issue_comment:
+ types: [created]
+ pull_request_review_comment:
+ types: [created]
 
 jobs:
-  respond:
-    if: contains(github.event.comment.body, '@ai-helper')
-    runs-on: ubuntu-latest
+ respond:
+ if: contains(github.event.comment.body, '@ai-helper')
+ runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+ steps:
+ - uses: actions/checkout@v4
 
-      - name: Extract question
-        id: question
-        run: |
-          # Extract text after @ai-helper
-          question=$(echo "${{ github.event.comment.body }}" | sed 's/.*@ai-helper//')
-          echo "question=$question" >> $GITHUB_OUTPUT
+ - name: Extract question
+ id: question
+ run: |
+ # Extract text after @ai-helper
+ question=$(echo "${{ github.event.comment.body }}" | sed 's/.*@ai-helper//')
+ echo "question=$question" >> $GITHUB_OUTPUT
 
-      - name: Get context
-        id: context
-        run: |
-          if [ "${{ github.event.issue.pull_request }}" != "" ]; then
-            # It's a PR - get diff
-            gh pr diff ${{ github.event.issue.number }} > context.txt
-          else
-            # It's an issue - get description
-            gh issue view ${{ github.event.issue.number }} --json body -q .body > context.txt
-          fi
-          echo "context=$(cat context.txt)" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+ - name: Get context
+ id: context
+ run: |
+ if [ "${{ github.event.issue.pull_request }}" != "" ]; then
+ # It's a PR - get diff
+ gh pr diff ${{ github.event.issue.number }} > context.txt
+ else
+ # It's an issue - get description
+ gh issue view ${{ github.event.issue.number }} --json body -q .body > context.txt
+ fi
+ echo "context=$(cat context.txt)" >> $GITHUB_OUTPUT
+ env:
+ GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: AI Response
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const response = await ai.chat(`
-              Context: ${process.env.CONTEXT}
-              
-              Question: ${process.env.QUESTION}
-              
-              Provide a helpful, specific answer. Include code examples if relevant.
-            `);
+ - name: AI Response
+ uses: actions/github-script@v7
+ with:
+ script: |
+ const response = await ai.chat(`
+ Context: ${process.env.CONTEXT}
+ 
+ Question: ${process.env.QUESTION}
+ 
+ Provide a helpful, specific answer. Include code examples if relevant.
+ `);
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: response
-            });
-        env:
-          CONTEXT: ${{ steps.context.outputs.context }}
-          QUESTION: ${{ steps.question.outputs.question }}
+ await github.rest.issues.createComment({
+ owner: context.repo.owner,
+ repo: context.repo.repo,
+ issue_number: context.issue.number,
+ body: response
+ });
+ env:
+ CONTEXT: ${{ steps.context.outputs.context }}
+ QUESTION: ${{ steps.question.outputs.question }}
 ```
 
 ### 5.2 Command Patterns
@@ -733,18 +733,18 @@ jobs:
 ```markdown
 ## Available Commands
 
-| Command              | Description                 |
+| Command | Description |
 | :------------------- | :-------------------------- |
 | `@ai-helper explain` | Explain the code in this PR |
-| `@ai-helper review`  | Request AI code review      |
-| `@ai-helper fix`     | Suggest fixes for issues    |
-| `@ai-helper test`    | Generate test cases         |
-| `@ai-helper docs`    | Generate documentation      |
-| `/rebase`            | Rebase PR onto main         |
-| `/update`            | Update PR branch from main  |
-| `/approve`           | Mark as approved by bot     |
-| `/label bug`         | Add 'bug' label             |
-| `/assign @user`      | Assign to user              |
+| `@ai-helper review` | Request AI code review |
+| `@ai-helper fix` | Suggest fixes for issues |
+| `@ai-helper test` | Generate test cases |
+| `@ai-helper docs` | Generate documentation |
+| `/rebase` | Rebase PR onto main |
+| `/update` | Update PR branch from main |
+| `/approve` | Mark as approved by bot |
+| `/label bug` | Add 'bug' label |
+| `/assign @user` | Assign to user |
 ```
 
 ---
@@ -787,28 +787,28 @@ Dockerfile @org/devops-team
 ```yaml
 # Set up via GitHub API
 - name: Configure branch protection
-  uses: actions/github-script@v7
-  with:
-    script: |
-      await github.rest.repos.updateBranchProtection({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        branch: 'main',
-        required_status_checks: {
-          strict: true,
-          contexts: ['test', 'lint', 'ai-review']
-        },
-        enforce_admins: true,
-        required_pull_request_reviews: {
-          required_approving_review_count: 1,
-          require_code_owner_reviews: true,
-          dismiss_stale_reviews: true
-        },
-        restrictions: null,
-        required_linear_history: true,
-        allow_force_pushes: false,
-        allow_deletions: false
-      });
+ uses: actions/github-script@v7
+ with:
+ script: |
+ await github.rest.repos.updateBranchProtection({
+ owner: context.repo.owner,
+ repo: context.repo.repo,
+ branch: 'main',
+ required_status_checks: {
+ strict: true,
+ contexts: ['test', 'lint', 'ai-review']
+ },
+ enforce_admins: true,
+ required_pull_request_reviews: {
+ required_approving_review_count: 1,
+ require_code_owner_reviews: true,
+ dismiss_stale_reviews: true
+ },
+ restrictions: null,
+ required_linear_history: true,
+ allow_force_pushes: false,
+ allow_deletions: false
+ });
 ```
 
 ---

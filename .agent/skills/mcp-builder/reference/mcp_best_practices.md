@@ -48,8 +48,8 @@ The name should be general, descriptive of the service being integrated, easy to
 
 1. **Use snake_case**: `search_users`, `create_project`, `get_channel_info`
 2. **Include service prefix**: Anticipate that your MCP server may be used alongside other MCP servers
-   - Use `slack_send_message` instead of just `send_message`
-   - Use `github_create_issue` instead of just `create_issue`
+ - Use `slack_send_message` instead of just `send_message`
+ - Use `github_create_issue` instead of just `create_issue`
 3. **Be action-oriented**: Start with verbs (get, list, search, create, etc.)
 4. **Be specific**: Avoid generic names that could conflict with other servers
 
@@ -94,12 +94,12 @@ For tools that list resources:
 Example pagination response:
 ```json
 {
-  "total": 150,
-  "count": 20,
-  "offset": 0,
-  "items": [...],
-  "has_more": true,
-  "next_offset": 20
+ "total": 150,
+ "count": 20,
+ "offset": 0,
+ "items": [...],
+ "has_more": true,
+ "next_offset": 20
 }
 ```
 
@@ -213,16 +213,16 @@ Provide annotations to help clients understand tool behavior:
 Example error handling:
 ```typescript
 try {
-  const result = performOperation();
-  return { content: [{ type: "text", text: result }] };
+ const result = performOperation();
+ return { content: [{ type: "text", text: result }] };
 } catch (error) {
-  return {
-    isError: true,
-    content: [{
-      type: "text",
-      text: `Error: ${error.message}. Try using filter='active_only' to reduce results.`
-    }]
-  };
+ return {
+ isError: true,
+ content: [{
+ type: "text",
+ text: `Error: ${error.message}. Try using filter='active_only' to reduce results.`
+ }]
+ };
 }
 ```
 

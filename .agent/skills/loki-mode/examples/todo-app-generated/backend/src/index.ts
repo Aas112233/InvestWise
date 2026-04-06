@@ -12,10 +12,10 @@ app.use(express.json());
 
 // Initialize database on startup
 try {
-  initializeDatabase();
+ initializeDatabase();
 } catch (error) {
-  console.error('Failed to initialize database:', error);
-  process.exit(1);
+ console.error('Failed to initialize database:', error);
+ process.exit(1);
 }
 
 // Routes
@@ -23,22 +23,22 @@ app.use('/api', todosRouter);
 
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', message: 'Backend server is running' });
+ res.json({ status: 'ok', message: 'Backend server is running' });
 });
 
 // Start server
 const server = app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+ console.log(`Server is running on port ${PORT}`);
 });
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('Shutting down gracefully...');
-  closeDatabase();
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
+ console.log('Shutting down gracefully...');
+ closeDatabase();
+ server.close(() => {
+ console.log('Server closed');
+ process.exit(0);
+ });
 });
 
 export default app;

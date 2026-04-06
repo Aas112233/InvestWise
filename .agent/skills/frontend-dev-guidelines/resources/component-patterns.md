@@ -20,18 +20,18 @@ All components use the `React.FC<Props>` pattern for:
 import React from 'react';
 
 interface MyComponentProps {
-    /** User ID to display */
-    userId: number;
-    /** Optional callback when action occurs */
-    onAction?: () => void;
+ /** User ID to display */
+ userId: number;
+ /** Optional callback when action occurs */
+ onAction?: () => void;
 }
 
 export const MyComponent: React.FC<MyComponentProps> = ({ userId, onAction }) => {
-    return (
-        <div>
-            User: {userId}
-        </div>
-    );
+ return (
+ <div>
+ User: {userId}
+ </div>
+ );
 };
 
 export default MyComponent;
@@ -62,14 +62,14 @@ import React from 'react';
 
 // Lazy load heavy component
 const PostDataGrid = React.lazy(() =>
-    import('./grids/PostDataGrid')
+ import('./grids/PostDataGrid')
 );
 
 // For named exports
 const MyComponent = React.lazy(() =>
-    import('./MyComponent').then(module => ({
-        default: module.MyComponent
-    }))
+ import('./MyComponent').then(module => ({
+ default: module.MyComponent
+ }))
 );
 ```
 
@@ -88,13 +88,13 @@ const PostDataGrid = React.lazy(() => import('./grids/PostDataGrid'));
 import { SuspenseLoader } from '~components/SuspenseLoader';
 
 export const PostTable: React.FC<PostTableProps> = ({ formId }) => {
-    return (
-        <Box>
-            <SuspenseLoader>
-                <PostDataGrid formId={formId} />
-            </SuspenseLoader>
-        </Box>
-    );
+ return (
+ <Box>
+ <SuspenseLoader>
+ <PostDataGrid formId={formId} />
+ </SuspenseLoader>
+ </Box>
+ );
 };
 
 export default PostTable;
@@ -116,7 +116,7 @@ import { SuspenseLoader } from '@/components/SuspenseLoader';
 **Usage:**
 ```typescript
 <SuspenseLoader>
-    <LazyLoadedComponent />
+ <LazyLoadedComponent />
 </SuspenseLoader>
 ```
 
@@ -134,46 +134,46 @@ import { SuspenseLoader } from '@/components/SuspenseLoader';
 const MyPage = lazy(() => import('@/features/my-feature/components/MyPage'));
 
 function Route() {
-    return (
-        <SuspenseLoader>
-            <MyPage />
-        </SuspenseLoader>
-    );
+ return (
+ <SuspenseLoader>
+ <MyPage />
+ </SuspenseLoader>
+ );
 }
 ```
 
 **Component Level:**
 ```typescript
 function ParentComponent() {
-    return (
-        <Box>
-            <Header />
-            <SuspenseLoader>
-                <HeavyDataGrid />
-            </SuspenseLoader>
-        </Box>
-    );
+ return (
+ <Box>
+ <Header />
+ <SuspenseLoader>
+ <HeavyDataGrid />
+ </SuspenseLoader>
+ </Box>
+ );
 }
 ```
 
 **Multiple Boundaries:**
 ```typescript
 function Page() {
-    return (
-        <Box>
-            <SuspenseLoader>
-                <HeaderSection />
-            </SuspenseLoader>
+ return (
+ <Box>
+ <SuspenseLoader>
+ <HeaderSection />
+ </SuspenseLoader>
 
-            <SuspenseLoader>
-                <MainContent />
-            </SuspenseLoader>
+ <SuspenseLoader>
+ <MainContent />
+ </SuspenseLoader>
 
-            <SuspenseLoader>
-                <Sidebar />
-            </SuspenseLoader>
-        </Box>
-    );
+ <SuspenseLoader>
+ <Sidebar />
+ </SuspenseLoader>
+ </Box>
+ );
 }
 ```
 
@@ -208,92 +208,92 @@ import { useMuiSnackbar } from '@/hooks/useMuiSnackbar';
 
 // 1. PROPS INTERFACE (with JSDoc)
 interface MyComponentProps {
-    /** The ID of the entity to display */
-    entityId: number;
-    /** Optional callback when action completes */
-    onComplete?: () => void;
-    /** Display mode */
-    mode?: 'view' | 'edit';
+ /** The ID of the entity to display */
+ entityId: number;
+ /** Optional callback when action completes */
+ onComplete?: () => void;
+ /** Display mode */
+ mode?: 'view' | 'edit';
 }
 
 // 2. STYLES (if inline and <100 lines)
 const componentStyles: Record<string, SxProps<Theme>> = {
-    container: {
-        p: 2,
-        display: 'flex',
-        flexDirection: 'column',
-    },
-    header: {
-        mb: 2,
-        display: 'flex',
-        justifyContent: 'space-between',
-    },
+ container: {
+ p: 2,
+ display: 'flex',
+ flexDirection: 'column',
+ },
+ header: {
+ mb: 2,
+ display: 'flex',
+ justifyContent: 'space-between',
+ },
 };
 
 // 3. COMPONENT DEFINITION
 export const MyComponent: React.FC<MyComponentProps> = ({
-    entityId,
-    onComplete,
-    mode = 'view',
+ entityId,
+ onComplete,
+ mode = 'view',
 }) => {
-    // 4. HOOKS (in this order)
-    // - Context hooks first
-    const { user } = useAuth();
-    const { showSuccess, showError } = useMuiSnackbar();
+ // 4. HOOKS (in this order)
+ // - Context hooks first
+ const { user } = useAuth();
+ const { showSuccess, showError } = useMuiSnackbar();
 
-    // - Data fetching
-    const { data } = useSuspenseQuery({
-        queryKey: ['myEntity', entityId],
-        queryFn: () => myFeatureApi.getEntity(entityId),
-    });
+ // - Data fetching
+ const { data } = useSuspenseQuery({
+ queryKey: ['myEntity', entityId],
+ queryFn: () => myFeatureApi.getEntity(entityId),
+ });
 
-    // - Local state
-    const [selectedItem, setSelectedItem] = useState<string | null>(null);
-    const [isEditing, setIsEditing] = useState(mode === 'edit');
+ // - Local state
+ const [selectedItem, setSelectedItem] = useState<string | null>(null);
+ const [isEditing, setIsEditing] = useState(mode === 'edit');
 
-    // - Memoized values
-    const filteredData = useMemo(() => {
-        return data.filter(item => item.active);
-    }, [data]);
+ // - Memoized values
+ const filteredData = useMemo(() => {
+ return data.filter(item => item.active);
+ }, [data]);
 
-    // - Effects
-    useEffect(() => {
-        // Setup
-        return () => {
-            // Cleanup
-        };
-    }, []);
+ // - Effects
+ useEffect(() => {
+ // Setup
+ return () => {
+ // Cleanup
+ };
+ }, []);
 
-    // 5. EVENT HANDLERS (with useCallback)
-    const handleItemSelect = useCallback((itemId: string) => {
-        setSelectedItem(itemId);
-    }, []);
+ // 5. EVENT HANDLERS (with useCallback)
+ const handleItemSelect = useCallback((itemId: string) => {
+ setSelectedItem(itemId);
+ }, []);
 
-    const handleSave = useCallback(async () => {
-        try {
-            await myFeatureApi.updateEntity(entityId, { /* data */ });
-            showSuccess('Entity updated successfully');
-            onComplete?.();
-        } catch (error) {
-            showError('Failed to update entity');
-        }
-    }, [entityId, onComplete, showSuccess, showError]);
+ const handleSave = useCallback(async () => {
+ try {
+ await myFeatureApi.updateEntity(entityId, { /* data */ });
+ showSuccess('Entity updated successfully');
+ onComplete?.();
+ } catch (error) {
+ showError('Failed to update entity');
+ }
+ }, [entityId, onComplete, showSuccess, showError]);
 
-    // 6. RENDER
-    return (
-        <Box sx={componentStyles.container}>
-            <Box sx={componentStyles.header}>
-                <h2>My Component</h2>
-                <Button onClick={handleSave}>Save</Button>
-            </Box>
+ // 6. RENDER
+ return (
+ <Box sx={componentStyles.container}>
+ <Box sx={componentStyles.header}>
+ <h2>My Component</h2>
+ <Button onClick={handleSave}>Save</Button>
+ </Box>
 
-            <Paper sx={{ p: 2 }}>
-                {filteredData.map(item => (
-                    <div key={item.id}>{item.name}</div>
-                ))}
-            </Paper>
-        </Box>
-    );
+ <Paper sx={{ p: 2 }}>
+ {filteredData.map(item => (
+ <div key={item.id}>{item.name}</div>
+ ))}
+ </Paper>
+ </Box>
+ );
 };
 
 // 7. EXPORT (default export at bottom)
@@ -315,24 +315,24 @@ export default MyComponent;
 **Example:**
 
 ```typescript
-// ❌ AVOID - Monolithic
+// AVOID - Monolithic
 function MassiveComponent() {
-    // 500+ lines
-    // Search logic
-    // Filter logic
-    // Grid logic
-    // Action panel logic
+ // 500+ lines
+ // Search logic
+ // Filter logic
+ // Grid logic
+ // Action panel logic
 }
 
-// ✅ PREFERRED - Modular
+// PREFERRED - Modular
 function ParentContainer() {
-    return (
-        <Box>
-            <SearchAndFilter onFilter={handleFilter} />
-            <DataGrid data={filteredData} />
-            <ActionPanel onAction={handleAction} />
-        </Box>
-    );
+ return (
+ <Box>
+ <SearchAndFilter onFilter={handleFilter} />
+ <DataGrid data={filteredData} />
+ <ActionPanel onAction={handleAction} />
+ </Box>
+ );
 }
 ```
 
@@ -352,7 +352,7 @@ function ParentContainer() {
 
 ```typescript
 export const MyComponent: React.FC<Props> = ({ ... }) => {
-    // Component logic
+ // Component logic
 };
 
 export default MyComponent;
@@ -367,9 +367,9 @@ export default MyComponent;
 
 ```typescript
 const MyComponent = React.lazy(() =>
-    import('./MyComponent').then(module => ({
-        default: module.MyComponent
-    }))
+ import('./MyComponent').then(module => ({
+ default: module.MyComponent
+ }))
 );
 ```
 
@@ -382,28 +382,28 @@ const MyComponent = React.lazy(() =>
 ```typescript
 // Parent
 function Parent() {
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+ const [selectedId, setSelectedId] = useState<string | null>(null);
 
-    return (
-        <Child
-            data={data}                    // Props down
-            onSelect={setSelectedId}       // Events up
-        />
-    );
+ return (
+ <Child
+ data={data} // Props down
+ onSelect={setSelectedId} // Events up
+ />
+ );
 }
 
 // Child
 interface ChildProps {
-    data: Data[];
-    onSelect: (id: string) => void;
+ data: Data[];
+ onSelect: (id: string) => void;
 }
 
 export const Child: React.FC<ChildProps> = ({ data, onSelect }) => {
-    return (
-        <div onClick={() => onSelect(data[0].id)}>
-            {/* Content */}
-        </div>
-    );
+ return (
+ <div onClick={() => onSelect(data[0].id)}>
+ {/* Content */}
+ </div>
+ );
 };
 ```
 
@@ -411,28 +411,28 @@ export const Child: React.FC<ChildProps> = ({ data, onSelect }) => {
 
 **Use context for deep nesting:**
 ```typescript
-// ❌ AVOID - Prop drilling 5+ levels
+// AVOID - Prop drilling 5+ levels
 <A prop={x}>
-  <B prop={x}>
-    <C prop={x}>
-      <D prop={x}>
-        <E prop={x} />  // Finally uses it here
-      </D>
-    </C>
-  </B>
+ <B prop={x}>
+ <C prop={x}>
+ <D prop={x}>
+ <E prop={x} /> // Finally uses it here
+ </D>
+ </C>
+ </B>
 </A>
 
-// ✅ PREFERRED - Context or TanStack Query
+// PREFERRED - Context or TanStack Query
 const MyContext = createContext<MyData | null>(null);
 
 function Provider({ children }) {
-    const { data } = useSuspenseQuery({ ... });
-    return <MyContext.Provider value={data}>{children}</MyContext.Provider>;
+ const { data } = useSuspenseQuery({ ... });
+ return <MyContext.Provider value={data}>{children}</MyContext.Provider>;
 }
 
 function DeepChild() {
-    const data = useContext(MyContext);
-    // Use data directly
+ const data = useContext(MyContext);
+ // Use data directly
 }
 ```
 
@@ -445,11 +445,11 @@ function DeepChild() {
 ```typescript
 // Card.tsx
 export const Card: React.FC<CardProps> & {
-    Header: typeof CardHeader;
-    Body: typeof CardBody;
-    Footer: typeof CardFooter;
+ Header: typeof CardHeader;
+ Body: typeof CardBody;
+ Footer: typeof CardFooter;
 } = ({ children }) => {
-    return <Paper>{children}</Paper>;
+ return <Paper>{children}</Paper>;
 };
 
 Card.Header = CardHeader;
@@ -458,9 +458,9 @@ Card.Footer = CardFooter;
 
 // Usage
 <Card>
-    <Card.Header>Title</Card.Header>
-    <Card.Body>Content</Card.Body>
-    <Card.Footer>Actions</Card.Footer>
+ <Card.Header>Title</Card.Header>
+ <Card.Body>Content</Card.Body>
+ <Card.Footer>Actions</Card.Footer>
 </Card>
 ```
 
@@ -468,17 +468,17 @@ Card.Footer = CardFooter;
 
 ```typescript
 interface DataProviderProps {
-    children: (data: Data) => React.ReactNode;
+ children: (data: Data) => React.ReactNode;
 }
 
 export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
-    const { data } = useSuspenseQuery({ ... });
-    return <>{children(data)}</>;
+ const { data } = useSuspenseQuery({ ... });
+ return <>{children(data)}</>;
 };
 
 // Usage
 <DataProvider>
-    {(data) => <Display data={data} />}
+ {(data) => <Display data={data} />}
 </DataProvider>
 ```
 

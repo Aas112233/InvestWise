@@ -25,42 +25,42 @@ Every iteration follows this cycle:
 
 ```
 +-------------------------------------------------------------------+
-| REASON: What needs to be done next?                               |
-| - READ .loki/CONTINUITY.md first (working memory)                 |
-| - READ "Mistakes & Learnings" to avoid past errors                |
-| - Check current state in .loki/state/orchestrator.json            |
-| - Review pending tasks in .loki/queue/pending.json                |
-| - Identify highest priority unblocked task                        |
-| - Determine exact steps to complete it                            |
+| REASON: What needs to be done next? |
+| - READ .loki/CONTINUITY.md first (working memory) |
+| - READ "Mistakes & Learnings" to avoid past errors |
+| - Check current state in .loki/state/orchestrator.json |
+| - Review pending tasks in .loki/queue/pending.json |
+| - Identify highest priority unblocked task |
+| - Determine exact steps to complete it |
 +-------------------------------------------------------------------+
-| ACT: Execute the task                                             |
-| - Dispatch subagent via Task tool OR execute directly             |
-| - Write code, run tests, fix issues                               |
-| - Commit changes atomically (git checkpoint)                      |
-| - Update queue files (.loki/queue/*.json)                         |
+| ACT: Execute the task |
+| - Dispatch subagent via Task tool OR execute directly |
+| - Write code, run tests, fix issues |
+| - Commit changes atomically (git checkpoint) |
+| - Update queue files (.loki/queue/*.json) |
 +-------------------------------------------------------------------+
-| REFLECT: Did it work? What next?                                  |
-| - Verify task success (tests pass, no errors)                     |
-| - UPDATE .loki/CONTINUITY.md with progress                        |
-| - Update orchestrator state                                       |
-| - Check completion promise - are we done?                         |
-| - If not done, loop back to REASON                                |
+| REFLECT: Did it work? What next? |
+| - Verify task success (tests pass, no errors) |
+| - UPDATE .loki/CONTINUITY.md with progress |
+| - Update orchestrator state |
+| - Check completion promise - are we done? |
+| - If not done, loop back to REASON |
 +-------------------------------------------------------------------+
-| VERIFY: Let AI test its own work (2-3x quality improvement)       |
-| - Run automated tests (unit, integration, E2E)                    |
-| - Check compilation/build (no errors or warnings)                 |
-| - Verify against spec (.loki/specs/openapi.yaml)                  |
-| - Run linters/formatters via post-write hooks                     |
-| - Browser/runtime testing if applicable                           |
-|                                                                   |
-| IF VERIFICATION FAILS:                                            |
-|   1. Capture error details (stack trace, logs)                    |
-|   2. Analyze root cause                                           |
-|   3. UPDATE CONTINUITY.md "Mistakes & Learnings"                  |
-|   4. Rollback to last good git checkpoint (if needed)             |
-|   5. Apply learning and RETRY from REASON                         |
-|                                                                   |
-| - If verification passes, mark task complete and continue         |
+| VERIFY: Let AI test its own work (2-3x quality improvement) |
+| - Run automated tests (unit, integration, E2E) |
+| - Check compilation/build (no errors or warnings) |
+| - Verify against spec (.loki/specs/openapi.yaml) |
+| - Run linters/formatters via post-write hooks |
+| - Browser/runtime testing if applicable |
+| |
+| IF VERIFICATION FAILS: |
+| 1. Capture error details (stack trace, logs) |
+| 2. Analyze root cause |
+| 3. UPDATE CONTINUITY.md "Mistakes & Learnings" |
+| 4. Rollback to last good git checkpoint (if needed) |
+| 5. Apply learning and RETRY from REASON |
+| |
+| - If verification passes, mark task complete and continue |
 +-------------------------------------------------------------------+
 ```
 
@@ -140,11 +140,11 @@ Current Iteration: [number]
 **Self-Update Protocol:**
 ```
 ON_ERROR:
-  1. Capture error details (stack trace, context)
-  2. Analyze root cause
-  3. Write learning to CONTINUITY.md "Mistakes & Learnings"
-  4. Update approach based on learning
-  5. Retry with corrected approach
+ 1. Capture error details (stack trace, context)
+ 2. Analyze root cause
+ 3. Write learning to CONTINUITY.md "Mistakes & Learnings"
+ 4. Update approach based on learning
+ 5. Retry with corrected approach
 ```
 
 ## Working Context
@@ -182,15 +182,15 @@ The memory systems work together:
 ```bash
 # Git Checkpoint Protocol
 ON_TASK_COMPLETE() {
-    task_id=$1
-    task_title=$2
-    agent_id=$3
+ task_id=$1
+ task_title=$2
+ agent_id=$3
 
-    # Stage modified files
-    git add <modified_files>
+ # Stage modified files
+ git add <modified_files>
 
-    # Create structured commit message
-    git commit -m "[Loki] ${agent_type}-${task_id}: ${task_title}
+ # Create structured commit message
+ git commit -m "[Loki] ${agent_type}-${task_id}: ${task_title}
 
 ${detailed_description}
 
@@ -200,12 +200,12 @@ Spec: ${spec_reference}
 Tests: ${test_files}
 Git-Checkpoint: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-    # Store commit SHA in task metadata
-    commit_sha=$(git rev-parse HEAD)
-    update_task_metadata task_id git_commit_sha "$commit_sha"
+ # Store commit SHA in task metadata
+ commit_sha=$(git rev-parse HEAD)
+ update_task_metadata task_id git_commit_sha "$commit_sha"
 
-    # Update CONTINUITY.md
-    echo "- Task $task_id completed (commit: $commit_sha)" >> .loki/CONTINUITY.md
+ # Update CONTINUITY.md
+ echo "- Task $task_id completed (commit: $commit_sha)" >> .loki/CONTINUITY.md
 }
 ```
 

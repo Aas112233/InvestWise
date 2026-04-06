@@ -2,17 +2,17 @@
 name: transitions
 description: Fullscreen scene transitions for Remotion.
 metadata:
-  tags: transitions, fade, slide, wipe, scenes
+ tags: transitions, fade, slide, wipe, scenes
 ---
 
 ## Fullscreen transitions
 
-Using `<TransitionSeries>` to animate between multiple scenes or clips.  
+Using `<TransitionSeries>` to animate between multiple scenes or clips. 
 This will absolutely position the children.
 
 ## Prerequisites
 
-First, the @remotion/transitions package needs to be installed.  
+First, the @remotion/transitions package needs to be installed. 
 If it is not, use the following command:
 
 ```bash
@@ -29,13 +29,13 @@ import {TransitionSeries, linearTiming} from '@remotion/transitions';
 import {fade} from '@remotion/transitions/fade';
 
 <TransitionSeries>
-  <TransitionSeries.Sequence durationInFrames={60}>
-    <SceneA />
-  </TransitionSeries.Sequence>
-  <TransitionSeries.Transition presentation={fade()} timing={linearTiming({durationInFrames: 15})} />
-  <TransitionSeries.Sequence durationInFrames={60}>
-    <SceneB />
-  </TransitionSeries.Sequence>
+ <TransitionSeries.Sequence durationInFrames={60}>
+ <SceneA />
+ </TransitionSeries.Sequence>
+ <TransitionSeries.Transition presentation={fade()} timing={linearTiming({durationInFrames: 15})} />
+ <TransitionSeries.Sequence durationInFrames={60}>
+ <SceneB />
+ </TransitionSeries.Sequence>
 </TransitionSeries>;
 ```
 

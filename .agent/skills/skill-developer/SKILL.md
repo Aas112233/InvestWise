@@ -132,11 +132,11 @@ The actual guidance, documentation, patterns, examples
 ```
 
 **Best Practices:**
-- ✅ **Name**: Lowercase, hyphens, gerund form (verb + -ing) preferred
-- ✅ **Description**: Include ALL trigger keywords/phrases (max 1024 chars)
-- ✅ **Content**: Under 500 lines - use reference files for details
-- ✅ **Examples**: Real code examples
-- ✅ **Structure**: Clear headings, lists, code blocks
+- **Name**: Lowercase, hyphens, gerund form (verb + -ing) preferred
+- **Description**: Include ALL trigger keywords/phrases (max 1024 chars)
+- **Content**: Under 500 lines - use reference files for details
+- **Examples**: Real code examples
+- **Structure**: Clear headings, lists, code blocks
 
 ### Step 2: Add to skill-rules.json
 
@@ -145,15 +145,15 @@ See [SKILL_RULES_REFERENCE.md](SKILL_RULES_REFERENCE.md) for complete schema.
 **Basic Template:**
 ```json
 {
-  "my-new-skill": {
-    "type": "domain",
-    "enforcement": "suggest",
-    "priority": "medium",
-    "promptTriggers": {
-      "keywords": ["keyword1", "keyword2"],
-      "intentPatterns": ["(create|add).*?something"]
-    }
-  }
+ "my-new-skill": {
+ "type": "domain",
+ "enforcement": "suggest",
+ "priority": "medium",
+ "promptTriggers": {
+ "keywords": ["keyword1", "keyword2"],
+ "intentPatterns": ["(create|add).*?something"]
+ }
+ }
 }
 ```
 
@@ -162,7 +162,7 @@ See [SKILL_RULES_REFERENCE.md](SKILL_RULES_REFERENCE.md) for complete schema.
 **Test UserPromptSubmit:**
 ```bash
 echo '{"session_id":"test","prompt":"your test prompt"}' | \
-  npx tsx .claude/hooks/skill-activation-prompt.ts
+ npx tsx .claude/hooks/skill-activation-prompt.ts
 ```
 
 **Test PreToolUse:**
@@ -182,12 +182,12 @@ Based on testing:
 
 ### Step 5: Follow Anthropic Best Practices
 
-✅ Keep SKILL.md under 500 lines
-✅ Use progressive disclosure with reference files
-✅ Add table of contents to reference files > 100 lines
-✅ Write detailed description with trigger keywords
-✅ Test with 3+ real scenarios before documenting
-✅ Iterate based on actual usage
+ Keep SKILL.md under 500 lines
+ Use progressive disclosure with reference files
+ Add table of contents to reference files > 100 lines
+ Write detailed description with trigger keywords
+ Test with 3+ real scenarios before documenting
+ Iterate based on actual usage
 
 ---
 
@@ -255,7 +255,7 @@ import { PrismaService } from './prisma';
 
 **Global disable:**
 ```bash
-export SKIP_SKILL_GUARDRAILS=true  # Disables ALL PreToolUse blocks
+export SKIP_SKILL_GUARDRAILS=true # Disables ALL PreToolUse blocks
 ```
 
 **Skill-specific:**
@@ -284,7 +284,7 @@ When creating a new skill, verify:
 - [ ] No false negatives in testing
 - [ ] Performance is acceptable (<100ms or <200ms)
 - [ ] JSON syntax validated: `jq . skill-rules.json`
-- [ ] **SKILL.md under 500 lines** ⭐
+- [ ] **SKILL.md under 500 lines** 
 - [ ] Reference files created if needed
 - [ ] Table of contents added to files > 100 lines
 
@@ -378,13 +378,13 @@ See [TRIGGER_TYPES.md](TRIGGER_TYPES.md) for complete details.
 
 ### Anthropic Best Practices
 
-✅ **500-line rule**: Keep SKILL.md under 500 lines
-✅ **Progressive disclosure**: Use reference files for details
-✅ **Table of contents**: Add to reference files > 100 lines
-✅ **One level deep**: Don't nest references deeply
-✅ **Rich descriptions**: Include all trigger keywords (max 1024 chars)
-✅ **Test first**: Build 3+ evaluations before extensive documentation
-✅ **Gerund naming**: Prefer verb + -ing (e.g., "processing-pdfs")
+ **500-line rule**: Keep SKILL.md under 500 lines
+ **Progressive disclosure**: Use reference files for details
+ **Table of contents**: Add to reference files > 100 lines
+ **One level deep**: Don't nest references deeply
+ **Rich descriptions**: Include all trigger keywords (max 1024 chars)
+ **Test first**: Build 3+ evaluations before extensive documentation
+ **Gerund naming**: Prefer verb + -ing (e.g., "processing-pdfs")
 
 ### Troubleshoot
 
@@ -419,8 +419,8 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for complete debugging guide.
 
 ---
 
-**Skill Status**: COMPLETE - Restructured following Anthropic best practices ✅
-**Line Count**: < 500 (following 500-line rule) ✅
-**Progressive Disclosure**: Reference files for detailed information ✅
+**Skill Status**: COMPLETE - Restructured following Anthropic best practices 
+**Line Count**: < 500 (following 500-line rule) 
+**Progressive Disclosure**: Reference files for detailed information 
 
 **Next**: Create more skills, refine patterns based on usage

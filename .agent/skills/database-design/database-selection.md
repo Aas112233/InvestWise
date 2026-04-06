@@ -8,20 +8,20 @@
 What are your requirements?
 │
 ├── Full relational features needed
-│   ├── Self-hosted → PostgreSQL
-│   └── Serverless → Neon, Supabase
+│ ├── Self-hosted → PostgreSQL
+│ └── Serverless → Neon, Supabase
 │
 ├── Edge deployment / Ultra-low latency
-│   └── Turso (edge SQLite)
+│ └── Turso (edge SQLite)
 │
 ├── AI / Vector search
-│   └── PostgreSQL + pgvector
+│ └── PostgreSQL + pgvector
 │
 ├── Simple / Embedded / Local
-│   └── SQLite
+│ └── SQLite
 │
 └── Global distribution
-    └── PlanetScale, CockroachDB, Turso
+ └── PlanetScale, CockroachDB, Turso
 ```
 
 ## Comparison

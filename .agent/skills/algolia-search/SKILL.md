@@ -52,7 +52,7 @@ Best practices:
 - Avoid deleteBy (computationally expensive)
 
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

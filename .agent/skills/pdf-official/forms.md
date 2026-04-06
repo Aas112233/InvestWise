@@ -8,46 +8,46 @@ If the PDF has fillable form fields:
 - Run this script from this file's directory: `python scripts/extract_form_field_info.py <input.pdf> <field_info.json>`. It will create a JSON file with a list of fields in this format:
 ```
 [
-  {
-    "field_id": (unique ID for the field),
-    "page": (page number, 1-based),
-    "rect": ([left, bottom, right, top] bounding box in PDF coordinates, y=0 is the bottom of the page),
-    "type": ("text", "checkbox", "radio_group", or "choice"),
-  },
-  // Checkboxes have "checked_value" and "unchecked_value" properties:
-  {
-    "field_id": (unique ID for the field),
-    "page": (page number, 1-based),
-    "type": "checkbox",
-    "checked_value": (Set the field to this value to check the checkbox),
-    "unchecked_value": (Set the field to this value to uncheck the checkbox),
-  },
-  // Radio groups have a "radio_options" list with the possible choices.
-  {
-    "field_id": (unique ID for the field),
-    "page": (page number, 1-based),
-    "type": "radio_group",
-    "radio_options": [
-      {
-        "value": (set the field to this value to select this radio option),
-        "rect": (bounding box for the radio button for this option)
-      },
-      // Other radio options
-    ]
-  },
-  // Multiple choice fields have a "choice_options" list with the possible choices:
-  {
-    "field_id": (unique ID for the field),
-    "page": (page number, 1-based),
-    "type": "choice",
-    "choice_options": [
-      {
-        "value": (set the field to this value to select this option),
-        "text": (display text of the option)
-      },
-      // Other choice options
-    ],
-  }
+ {
+ "field_id": (unique ID for the field),
+ "page": (page number, 1-based),
+ "rect": ([left, bottom, right, top] bounding box in PDF coordinates, y=0 is the bottom of the page),
+ "type": ("text", "checkbox", "radio_group", or "choice"),
+ },
+ // Checkboxes have "checked_value" and "unchecked_value" properties:
+ {
+ "field_id": (unique ID for the field),
+ "page": (page number, 1-based),
+ "type": "checkbox",
+ "checked_value": (Set the field to this value to check the checkbox),
+ "unchecked_value": (Set the field to this value to uncheck the checkbox),
+ },
+ // Radio groups have a "radio_options" list with the possible choices.
+ {
+ "field_id": (unique ID for the field),
+ "page": (page number, 1-based),
+ "type": "radio_group",
+ "radio_options": [
+ {
+ "value": (set the field to this value to select this radio option),
+ "rect": (bounding box for the radio button for this option)
+ },
+ // Other radio options
+ ]
+ },
+ // Multiple choice fields have a "choice_options" list with the possible choices:
+ {
+ "field_id": (unique ID for the field),
+ "page": (page number, 1-based),
+ "type": "choice",
+ "choice_options": [
+ {
+ "value": (set the field to this value to select this option),
+ "text": (display text of the option)
+ },
+ // Other choice options
+ ],
+ }
 ]
 ```
 - Convert the PDF to PNGs (one image for each page) with this script (run from this file's directory):
@@ -56,19 +56,19 @@ Then analyze the images to determine the purpose of each form field (make sure t
 - Create a `field_values.json` file in this format with the values to be entered for each field:
 ```
 [
-  {
-    "field_id": "last_name", // Must match the field_id from `extract_form_field_info.py`
-    "description": "The user's last name",
-    "page": 1, // Must match the "page" value in field_info.json
-    "value": "Simpson"
-  },
-  {
-    "field_id": "Checkbox12",
-    "description": "Checkbox to be checked if the user is 18 or over",
-    "page": 1,
-    "value": "/On" // If this is a checkbox, use its "checked_value" value to check it. If it's a radio button group, use one of the "value" values in "radio_options".
-  },
-  // more fields
+ {
+ "field_id": "last_name", // Must match the field_id from `extract_form_field_info.py`
+ "description": "The user's last name",
+ "page": 1, // Must match the "page" value in field_info.json
+ "value": "Simpson"
+ },
+ {
+ "field_id": "Checkbox12",
+ "description": "Checkbox to be checked if the user is 18 or over",
+ "page": 1,
+ "value": "/On" // If this is a checkbox, use its "checked_value" value to check it. If it's a radio button group, use one of the "value" values in "radio_options".
+ },
+ // more fields
 ]
 ```
 - Run the `fill_fillable_fields.py` script from this file's directory to create a filled-in PDF:
@@ -93,7 +93,7 @@ These are some examples of form structures that you might see:
 *Label inside box*
 ```
 ┌────────────────────────┐
-│ Name:                  │
+│ Name: │
 └────────────────────────┘
 ```
 The input area should be to the right of the "Name" label and extend to the edge of the box.
@@ -120,7 +120,7 @@ The input area should extend from the bottom of the label to the line, and shoul
 
 *Checkboxes*
 ```
-Are you a US citizen? Yes □  No □
+Are you a US citizen? Yes □ No □
 ```
 For checkboxes:
 - Look for small square boxes (□) - these are the actual checkboxes to target. They may be to the left or right of their labels.
@@ -131,48 +131,48 @@ For checkboxes:
 - Create a file named `fields.json` with information for the form fields and bounding boxes in this format:
 ```
 {
-  "pages": [
-    {
-      "page_number": 1,
-      "image_width": (first page image width in pixels),
-      "image_height": (first page image height in pixels),
-    },
-    {
-      "page_number": 2,
-      "image_width": (second page image width in pixels),
-      "image_height": (second page image height in pixels),
-    }
-    // additional pages
-  ],
-  "form_fields": [
-    // Example for a text field.
-    {
-      "page_number": 1,
-      "description": "The user's last name should be entered here",
-      // Bounding boxes are [left, top, right, bottom]. The bounding boxes for the label and text entry should not overlap.
-      "field_label": "Last name",
-      "label_bounding_box": [30, 125, 95, 142],
-      "entry_bounding_box": [100, 125, 280, 142],
-      "entry_text": {
-        "text": "Johnson", // This text will be added as an annotation at the entry_bounding_box location
-        "font_size": 14, // optional, defaults to 14
-        "font_color": "000000", // optional, RRGGBB format, defaults to 000000 (black)
-      }
-    },
-    // Example for a checkbox. TARGET THE SQUARE for the entry bounding box, NOT THE TEXT
-    {
-      "page_number": 2,
-      "description": "Checkbox that should be checked if the user is over 18",
-      "entry_bounding_box": [140, 525, 155, 540],  // Small box over checkbox square
-      "field_label": "Yes",
-      "label_bounding_box": [100, 525, 132, 540],  // Box containing "Yes" text
-      // Use "X" to check a checkbox.
-      "entry_text": {
-        "text": "X",
-      }
-    }
-    // additional form field entries
-  ]
+ "pages": [
+ {
+ "page_number": 1,
+ "image_width": (first page image width in pixels),
+ "image_height": (first page image height in pixels),
+ },
+ {
+ "page_number": 2,
+ "image_width": (second page image width in pixels),
+ "image_height": (second page image height in pixels),
+ }
+ // additional pages
+ ],
+ "form_fields": [
+ // Example for a text field.
+ {
+ "page_number": 1,
+ "description": "The user's last name should be entered here",
+ // Bounding boxes are [left, top, right, bottom]. The bounding boxes for the label and text entry should not overlap.
+ "field_label": "Last name",
+ "label_bounding_box": [30, 125, 95, 142],
+ "entry_bounding_box": [100, 125, 280, 142],
+ "entry_text": {
+ "text": "Johnson", // This text will be added as an annotation at the entry_bounding_box location
+ "font_size": 14, // optional, defaults to 14
+ "font_color": "000000", // optional, RRGGBB format, defaults to 000000 (black)
+ }
+ },
+ // Example for a checkbox. TARGET THE SQUARE for the entry bounding box, NOT THE TEXT
+ {
+ "page_number": 2,
+ "description": "Checkbox that should be checked if the user is over 18",
+ "entry_bounding_box": [140, 525, 155, 540], // Small box over checkbox square
+ "field_label": "Yes",
+ "label_bounding_box": [100, 525, 132, 540], // Box containing "Yes" text
+ // Use "X" to check a checkbox.
+ "entry_text": {
+ "text": "X",
+ }
+ }
+ // additional form field entries
+ ]
 }
 ```
 
@@ -194,8 +194,8 @@ If there are errors, reanalyze the relevant fields, adjust the bounding boxes, a
 - Red rectangles MUST NOT contain any text
 - Blue rectangles should contain label text
 - For checkboxes:
-  - Red rectangle MUST be centered on the checkbox square
-  - Blue rectangle should cover the text label for the checkbox
+ - Red rectangle MUST be centered on the checkbox square
+ - Blue rectangle should cover the text label for the checkbox
 
 - If any rectangles look wrong, fix fields.json, regenerate the validation images, and verify again. Repeat this process until the bounding boxes are fully accurate.
 

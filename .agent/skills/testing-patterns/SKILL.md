@@ -37,9 +37,9 @@ import { render } from '@testing-library/react-native';
 import { ThemeProvider } from './theme';
 
 export const renderWithTheme = (ui: React.ReactElement) => {
-  return render(
-    <ThemeProvider>{ui}</ThemeProvider>
-  );
+ return render(
+ <ThemeProvider>{ui}</ThemeProvider>
+ );
 };
 ```
 
@@ -49,8 +49,8 @@ import { renderWithTheme } from 'utils/testUtils';
 import { screen } from '@testing-library/react-native';
 
 it('should render component', () => {
-  renderWithTheme(<MyComponent />);
-  expect(screen.getByText('Hello')).toBeTruthy();
+ renderWithTheme(<MyComponent />);
+ expect(screen.getByText('Hello')).toBeTruthy();
 });
 ```
 
@@ -62,22 +62,22 @@ it('should render component', () => {
 import { ComponentProps } from 'react';
 
 const getMockMyComponentProps = (
-  overrides?: Partial<ComponentProps<typeof MyComponent>>
+ overrides?: Partial<ComponentProps<typeof MyComponent>>
 ) => {
-  return {
-    title: 'Default Title',
-    count: 0,
-    onPress: jest.fn(),
-    isLoading: false,
-    ...overrides,
-  };
+ return {
+ title: 'Default Title',
+ count: 0,
+ onPress: jest.fn(),
+ isLoading: false,
+ ...overrides,
+ };
 };
 
 // Usage in tests
 it('should render with custom title', () => {
-  const props = getMockMyComponentProps({ title: 'Custom Title' });
-  renderWithTheme(<MyComponent {...props} />);
-  expect(screen.getByText('Custom Title')).toBeTruthy();
+ const props = getMockMyComponentProps({ title: 'Custom Title' });
+ renderWithTheme(<MyComponent {...props} />);
+ expect(screen.getByText('Custom Title')).toBeTruthy();
 });
 ```
 
@@ -85,27 +85,27 @@ it('should render with custom title', () => {
 
 ```typescript
 interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'user';
+ id: string;
+ name: string;
+ email: string;
+ role: 'admin' | 'user';
 }
 
 const getMockUser = (overrides?: Partial<User>): User => {
-  return {
-    id: '123',
-    name: 'John Doe',
-    email: 'john@example.com',
-    role: 'user',
-    ...overrides,
-  };
+ return {
+ id: '123',
+ name: 'John Doe',
+ email: 'john@example.com',
+ role: 'user',
+ ...overrides,
+ };
 };
 
 // Usage
 it('should display admin badge for admin users', () => {
-  const user = getMockUser({ role: 'admin' });
-  renderWithTheme(<UserCard user={user} />);
-  expect(screen.getByText('Admin')).toBeTruthy();
+ const user = getMockUser({ role: 'admin' });
+ renderWithTheme(<UserCard user={user} />);
+ expect(screen.getByText('Admin')).toBeTruthy();
 });
 ```
 
@@ -119,9 +119,9 @@ jest.mock('utils/analytics');
 
 // Mock with factory function
 jest.mock('utils/analytics', () => ({
-  Analytics: {
-    logEvent: jest.fn(),
-  },
+ Analytics: {
+ logEvent: jest.fn(),
+ },
 }));
 
 // Access mock in test
@@ -132,18 +132,18 @@ const mockLogEvent = jest.requireMock('utils/analytics').Analytics.logEvent;
 
 ```typescript
 jest.mock('./GetItems.generated', () => ({
-  useGetItemsQuery: jest.fn(),
+ useGetItemsQuery: jest.fn(),
 }));
 
 const mockUseGetItemsQuery = jest.requireMock(
-  './GetItems.generated'
+ './GetItems.generated'
 ).useGetItemsQuery as jest.Mock;
 
 // In test
 mockUseGetItemsQuery.mockReturnValue({
-  data: { items: [] },
-  loading: false,
-  error: undefined,
+ data: { items: [] },
+ loading: false,
+ error: undefined,
 });
 ```
 
@@ -151,22 +151,22 @@ mockUseGetItemsQuery.mockReturnValue({
 
 ```typescript
 describe('ComponentName', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+ beforeEach(() => {
+ jest.clearAllMocks();
+ });
 
-  describe('Rendering', () => {
-    it('should render component with default props', () => {});
-    it('should render loading state when loading', () => {});
-  });
+ describe('Rendering', () => {
+ it('should render component with default props', () => {});
+ it('should render loading state when loading', () => {});
+ });
 
-  describe('User interactions', () => {
-    it('should call onPress when button is clicked', async () => {});
-  });
+ describe('User interactions', () => {
+ it('should call onPress when button is clicked', async () => {});
+ });
 
-  describe('Edge cases', () => {
-    it('should handle empty data gracefully', () => {});
-  });
+ describe('Edge cases', () => {
+ it('should handle empty data gracefully', () => {});
+ });
 });
 ```
 
@@ -181,7 +181,7 @@ expect(screen.queryByText('Goodbye')).toBeNull();
 
 // Element appears asynchronously
 await waitFor(() => {
-  expect(screen.findByText('Loaded')).toBeTruthy();
+ expect(screen.findByText('Loaded')).toBeTruthy();
 });
 ```
 
@@ -191,16 +191,16 @@ await waitFor(() => {
 import { fireEvent, screen } from '@testing-library/react-native';
 
 it('should submit form on button click', async () => {
-  const onSubmit = jest.fn();
-  renderWithTheme(<LoginForm onSubmit={onSubmit} />);
+ const onSubmit = jest.fn();
+ renderWithTheme(<LoginForm onSubmit={onSubmit} />);
 
-  fireEvent.changeText(screen.getByLabelText('Email'), 'user@example.com');
-  fireEvent.changeText(screen.getByLabelText('Password'), 'password123');
-  fireEvent.press(screen.getByTestId('login-button'));
+ fireEvent.changeText(screen.getByLabelText('Email'), 'user@example.com');
+ fireEvent.changeText(screen.getByLabelText('Password'), 'password123');
+ fireEvent.press(screen.getByTestId('login-button'));
 
-  await waitFor(() => {
-    expect(onSubmit).toHaveBeenCalled();
-  });
+ await waitFor(() => {
+ expect(onSubmit).toHaveBeenCalled();
+ });
 });
 ```
 
@@ -221,10 +221,10 @@ expect(screen.getByText('John Doe')).toBeTruthy();
 ```typescript
 // Bad - duplicated, inconsistent test data
 it('test 1', () => {
-  const user = { id: '1', name: 'John', email: 'john@test.com', role: 'user' };
+ const user = { id: '1', name: 'John', email: 'john@test.com', role: 'user' };
 });
 it('test 2', () => {
-  const user = { id: '2', name: 'Jane', email: 'jane@test.com' }; // Missing role!
+ const user = { id: '2', name: 'Jane', email: 'jane@test.com' }; // Missing role!
 });
 
 // Good - reusable factory

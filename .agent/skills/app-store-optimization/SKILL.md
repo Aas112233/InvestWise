@@ -55,82 +55,82 @@ This comprehensive skill provides complete ASO capabilities for successfully lau
 
 ### Platform-Specific Requirements
 - **Apple App Store**:
-  - Title: 30 characters
-  - Subtitle: 30 characters
-  - Promotional Text: 170 characters (editable without app update)
-  - Description: 4,000 characters
-  - Keywords: 100 characters (comma-separated, no spaces)
-  - What's New: 4,000 characters
+ - Title: 30 characters
+ - Subtitle: 30 characters
+ - Promotional Text: 170 characters (editable without app update)
+ - Description: 4,000 characters
+ - Keywords: 100 characters (comma-separated, no spaces)
+ - What's New: 4,000 characters
 - **Google Play Store**:
-  - Title: 50 characters (formerly 30, increased in 2021)
-  - Short Description: 80 characters
-  - Full Description: 4,000 characters
-  - No separate keyword field (keywords extracted from title and description)
+ - Title: 50 characters (formerly 30, increased in 2021)
+ - Short Description: 80 characters
+ - Full Description: 4,000 characters
+ - No separate keyword field (keywords extracted from title and description)
 
 ## Input Requirements
 
 ### Keyword Research
 ```json
 {
-  "app_name": "MyApp",
-  "category": "Productivity",
-  "target_keywords": ["task manager", "productivity", "todo list"],
-  "competitors": ["Todoist", "Any.do", "Microsoft To Do"],
-  "language": "en-US"
+ "app_name": "MyApp",
+ "category": "Productivity",
+ "target_keywords": ["task manager", "productivity", "todo list"],
+ "competitors": ["Todoist", "Any.do", "Microsoft To Do"],
+ "language": "en-US"
 }
 ```
 
 ### Metadata Optimization
 ```json
 {
-  "platform": "apple" | "google",
-  "app_info": {
-    "name": "MyApp",
-    "category": "Productivity",
-    "target_audience": "Professionals aged 25-45",
-    "key_features": ["Task management", "Team collaboration", "AI assistance"],
-    "unique_value": "AI-powered task prioritization"
-  },
-  "current_metadata": {
-    "title": "Current Title",
-    "subtitle": "Current Subtitle",
-    "description": "Current description..."
-  },
-  "target_keywords": ["productivity", "task manager", "todo"]
+ "platform": "apple" | "google",
+ "app_info": {
+ "name": "MyApp",
+ "category": "Productivity",
+ "target_audience": "Professionals aged 25-45",
+ "key_features": ["Task management", "Team collaboration", "AI assistance"],
+ "unique_value": "AI-powered task prioritization"
+ },
+ "current_metadata": {
+ "title": "Current Title",
+ "subtitle": "Current Subtitle",
+ "description": "Current description..."
+ },
+ "target_keywords": ["productivity", "task manager", "todo"]
 }
 ```
 
 ### Review Analysis
 ```json
 {
-  "app_id": "com.myapp.app",
-  "platform": "apple" | "google",
-  "date_range": "last_30_days" | "last_90_days" | "all_time",
-  "rating_filter": [1, 2, 3, 4, 5],
-  "language": "en"
+ "app_id": "com.myapp.app",
+ "platform": "apple" | "google",
+ "date_range": "last_30_days" | "last_90_days" | "all_time",
+ "rating_filter": [1, 2, 3, 4, 5],
+ "language": "en"
 }
 ```
 
 ### ASO Score Calculation
 ```json
 {
-  "metadata": {
-    "title_quality": 0.8,
-    "description_quality": 0.7,
-    "keyword_density": 0.6
-  },
-  "ratings": {
-    "average_rating": 4.5,
-    "total_ratings": 15000
-  },
-  "conversion": {
-    "impression_to_install": 0.05
-  },
-  "keyword_rankings": {
-    "top_10": 5,
-    "top_50": 12,
-    "top_100": 18
-  }
+ "metadata": {
+ "title_quality": 0.8,
+ "description_quality": 0.7,
+ "keyword_density": 0.6
+ },
+ "ratings": {
+ "average_rating": 4.5,
+ "total_ratings": 15000
+ },
+ "conversion": {
+ "impression_to_install": 0.05
+ },
+ "keyword_rankings": {
+ "top_10": 5,
+ "top_50": 12,
+ "top_100": 18
+ }
 }
 ```
 
@@ -164,10 +164,10 @@ This comprehensive skill provides complete ASO capabilities for successfully lau
 ### ASO Health Score
 - Overall score (0-100)
 - Category breakdown:
-  - Metadata Quality (0-25)
-  - Ratings & Reviews (0-25)
-  - Keyword Performance (0-25)
-  - Conversion Metrics (0-25)
+ - Metadata Quality (0-25)
+ - Ratings & Reviews (0-25)
+ - Keyword Performance (0-25)
+ - Conversion Metrics (0-25)
 - Specific improvement recommendations
 - Priority action items
 

@@ -807,16 +807,16 @@ Update after every task completion.
 **Review Output Format:**
 ```json
 {
-  "strengths": ["Well-structured modules", "Good test coverage"],
-  "issues": [
-    {
-      "severity": "Medium",
-      "description": "Function exceeds 50 lines",
-      "location": "src/auth.js:45",
-      "suggestion": "Extract validation logic to separate function"
-    }
-  ],
-  "assessment": "PASS|FAIL"
+ "strengths": ["Well-structured modules", "Good test coverage"],
+ "issues": [
+ {
+ "severity": "Medium",
+ "description": "Function exceeds 50 lines",
+ "location": "src/auth.js:45",
+ "suggestion": "Extract validation logic to separate function"
+ }
+ ],
+ "assessment": "PASS|FAIL"
 }
 ```
 
@@ -982,62 +982,62 @@ Update after every task completion.
 ### Heartbeat (every 60s)
 ```json
 {
-  "from": "agent-id",
-  "type": "heartbeat",
-  "timestamp": "ISO",
-  "status": "active|idle|working",
-  "currentTask": "task-id|null",
-  "metrics": {
-    "tasksCompleted": 5,
-    "uptime": 3600
-  }
+ "from": "agent-id",
+ "type": "heartbeat",
+ "timestamp": "ISO",
+ "status": "active|idle|working",
+ "currentTask": "task-id|null",
+ "metrics": {
+ "tasksCompleted": 5,
+ "uptime": 3600
+ }
 }
 ```
 
 ### Task Claim
 ```json
 {
-  "from": "agent-id",
-  "type": "task-claim",
-  "taskId": "uuid",
-  "timestamp": "ISO"
+ "from": "agent-id",
+ "type": "task-claim",
+ "taskId": "uuid",
+ "timestamp": "ISO"
 }
 ```
 
 ### Task Complete
 ```json
 {
-  "from": "agent-id",
-  "type": "task-complete",
-  "taskId": "uuid",
-  "result": "success|failure",
-  "output": {},
-  "duration": 120,
-  "timestamp": "ISO"
+ "from": "agent-id",
+ "type": "task-complete",
+ "taskId": "uuid",
+ "result": "success|failure",
+ "output": {},
+ "duration": 120,
+ "timestamp": "ISO"
 }
 ```
 
 ### Blocker
 ```json
 {
-  "from": "agent-id",
-  "to": "orchestrator",
-  "type": "blocker",
-  "taskId": "uuid",
-  "reason": "string",
-  "attemptedSolutions": [],
-  "timestamp": "ISO"
+ "from": "agent-id",
+ "to": "orchestrator",
+ "type": "blocker",
+ "taskId": "uuid",
+ "reason": "string",
+ "attemptedSolutions": [],
+ "timestamp": "ISO"
 }
 ```
 
 ### Scale Request
 ```json
 {
-  "from": "orchestrator",
-  "type": "scale-request",
-  "agentType": "eng-backend",
-  "count": 2,
-  "reason": "queue-depth",
-  "timestamp": "ISO"
+ "from": "orchestrator",
+ "type": "scale-request",
+ "agentType": "eng-backend",
+ "count": 2,
+ "reason": "queue-depth",
+ "timestamp": "ISO"
 }
 ```

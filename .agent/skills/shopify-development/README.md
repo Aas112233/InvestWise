@@ -13,16 +13,16 @@ Comprehensive skill for building on Shopify platform: apps, extensions, themes, 
 
 ```
 shopify-development/
-├── SKILL.md              # Main skill file (AI-optimized)
-├── README.md             # This file
+├── SKILL.md # Main skill file (AI-optimized)
+├── README.md # This file
 ├── references/
-│   ├── app-development.md    # OAuth, API, webhooks, billing
-│   ├── extensions.md         # UI extensions, Functions
-│   └── themes.md             # Liquid, theme architecture
+│ ├── app-development.md # OAuth, API, webhooks, billing
+│ ├── extensions.md # UI extensions, Functions
+│ └── themes.md # Liquid, theme architecture
 └── scripts/
-    ├── shopify_init.py       # Interactive project scaffolding
-    ├── shopify_graphql.py    # GraphQL utilities & templates
-    └── tests/                # Unit tests
+ ├── shopify_init.py # Interactive project scaffolding
+ ├── shopify_graphql.py # GraphQL utilities & templates
+ └── tests/ # Unit tests
 ```
 
 ## Validated GraphQL

@@ -48,29 +48,29 @@ Create `playwright.config.ts`:
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests',
-  fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
-  use: {
-    baseURL: 'http://localhost:3000',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
-  },
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-  ],
-  webServer: {
-    command: 'npm run start',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-  },
+ testDir: './tests',
+ fullyParallel: true,
+ forbidOnly: !!process.env.CI,
+ retries: process.env.CI ? 2 : 0,
+ workers: process.env.CI ? 1 : undefined,
+ reporter: 'html',
+ use: {
+ baseURL: 'http://localhost:3000',
+ trace: 'on-first-retry',
+ screenshot: 'only-on-failure',
+ video: 'retain-on-failure',
+ },
+ projects: [
+ {
+ name: 'chromium',
+ use: { ...devices['Desktop Chrome'] },
+ },
+ ],
+ webServer: {
+ command: 'npm run start',
+ url: 'http://localhost:3000',
+ reuseExistingServer: !process.env.CI,
+ },
 });
 ```
 
@@ -82,27 +82,27 @@ export default defineConfig({
 const { chromium } = require('playwright');
 
 (async () => {
-  // Launch browser
-  const browser = await chromium.launch({
-    headless: false,  // Set to true for headless mode
-    slowMo: 50       // Slow down operations by 50ms
-  });
+ // Launch browser
+ const browser = await chromium.launch({
+ headless: false, // Set to true for headless mode
+ slowMo: 50 // Slow down operations by 50ms
+ });
 
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 720 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-  });
+ const context = await browser.newContext({
+ viewport: { width: 1280, height: 720 },
+ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+ });
 
-  const page = await context.newPage();
+ const page = await context.newPage();
 
-  // Navigate
-  await page.goto('https://example.com', {
-    waitUntil: 'networkidle'  // Wait for network to be idle
-  });
+ // Navigate
+ await page.goto('https://example.com', {
+ waitUntil: 'networkidle' // Wait for network to be idle
+ });
 
-  // Your automation here
+ // Your automation here
 
-  await browser.close();
+ await browser.close();
 })();
 ```
 
@@ -112,21 +112,21 @@ const { chromium } = require('playwright');
 import { test, expect } from '@playwright/test';
 
 test.describe('Feature Name', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-  });
+ test.beforeEach(async ({ page }) => {
+ await page.goto('/');
+ });
 
-  test('should do something', async ({ page }) => {
-    // Arrange
-    const button = page.locator('button[data-testid="submit"]');
+ test('should do something', async ({ page }) => {
+ // Arrange
+ const button = page.locator('button[data-testid="submit"]');
 
-    // Act
-    await button.click();
+ // Act
+ await button.click();
 
-    // Assert
-    await expect(page).toHaveURL('/success');
-    await expect(page.locator('.message')).toHaveText('Success!');
-  });
+ // Assert
+ await expect(page).toHaveURL('/success');
+ await expect(page.locator('.message')).toHaveText('Success!');
+ });
 });
 ```
 
@@ -153,11 +153,11 @@ await page.locator('button[type="submit"]').click();
 await page.locator('input[name="email"]').fill('test@test.com');
 
 // AVOID: Classes and IDs (can change frequently)
-await page.locator('.btn-primary').click();  // Avoid
-await page.locator('#submit').click();       // Avoid
+await page.locator('.btn-primary').click(); // Avoid
+await page.locator('#submit').click(); // Avoid
 
 // LAST RESORT: Complex CSS/XPath
-await page.locator('div.container > form > button').click();  // Fragile
+await page.locator('div.container > form > button').click(); // Fragile
 ```
 
 ### Advanced Locator Patterns
@@ -210,8 +210,8 @@ await page.selectOption('select#colors', ['red', 'blue', 'green']);
 // File upload
 await page.setInputFiles('input[type="file"]', 'path/to/file.pdf');
 await page.setInputFiles('input[type="file"]', [
-  'file1.pdf',
-  'file2.pdf'
+ 'file1.pdf',
+ 'file2.pdf'
 ]);
 ```
 
@@ -219,10 +219,10 @@ await page.setInputFiles('input[type="file"]', [
 
 ```javascript
 // Click variations
-await page.click('button');                          // Left click
-await page.click('button', { button: 'right' });    // Right click
-await page.dblclick('button');                       // Double click
-await page.click('button', { position: { x: 10, y: 10 } });  // Click at position
+await page.click('button'); // Left click
+await page.click('button', { button: 'right' }); // Right click
+await page.dblclick('button'); // Double click
+await page.click('button', { position: { x: 10, y: 10 } }); // Click at position
 
 // Hover
 await page.hover('.menu-item');
@@ -277,8 +277,8 @@ await page.waitForLoadState('domcontentloaded');
 // Wait for function
 await page.waitForFunction(() => document.querySelector('.loaded'));
 await page.waitForFunction(
-  text => document.body.innerText.includes(text),
-  'Content loaded'
+ text => document.body.innerText.includes(text),
+ 'Content loaded'
 );
 
 // Wait for response
@@ -288,13 +288,13 @@ const response = await responsePromise;
 
 // Wait for request
 await page.waitForRequest(request =>
-  request.url().includes('/api/') && request.method() === 'POST'
+ request.url().includes('/api/') && request.method() === 'POST'
 );
 
 // Custom timeout
 await page.locator('.slow-element').waitFor({
-  state: 'visible',
-  timeout: 10000  // 10 seconds
+ state: 'visible',
+ timeout: 10000 // 10 seconds
 });
 ```
 
@@ -346,35 +346,35 @@ await expect(page.locator('input[type="checkbox"]')).toBeChecked();
 ```javascript
 // pages/LoginPage.js
 class LoginPage {
-  constructor(page) {
-    this.page = page;
-    this.usernameInput = page.locator('input[name="username"]');
-    this.passwordInput = page.locator('input[name="password"]');
-    this.submitButton = page.locator('button[type="submit"]');
-    this.errorMessage = page.locator('.error-message');
-  }
+ constructor(page) {
+ this.page = page;
+ this.usernameInput = page.locator('input[name="username"]');
+ this.passwordInput = page.locator('input[name="password"]');
+ this.submitButton = page.locator('button[type="submit"]');
+ this.errorMessage = page.locator('.error-message');
+ }
 
-  async navigate() {
-    await this.page.goto('/login');
-  }
+ async navigate() {
+ await this.page.goto('/login');
+ }
 
-  async login(username, password) {
-    await this.usernameInput.fill(username);
-    await this.passwordInput.fill(password);
-    await this.submitButton.click();
-  }
+ async login(username, password) {
+ await this.usernameInput.fill(username);
+ await this.passwordInput.fill(password);
+ await this.submitButton.click();
+ }
 
-  async getErrorMessage() {
-    return await this.errorMessage.textContent();
-  }
+ async getErrorMessage() {
+ return await this.errorMessage.textContent();
+ }
 }
 
 // Usage in test
 test('login with valid credentials', async ({ page }) => {
-  const loginPage = new LoginPage(page);
-  await loginPage.navigate();
-  await loginPage.login('user@example.com', 'password123');
-  await expect(page).toHaveURL('/dashboard');
+ const loginPage = new LoginPage(page);
+ await loginPage.navigate();
+ await loginPage.login('user@example.com', 'password123');
+ await expect(page).toHaveURL('/dashboard');
 });
 ```
 
@@ -385,23 +385,23 @@ test('login with valid credentials', async ({ page }) => {
 ```javascript
 // Mock API responses
 await page.route('**/api/users', route => {
-  route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify([
-      { id: 1, name: 'John' },
-      { id: 2, name: 'Jane' }
-    ])
-  });
+ route.fulfill({
+ status: 200,
+ contentType: 'application/json',
+ body: JSON.stringify([
+ { id: 1, name: 'John' },
+ { id: 2, name: 'Jane' }
+ ])
+ });
 });
 
 // Modify requests
 await page.route('**/api/**', route => {
-  const headers = {
-    ...route.request().headers(),
-    'X-Custom-Header': 'value'
-  };
-  route.continue({ headers });
+ const headers = {
+ ...route.request().headers(),
+ 'X-Custom-Header': 'value'
+ };
+ route.continue({ headers });
 });
 
 // Block resources
@@ -438,13 +438,13 @@ These headers are automatically applied to all requests when using:
 ```javascript
 // Full page screenshot
 await page.screenshot({
-  path: 'screenshot.png',
-  fullPage: true
+ path: 'screenshot.png',
+ fullPage: true
 });
 
 // Element screenshot
 await page.locator('.chart').screenshot({
-  path: 'chart.png'
+ path: 'chart.png'
 });
 
 // Visual comparison
@@ -459,10 +459,10 @@ const { devices } = require('playwright');
 const iPhone = devices['iPhone 12'];
 
 const context = await browser.newContext({
-  ...iPhone,
-  locale: 'en-US',
-  permissions: ['geolocation'],
-  geolocation: { latitude: 37.7749, longitude: -122.4194 }
+ ...iPhone,
+ locale: 'en-US',
+ permissions: ['geolocation'],
+ geolocation: { latitude: 37.7749, longitude: -122.4194 }
 });
 ```
 
@@ -507,13 +507,13 @@ console.log(`Page loaded in ${loadTime}ms`);
 ```javascript
 // Run tests in parallel
 test.describe.parallel('Parallel suite', () => {
-  test('test 1', async ({ page }) => {
-    // Runs in parallel with test 2
-  });
+ test('test 1', async ({ page }) => {
+ // Runs in parallel with test 2
+ });
 
-  test('test 2', async ({ page }) => {
-    // Runs in parallel with test 1
-  });
+ test('test 2', async ({ page }) => {
+ // Runs in parallel with test 1
+ });
 });
 ```
 
@@ -522,18 +522,18 @@ test.describe.parallel('Parallel suite', () => {
 ```javascript
 // Parameterized tests
 const testData = [
-  { username: 'user1', password: 'pass1', expected: 'Welcome user1' },
-  { username: 'user2', password: 'pass2', expected: 'Welcome user2' },
+ { username: 'user1', password: 'pass1', expected: 'Welcome user1' },
+ { username: 'user2', password: 'pass2', expected: 'Welcome user2' },
 ];
 
 testData.forEach(({ username, password, expected }) => {
-  test(`login with ${username}`, async ({ page }) => {
-    await page.goto('/login');
-    await page.fill('#username', username);
-    await page.fill('#password', password);
-    await page.click('button[type="submit"]');
-    await expect(page.locator('.message')).toHaveText(expected);
-  });
+ test(`login with ${username}`, async ({ page }) => {
+ await page.goto('/login');
+ await page.fill('#username', username);
+ await page.fill('#password', password);
+ await page.click('button[type="submit"]');
+ await expect(page.locator('.message')).toHaveText(expected);
+ });
 });
 ```
 
@@ -543,9 +543,9 @@ testData.forEach(({ username, password, expected }) => {
 import { injectAxe, checkA11y } from 'axe-playwright';
 
 test('accessibility check', async ({ page }) => {
-  await page.goto('/');
-  await injectAxe(page);
-  await checkA11y(page);
+ await page.goto('/');
+ await injectAxe(page);
+ await checkA11y(page);
 });
 ```
 
@@ -556,20 +556,20 @@ test('accessibility check', async ({ page }) => {
 ```yaml
 name: Playwright Tests
 on:
-  push:
-    branches: [main, master]
+ push:
+ branches: [main, master]
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-      - name: Run tests
-        run: npx playwright test
+ test:
+ runs-on: ubuntu-latest
+ steps:
+ - uses: actions/checkout@v3
+ - uses: actions/setup-node@v3
+ - name: Install dependencies
+ run: npm ci
+ - name: Install Playwright Browsers
+ run: npx playwright install --with-deps
+ - name: Run tests
+ run: npx playwright test
 ```
 
 ## Best Practices
@@ -586,8 +586,8 @@ jobs:
 
 ```javascript
 const [popup] = await Promise.all([
-  page.waitForEvent('popup'),
-  page.click('button.open-popup')
+ page.waitForEvent('popup'),
+ page.click('button.open-popup')
 ]);
 await popup.waitForLoadState();
 ```
@@ -596,8 +596,8 @@ await popup.waitForLoadState();
 
 ```javascript
 const [download] = await Promise.all([
-  page.waitForEvent('download'),
-  page.click('button.download')
+ page.waitForEvent('download'),
+ page.click('button.download')
 ]);
 await download.saveAs(`./downloads/${download.suggestedFilename()}`);
 ```
@@ -613,8 +613,8 @@ await frame.locator('button').click();
 
 ```javascript
 async function scrollToBottom(page) {
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await page.waitForTimeout(500);
+ await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+ await page.waitForTimeout(500);
 }
 ```
 

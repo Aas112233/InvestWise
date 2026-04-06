@@ -14,11 +14,11 @@ Created by members or managers to signal intent to deposit.
 
 ### 3. `POST /api/v1/deposits/:id/approve`
 - **Logic**: 
-    1. Update `deposit.status` to `Completed`.
-    2. Atomic Transaction:
-        - Increment `member.totalContributed`.
-        - Increment `fund.balance` where fund_id = 'Cashier_General_Pool'.
-        - Create record in `global_transactions` table.
+ 1. Update `deposit.status` to `Completed`.
+ 2. Atomic Transaction:
+ - Increment `member.totalContributed`.
+ - Increment `fund.balance` where fund_id = 'Cashier_General_Pool'.
+ - Create record in `global_transactions` table.
 
 ## Logic Requirements
 - **Auto-Calculation**: The system must verify that `amount == shares * SHARE_VALUE` unless an override is authorized by an Administrator.

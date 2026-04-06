@@ -20,7 +20,7 @@ Detailed explanation of the pattern.
 ```typescript
 // Example code implementation
 export class Example {
-  // Implementation details
+ // Implementation details
 }
 ```
 
@@ -43,7 +43,7 @@ Another important pattern for senior architect.
 ```typescript
 // Advanced example
 async function advancedExample() {
-  // Code here
+ // Code here
 }
 ```
 

@@ -32,11 +32,11 @@ Ideas and concepts for future improvements to the skill system.
 **Configuration Idea:**
 ```json
 {
-  "my-advanced-skill": {
-    "dependsOn": ["prerequisite-skill", "base-skill"],
-    "type": "domain",
-    ...
-  }
+ "my-advanced-skill": {
+ "dependsOn": ["prerequisite-skill", "base-skill"],
+ "type": "domain",
+ ...
+ }
 }
 ```
 
@@ -61,14 +61,14 @@ Ideas and concepts for future improvements to the skill system.
 **Configuration Idea:**
 ```json
 {
-  "enforcement": {
-    "default": "suggest",
-    "when": {
-      "production": "block",
-      "development": "suggest",
-      "ci": "block"
-    }
-  }
+ "enforcement": {
+ "default": "suggest",
+ "when": {
+ "production": "block",
+ "development": "suggest",
+ "ci": "block"
+ }
+ }
 }
 ```
 
@@ -120,12 +120,12 @@ Ideas and concepts for future improvements to the skill system.
 **Configuration Idea:**
 ```json
 {
-  "my-skill": {
-    "version": "2.1.0",
-    "minClaudeVersion": "1.5.0",
-    "changelog": "Added support for new workflow patterns",
-    ...
-  }
+ "my-skill": {
+ "version": "2.1.0",
+ "minClaudeVersion": "1.5.0",
+ "changelog": "Added support for new workflow patterns",
+ ...
+ }
 }
 ```
 
@@ -170,16 +170,16 @@ Ideas and concepts for future improvements to the skill system.
 **Example Test:**
 ```typescript
 describe('database-verification', () => {
-  it('triggers on Prisma imports', () => {
-    const result = testSkill({
-      prompt: "add user tracking",
-      file: "services/user.ts",
-      content: "import { PrismaService } from './prisma'"
-    });
+ it('triggers on Prisma imports', () => {
+ const result = testSkill({
+ prompt: "add user tracking",
+ file: "services/user.ts",
+ content: "import { PrismaService } from './prisma'"
+ });
 
-    expect(result.triggered).toBe(true);
-    expect(result.skill).toBe('database-verification');
-  });
+ expect(result.triggered).toBe(true);
+ expect(result.skill).toBe('database-verification');
+ });
 });
 ```
 

@@ -22,14 +22,14 @@ description: Turborepo monorepo template principles. pnpm workspaces, shared pac
 ```
 project-name/
 ├── apps/
-│   ├── web/             # Next.js app
-│   ├── api/             # Express API
-│   └── docs/            # Documentation
+│ ├── web/ # Next.js app
+│ ├── api/ # Express API
+│ └── docs/ # Documentation
 ├── packages/
-│   ├── ui/              # Shared components
-│   ├── config/          # ESLint, TS, Tailwind
-│   ├── types/           # Shared types
-│   └── utils/           # Shared utilities
+│ ├── ui/ # Shared components
+│ ├── config/ # ESLint, TS, Tailwind
+│ ├── types/ # Shared types
+│ └── utils/ # Shared utilities
 ├── turbo.json
 ├── pnpm-workspace.yaml
 └── package.json

@@ -10,11 +10,11 @@ Maps continuous input domain to continuous output range with linear interpolatio
 
 ```javascript
 const scale = d3.scaleLinear()
-  .domain([0, 100])
-  .range([0, 500]);
+ .domain([0, 100])
+ .range([0, 500]);
 
-scale(50);  // Returns 250
-scale(0);   // Returns 0
+scale(50); // Returns 250
+scale(0); // Returns 0
 scale(100); // Returns 500
 
 // Invert scale (get input from output)
@@ -39,19 +39,19 @@ Maps continuous input to continuous output with exponential transformation.
 
 ```javascript
 const sqrtScale = d3.scalePow()
-  .exponent(0.5)  // Square root
-  .domain([0, 100])
-  .range([0, 500]);
+ .exponent(0.5) // Square root
+ .domain([0, 100])
+ .range([0, 500]);
 
 const squareScale = d3.scalePow()
-  .exponent(2)  // Square
-  .domain([0, 100])
-  .range([0, 500]);
+ .exponent(2) // Square
+ .domain([0, 100])
+ .range([0, 500]);
 
 // Shorthand for square root
 const sqrtScale2 = d3.scaleSqrt()
-  .domain([0, 100])
-  .range([0, 500]);
+ .domain([0, 100])
+ .range([0, 500]);
 ```
 
 **Use cases:**
@@ -65,12 +65,12 @@ Maps continuous input to continuous output with logarithmic transformation.
 
 ```javascript
 const logScale = d3.scaleLog()
-  .domain([1, 1000])  // Must be positive
-  .range([0, 500]);
+ .domain([1, 1000]) // Must be positive
+ .range([0, 500]);
 
-logScale(1);    // Returns 0
-logScale(10);   // Returns ~167
-logScale(100);  // Returns ~333
+logScale(1); // Returns 0
+logScale(10); // Returns ~167
+logScale(100); // Returns ~333
 logScale(1000); // Returns 500
 ```
 
@@ -88,8 +88,8 @@ Specialised linear scale for temporal data.
 
 ```javascript
 const timeScale = d3.scaleTime()
-  .domain([new Date(2020, 0, 1), new Date(2024, 0, 1)])
-  .range([0, 800]);
+ .domain([new Date(2020, 0, 1), new Date(2024, 0, 1)])
+ .range([0, 800]);
 
 timeScale(new Date(2022, 0, 1)); // Returns 400
 
@@ -114,12 +114,12 @@ Maps continuous input to discrete output buckets.
 
 ```javascript
 const quantizeScale = d3.scaleQuantize()
-  .domain([0, 100])
-  .range(['low', 'medium', 'high']);
+ .domain([0, 100])
+ .range(['low', 'medium', 'high']);
 
-quantizeScale(25);  // Returns 'low'
-quantizeScale(50);  // Returns 'medium'
-quantizeScale(75);  // Returns 'high'
+quantizeScale(25); // Returns 'low'
+quantizeScale(50); // Returns 'medium'
+quantizeScale(75); // Returns 'high'
 
 // Get the threshold values
 quantizeScale.thresholds(); // Returns [33.33, 66.67]
@@ -137,10 +137,10 @@ Maps continuous input to discrete output based on quantiles.
 
 ```javascript
 const quantileScale = d3.scaleQuantile()
-  .domain([3, 6, 7, 8, 8, 10, 13, 15, 16, 20, 24]) // Sample data
-  .range(['low', 'medium', 'high']);
+ .domain([3, 6, 7, 8, 8, 10, 13, 15, 16, 20, 24]) // Sample data
+ .range(['low', 'medium', 'high']);
 
-quantileScale(8);  // Returns based on quantile position
+quantileScale(8); // Returns based on quantile position
 quantileScale.quantiles(); // Returns quantile thresholds
 ```
 
@@ -155,13 +155,13 @@ Maps continuous input to discrete output with custom thresholds.
 
 ```javascript
 const thresholdScale = d3.scaleThreshold()
-  .domain([0, 10, 20])
-  .range(['freezing', 'cold', 'warm', 'hot']);
+ .domain([0, 10, 20])
+ .range(['freezing', 'cold', 'warm', 'hot']);
 
-thresholdScale(-5);  // Returns 'freezing'
-thresholdScale(5);   // Returns 'cold'
-thresholdScale(15);  // Returns 'warm'
-thresholdScale(25);  // Returns 'hot'
+thresholdScale(-5); // Returns 'freezing'
+thresholdScale(5); // Returns 'cold'
+thresholdScale(15); // Returns 'warm'
+thresholdScale(25); // Returns 'hot'
 ```
 
 **Use cases:**
@@ -178,10 +178,10 @@ Maps continuous input to continuous colour gradient.
 
 ```javascript
 const colourScale = d3.scaleSequential(d3.interpolateBlues)
-  .domain([0, 100]);
+ .domain([0, 100]);
 
-colourScale(0);   // Returns lightest blue
-colourScale(50);  // Returns mid blue
+colourScale(0); // Returns lightest blue
+colourScale(50); // Returns mid blue
 colourScale(100); // Returns darkest blue
 ```
 
@@ -207,11 +207,11 @@ Maps continuous input to diverging colour gradient with a midpoint.
 
 ```javascript
 const divergingScale = d3.scaleDiverging(d3.interpolateRdBu)
-  .domain([-10, 0, 10]);
+ .domain([-10, 0, 10]);
 
 divergingScale(-10); // Returns red
-divergingScale(0);   // Returns white/neutral
-divergingScale(10);  // Returns blue
+divergingScale(0); // Returns white/neutral
+divergingScale(10); // Returns blue
 ```
 
 **Available interpolators:**
@@ -237,7 +237,7 @@ Combines sequential colour with quantile mapping.
 
 ```javascript
 const sequentialQuantileScale = d3.scaleSequentialQuantile(d3.interpolateBlues)
-  .domain([3, 6, 7, 8, 8, 10, 13, 15, 16, 20, 24]);
+ .domain([3, 6, 7, 8, 8, 10, 13, 15, 16, 20, 24]);
 
 // Maps based on quantile position
 ```
@@ -255,14 +255,14 @@ Maps discrete input to continuous bands (rectangles) with optional padding.
 
 ```javascript
 const bandScale = d3.scaleBand()
-  .domain(['A', 'B', 'C', 'D'])
-  .range([0, 400])
-  .padding(0.1);
+ .domain(['A', 'B', 'C', 'D'])
+ .range([0, 400])
+ .padding(0.1);
 
-bandScale('A');           // Returns start position (e.g., 0)
-bandScale('B');           // Returns start position (e.g., 110)
-bandScale.bandwidth();    // Returns width of each band (e.g., 95)
-bandScale.step();         // Returns total step including padding
+bandScale('A'); // Returns start position (e.g., 0)
+bandScale('B'); // Returns start position (e.g., 110)
+bandScale.bandwidth(); // Returns width of each band (e.g., 95)
+bandScale.step(); // Returns total step including padding
 bandScale.paddingInner(); // Returns inner padding (between bands)
 bandScale.paddingOuter(); // Returns outer padding (at edges)
 ```
@@ -285,9 +285,9 @@ Maps discrete input to continuous points (no width).
 
 ```javascript
 const pointScale = d3.scalePoint()
-  .domain(['A', 'B', 'C', 'D'])
-  .range([0, 400])
-  .padding(0.5);
+ .domain(['A', 'B', 'C', 'D'])
+ .range([0, 400])
+ .padding(0.5);
 
 pointScale('A'); // Returns position (e.g., 50)
 pointScale('B'); // Returns position (e.g., 150)
@@ -309,14 +309,14 @@ Maps discrete input to discrete output (colours, shapes, etc.).
 ```javascript
 const colourScale = d3.scaleOrdinal(d3.schemeCategory10);
 
-colourScale('apples');  // Returns first colour
+colourScale('apples'); // Returns first colour
 colourScale('oranges'); // Returns second colour
-colourScale('apples');  // Returns same first colour (consistent)
+colourScale('apples'); // Returns same first colour (consistent)
 
 // Custom range
 const customScale = d3.scaleOrdinal()
-  .domain(['cat1', 'cat2', 'cat3'])
-  .range(['#FF6B6B', '#4ECDC4', '#45B7D1']);
+ .domain(['cat1', 'cat2', 'cat3'])
+ .range(['#FF6B6B', '#4ECDC4', '#45B7D1']);
 ```
 
 **Built-in colour schemes:**
@@ -347,15 +347,15 @@ Extend domain to nice round values.
 
 ```javascript
 const scale = d3.scaleLinear()
-  .domain([0.201, 0.996])
-  .nice();
+ .domain([0.201, 0.996])
+ .nice();
 
 scale.domain(); // Returns [0.2, 1.0]
 
 // With count (approximate tick count)
 const scale2 = d3.scaleLinear()
-  .domain([0.201, 0.996])
-  .nice(5);
+ .domain([0.201, 0.996])
+ .nice(5);
 ```
 
 ### Clamping
@@ -364,9 +364,9 @@ Restrict output to range bounds.
 
 ```javascript
 const scale = d3.scaleLinear()
-  .domain([0, 100])
-  .range([0, 500])
-  .clamp(true);
+ .domain([0, 100])
+ .range([0, 500])
+ .clamp(true);
 
 scale(-10); // Returns 0 (clamped)
 scale(150); // Returns 500 (clamped)
@@ -378,8 +378,8 @@ Create independent copies.
 
 ```javascript
 const scale1 = d3.scaleLinear()
-  .domain([0, 100])
-  .range([0, 500]);
+ .domain([0, 100])
+ .range([0, 500]);
 
 const scale2 = scale1.copy();
 // scale2 is independent of scale1
@@ -391,20 +391,20 @@ Generate nice tick values for axes.
 
 ```javascript
 const scale = d3.scaleLinear()
-  .domain([0, 100])
-  .range([0, 500]);
+ .domain([0, 100])
+ .range([0, 500]);
 
-scale.ticks(10);        // Generate ~10 ticks
-scale.tickFormat(10);   // Get format function for ticks
+scale.ticks(10); // Generate ~10 ticks
+scale.tickFormat(10); // Get format function for ticks
 scale.tickFormat(10, ".2f"); // Custom format (2 decimal places)
 
 // Time scale ticks
 const timeScale = d3.scaleTime()
-  .domain([new Date(2020, 0, 1), new Date(2024, 0, 1)]);
+ .domain([new Date(2020, 0, 1), new Date(2024, 0, 1)]);
 
-timeScale.ticks(d3.timeYear);      // Yearly ticks
-timeScale.ticks(d3.timeMonth, 3);  // Every 3 months
-timeScale.tickFormat(5, "%Y-%m");  // Format as year-month
+timeScale.ticks(d3.timeYear); // Yearly ticks
+timeScale.ticks(d3.timeMonth, 3); // Every 3 months
+timeScale.tickFormat(5, "%Y-%m"); // Format as year-month
 ```
 
 ## Colour spaces and interpolation
@@ -413,8 +413,8 @@ timeScale.tickFormat(5, "%Y-%m");  // Format as year-month
 
 ```javascript
 const scale = d3.scaleLinear()
-  .domain([0, 100])
-  .range(["blue", "red"]);
+ .domain([0, 100])
+ .range(["blue", "red"]);
 // Default: RGB interpolation
 ```
 
@@ -422,9 +422,9 @@ const scale = d3.scaleLinear()
 
 ```javascript
 const scale = d3.scaleLinear()
-  .domain([0, 100])
-  .range(["blue", "red"])
-  .interpolate(d3.interpolateHsl);
+ .domain([0, 100])
+ .range(["blue", "red"])
+ .interpolate(d3.interpolateHsl);
 // Smoother colour transitions
 ```
 
@@ -432,9 +432,9 @@ const scale = d3.scaleLinear()
 
 ```javascript
 const scale = d3.scaleLinear()
-  .domain([0, 100])
-  .range(["blue", "red"])
-  .interpolate(d3.interpolateLab);
+ .domain([0, 100])
+ .range(["blue", "red"])
+ .interpolate(d3.interpolateLab);
 // Perceptually uniform
 ```
 
@@ -442,9 +442,9 @@ const scale = d3.scaleLinear()
 
 ```javascript
 const scale = d3.scaleLinear()
-  .domain([0, 100])
-  .range(["blue", "red"])
-  .interpolate(d3.interpolateHcl);
+ .domain([0, 100])
+ .range(["blue", "red"])
+ .interpolate(d3.interpolateHcl);
 // Perceptually uniform with hue
 ```
 
@@ -454,25 +454,25 @@ const scale = d3.scaleLinear()
 
 ```javascript
 const scale = d3.scaleLinear()
-  .domain([min, midpoint, max])
-  .range(["red", "white", "blue"])
-  .interpolate(d3.interpolateHcl);
+ .domain([min, midpoint, max])
+ .range(["red", "white", "blue"])
+ .interpolate(d3.interpolateHcl);
 ```
 
 ### Multi-stop gradient scale
 
 ```javascript
 const scale = d3.scaleLinear()
-  .domain([0, 25, 50, 75, 100])
-  .range(["#d53e4f", "#fc8d59", "#fee08b", "#e6f598", "#66c2a5"]);
+ .domain([0, 25, 50, 75, 100])
+ .range(["#d53e4f", "#fc8d59", "#fee08b", "#e6f598", "#66c2a5"]);
 ```
 
 ### Radius scale for circles (perceptual)
 
 ```javascript
 const radiusScale = d3.scaleSqrt()
-  .domain([0, d3.max(data, d => d.value)])
-  .range([0, 50]);
+ .domain([0, d3.max(data, d => d.value)])
+ .range([0, 50]);
 
 // Use with circles
 circle.attr("r", d => radiusScale(d.value));
@@ -482,20 +482,20 @@ circle.attr("r", d => radiusScale(d.value));
 
 ```javascript
 function createAdaptiveScale(data) {
-  const extent = d3.extent(data);
-  const range = extent[1] - extent[0];
-  
-  // Use log scale if data spans >2 orders of magnitude
-  if (extent[1] / extent[0] > 100) {
-    return d3.scaleLog()
-      .domain(extent)
-      .range([0, width]);
-  }
-  
-  // Otherwise use linear
-  return d3.scaleLinear()
-    .domain(extent)
-    .range([0, width]);
+ const extent = d3.extent(data);
+ const range = extent[1] - extent[0];
+ 
+ // Use log scale if data spans >2 orders of magnitude
+ if (extent[1] / extent[0] > 100) {
+ return d3.scaleLog()
+ .domain(extent)
+ .range([0, width]);
+ }
+ 
+ // Otherwise use linear
+ return d3.scaleLinear()
+ .domain(extent)
+ .range([0, width]);
 }
 ```
 
@@ -503,7 +503,7 @@ function createAdaptiveScale(data) {
 
 ```javascript
 const colourScale = d3.scaleOrdinal()
-  .domain(['Low Risk', 'Medium Risk', 'High Risk'])
-  .range(['#2ecc71', '#f39c12', '#e74c3c'])
-  .unknown('#95a5a6'); // Fallback for unknown values
+ .domain(['Low Risk', 'Medium Risk', 'High Risk'])
+ .range(['#2ecc71', '#f39c12', '#e74c3c'])
+ .unknown('#95a5a6'); // Fallback for unknown values
 ```

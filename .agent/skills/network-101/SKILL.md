@@ -2,8 +2,8 @@
 name: Network 101
 description: This skill should be used when the user asks to "set up a web server", "configure HTTP or HTTPS", "perform SNMP enumeration", "configure SMB shares", "test network services", or needs guidance on configuring and testing network services for penetration testing labs.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Network 101
@@ -76,8 +76,8 @@ Set up secure HTTPS with SSL/TLS:
 ```bash
 # Linux - Generate certificate
 sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout /etc/ssl/private/apache-selfsigned.key \
-  -out /etc/ssl/certs/apache-selfsigned.crt
+ -keyout /etc/ssl/private/apache-selfsigned.key \
+ -out /etc/ssl/certs/apache-selfsigned.crt
 
 # Enable SSL module
 sudo a2enmod ssl
@@ -178,10 +178,10 @@ sudo nano /etc/samba/smb.conf
 
 # Add share:
 # [public]
-#    path = /srv/samba/share
-#    browsable = yes
-#    guest ok = yes
-#    read only = no
+# path = /srv/samba/share
+# browsable = yes
+# guest ok = yes
+# read only = no
 
 # Restart service
 sudo systemctl restart smbd

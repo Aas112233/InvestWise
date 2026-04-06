@@ -22,29 +22,29 @@ Enhanced with 2025 research on anti-sycophancy, heterogeneous teams, and OpenAI 
 # Layer 1: Validate task scope and safety
 @input_guardrail(blocking=True)
 async def validate_task_scope(input, context):
-    # Check if task within project bounds
-    if references_external_paths(input):
-        return GuardrailResult(
-            tripwire_triggered=True,
-            reason="Task references paths outside project"
-        )
-    # Check for destructive operations
-    if contains_destructive_operation(input):
-        return GuardrailResult(
-            tripwire_triggered=True,
-            reason="Destructive operation requires human approval"
-        )
-    return GuardrailResult(tripwire_triggered=False)
+ # Check if task within project bounds
+ if references_external_paths(input):
+ return GuardrailResult(
+ tripwire_triggered=True,
+ reason="Task references paths outside project"
+ )
+ # Check for destructive operations
+ if contains_destructive_operation(input):
+ return GuardrailResult(
+ tripwire_triggered=True,
+ reason="Destructive operation requires human approval"
+ )
+ return GuardrailResult(tripwire_triggered=False)
 
 # Layer 2: Detect prompt injection
 @input_guardrail(blocking=True)
 async def detect_injection(input, context):
-    if has_injection_patterns(input):
-        return GuardrailResult(
-            tripwire_triggered=True,
-            reason="Potential prompt injection detected"
-        )
-    return GuardrailResult(tripwire_triggered=False)
+ if has_injection_patterns(input):
+ return GuardrailResult(
+ tripwire_triggered=True,
+ reason="Potential prompt injection detected"
+ )
+ return GuardrailResult(tripwire_triggered=False)
 ```
 
 ### Output Guardrails (Run After Execution)
@@ -53,25 +53,25 @@ async def detect_injection(input, context):
 # Validate code quality before accepting
 @output_guardrail
 async def validate_code_output(output, context):
-    if output.type == "code":
-        issues = run_static_analysis(output.content)
-        critical = [i for i in issues if i.severity == "critical"]
-        if critical:
-            return GuardrailResult(
-                tripwire_triggered=True,
-                reason=f"Critical issues: {critical}"
-            )
-    return GuardrailResult(tripwire_triggered=False)
+ if output.type == "code":
+ issues = run_static_analysis(output.content)
+ critical = [i for i in issues if i.severity == "critical"]
+ if critical:
+ return GuardrailResult(
+ tripwire_triggered=True,
+ reason=f"Critical issues: {critical}"
+ )
+ return GuardrailResult(tripwire_triggered=False)
 
 # Check for secrets in output
 @output_guardrail
 async def check_secrets(output, context):
-    if contains_secrets(output.content):
-        return GuardrailResult(
-            tripwire_triggered=True,
-            reason="Output contains potential secrets"
-        )
-    return GuardrailResult(tripwire_triggered=False)
+ if contains_secrets(output.content):
+ return GuardrailResult(
+ tripwire_triggered=True,
+ reason="Output contains potential secrets"
+ )
+ return GuardrailResult(tripwire_triggered=False)
 ```
 
 ### Execution Modes
@@ -97,38 +97,38 @@ When a guardrail triggers its tripwire, execution halts immediately:
 
 ```python
 try:
-    result = await run_agent(task)
+ result = await run_agent(task)
 except InputGuardrailTripwireTriggered as e:
-    log_blocked_attempt(e)
-    return early_exit(reason=str(e))
+ log_blocked_attempt(e)
+ return early_exit(reason=str(e))
 except OutputGuardrailTripwireTriggered as e:
-    rollback_changes()
-    return retry_with_constraints(e.constraints)
+ rollback_changes()
+ return retry_with_constraints(e.constraints)
 ```
 
 ### Layered Defense Strategy
 
 ```yaml
 guardrail_layers:
-  layer_1_input:
-    - scope_validation      # Is task within bounds?
-    - pii_detection         # Contains sensitive data?
-    - injection_detection   # Prompt injection attempt?
+ layer_1_input:
+ - scope_validation # Is task within bounds?
+ - pii_detection # Contains sensitive data?
+ - injection_detection # Prompt injection attempt?
 
-  layer_2_pre_execution:
-    - cost_estimation       # Will this exceed budget?
-    - dependency_check      # Are dependencies available?
-    - conflict_detection    # Conflicts with in-progress work?
+ layer_2_pre_execution:
+ - cost_estimation # Will this exceed budget?
+ - dependency_check # Are dependencies available?
+ - conflict_detection # Conflicts with in-progress work?
 
-  layer_3_output:
-    - static_analysis       # Code quality issues?
-    - secret_detection      # Secrets in output?
-    - spec_compliance       # Matches OpenAPI spec?
+ layer_3_output:
+ - static_analysis # Code quality issues?
+ - secret_detection # Secrets in output?
+ - spec_compliance # Matches OpenAPI spec?
 
-  layer_4_post_action:
-    - test_validation       # Tests pass?
-    - review_approval       # Review passed?
-    - deployment_safety     # Safe to deploy?
+ layer_4_post_action:
+ - test_validation # Tests pass?
+ - review_approval # Review passed?
+ - deployment_safety # Safe to deploy?
 ```
 
 See `references/openai-patterns.md` for full guardrails implementation.
@@ -152,10 +152,10 @@ Every code change goes through 3 specialized reviewers **simultaneously**:
 
 ```
 IMPLEMENT -> BLIND REVIEW (parallel) -> DEBATE (if disagreement) -> AGGREGATE -> FIX -> RE-REVIEW
-                |
-                +-- code-reviewer (Opus) - Code quality, patterns, best practices
-                +-- business-logic-reviewer (Opus) - Requirements, edge cases, UX
-                +-- security-reviewer (Opus) - Vulnerabilities, OWASP Top 10
+ |
+ +-- code-reviewer (Opus) - Code quality, patterns, best practices
+ +-- business-logic-reviewer (Opus) - Requirements, edge cases, UX
+ +-- security-reviewer (Opus) - Vulnerabilities, OWASP Top 10
 ```
 
 **Important:**
@@ -175,35 +175,35 @@ IMPLEMENT -> BLIND REVIEW (parallel) -> DEBATE (if disagreement) -> AGGREGATE ->
 # Phase 1: Independent blind review
 reviews = []
 for reviewer in [code_reviewer, business_reviewer, security_reviewer]:
-    review = Task(
-        subagent_type="general-purpose",
-        model="opus",
-        prompt=f"""
-        {reviewer.prompt}
+ review = Task(
+ subagent_type="general-purpose",
+ model="opus",
+ prompt=f"""
+ {reviewer.prompt}
 
-        CRITICAL: Be skeptical. Your job is to find problems.
-        List specific concerns with file:line references.
-        Do NOT rubber-stamp. Finding zero issues is suspicious.
-        """
-    )
-    reviews.append(review)
+ CRITICAL: Be skeptical. Your job is to find problems.
+ List specific concerns with file:line references.
+ Do NOT rubber-stamp. Finding zero issues is suspicious.
+ """
+ )
+ reviews.append(review)
 
 # Phase 2: Check for disagreement
 if has_disagreement(reviews):
-    # Structured debate - max 2 rounds
-    debate_result = structured_debate(reviews, max_rounds=2)
+ # Structured debate - max 2 rounds
+ debate_result = structured_debate(reviews, max_rounds=2)
 else:
-    # All agreed - run devil's advocate
-    devil_review = Task(
-        subagent_type="general-purpose",
-        model="opus",
-        prompt="""
-        The other reviewers found no issues. Your job is to be contrarian.
-        Find problems they missed. Challenge assumptions.
-        If truly nothing wrong, explain why each potential issue category is covered.
-        """
-    )
-    reviews.append(devil_review)
+ # All agreed - run devil's advocate
+ devil_review = Task(
+ subagent_type="general-purpose",
+ model="opus",
+ prompt="""
+ The other reviewers found no issues. Your job is to be contrarian.
+ Find problems they missed. Challenge assumptions.
+ If truly nothing wrong, explain why each potential issue category is covered.
+ """
+ )
+ reviews.append(devil_review)
 ```
 
 ### Heterogeneous Team Composition
@@ -251,16 +251,16 @@ This diversity prevents groupthink and catches more issues.
 ```python
 # CORRECT: Launch all 3 in parallel
 Task(subagent_type="general-purpose", model="opus",
-     description="Code quality review",
-     prompt="Review for code quality, patterns, SOLID principles...")
+ description="Code quality review",
+ prompt="Review for code quality, patterns, SOLID principles...")
 
 Task(subagent_type="general-purpose", model="opus",
-     description="Business logic review",
-     prompt="Review for requirements alignment, edge cases, UX...")
+ description="Business logic review",
+ prompt="Review for requirements alignment, edge cases, UX...")
 
 Task(subagent_type="general-purpose", model="opus",
-     description="Security review",
-     prompt="Review for vulnerabilities, OWASP Top 10...")
+ description="Security review",
+ prompt="Review for vulnerabilities, OWASP Top 10...")
 
 # WRONG: Sequential reviewers (3x slower)
 # Don't do: await reviewer1; await reviewer2; await reviewer3;
@@ -316,33 +316,33 @@ NOT: "Refactor the auth file"
 - **Root Cause**: [Why it happened]
 - **Solution Chosen**: [What we implemented]
 - **Alternatives Considered**:
-  1. [Option A]: Rejected because [reason]
-  2. [Option B]: Rejected because [reason]
+ 1. [Option A]: Rejected because [reason]
+ 2. [Option B]: Rejected because [reason]
 
 ### WHAT (Changes Made)
 - **Files Modified**: [with line ranges and purpose]
-  - `src/auth.ts:45-89` - Extracted token validation to separate function
-  - `src/auth.test.ts:120-156` - Added edge case tests
+ - `src/auth.ts:45-89` - Extracted token validation to separate function
+ - `src/auth.test.ts:120-156` - Added edge case tests
 - **APIs Changed**: [breaking vs non-breaking]
 - **Behavior Changes**: [what users will notice]
 - **Dependencies Added/Removed**: [with justification]
 
 ### TRADE-OFFS (Gains & Costs)
 - **Gained**:
-  - Better testability (extracted pure functions)
-  - 40% faster token validation
-  - Reduced cyclomatic complexity from 15 to 6
+ - Better testability (extracted pure functions)
+ - 40% faster token validation
+ - Reduced cyclomatic complexity from 15 to 6
 - **Cost**:
-  - Added 2 new functions (increased surface area)
-  - Requires migration for custom token validators
+ - Added 2 new functions (increased surface area)
+ - Requires migration for custom token validators
 - **Neutral**:
-  - No performance change for standard use cases
+ - No performance change for standard use cases
 
 ### RISKS & MITIGATIONS
 - **Risk**: Existing custom validators may break
-  - **Mitigation**: Added backwards-compatibility shim, deprecation warning
+ - **Mitigation**: Added backwards-compatibility shim, deprecation warning
 - **Risk**: New validation logic untested at scale
-  - **Mitigation**: Gradual rollout with feature flag, rollback plan ready
+ - **Mitigation**: Gradual rollout with feature flag, rollback plan ready
 
 ### TEST RESULTS
 - Unit: 24/24 passed (coverage: 92%)
@@ -387,14 +387,14 @@ NOT: "Refactor the auth file"
 
 # Check for secrets
 if grep -rE "(password|secret|key).*=.*['\"][^'\"]{8,}" "$1"; then
-  echo "BLOCKED: Potential secret detected"
-  exit 1
+ echo "BLOCKED: Potential secret detected"
+ exit 1
 fi
 
 # Check for console.log in production
 if grep -n "console.log" "$1" | grep -v "test"; then
-  echo "BLOCKED: Remove console.log statements"
-  exit 1
+ echo "BLOCKED: Remove console.log statements"
+ exit 1
 fi
 ```
 

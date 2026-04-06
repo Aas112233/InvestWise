@@ -2,8 +2,8 @@
 name: SMTP Penetration Testing
 description: This skill should be used when the user asks to "perform SMTP penetration testing", "enumerate email users", "test for open mail relays", "grab SMTP banners", "brute force email credentials", or "assess mail server security". It provides comprehensive techniques for testing SMTP server security.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # SMTP Penetration Testing
@@ -323,9 +323,9 @@ Check email authentication records:
 
 ```bash
 # SPF/DKIM/DMARC record lookups
-dig TXT target.com | grep spf            # SPF
-dig TXT selector._domainkey.target.com    # DKIM
-dig TXT _dmarc.target.com                 # DMARC
+dig TXT target.com | grep spf # SPF
+dig TXT selector._domainkey.target.com # DKIM
+dig TXT _dmarc.target.com # DMARC
 
 # SPF policy: -all = strict fail, ~all = soft fail, ?all = neutral
 ```
@@ -470,8 +470,8 @@ RCPT TO:<test@gmail.com>
 nmap -p 25 --script smtp-open-relay --script-args smtp-open-relay.from=test@attacker.com,smtp-open-relay.to=test@external.com mail.target.com
 
 # Output:
-# PORT   STATE SERVICE
-# 25/tcp open  smtp
+# PORT STATE SERVICE
+# 25/tcp open smtp
 # |_smtp-open-relay: Server is an open relay (14/16 tests)
 ```
 

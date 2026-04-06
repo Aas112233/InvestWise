@@ -27,8 +27,8 @@ const value: string | number = 'hello'
 const direction: 'up' | 'down' | 'left' | 'right' = 'up'
 
 // Any vs Unknown
-const anyValue: any = 'anything'     // ❌ Avoid
-const unknownValue: unknown = 'safe' // ✅ Prefer, requires narrowing
+const anyValue: any = 'anything' // Avoid
+const unknownValue: unknown = 'safe' // Prefer, requires narrowing
 ```
 
 ## Type Aliases & Interfaces
@@ -36,21 +36,21 @@ const unknownValue: unknown = 'safe' // ✅ Prefer, requires narrowing
 ```typescript
 // Type Alias
 type Point = {
-  x: number
-  y: number
+ x: number
+ y: number
 }
 
 // Interface (preferred for objects)
 interface User {
-  id: string
-  name: string
-  email?: string  // Optional
-  readonly createdAt: Date  // Readonly
+ id: string
+ name: string
+ email?: string // Optional
+ readonly createdAt: Date // Readonly
 }
 
 // Extending
 interface Admin extends User {
-  permissions: string[]
+ permissions: string[]
 }
 
 // Intersection
@@ -62,29 +62,29 @@ type AdminUser = User & { permissions: string[] }
 ```typescript
 // Generic function
 function identity<T>(value: T): T {
-  return value
+ return value
 }
 
 // Generic with constraint
 function getLength<T extends { length: number }>(item: T): number {
-  return item.length
+ return item.length
 }
 
 // Generic interface
 interface ApiResponse<T> {
-  data: T
-  status: number
-  message: string
+ data: T
+ status: number
+ message: string
 }
 
 // Generic with default
 type Container<T = string> = {
-  value: T
+ value: T
 }
 
 // Multiple generics
 function merge<T, U>(obj1: T, obj2: U): T & U {
-  return { ...obj1, ...obj2 }
+ return { ...obj1, ...obj2 }
 }
 ```
 
@@ -92,10 +92,10 @@ function merge<T, U>(obj1: T, obj2: U): T & U {
 
 ```typescript
 interface User {
-  id: string
-  name: string
-  email: string
-  age: number
+ id: string
+ name: string
+ email: string
+ age: number
 }
 
 // Partial - all optional
@@ -149,7 +149,7 @@ type UnwrapPromise<T> = T extends Promise<infer U> ? U : T
 
 // Distributive conditional
 type ToArray<T> = T extends any ? T[] : never
-type Result = ToArray<string | number>  // string[] | number[]
+type Result = ToArray<string | number> // string[] | number[]
 
 // NonDistributive
 type ToArrayNonDist<T> = [T] extends [any] ? T[] : never
@@ -176,17 +176,17 @@ type EventHandler = `on${Capitalize<EventName>}`
 ```typescript
 // Basic mapped type
 type Optional<T> = {
-  [K in keyof T]?: T[K]
+ [K in keyof T]?: T[K]
 }
 
 // With key remapping
 type Getters<T> = {
-  [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K]
+ [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K]
 }
 
 // Filter keys
 type OnlyStrings<T> = {
-  [K in keyof T as T[K] extends string ? K : never]: T[K]
+ [K in keyof T as T[K] extends string ? K : never]: T[K]
 }
 ```
 
@@ -195,10 +195,10 @@ type OnlyStrings<T> = {
 ```typescript
 // typeof guard
 function process(value: string | number) {
-  if (typeof value === 'string') {
-    return value.toUpperCase()  // string
-  }
-  return value.toFixed(2)  // number
+ if (typeof value === 'string') {
+ return value.toUpperCase() // string
+ }
+ return value.toFixed(2) // number
 }
 
 // instanceof guard
@@ -206,11 +206,11 @@ class Dog { bark() {} }
 class Cat { meow() {} }
 
 function makeSound(animal: Dog | Cat) {
-  if (animal instanceof Dog) {
-    animal.bark()
-  } else {
-    animal.meow()
-  }
+ if (animal instanceof Dog) {
+ animal.bark()
+ } else {
+ animal.meow()
+ }
 }
 
 // in guard
@@ -218,23 +218,23 @@ interface Bird { fly(): void }
 interface Fish { swim(): void }
 
 function move(animal: Bird | Fish) {
-  if ('fly' in animal) {
-    animal.fly()
-  } else {
-    animal.swim()
-  }
+ if ('fly' in animal) {
+ animal.fly()
+ } else {
+ animal.swim()
+ }
 }
 
 // Custom type guard
 function isString(value: unknown): value is string {
-  return typeof value === 'string'
+ return typeof value === 'string'
 }
 
 // Assertion function
 function assertIsString(value: unknown): asserts value is string {
-  if (typeof value !== 'string') {
-    throw new Error('Not a string')
-  }
+ if (typeof value !== 'string') {
+ throw new Error('Not a string')
+ }
 }
 ```
 
@@ -249,19 +249,19 @@ type Loading = { type: 'loading' }
 type State<T> = Success<T> | Error | Loading
 
 function handle<T>(state: State<T>) {
-  switch (state.type) {
-    case 'success':
-      return state.data  // T
-    case 'error':
-      return state.message  // string
-    case 'loading':
-      return null
-  }
+ switch (state.type) {
+ case 'success':
+ return state.data // T
+ case 'error':
+ return state.message // string
+ case 'loading':
+ return null
+ }
 }
 
 // Exhaustive check
 function assertNever(value: never): never {
-  throw new Error(`Unexpected value: ${value}`)
+ throw new Error(`Unexpected value: ${value}`)
 }
 ```
 
@@ -276,11 +276,11 @@ type OrderId = Brand<string, 'OrderId'>
 
 // Constructor functions
 function createUserId(id: string): UserId {
-  return id as UserId
+ return id as UserId
 }
 
 function createOrderId(id: string): OrderId {
-  return id as OrderId
+ return id as OrderId
 }
 
 // Usage - prevents mixing
@@ -289,8 +289,8 @@ function getOrder(orderId: OrderId, userId: UserId) {}
 const userId = createUserId('user-123')
 const orderId = createOrderId('order-456')
 
-getOrder(orderId, userId)  // ✅ OK
-// getOrder(userId, orderId)  // ❌ Error - types don't match
+getOrder(orderId, userId) // OK
+// getOrder(userId, orderId) // Error - types don't match
 ```
 
 ## Module Declarations
@@ -298,22 +298,22 @@ getOrder(orderId, userId)  // ✅ OK
 ```typescript
 // Declare module for untyped package
 declare module 'untyped-package' {
-  export function doSomething(): void
-  export const value: string
+ export function doSomething(): void
+ export const value: string
 }
 
 // Augment existing module
 declare module 'express' {
-  interface Request {
-    user?: { id: string }
-  }
+ interface Request {
+ user?: { id: string }
+ }
 }
 
 // Declare global
 declare global {
-  interface Window {
-    myGlobal: string
-  }
+ interface Window {
+ myGlobal: string
+ }
 }
 ```
 
@@ -321,63 +321,63 @@ declare global {
 
 ```json
 {
-  "compilerOptions": {
-    // Strictness
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    
-    // Modules
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    
-    // Output
-    "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
-    
-    // Performance
-    "skipLibCheck": true,
-    "incremental": true,
-    
-    // Paths
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  }
+ "compilerOptions": {
+ // Strictness
+ "strict": true,
+ "noUncheckedIndexedAccess": true,
+ "noImplicitOverride": true,
+ 
+ // Modules
+ "module": "ESNext",
+ "moduleResolution": "bundler",
+ "esModuleInterop": true,
+ 
+ // Output
+ "target": "ES2022",
+ "lib": ["ES2022", "DOM"],
+ 
+ // Performance
+ "skipLibCheck": true,
+ "incremental": true,
+ 
+ // Paths
+ "baseUrl": ".",
+ "paths": {
+ "@/*": ["./src/*"]
+ }
+ }
 }
 ```
 
 ## Best Practices
 
 ```typescript
-// ✅ Prefer interface for objects
+// Prefer interface for objects
 interface User {
-  name: string
+ name: string
 }
 
-// ✅ Use const assertions
+// Use const assertions
 const routes = ['home', 'about'] as const
 
-// ✅ Use satisfies for validation
+// Use satisfies for validation
 const config = {
-  api: 'https://api.example.com'
+ api: 'https://api.example.com'
 } satisfies Record<string, string>
 
-// ✅ Use unknown over any
+// Use unknown over any
 function parse(input: unknown) {
-  if (typeof input === 'string') {
-    return JSON.parse(input)
-  }
+ if (typeof input === 'string') {
+ return JSON.parse(input)
+ }
 }
 
-// ✅ Explicit return types for public APIs
+// Explicit return types for public APIs
 export function getUser(id: string): User | null {
-  // ...
+ // ...
 }
 
-// ❌ Avoid
+// Avoid
 const data: any = fetchData()
-data.anything.goes.wrong  // No type safety
+data.anything.goes.wrong // No type safety
 ```

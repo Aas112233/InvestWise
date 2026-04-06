@@ -50,20 +50,20 @@ from langchain_core.tools import tool
 
 # 1. Define State
 class AgentState(TypedDict):
-    messages: Annotated[list, add_messages]
-    # add_messages reducer appends, doesn't overwrite
+ messages: Annotated[list, add_messages]
+ # add_messages reducer appends, doesn't overwrite
 
 # 2. Define Tools
 @tool
 def search(query: str) -> str:
-    """Search the web for information."""
-    # Implementation here
-    return f"Results for: {query}"
+ """Search the web for information."""
+ # Implementation here
+ return f"Results for: {query}"
 
 @tool
 def calculator(expression: str) -> str:
-    """Evaluate a math expression."""
-    return str(eval(expression))
+ """Evaluate a math expression."""
+ return str(eval(expression))
 
 tools = [search, calculator]
 
@@ -72,20 +72,20 @@ llm = ChatOpenAI(model="gpt-4o").bind_tools(tools)
 
 # 4. Define Nodes
 def agent(state: AgentState) -> dict:
-    """The agent node - calls LLM."""
-    response = llm.invoke(state["messages"])
-    return {"messages": [response]}
+ """The agent node - calls LLM."""
+ response = llm.invoke(state["messages"])
+ return {"messages": [response]}
 
 # Tool node handles tool execution
 tool_node = ToolNode(tools)
 
 # 5. Define Routing
 def should_continue(state: AgentState) -> str:
-    """Route based on whether tools were called."""
-    last_message = state["messages"][-1]
-    if last_message.tool_calls:
-        return "tools"
-    return END
+ """Route based on whether tools were called."""
+ last_message = state["messages"][-1]
+ if last_message.tool_calls:
+ return "tools"
+ return END
 
 # 6. Build Graph
 graph = StateGraph(AgentState)
@@ -97,14 +97,14 @@ graph.add_node("tools", tool_node)
 # Add edges
 graph.add_edge(START, "agent")
 graph.add_conditional_edges("agent", should_continue, ["tools", END])
-graph.add_edge("tools", "agent")  # Loop back
+graph.add_edge("tools", "agent") # Loop back
 
 # Compile
 app = graph.compile()
 
 # 7. Run
 result = app.invoke({
-    "messages": [("user", "What is 25 * 4?")]
+ "messages": [("user", "What is 25 * 4?")]
 })
 ```
 
@@ -121,43 +121,43 @@ from langgraph.graph import StateGraph
 
 # Custom reducer for merging dictionaries
 def merge_dicts(left: dict, right: dict) -> dict:
-    return {**left, **right}
+ return {**left, **right}
 
 # State with multiple reducers
 class ResearchState(TypedDict):
-    # Messages append (don't overwrite)
-    messages: Annotated[list, add_messages]
+ # Messages append (don't overwrite)
+ messages: Annotated[list, add_messages]
 
-    # Research findings merge
-    findings: Annotated[dict, merge_dicts]
+ # Research findings merge
+ findings: Annotated[dict, merge_dicts]
 
-    # Sources accumulate
-    sources: Annotated[list[str], add]
+ # Sources accumulate
+ sources: Annotated[list[str], add]
 
-    # Current step (overwrites - no reducer)
-    current_step: str
+ # Current step (overwrites - no reducer)
+ current_step: str
 
-    # Error count (custom reducer)
-    errors: Annotated[int, lambda a, b: a + b]
+ # Error count (custom reducer)
+ errors: Annotated[int, lambda a, b: a + b]
 
 # Nodes return partial state updates
 def researcher(state: ResearchState) -> dict:
-    # Only return fields being updated
-    return {
-        "findings": {"topic_a": "New finding"},
-        "sources": ["source1.com"],
-        "current_step": "researching"
-    }
+ # Only return fields being updated
+ return {
+ "findings": {"topic_a": "New finding"},
+ "sources": ["source1.com"],
+ "current_step": "researching"
+ }
 
 def writer(state: ResearchState) -> dict:
-    # Access accumulated state
-    all_findings = state["findings"]
-    all_sources = state["sources"]
+ # Access accumulated state
+ all_findings = state["findings"]
+ all_sources = state["sources"]
 
-    return {
-        "messages": [("assistant", f"Report based on {len(all_sources)} sources")],
-        "current_step": "writing"
-    }
+ return {
+ "messages": [("assistant", f"Report based on {len(all_sources)} sources")],
+ "current_step": "writing"
+ }
 
 # Build graph
 graph = StateGraph(ResearchState)
@@ -176,34 +176,34 @@ Route to different paths based on state
 from langgraph.graph import StateGraph, START, END
 
 class RouterState(TypedDict):
-    query: str
-    query_type: str
-    result: str
+ query: str
+ query_type: str
+ result: str
 
 def classifier(state: RouterState) -> dict:
-    """Classify the query type."""
-    query = state["query"].lower()
-    if "code" in query or "program" in query:
-        return {"query_type": "coding"}
-    elif "search" in query or "find" in query:
-        return {"query_type": "search"}
-    else:
-        return {"query_type": "chat"}
+ """Classify the query type."""
+ query = state["query"].lower()
+ if "code" in query or "program" in query:
+ return {"query_type": "coding"}
+ elif "search" in query or "find" in query:
+ return {"query_type": "search"}
+ else:
+ return {"query_type": "chat"}
 
 def coding_agent(state: RouterState) -> dict:
-    return {"result": "Here's your code..."}
+ return {"result": "Here's your code..."}
 
 def search_agent(state: RouterState) -> dict:
-    return {"result": "Search results..."}
+ return {"result": "Search results..."}
 
 def chat_agent(state: RouterState) -> dict:
-    return {"result": "Let me help..."}
+ return {"result": "Let me help..."}
 
 # Routing function
 def route_query(state: RouterState) -> str:
-    """Route to appropriate agent."""
-    query_type = state["query_type"]
-    return query_type  # Returns node name
+ """Route to appropriate agent."""
+ query_type = state["query_type"]
+ return query_type # Returns node name
 
 # Build graph
 graph = StateGraph(RouterState)
@@ -217,13 +217,13 @@ graph.add_edge(START, "classifier")
 
 # Conditional edges from classifier
 graph.add_conditional_edges(
-    "classifier",
-    route_query,
-    {
-        "coding": "coding",
-        "search": "search",
-        "chat": "chat"
-    }
+ "classifier",
+ route_query,
+ {
+ "coding": "coding",
+ "search": "search",
+ "chat": "chat"
+ }
 )
 
 # All agents lead to END
@@ -236,7 +236,7 @@ app = graph.compile()
 
 ## Anti-Patterns
 
-### ❌ Infinite Loop Without Exit
+### Infinite Loop Without Exit
 
 **Why bad**: Agent loops forever.
 Burns tokens and costs.
@@ -248,13 +248,13 @@ Eventually errors out.
 - Timeout at application level
 
 def should_continue(state):
-    if state["iterations"] > 10:
-        return END
-    if state["task_complete"]:
-        return END
-    return "agent"
+ if state["iterations"] > 10:
+ return END
+ if state["task_complete"]:
+ return END
+ return "agent"
 
-### ❌ Stateless Nodes
+### Stateless Nodes
 
 **Why bad**: Loses LangGraph's benefits.
 State not persisted.
@@ -265,7 +265,7 @@ Return state updates from nodes.
 Use reducers for accumulation.
 Let LangGraph manage state.
 
-### ❌ Giant Monolithic State
+### Giant Monolithic State
 
 **Why bad**: Hard to reason about.
 Unnecessary data in context.

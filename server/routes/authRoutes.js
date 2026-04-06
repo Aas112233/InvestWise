@@ -1,20 +1,20 @@
 import express from 'express';
 const router = express.Router();
 import {
-    authUser,
-    registerUser,
-    getUserProfile,
-    getUsers,
-    updateUser,
-    deleteUser,
-    updateUserPassword,
-    changeCurrentUserPassword,
-    refreshToken,
-    logoutUser,
-    logoutAllDevices,
-    getActiveSessions,
-    revokeSession,
-    getLoginHistory,
+ authUser,
+ registerUser,
+ getUserProfile,
+ getUsers,
+ updateUser,
+ deleteUser,
+ updateUserPassword,
+ changeCurrentUserPassword,
+ refreshToken,
+ logoutUser,
+ logoutAllDevices,
+ getActiveSessions,
+ revokeSession,
+ getLoginHistory,
 } from '../controllers/authController.js';
 import { protect, admin, managerOrAdmin } from '../middleware/authMiddleware.js';
 import { loginValidation, registerValidation } from '../middleware/validator.js';

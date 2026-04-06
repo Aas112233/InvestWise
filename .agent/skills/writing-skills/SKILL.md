@@ -29,18 +29,18 @@ A **skill** is a reference guide for proven techniques, patterns, or tools. Skil
 
 ## TDD Mapping for Skills
 
-| TDD Concept             | Skill Creation                                   |
+| TDD Concept | Skill Creation |
 | ----------------------- | ------------------------------------------------ |
-| **Test case**           | Pressure scenario with subagent                  |
-| **Production code**     | Skill document (SKILL.md)                        |
-| **Test fails (RED)**    | Agent violates rule without skill (baseline)     |
-| **Test passes (GREEN)** | Agent complies with skill present                |
-| **Refactor**            | Close loopholes while maintaining compliance     |
-| **Write test first**    | Run baseline scenario BEFORE writing skill       |
-| **Watch it fail**       | Document exact rationalizations agent uses       |
-| **Minimal code**        | Write skill addressing those specific violations |
-| **Watch it pass**       | Verify agent now complies                        |
-| **Refactor cycle**      | Find new rationalizations → plug → re-verify     |
+| **Test case** | Pressure scenario with subagent |
+| **Production code** | Skill document (SKILL.md) |
+| **Test fails (RED)** | Agent violates rule without skill (baseline) |
+| **Test passes (GREEN)** | Agent complies with skill present |
+| **Refactor** | Close loopholes while maintaining compliance |
+| **Write test first** | Run baseline scenario BEFORE writing skill |
+| **Watch it fail** | Document exact rationalizations agent uses |
+| **Minimal code** | Write skill addressing those specific violations |
+| **Watch it pass** | Verify agent now complies |
+| **Refactor cycle** | Find new rationalizations → plug → re-verify |
 
 The entire skill creation process follows RED-GREEN-REFACTOR.
 
@@ -78,9 +78,9 @@ API docs, syntax guides, tool documentation (office docs)
 
 ```
 skills/
-  skill-name/
-    SKILL.md              # Main reference (required)
-    supporting-file.*     # Only if needed
+ skill-name/
+ SKILL.md # Main reference (required)
+ supporting-file.* # Only if needed
 ```
 
 **Flat namespace** - all skills in one searchable namespace
@@ -111,9 +111,9 @@ Manage context efficiently by splitting detailed information into separate files
 1. **Metadata (name + description)**: Always loaded for discovery.
 2. **SKILL.md body**: Core workflow and high-level guidance. Keep under 500 lines.
 3. **Bundled resources**:
-   - `scripts/`: Deterministic code/logic.
-   - `references/`: Detailed schemas, API docs, or domain knowledge.
-   - `assets/`: Templates, images, or static files.
+ - `scripts/`: Deterministic code/logic.
+ - `references/`: Detailed schemas, API docs, or domain knowledge.
+ - `assets/`: Templates, images, or static files.
 
 **Pattern**: Link to advanced content or variant-specific details (e.g., `aws.md` vs `gcp.md`) from the main `SKILL.md`.
 
@@ -125,10 +125,10 @@ Manage context efficiently by splitting detailed information into separate files
 - Max 1024 characters total
 - `name`: Use letters, numbers, and hyphens only (no parentheses, special chars)
 - `description`: Third-person, describes ONLY when to use (NOT what it does)
-  - Start with "Use when..." to focus on triggering conditions
-  - Include specific symptoms, situations, and contexts
-  - **NEVER summarize the skill's process or workflow** (see CSO section for why)
-  - Keep under 500 characters if possible
+ - Start with "Use when..." to focus on triggering conditions
+ - Include specific symptoms, situations, and contexts
+ - **NEVER summarize the skill's process or workflow** (see CSO section for why)
+ - Keep under 500 characters if possible
 
 ```markdown
 ---
@@ -192,16 +192,16 @@ When the description was changed to just "Use when executing implementation plan
 **The trap:** Descriptions that summarize workflow create a shortcut Claude will take. The skill body becomes documentation Claude skips.
 
 ```yaml
-# ❌ BAD: Summarizes workflow - Claude may follow this instead of reading skill
+# BAD: Summarizes workflow - Claude may follow this instead of reading skill
 description: Use when executing plans - dispatches subagent per task with code review between tasks
 
-# ❌ BAD: Too much process detail
+# BAD: Too much process detail
 description: Use for TDD - write test first, watch it fail, write minimal code, refactor
 
-# ✅ GOOD: Just triggering conditions, no workflow summary
+# GOOD: Just triggering conditions, no workflow summary
 description: Use when executing implementation plans with independent tasks in the current session
 
-# ✅ GOOD: Triggering conditions only
+# GOOD: Triggering conditions only
 description: Use when implementing any feature or bugfix, before writing implementation code
 ```
 
@@ -215,19 +215,19 @@ description: Use when implementing any feature or bugfix, before writing impleme
 - **NEVER summarize the skill's process or workflow**
 
 ```yaml
-# ❌ BAD: Too abstract, vague, doesn't include when to use
+# BAD: Too abstract, vague, doesn't include when to use
 description: For async testing
 
-# ❌ BAD: First person
+# BAD: First person
 description: I can help you with async tests when they're flaky
 
-# ❌ BAD: Mentions technology but skill isn't specific to it
+# BAD: Mentions technology but skill isn't specific to it
 description: Use when tests use setTimeout/sleep and are flaky
 
-# ✅ GOOD: Starts with "Use when", describes problem, no workflow
+# GOOD: Starts with "Use when", describes problem, no workflow
 description: Use when tests have race conditions, timing dependencies, or pass/fail inconsistently
 
-# ✅ GOOD: Technology-specific skill with explicit trigger
+# GOOD: Technology-specific skill with explicit trigger
 description: Use when using React Router and handling authentication redirects
 ```
 
@@ -244,8 +244,8 @@ Use words Claude would search for:
 
 **Use active voice, verb-first:**
 
-- ✅ `creating-skills` not `skill-creation`
-- ✅ `condition-based-waiting` not `async-test-helpers`
+- `creating-skills` not `skill-creation`
+- `condition-based-waiting` not `async-test-helpers`
 
 ### 4. Token Efficiency (Critical)
 
@@ -262,22 +262,22 @@ Use words Claude would search for:
 **Move details to tool help:**
 
 ```bash
-# ❌ BAD: Document all flags in SKILL.md
+# BAD: Document all flags in SKILL.md
 search-conversations supports --text, --both, --after DATE, --before DATE, --limit N
 
-# ✅ GOOD: Reference --help
+# GOOD: Reference --help
 search-conversations supports multiple modes and filters. Run --help for details.
 ```
 
 **Use cross-references:**
 
 ```markdown
-# ❌ BAD: Repeat workflow details
+# BAD: Repeat workflow details
 
 When searching, dispatch subagent with template...
 [20 lines of repeated instructions]
 
-# ✅ GOOD: Reference other skill
+# GOOD: Reference other skill
 
 Always use subagents (50-100x context savings). REQUIRED: Use [other-skill-name] for workflow.
 ```
@@ -285,13 +285,13 @@ Always use subagents (50-100x context savings). REQUIRED: Use [other-skill-name]
 **Compress examples:**
 
 ```markdown
-# ❌ BAD: Verbose example (42 words)
+# BAD: Verbose example (42 words)
 
 your human partner: "How did we handle authentication errors in React Router before?"
 You: I'll search past conversations for React Router authentication patterns.
 [Dispatch subagent with search query: "React Router authentication error handling 401"]
 
-# ✅ GOOD: Minimal example (20 words)
+# GOOD: Minimal example (20 words)
 
 Partner: "How did we handle auth errors in React Router?"
 You: Searching...
@@ -314,10 +314,10 @@ wc -w skills/path/SKILL.md
 
 **Name by what you DO or core insight:**
 
-- ✅ `condition-based-waiting` > `async-test-helpers`
-- ✅ `using-skills` not `skill-usage`
-- ✅ `flatten-with-flags` > `data-structure-refactoring`
-- ✅ `root-cause-tracing` > `debugging-techniques`
+- `condition-based-waiting` > `async-test-helpers`
+- `using-skills` not `skill-usage`
+- `flatten-with-flags` > `data-structure-refactoring`
+- `root-cause-tracing` > `debugging-techniques`
 
 **Gerunds (-ing) work well for processes:**
 
@@ -330,10 +330,10 @@ wc -w skills/path/SKILL.md
 
 Use skill name only, with explicit requirement markers:
 
-- ✅ Good: `**REQUIRED SUB-SKILL:** Use superpowers:test-driven-development`
-- ✅ Good: `**REQUIRED BACKGROUND:** You MUST understand superpowers:systematic-debugging`
-- ❌ Bad: `See skills/testing/test-driven-development` (unclear if required)
-- ❌ Bad: `@skills/testing/test-driven-development/SKILL.md` (force-loads, burns context)
+- Good: `**REQUIRED SUB-SKILL:** Use superpowers:test-driven-development`
+- Good: `**REQUIRED BACKGROUND:** You MUST understand superpowers:systematic-debugging`
+- Bad: `See skills/testing/test-driven-development` (unclear if required)
+- Bad: `@skills/testing/test-driven-development/SKILL.md` (force-loads, burns context)
 
 **Why no @ links:** `@` syntax force-loads files immediately, consuming 200k+ context before you need them.
 
@@ -341,14 +341,14 @@ Use skill name only, with explicit requirement markers:
 
 ```dot
 digraph when_flowchart {
-    "Need to show information?" [shape=diamond];
-    "Decision where I might go wrong?" [shape=diamond];
-    "Use markdown" [shape=box];
-    "Small inline flowchart" [shape=box];
+ "Need to show information?" [shape=diamond];
+ "Decision where I might go wrong?" [shape=diamond];
+ "Use markdown" [shape=box];
+ "Small inline flowchart" [shape=box];
 
-    "Need to show information?" -> "Decision where I might go wrong?" [label="yes"];
-    "Decision where I might go wrong?" -> "Small inline flowchart" [label="yes"];
-    "Decision where I might go wrong?" -> "Use markdown" [label="no"];
+ "Need to show information?" -> "Decision where I might go wrong?" [label="yes"];
+ "Decision where I might go wrong?" -> "Small inline flowchart" [label="yes"];
+ "Decision where I might go wrong?" -> "Use markdown" [label="no"];
 }
 ```
 
@@ -370,7 +370,7 @@ See @graphviz-conventions.dot for graphviz style rules.
 **Visualizing for your human partner:** Use `render-graphs.js` in this directory to render a skill's flowcharts to SVG:
 
 ```bash
-./render-graphs.js ../some-skill           # Each diagram separately
+./render-graphs.js ../some-skill # Each diagram separately
 ./render-graphs.js ../some-skill --combine # All diagrams in one SVG
 ```
 
@@ -406,7 +406,7 @@ You're good at porting - one great example is enough.
 
 ```
 defense-in-depth/
-  SKILL.md    # Everything inline
+ SKILL.md # Everything inline
 ```
 
 When: All content fits, no heavy reference needed
@@ -415,8 +415,8 @@ When: All content fits, no heavy reference needed
 
 ```
 condition-based-waiting/
-  SKILL.md    # Overview + patterns
-  example.ts  # Working helpers to adapt
+ SKILL.md # Overview + patterns
+ example.ts # Working helpers to adapt
 ```
 
 When: Tool is reusable code, not just narrative
@@ -425,10 +425,10 @@ When: Tool is reusable code, not just narrative
 
 ```
 pptx/
-  SKILL.md       # Overview + workflows
-  pptxgenjs.md   # 600 lines API reference
-  ooxml.md       # 500 lines XML structure
-  scripts/       # Executable tools
+ SKILL.md # Overview + workflows
+ pptxgenjs.md # 600 lines API reference
+ ooxml.md # 500 lines XML structure
+ scripts/ # Executable tools
 ```
 
 When: Reference material too large for inline
@@ -510,16 +510,16 @@ Different skill types need different test approaches:
 
 ## Common Rationalizations for Skipping Testing
 
-| Excuse                         | Reality                                                          |
+| Excuse | Reality |
 | ------------------------------ | ---------------------------------------------------------------- |
-| "Skill is obviously clear"     | Clear to you ≠ clear to other agents. Test it.                   |
-| "It's just a reference"        | References can have gaps, unclear sections. Test retrieval.      |
-| "Testing is overkill"          | Untested skills have issues. Always. 15 min testing saves hours. |
-| "I'll test if problems emerge" | Problems = agents can't use skill. Test BEFORE deploying.        |
-| "Too tedious to test"          | Testing is less tedious than debugging bad skill in production.  |
-| "I'm confident it's good"      | Overconfidence guarantees issues. Test anyway.                   |
-| "Academic review is enough"    | Reading ≠ using. Test application scenarios.                     |
-| "No time to test"              | Deploying untested skill wastes more time fixing it later.       |
+| "Skill is obviously clear" | Clear to you ≠ clear to other agents. Test it. |
+| "It's just a reference" | References can have gaps, unclear sections. Test retrieval. |
+| "Testing is overkill" | Untested skills have issues. Always. 15 min testing saves hours. |
+| "I'll test if problems emerge" | Problems = agents can't use skill. Test BEFORE deploying. |
+| "Too tedious to test" | Testing is less tedious than debugging bad skill in production. |
+| "I'm confident it's good" | Overconfidence guarantees issues. Test anyway. |
+| "Academic review is enough" | Reading ≠ using. Test application scenarios. |
+| "No time to test" | Deploying untested skill wastes more time fixing it later. |
 
 **All of these mean: Test before deploying. No exceptions.**
 
@@ -568,10 +568,10 @@ This cuts off entire class of "I'm following the spirit" rationalizations.
 Capture rationalizations from baseline testing (see Testing section below). Every excuse agents make goes in the table:
 
 ```markdown
-| Excuse                           | Reality                                                                 |
+| Excuse | Reality |
 | -------------------------------- | ----------------------------------------------------------------------- |
-| "Too simple to test"             | Simple code breaks. Test takes 30 seconds.                              |
-| "I'll test after"                | Tests passing immediately prove nothing.                                |
+| "Too simple to test" | Simple code breaks. Test takes 30 seconds. |
+| "I'll test after" | Tests passing immediately prove nothing. |
 | "Tests after achieve same goals" | Tests-after = "what does this do?" Tests-first = "what should this do?" |
 ```
 
@@ -632,17 +632,17 @@ Agent found new rationalization? Add explicit counter. Re-test until bulletproof
 
 ## Anti-Patterns
 
-### ❌ Narrative Example
+### Narrative Example
 
 "In session 2025-10-03, we found empty projectDir caused..."
 **Why bad:** Too specific, not reusable
 
-### ❌ Multi-Language Dilution
+### Multi-Language Dilution
 
 example-js.js, example-py.py, example-go.go
 **Why bad:** Mediocre quality, maintenance burden
 
-### ❌ Code in Flowcharts
+### Code in Flowcharts
 
 ```dot
 step1 [label="import fs"];
@@ -651,7 +651,7 @@ step2 [label="read file"];
 
 **Why bad:** Can't copy-paste, hard to read
 
-### ❌ Generic Labels
+### Generic Labels
 
 helper1, helper2, step3, pattern4
 **Why bad:** Labels should have semantic meaning

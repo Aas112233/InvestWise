@@ -92,18 +92,18 @@ Building command-line tools that last
 ```javascript
 // package.json
 {
-  "name": "my-tool",
-  "version": "1.0.0",
-  "bin": {
-    "mytool": "./bin/cli.js"
-  },
-  "dependencies": {
-    "commander": "^12.0.0",    // Argument parsing
-    "chalk": "^5.3.0",          // Colors
-    "ora": "^8.0.0",            // Spinners
-    "inquirer": "^9.2.0",       // Interactive prompts
-    "conf": "^12.0.0"           // Config storage
-  }
+ "name": "my-tool",
+ "version": "1.0.0",
+ "bin": {
+ "mytool": "./bin/cli.js"
+ },
+ "dependencies": {
+ "commander": "^12.0.0", // Argument parsing
+ "chalk": "^5.3.0", // Colors
+ "ora": "^8.0.0", // Spinners
+ "inquirer": "^9.2.0", // Interactive prompts
+ "conf": "^12.0.0" // Config storage
+ }
 }
 
 // bin/cli.js
@@ -114,17 +114,17 @@ import chalk from 'chalk';
 const program = new Command();
 
 program
-  .name('mytool')
-  .description('What it does in one line')
-  .version('1.0.0');
+ .name('mytool')
+ .description('What it does in one line')
+ .version('1.0.0');
 
 program
-  .command('do-thing')
-  .description('Does the thing')
-  .option('-v, --verbose', 'Verbose output')
-  .action(async (options) => {
-    // Your logic here
-  });
+ .command('do-thing')
+ .description('Does the thing')
+ .option('-v, --verbose', 'Verbose output')
+ .action(async (options) => {
+ // Your logic here
+ });
 
 program.parse();
 ```
@@ -136,18 +136,18 @@ import click
 
 @click.group()
 def cli():
-    """Tool description."""
-    pass
+ """Tool description."""
+ pass
 
 @cli.command()
 @click.option('--name', '-n', required=True)
 @click.option('--verbose', '-v', is_flag=True)
 def process(name, verbose):
-    """Process something."""
-    click.echo(f'Processing {name}')
+ """Process something."""
+ click.echo(f'Processing {name}')
 
 if __name__ == '__main__':
-    cli()
+ cli()
 ```
 
 ### Distribution
@@ -204,13 +204,13 @@ const DATA_DIR = join(homedir(), '.mytool');
 const DATA_FILE = join(DATA_DIR, 'data.json');
 
 function loadData() {
-  if (!existsSync(DATA_FILE)) return { items: [] };
-  return JSON.parse(readFileSync(DATA_FILE, 'utf8'));
+ if (!existsSync(DATA_FILE)) return { items: [] };
+ return JSON.parse(readFileSync(DATA_FILE, 'utf8'));
 }
 
 function saveData(data) {
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR);
-  writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+ if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR);
+ writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 ```
 
@@ -225,11 +225,11 @@ const db = new Database(join(homedir(), '.mytool', 'data.db'));
 
 // Create tables on first run
 db.exec(`
-  CREATE TABLE IF NOT EXISTS items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
+ CREATE TABLE IF NOT EXISTS items (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ name TEXT NOT NULL,
+ created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+ )
 `);
 
 // Fast synchronous queries
@@ -239,7 +239,7 @@ const items = db.prepare('SELECT * FROM items').all();
 
 ## Anti-Patterns
 
-### ❌ Building for Imaginary Users
+### Building for Imaginary Users
 
 **Why bad**: No real feedback loop.
 Building features no one needs.
@@ -251,7 +251,7 @@ Real problem = real motivation.
 You're the first tester.
 Expand users later.
 
-### ❌ Over-Engineering Personal Tools
+### Over-Engineering Personal Tools
 
 **Why bad**: Takes forever to build.
 Harder to modify later.
@@ -263,7 +263,7 @@ Add complexity when needed.
 Refactor only when it hurts.
 Ugly but working > pretty but incomplete.
 
-### ❌ Not Dogfooding
+### Not Dogfooding
 
 **Why bad**: Missing obvious UX issues.
 Not finding real bugs.
@@ -275,7 +275,7 @@ Feel the pain of bad UX.
 Fix what annoys YOU.
 Your needs = user needs.
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

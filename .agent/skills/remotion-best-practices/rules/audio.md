@@ -2,7 +2,7 @@
 name: audio
 description: Using audio and sound in Remotion - importing, trimming, volume, speed, pitch
 metadata:
-  tags: audio, media, trim, volume, speed, loop, pitch, mute, sound, sfx
+ tags: audio, media, trim, volume, speed, loop, pitch, mute, sound, sfx
 ---
 
 # Using audio in Remotion
@@ -28,7 +28,7 @@ import { Audio } from "@remotion/media";
 import { staticFile } from "remotion";
 
 export const MyComposition = () => {
-  return <Audio src={staticFile("audio.mp3")} />;
+ return <Audio src={staticFile("audio.mp3")} />;
 };
 ```
 
@@ -49,11 +49,11 @@ Use `trimBefore` and `trimAfter` to remove portions of the audio. Values are in 
 const { fps } = useVideoConfig();
 
 return (
-  <Audio
-    src={staticFile("audio.mp3")}
-    trimBefore={2 * fps} // Skip the first 2 seconds
-    trimAfter={10 * fps} // End at the 10 second mark
-  />
+ <Audio
+ src={staticFile("audio.mp3")}
+ trimBefore={2 * fps} // Skip the first 2 seconds
+ trimAfter={10 * fps} // End at the 10 second mark
+ />
 );
 ```
 
@@ -70,9 +70,9 @@ import { Audio } from "@remotion/media";
 const { fps } = useVideoConfig();
 
 return (
-  <Sequence from={1 * fps}>
-    <Audio src={staticFile("audio.mp3")} />
-  </Sequence>
+ <Sequence from={1 * fps}>
+ <Audio src={staticFile("audio.mp3")} />
+ </Sequence>
 );
 ```
 
@@ -94,12 +94,12 @@ import { interpolate } from "remotion";
 const { fps } = useVideoConfig();
 
 return (
-  <Audio
-    src={staticFile("audio.mp3")}
-    volume={(f) =>
-      interpolate(f, [0, 1 * fps], [0, 1], { extrapolateRight: "clamp" })
-    }
-  />
+ <Audio
+ src={staticFile("audio.mp3")}
+ volume={(f) =>
+ interpolate(f, [0, 1 * fps], [0, 1], { extrapolateRight: "clamp" })
+ }
+ />
 );
 ```
 
@@ -114,10 +114,10 @@ const frame = useCurrentFrame();
 const { fps } = useVideoConfig();
 
 return (
-  <Audio
-    src={staticFile("audio.mp3")}
-    muted={frame >= 2 * fps && frame <= 4 * fps} // Mute between 2s and 4s
-  />
+ <Audio
+ src={staticFile("audio.mp3")}
+ muted={frame >= 2 * fps && frame <= 4 * fps} // Mute between 2s and 4s
+ />
 );
 ```
 
@@ -147,10 +147,10 @@ Use `loopVolumeCurveBehavior` to control how the frame count behaves when loopin
 
 ```tsx
 <Audio
-  src={staticFile("audio.mp3")}
-  loop
-  loopVolumeCurveBehavior="extend"
-  volume={(f) => interpolate(f, [0, 300], [1, 0])} // Fade out over multiple loops
+ src={staticFile("audio.mp3")}
+ loop
+ loopVolumeCurveBehavior="extend"
+ volume={(f) => interpolate(f, [0, 300], [1, 0])} // Fade out over multiple loops
 />
 ```
 
@@ -160,12 +160,12 @@ Use `toneFrequency` to adjust the pitch without affecting speed. Values range fr
 
 ```tsx
 <Audio
-  src={staticFile("audio.mp3")}
-  toneFrequency={1.5} // Higher pitch
+ src={staticFile("audio.mp3")}
+ toneFrequency={1.5} // Higher pitch
 />
 <Audio
-  src={staticFile("audio.mp3")}
-  toneFrequency={0.8} // Lower pitch
+ src={staticFile("audio.mp3")}
+ toneFrequency={0.8} // Lower pitch
 />
 ```
 

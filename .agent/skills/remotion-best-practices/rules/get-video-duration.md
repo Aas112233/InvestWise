@@ -2,7 +2,7 @@
 name: get-video-duration
 description: Getting the duration of a video file in seconds with Mediabunny
 metadata:
-  tags: duration, video, length, time, seconds
+ tags: duration, video, length, time, seconds
 ---
 
 # Getting video duration with Mediabunny
@@ -15,15 +15,15 @@ Mediabunny can extract the duration of a video file. It works in browser, Node.j
 import { Input, ALL_FORMATS, UrlSource } from "mediabunny";
 
 export const getVideoDuration = async (src: string) => {
-  const input = new Input({
-    formats: ALL_FORMATS,
-    source: new UrlSource(src, {
-      getRetryDelay: () => null,
-    }),
-  });
+ const input = new Input({
+ formats: ALL_FORMATS,
+ source: new UrlSource(src, {
+ getRetryDelay: () => null,
+ }),
+ });
 
-  const durationInSeconds = await input.computeDuration();
-  return durationInSeconds;
+ const durationInSeconds = await input.computeDuration();
+ return durationInSeconds;
 };
 ```
 
@@ -42,8 +42,8 @@ For local files, use `FileSource` instead of `UrlSource`:
 import { Input, ALL_FORMATS, FileSource } from "mediabunny";
 
 const input = new Input({
-  formats: ALL_FORMATS,
-  source: new FileSource(file), // File object from input or drag-drop
+ formats: ALL_FORMATS,
+ source: new FileSource(file), // File object from input or drag-drop
 });
 
 const durationInSeconds = await input.computeDuration();

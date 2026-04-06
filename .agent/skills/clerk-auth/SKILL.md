@@ -42,7 +42,7 @@ Key functions:
 - Both require clerkMiddleware to be configured
 
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

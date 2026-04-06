@@ -1,6 +1,6 @@
 ---
 name: ai-product
-description: "Every product will be AI-powered. The question is whether you'll build it right or ship a demo that falls apart in production.  This skill covers LLM integration patterns, RAG architecture, prompt engineering that scales, AI UX that users trust, and cost optimization that doesn't bankrupt you. Use when: keywords, file_patterns, code_patterns."
+description: "Every product will be AI-powered. The question is whether you'll build it right or ship a demo that falls apart in production. This skill covers LLM integration patterns, RAG architecture, prompt engineering that scales, AI UX that users trust, and cost optimization that doesn't bankrupt you. Use when: keywords, file_patterns, code_patterns."
 source: vibeship-spawner-skills (Apache 2.0)
 ---
 
@@ -28,19 +28,19 @@ Version prompts in code and test with regression suite
 
 ## Anti-Patterns
 
-### ❌ Demo-ware
+### Demo-ware
 
 **Why bad**: Demos deceive. Production reveals truth. Users lose trust fast.
 
-### ❌ Context window stuffing
+### Context window stuffing
 
 **Why bad**: Expensive, slow, hits limits. Dilutes relevant context with noise.
 
-### ❌ Unstructured output parsing
+### Unstructured output parsing
 
 **Why bad**: Breaks randomly. Inconsistent formats. Injection risks.
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

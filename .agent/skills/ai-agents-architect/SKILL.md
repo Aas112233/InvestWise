@@ -66,13 +66,13 @@ Dynamic tool discovery and management
 
 ## Anti-Patterns
 
-### ❌ Unlimited Autonomy
+### Unlimited Autonomy
 
-### ❌ Tool Overload
+### Tool Overload
 
-### ❌ Memory Hoarding
+### Memory Hoarding
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

@@ -15,32 +15,32 @@ This skill provides a persistent, searchable memory bank that automatically sync
 ## Setup
 
 1. **Clone the Repository**:
-   Clone the `agentMemory` project into your agent's workspace or a parallel directory:
+ Clone the `agentMemory` project into your agent's workspace or a parallel directory:
 
-   ```bash
-   git clone https://github.com/webzler/agentMemory.git .agent/skills/agent-memory
-   ```
+ ```bash
+ git clone https://github.com/webzler/agentMemory.git .agent/skills/agent-memory
+ ```
 
 2. **Install Dependencies**:
 
-   ```bash
-   cd .agent/skills/agent-memory
-   npm install
-   npm run compile
-   ```
+ ```bash
+ cd .agent/skills/agent-memory
+ npm install
+ npm run compile
+ ```
 
 3. **Start the MCP Server**:
-   Use the helper script to activate the memory bank for your current project:
+ Use the helper script to activate the memory bank for your current project:
 
-   ```bash
-   npm run start-server <project_id> <absolute_path_to_target_workspace>
-   ```
+ ```bash
+ npm run start-server <project_id> <absolute_path_to_target_workspace>
+ ```
 
-   _Example for current directory:_
+ _Example for current directory:_
 
-   ```bash
-   npm run start-server my-project $(pwd)
-   ```
+ ```bash
+ npm run start-server my-project $(pwd)
+ ```
 
 ## Capabilities (MCP Tools)
 

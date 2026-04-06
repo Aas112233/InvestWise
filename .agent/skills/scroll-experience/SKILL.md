@@ -53,14 +53,14 @@ gsap.registerPlugin(ScrollTrigger);
 
 // Basic scroll animation
 gsap.to('.element', {
-  scrollTrigger: {
-    trigger: '.element',
-    start: 'top center',
-    end: 'bottom center',
-    scrub: true, // Links animation to scroll position
-  },
-  y: -100,
-  opacity: 1,
+ scrollTrigger: {
+ trigger: '.element',
+ start: 'top center',
+ end: 'bottom center',
+ scrub: true, // Links animation to scroll position
+ },
+ y: -100,
+ opacity: 1,
 });
 ```
 
@@ -69,28 +69,28 @@ gsap.to('.element', {
 import { motion, useScroll, useTransform } from 'framer-motion';
 
 function ParallaxSection() {
-  const { scrollYProgress } = useScroll();
-  const y = useTransform(scrollYProgress, [0, 1], [0, -200]);
+ const { scrollYProgress } = useScroll();
+ const y = useTransform(scrollYProgress, [0, 1], [0, -200]);
 
-  return (
-    <motion.div style={{ y }}>
-      Content moves with scroll
-    </motion.div>
-  );
+ return (
+ <motion.div style={{ y }}>
+ Content moves with scroll
+ </motion.div>
+ );
 }
 ```
 
 ### CSS Native (2024+)
 ```css
 @keyframes reveal {
-  from { opacity: 0; transform: translateY(50px); }
-  to { opacity: 1; transform: translateY(0); }
+ from { opacity: 0; transform: translateY(50px); }
+ to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-on-scroll {
-  animation: reveal linear;
-  animation-timeline: view();
-  animation-range: entry 0% cover 40%;
+ animation: reveal linear;
+ animation-timeline: view();
+ animation-range: entry 0% cover 40%;
 }
 ```
 ```
@@ -117,30 +117,30 @@ Tell stories through scroll depth
 ```javascript
 // GSAP parallax layers
 gsap.to('.background', {
-  scrollTrigger: {
-    scrub: true
-  },
-  y: '-20%', // Moves slower
+ scrollTrigger: {
+ scrub: true
+ },
+ y: '-20%', // Moves slower
 });
 
 gsap.to('.foreground', {
-  scrollTrigger: {
-    scrub: true
-  },
-  y: '-50%', // Moves faster
+ scrollTrigger: {
+ scrub: true
+ },
+ y: '-50%', // Moves faster
 });
 ```
 
 ### Story Beats
 ```
 Section 1: Hook (full viewport, striking visual)
-    ↓ scroll
+ ↓ scroll
 Section 2: Context (text + supporting visuals)
-    ↓ scroll
+ ↓ scroll
 Section 3: Journey (parallax storytelling)
-    ↓ scroll
+ ↓ scroll
 Section 4: Climax (dramatic reveal)
-    ↓ scroll
+ ↓ scroll
 Section 5: Resolution (CTA or conclusion)
 ```
 
@@ -163,28 +163,28 @@ Pin elements while scrolling through content
 ### CSS Sticky
 ```css
 .sticky-container {
-  height: 300vh; /* Space for scrolling */
+ height: 300vh; /* Space for scrolling */
 }
 
 .sticky-element {
-  position: sticky;
-  top: 0;
-  height: 100vh;
+ position: sticky;
+ top: 0;
+ height: 100vh;
 }
 ```
 
 ### GSAP Pin
 ```javascript
 gsap.to('.content', {
-  scrollTrigger: {
-    trigger: '.section',
-    pin: true, // Pins the section
-    start: 'top top',
-    end: '+=1000', // Pin for 1000px of scroll
-    scrub: true,
-  },
-  // Animate while pinned
-  x: '-100vw',
+ scrollTrigger: {
+ trigger: '.section',
+ pin: true, // Pins the section
+ start: 'top top',
+ end: '+=1000', // Pin for 1000px of scroll
+ scrub: true,
+ },
+ // Animate while pinned
+ x: '-100vw',
 });
 ```
 
@@ -193,14 +193,14 @@ gsap.to('.content', {
 const sections = gsap.utils.toArray('.panel');
 
 gsap.to(sections, {
-  xPercent: -100 * (sections.length - 1),
-  ease: 'none',
-  scrollTrigger: {
-    trigger: '.horizontal-container',
-    pin: true,
-    scrub: 1,
-    end: () => '+=' + document.querySelector('.horizontal-container').offsetWidth,
-  },
+ xPercent: -100 * (sections.length - 1),
+ ease: 'none',
+ scrollTrigger: {
+ trigger: '.horizontal-container',
+ pin: true,
+ scrub: 1,
+ end: () => '+=' + document.querySelector('.horizontal-container').offsetWidth,
+ },
 });
 ```
 
@@ -213,7 +213,7 @@ gsap.to(sections, {
 
 ## Anti-Patterns
 
-### ❌ Scroll Hijacking
+### Scroll Hijacking
 
 **Why bad**: Users hate losing scroll control.
 Accessibility nightmare.
@@ -225,7 +225,7 @@ Keep natural scroll speed.
 Use scrub animations.
 Allow users to scroll normally.
 
-### ❌ Animation Overload
+### Animation Overload
 
 **Why bad**: Distracting, not delightful.
 Performance tanks.
@@ -237,7 +237,7 @@ Animate key moments.
 Static content is okay.
 Guide attention, don't overwhelm.
 
-### ❌ Desktop-Only Experience
+### Desktop-Only Experience
 
 **Why bad**: Mobile is majority of traffic.
 Touch scroll is different.
@@ -249,7 +249,7 @@ Simpler effects on mobile.
 Test on real devices.
 Graceful degradation.
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

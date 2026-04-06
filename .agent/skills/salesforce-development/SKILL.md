@@ -31,13 +31,13 @@ per transaction, 1 child job when chaining.
 
 ## Anti-Patterns
 
-### ❌ SOQL Inside Loops
+### SOQL Inside Loops
 
-### ❌ DML Inside Loops
+### DML Inside Loops
 
-### ❌ Hardcoding IDs
+### Hardcoding IDs
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

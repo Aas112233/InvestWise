@@ -8,16 +8,16 @@
 What's the context?
 │
 ├── Edge deployment / Bundle size matters
-│   └── Drizzle (smallest, SQL-like)
+│ └── Drizzle (smallest, SQL-like)
 │
 ├── Best DX / Schema-first
-│   └── Prisma (migrations, studio)
+│ └── Prisma (migrations, studio)
 │
 ├── Maximum control
-│   └── Raw SQL with query builder
+│ └── Raw SQL with query builder
 │
 └── Python ecosystem
-    └── SQLAlchemy 2.0 (async support)
+ └── SQLAlchemy 2.0 (async support)
 ```
 
 ## Comparison

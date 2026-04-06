@@ -16,12 +16,12 @@
 Most issues are solved by using the run.py wrapper:
 
 ```bash
-# ✅ CORRECT - Always:
+# CORRECT - Always:
 python scripts/run.py auth_manager.py status
 python scripts/run.py ask_question.py --question "..."
 
-# ❌ WRONG - Never:
-python scripts/auth_manager.py status  # ModuleNotFoundError!
+# WRONG - Never:
+python scripts/auth_manager.py status # ModuleNotFoundError!
 ```
 
 ## Common Issues and Solutions
@@ -128,8 +128,8 @@ python scripts/run.py auth_manager.py setup
 # Use multiple accounts
 accounts = ["account1", "account2"]
 for account in accounts:
-    # Switch account on rate limit
-    subprocess.run(["python", "scripts/run.py", "auth_manager.py", "reauth"])
+ # Switch account on rate limit
+ subprocess.run(["python", "scripts/run.py", "auth_manager.py", "reauth"])
 ```
 
 ### Notebook Access Issues
@@ -145,9 +145,9 @@ python scripts/run.py notebook_manager.py search --query "keyword"
 
 # Add notebook if missing
 python scripts/run.py notebook_manager.py add \
-  --url "https://notebooklm.google.com/..." \
-  --name "Name" \
-  --topics "topics"
+ --url "https://notebooklm.google.com/..." \
+ --name "Name" \
+ --topics "topics"
 ```
 
 #### Access denied to notebook
@@ -264,10 +264,10 @@ python scripts/run.py ask_question.py --question "test" --show-browser
 Add to scripts for debugging:
 ```python
 try:
-    # Your code
+ # Your code
 except Exception as e:
-    page.screenshot(path=f"error_{timestamp}.png")
-    raise e
+ page.screenshot(path=f"error_{timestamp}.png")
+ raise e
 ```
 
 ## Recovery Procedures
@@ -280,7 +280,7 @@ pkill -f chromium
 
 # Backup library if exists
 if [ -f ~/.claude/skills/notebooklm/data/library.json ]; then
-    cp ~/.claude/skills/notebooklm/data/library.json ~/library.backup.json
+ cp ~/.claude/skills/notebooklm/data/library.json ~/library.backup.json
 fi
 
 # Clean everything
@@ -295,8 +295,8 @@ python scripts/run.py auth_manager.py setup
 
 # Restore library if backup exists
 if [ -f ~/library.backup.json ]; then
-    mkdir -p ~/.claude/skills/notebooklm/data/
-    cp ~/library.backup.json ~/.claude/skills/notebooklm/data/library.json
+ mkdir -p ~/.claude/skills/notebooklm/data/
+ cp ~/library.backup.json ~/.claude/skills/notebooklm/data/library.json
 fi
 ```
 

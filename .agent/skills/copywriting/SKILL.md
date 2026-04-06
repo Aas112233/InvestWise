@@ -100,25 +100,25 @@ For a thorough line-by-line review, run the copy through the **copy-editing** sk
 ### Be Direct
 Get to the point. Don't bury the value in qualifications.
 
-❌ Slack lets you share files instantly, from documents to images, directly in your conversations
+ Slack lets you share files instantly, from documents to images, directly in your conversations
 
-✅ Need to share a screenshot? Send as many documents, images, and audio files as your heart desires.
+ Need to share a screenshot? Send as many documents, images, and audio files as your heart desires.
 
 ### Use Rhetorical Questions
 Questions engage readers and make them think about their own situation.
 
-✅ Hate returning stuff to Amazon?
+ Hate returning stuff to Amazon?
 
-✅ Need to share a screenshot?
+ Need to share a screenshot?
 
-✅ Tired of chasing approvals?
+ Tired of chasing approvals?
 
 ### Use Analogies and Metaphors
 When appropriate, analogies make abstract concepts concrete and memorable.
 
-❌ Slack lets you share files instantly, from documents to images, directly in your conversations
+ Slack lets you share files instantly, from documents to images, directly in your conversations
 
-✅ Imagine Slack's file-sharing as a digital whiteboard where everyone can post files, images, and updates in real time.
+ Imagine Slack's file-sharing as a digital whiteboard where everyone can post files, images, and updates in real time.
 
 ### Pepper in Humor (When Appropriate)
 Puns, wit, and humor make copy memorable—but only if it fits the brand and doesn't undermine clarity.
@@ -231,9 +231,9 @@ Example:
 ### Social Proof (Detailed)
 
 - Full testimonials with:
-  - Specific results
-  - Customer name, role, company
-  - Photo if possible
+ - Specific results
+ - Customer name, role, company
+ - Photo if possible
 - Case study snippets
 - Logos section (if not above)
 

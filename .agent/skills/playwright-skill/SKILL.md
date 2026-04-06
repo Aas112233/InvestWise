@@ -20,13 +20,13 @@ General-purpose browser automation skill. I'll write custom Playwright code for 
 
 1. **Auto-detect dev servers** - For localhost testing, ALWAYS run server detection FIRST:
 
-   ```bash
-   cd $SKILL_DIR && node -e "require('./lib/helpers').detectDevServers().then(servers => console.log(JSON.stringify(servers)))"
-   ```
+ ```bash
+ cd $SKILL_DIR && node -e "require('./lib/helpers').detectDevServers().then(servers => console.log(JSON.stringify(servers)))"
+ ```
 
-   - If **1 server found**: Use it automatically, inform user
-   - If **multiple servers found**: Ask user which one to test
-   - If **no servers found**: Ask for URL or offer to help start dev server
+ - If **1 server found**: Use it automatically, inform user
+ - If **multiple servers found**: Ask user which one to test
+ - If **no servers found**: Ask for URL or offer to help start dev server
 
 2. **Write scripts to /tmp** - NEVER write test files to skill directory; always use `/tmp/playwright-test-*.js`
 
@@ -70,16 +70,16 @@ const { chromium } = require('playwright');
 const TARGET_URL = 'http://localhost:3001'; // <-- Auto-detected or from user
 
 (async () => {
-  const browser = await chromium.launch({ headless: false });
-  const page = await browser.newPage();
+ const browser = await chromium.launch({ headless: false });
+ const page = await browser.newPage();
 
-  await page.goto(TARGET_URL);
-  console.log('Page loaded:', await page.title());
+ await page.goto(TARGET_URL);
+ console.log('Page loaded:', await page.title());
 
-  await page.screenshot({ path: '/tmp/screenshot.png', fullPage: true });
-  console.log('📸 Screenshot saved to /tmp/screenshot.png');
+ await page.screenshot({ path: '/tmp/screenshot.png', fullPage: true });
+ console.log(' Screenshot saved to /tmp/screenshot.png');
 
-  await browser.close();
+ await browser.close();
 })();
 ```
 
@@ -100,20 +100,20 @@ const { chromium } = require('playwright');
 const TARGET_URL = 'http://localhost:3001'; // Auto-detected
 
 (async () => {
-  const browser = await chromium.launch({ headless: false, slowMo: 100 });
-  const page = await browser.newPage();
+ const browser = await chromium.launch({ headless: false, slowMo: 100 });
+ const page = await browser.newPage();
 
-  // Desktop test
-  await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.goto(TARGET_URL);
-  console.log('Desktop - Title:', await page.title());
-  await page.screenshot({ path: '/tmp/desktop.png', fullPage: true });
+ // Desktop test
+ await page.setViewportSize({ width: 1920, height: 1080 });
+ await page.goto(TARGET_URL);
+ console.log('Desktop - Title:', await page.title());
+ await page.screenshot({ path: '/tmp/desktop.png', fullPage: true });
 
-  // Mobile test
-  await page.setViewportSize({ width: 375, height: 667 });
-  await page.screenshot({ path: '/tmp/mobile.png', fullPage: true });
+ // Mobile test
+ await page.setViewportSize({ width: 375, height: 667 });
+ await page.screenshot({ path: '/tmp/mobile.png', fullPage: true });
 
-  await browser.close();
+ await browser.close();
 })();
 ```
 
@@ -126,20 +126,20 @@ const { chromium } = require('playwright');
 const TARGET_URL = 'http://localhost:3001'; // Auto-detected
 
 (async () => {
-  const browser = await chromium.launch({ headless: false });
-  const page = await browser.newPage();
+ const browser = await chromium.launch({ headless: false });
+ const page = await browser.newPage();
 
-  await page.goto(`${TARGET_URL}/login`);
+ await page.goto(`${TARGET_URL}/login`);
 
-  await page.fill('input[name="email"]', 'test@example.com');
-  await page.fill('input[name="password"]', 'password123');
-  await page.click('button[type="submit"]');
+ await page.fill('input[name="email"]', 'test@example.com');
+ await page.fill('input[name="password"]', 'password123');
+ await page.click('button[type="submit"]');
 
-  // Wait for redirect
-  await page.waitForURL('**/dashboard');
-  console.log('✅ Login successful, redirected to dashboard');
+ // Wait for redirect
+ await page.waitForURL('**/dashboard');
+ console.log(' Login successful, redirected to dashboard');
 
-  await browser.close();
+ await browser.close();
 })();
 ```
 
@@ -152,21 +152,21 @@ const { chromium } = require('playwright');
 const TARGET_URL = 'http://localhost:3001'; // Auto-detected
 
 (async () => {
-  const browser = await chromium.launch({ headless: false, slowMo: 50 });
-  const page = await browser.newPage();
+ const browser = await chromium.launch({ headless: false, slowMo: 50 });
+ const page = await browser.newPage();
 
-  await page.goto(`${TARGET_URL}/contact`);
+ await page.goto(`${TARGET_URL}/contact`);
 
-  await page.fill('input[name="name"]', 'John Doe');
-  await page.fill('input[name="email"]', 'john@example.com');
-  await page.fill('textarea[name="message"]', 'Test message');
-  await page.click('button[type="submit"]');
+ await page.fill('input[name="name"]', 'John Doe');
+ await page.fill('input[name="email"]', 'john@example.com');
+ await page.fill('textarea[name="message"]', 'Test message');
+ await page.click('button[type="submit"]');
 
-  // Verify submission
-  await page.waitForSelector('.success-message');
-  console.log('✅ Form submitted successfully');
+ // Verify submission
+ await page.waitForSelector('.success-message');
+ console.log(' Form submitted successfully');
 
-  await browser.close();
+ await browser.close();
 })();
 ```
 
@@ -176,32 +176,32 @@ const TARGET_URL = 'http://localhost:3001'; // Auto-detected
 const { chromium } = require('playwright');
 
 (async () => {
-  const browser = await chromium.launch({ headless: false });
-  const page = await browser.newPage();
+ const browser = await chromium.launch({ headless: false });
+ const page = await browser.newPage();
 
-  await page.goto('http://localhost:3000');
+ await page.goto('http://localhost:3000');
 
-  const links = await page.locator('a[href^="http"]').all();
-  const results = { working: 0, broken: [] };
+ const links = await page.locator('a[href^="http"]').all();
+ const results = { working: 0, broken: [] };
 
-  for (const link of links) {
-    const href = await link.getAttribute('href');
-    try {
-      const response = await page.request.head(href);
-      if (response.ok()) {
-        results.working++;
-      } else {
-        results.broken.push({ url: href, status: response.status() });
-      }
-    } catch (e) {
-      results.broken.push({ url: href, error: e.message });
-    }
-  }
+ for (const link of links) {
+ const href = await link.getAttribute('href');
+ try {
+ const response = await page.request.head(href);
+ if (response.ok()) {
+ results.working++;
+ } else {
+ results.broken.push({ url: href, status: response.status() });
+ }
+ } catch (e) {
+ results.broken.push({ url: href, error: e.message });
+ }
+ }
 
-  console.log(`✅ Working links: ${results.working}`);
-  console.log(`❌ Broken links:`, results.broken);
+ console.log(` Working links: ${results.working}`);
+ console.log(` Broken links:`, results.broken);
 
-  await browser.close();
+ await browser.close();
 })();
 ```
 
@@ -211,26 +211,26 @@ const { chromium } = require('playwright');
 const { chromium } = require('playwright');
 
 (async () => {
-  const browser = await chromium.launch({ headless: false });
-  const page = await browser.newPage();
+ const browser = await chromium.launch({ headless: false });
+ const page = await browser.newPage();
 
-  try {
-    await page.goto('http://localhost:3000', {
-      waitUntil: 'networkidle',
-      timeout: 10000,
-    });
+ try {
+ await page.goto('http://localhost:3000', {
+ waitUntil: 'networkidle',
+ timeout: 10000,
+ });
 
-    await page.screenshot({
-      path: '/tmp/screenshot.png',
-      fullPage: true,
-    });
+ await page.screenshot({
+ path: '/tmp/screenshot.png',
+ fullPage: true,
+ });
 
-    console.log('📸 Screenshot saved to /tmp/screenshot.png');
-  } catch (error) {
-    console.error('❌ Error:', error.message);
-  } finally {
-    await browser.close();
-  }
+ console.log(' Screenshot saved to /tmp/screenshot.png');
+ } catch (error) {
+ console.error(' Error:', error.message);
+ } finally {
+ await browser.close();
+ }
 })();
 ```
 
@@ -243,36 +243,36 @@ const { chromium } = require('playwright');
 const TARGET_URL = 'http://localhost:3001'; // Auto-detected
 
 (async () => {
-  const browser = await chromium.launch({ headless: false });
-  const page = await browser.newPage();
+ const browser = await chromium.launch({ headless: false });
+ const page = await browser.newPage();
 
-  const viewports = [
-    { name: 'Desktop', width: 1920, height: 1080 },
-    { name: 'Tablet', width: 768, height: 1024 },
-    { name: 'Mobile', width: 375, height: 667 },
-  ];
+ const viewports = [
+ { name: 'Desktop', width: 1920, height: 1080 },
+ { name: 'Tablet', width: 768, height: 1024 },
+ { name: 'Mobile', width: 375, height: 667 },
+ ];
 
-  for (const viewport of viewports) {
-    console.log(
-      `Testing ${viewport.name} (${viewport.width}x${viewport.height})`,
-    );
+ for (const viewport of viewports) {
+ console.log(
+ `Testing ${viewport.name} (${viewport.width}x${viewport.height})`,
+ );
 
-    await page.setViewportSize({
-      width: viewport.width,
-      height: viewport.height,
-    });
+ await page.setViewportSize({
+ width: viewport.width,
+ height: viewport.height,
+ });
 
-    await page.goto(TARGET_URL);
-    await page.waitForTimeout(1000);
+ await page.goto(TARGET_URL);
+ await page.waitForTimeout(1000);
 
-    await page.screenshot({
-      path: `/tmp/${viewport.name.toLowerCase()}.png`,
-      fullPage: true,
-    });
-  }
+ await page.screenshot({
+ path: `/tmp/${viewport.name.toLowerCase()}.png`,
+ fullPage: true,
+ });
+ }
 
-  console.log('✅ All viewports tested');
-  await browser.close();
+ console.log(' All viewports tested');
+ await browser.close();
 })();
 ```
 
@@ -340,14 +340,14 @@ Configure custom headers for all HTTP requests via environment variables. Useful
 
 ```bash
 PW_HEADER_NAME=X-Automated-By PW_HEADER_VALUE=playwright-skill \
-  cd $SKILL_DIR && node run.js /tmp/my-script.js
+ cd $SKILL_DIR && node run.js /tmp/my-script.js
 ```
 
 **Multiple headers (JSON format):**
 
 ```bash
 PW_EXTRA_HEADERS='{"X-Automated-By":"playwright-skill","X-Debug":"true"}' \
-  cd $SKILL_DIR && node run.js /tmp/my-script.js
+ cd $SKILL_DIR && node run.js /tmp/my-script.js
 ```
 
 ### How It Works
@@ -364,7 +364,7 @@ For scripts using raw Playwright API, use the injected `getContextOptionsWithHea
 
 ```javascript
 const context = await browser.newContext(
-  getContextOptionsWithHeaders({ viewport: { width: 1920, height: 1080 } }),
+ getContextOptionsWithHeaders({ viewport: { width: 1920, height: 1080 } }),
 );
 ```
 
@@ -440,7 +440,7 @@ User: "Use 3001"
 
 [Writes login automation to /tmp/playwright-test-login.js]
 [Runs: cd $SKILL_DIR && node run.js /tmp/playwright-test-login.js]
-[Reports: ✅ Login successful, redirected to /dashboard]
+[Reports: Login successful, redirected to /dashboard]
 ```
 
 ## Notes

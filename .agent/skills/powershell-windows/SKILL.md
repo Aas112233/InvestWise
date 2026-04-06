@@ -14,7 +14,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 
 ### CRITICAL: Parentheses Required
 
-| ❌ Wrong | ✅ Correct |
+| Wrong | Correct |
 |----------|-----------|
 | `if (Test-Path "a" -or Test-Path "b")` | `if ((Test-Path "a") -or (Test-Path "b"))` |
 | `if (Get-Item $x -and $y -eq 5)` | `if ((Get-Item $x) -and ($y -eq 5))` |
@@ -27,12 +27,12 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 
 ### CRITICAL: No Unicode in Scripts
 
-| Purpose | ❌ Don't Use | ✅ Use |
+| Purpose | Don't Use | Use |
 |---------|-------------|--------|
-| Success | ✅ ✓ | [OK] [+] |
-| Error | ❌ ✗ 🔴 | [!] [X] |
-| Warning | ⚠️ 🟡 | [*] [WARN] |
-| Info | ℹ️ 🔵 | [i] [INFO] |
+| Success | | [OK] [+] |
+| Error | | [!] [X] |
+| Warning | � | [*] [WARN] |
+| Info | ℹ | [i] [INFO] |
 | Progress | ⏳ | [...] |
 
 **Rule:** Use ASCII characters only in PowerShell scripts.
@@ -43,7 +43,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 
 ### Always Check Before Access
 
-| ❌ Wrong | ✅ Correct |
+| Wrong | Correct |
 |----------|-----------|
 | `$array.Count -gt 0` | `$array -and $array.Count -gt 0` |
 | `$text.Length` | `if ($text) { $text.Length }` |
@@ -54,7 +54,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 
 ### Complex Expressions
 
-| ❌ Wrong | ✅ Correct |
+| Wrong | Correct |
 |----------|-----------|
 | `"Value: $($obj.prop.sub)"` | Store in variable first |
 
@@ -114,7 +114,7 @@ Write-Output "Value: $value"
 
 ### CRITICAL: Depth Parameter
 
-| ❌ Wrong | ✅ Correct |
+| Wrong | Correct |
 |----------|-----------|
 | `ConvertTo-Json` | `ConvertTo-Json -Depth 10` |
 
@@ -152,13 +152,13 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # Main
 try {
-    # Logic here
-    Write-Output "[OK] Done"
-    exit 0
+ # Logic here
+ Write-Output "[OK] Done"
+ exit 0
 }
 catch {
-    Write-Warning "Error: $_"
-    exit 1
+ Write-Warning "Error: $_"
+ exit 1
 }
 ```
 

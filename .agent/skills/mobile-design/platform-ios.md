@@ -74,16 +74,16 @@ iOS System Fonts:
 ### Dynamic Type Support (MANDATORY)
 
 ```swift
-// ❌ WRONG: Fixed font size
+// WRONG: Fixed font size
 Text("Hello")
-    .font(.system(size: 17))
+ .font(.system(size: 17))
 
-// ✅ CORRECT: Dynamic Type
+// CORRECT: Dynamic Type
 Text("Hello")
-    .font(.body) // Scales with user settings
+ .font(.body) // Scales with user settings
 
 // React Native equivalent
-<Text style={{ fontSize: 17 }}> // ❌ Fixed
+<Text style={{ fontSize: 17 }}> // Fixed
 <Text style={styles.body}> // Use a dynamic scale system
 ```
 
@@ -142,11 +142,11 @@ Fills:
 ```
 iOS Dark Mode is not inverted light mode:
 
-LIGHT MODE:              DARK MODE:
-├── White backgrounds    ├── True black (#000) or near-black
-├── High saturation      ├── Desaturated colors
-├── Black text           ├── White/light gray text
-└── Drop shadows         └── Glows or no shadows
+LIGHT MODE: DARK MODE:
+├── White backgrounds ├── True black (#000) or near-black
+├── High saturation ├── Desaturated colors
+├── Black text ├── White/light gray text
+└── Drop shadows └── Glows or no shadows
 
 RULE: Always use semantic colors for automatic adaptation.
 ```
@@ -161,11 +161,11 @@ RULE: Always use semantic colors for automatic adaptation.
 ┌─────────────────────────────────────┐
 │░░░░░░░░░░░ Status Bar ░░░░░░░░░░░░░│ ← Top safe area inset
 ├─────────────────────────────────────┤
-│                                     │
-│                                     │
-│         Safe Content Area           │
-│                                     │
-│                                     │
+│ │
+│ │
+│ Safe Content Area │
+│ │
+│ │
 ├─────────────────────────────────────┤
 │░░░░░░░░░ Home Indicator ░░░░░░░░░░░│ ← Bottom safe area inset
 └─────────────────────────────────────┘
@@ -217,12 +217,12 @@ iPad Grid:
 
 ```
 ┌─────────────────────────────────────┐
-│                                     │
-│         Content Area                │
-│                                     │
+│ │
+│ Content Area │
+│ │
 ├─────────────────────────────────────┤
-│  🏠     🔍     ➕     ❤️     👤    │ ← Tab bar (49pt height)
-│ Home   Search  New   Saved  Profile │
+│ │ ← Tab bar (49pt height)
+│ Home Search New Saved Profile │
 └─────────────────────────────────────┘
 
 Rules:
@@ -237,11 +237,11 @@ Rules:
 
 ```
 ┌─────────────────────────────────────┐
-│ < Back     Page Title      Edit    │ ← Navigation bar (44pt)
+│ < Back Page Title Edit │ ← Navigation bar (44pt)
 ├─────────────────────────────────────┤
-│                                     │
-│         Content Area                │
-│                                     │
+│ │
+│ Content Area │
+│ │
 └─────────────────────────────────────┘
 
 Rules:
@@ -282,11 +282,11 @@ Rules:
 Button Styles (UIKit/SwiftUI):
 
 ┌──────────────────────────────┐
-│         Tinted               │ ← Primary action (filled)
+│ Tinted │ ← Primary action (filled)
 ├──────────────────────────────┤
-│         Bordered             │ ← Secondary action (outline)
+│ Bordered │ ← Secondary action (outline)
 ├──────────────────────────────┤
-│         Plain                │ ← Tertiary action (text only)
+│ Plain │ ← Tertiary action (text only)
 └──────────────────────────────┘
 
 Sizes:
@@ -301,15 +301,15 @@ Sizes:
 ```
 List Styles:
 
-.plain         → No separators, edge-to-edge
-.insetGrouped  → Rounded cards (default iOS 14+)
-.grouped       → Full-width sections
-.sidebar       → iPad sidebar navigation
+.plain → No separators, edge-to-edge
+.insetGrouped → Rounded cards (default iOS 14+)
+.grouped → Full-width sections
+.sidebar → iPad sidebar navigation
 
 Cell Accessories:
 ├── Disclosure indicator (>) → Navigates to detail
 ├── Detail button (i) → Shows info without navigation
-├── Checkmark (✓) → Selection
+├── Checkmark () → Selection
 ├── Reorder (≡) → Drag to reorder
 └── Delete (-) → Swipe/edit mode delete
 ```
@@ -320,10 +320,10 @@ Cell Accessories:
 iOS Text Field Anatomy:
 
 ┌─────────────────────────────────────┐
-│ 🔍 Search...                    ✕  │
+│ Search... │
 └─────────────────────────────────────┘
-  ↑                               ↑
-  Leading icon                   Clear button
+ ↑ ↑
+ Leading icon Clear button
 
 Borders: Rounded rectangle
 Height: 36pt minimum
@@ -340,7 +340,7 @@ When to Use:
 ├── Switch views
 
 ┌───────┬───────┬───────┐
-│  All  │ Active│ Done  │
+│ All │ Active│ Done │
 └───────┴───────┴───────┘
 
 Rules:
@@ -371,9 +371,9 @@ RULE: Always use native UIRefreshControl (don't custom build).
 ```
 iOS swipe actions:
 
-← Swipe Left (Destructive)      Swipe Right (Constructive) →
+← Swipe Left (Destructive) Swipe Right (Constructive) →
 ┌─────────────────────────────────────────────────────────────┐
-│                    List Item Content                        │
+│ List Item Content │
 └─────────────────────────────────────────────────────────────┘
 
 Left swipe reveals: Archive, Delete, Flag
@@ -388,13 +388,13 @@ Full swipe: Triggers first action
 Long press → Context menu appears
 
 ┌─────────────────────────────┐
-│       Preview Card          │
+│ Preview Card │
 ├─────────────────────────────┤
-│  📋 Copy                    │
-│  📤 Share                   │
-│  ➕ Add to...               │
+│ Copy │
+│ Share │
+│ Add to... │
 ├─────────────────────────────┤
-│  🗑️ Delete          (Red)   │
+│ Delete (Red) │
 └─────────────────────────────┘
 
 Rules:
@@ -410,15 +410,15 @@ Rules:
 iOS 15+ Sheets:
 
 ┌─────────────────────────────────────┐
-│                                     │
-│        Parent View (dimmed)          │
-│                                     │
+│ │
+│ Parent View (dimmed) │
+│ │
 ├─────────────────────────────────────┤
-│  ═══  (Grabber)                     │ ← Drag to resize
-│                                     │
-│        Sheet Content                │
-│                                     │
-│                                     │
+│ ═══ (Grabber) │ ← Drag to resize
+│ │
+│ Sheet Content │
+│ │
+│ │
 └─────────────────────────────────────┘
 
 Detents:
@@ -452,16 +452,16 @@ Scales:
 ```swift
 // SwiftUI
 Image(systemName: "star.fill")
-    .font(.title2)
-    .foregroundStyle(.yellow)
+ .font(.title2)
+ .foregroundStyle(.yellow)
 
 // With rendering mode
 Image(systemName: "heart.fill")
-    .symbolRenderingMode(.multicolor)
+ .symbolRenderingMode(.multicolor)
 
 // Animated (iOS 17+)
 Image(systemName: "checkmark.circle")
-    .symbolEffect(.bounce)
+ .symbolEffect(.bounce)
 ```
 
 ### Symbol Best Practices
@@ -522,9 +522,9 @@ Respect motion preferences:
 @Environment(\.accessibilityReduceMotion) var reduceMotion
 
 if reduceMotion {
-    // Use instant transitions
+ // Use instant transitions
 } else {
-    // Use animations
+ // Use animations
 }
 
 React Native:

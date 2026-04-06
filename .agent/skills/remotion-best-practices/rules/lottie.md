@@ -2,14 +2,14 @@
 name: lottie
 description: Embedding Lottie animations in Remotion.
 metadata:
-  category: Animation
+ category: Animation
 ---
 
 # Using Lottie Animations in Remotion
 
 ## Prerequisites
 
-First, the @remotion/lottie package needs to be installed.  
+First, the @remotion/lottie package needs to be installed. 
 If it is not, use the following command:
 
 ```bash
@@ -34,27 +34,27 @@ import {useEffect, useState} from 'react';
 import {cancelRender, continueRender, delayRender} from 'remotion';
 
 export const MyAnimation = () => {
-  const [handle] = useState(() => delayRender('Loading Lottie animation'));
+ const [handle] = useState(() => delayRender('Loading Lottie animation'));
 
-  const [animationData, setAnimationData] = useState<LottieAnimationData | null>(null);
+ const [animationData, setAnimationData] = useState<LottieAnimationData | null>(null);
 
-  useEffect(() => {
-    fetch('https://assets4.lottiefiles.com/packages/lf20_zyquagfl.json')
-      .then((data) => data.json())
-      .then((json) => {
-        setAnimationData(json);
-        continueRender(handle);
-      })
-      .catch((err) => {
-        cancelRender(err);
-      });
-  }, [handle]);
+ useEffect(() => {
+ fetch('https://assets4.lottiefiles.com/packages/lf20_zyquagfl.json')
+ .then((data) => data.json())
+ .then((json) => {
+ setAnimationData(json);
+ continueRender(handle);
+ })
+ .catch((err) => {
+ cancelRender(err);
+ });
+ }, [handle]);
 
-  if (!animationData) {
-    return null;
-  }
+ if (!animationData) {
+ return null;
+ }
 
-  return <Lottie animationData={animationData} />;
+ return <Lottie animationData={animationData} />;
 };
 ```
 

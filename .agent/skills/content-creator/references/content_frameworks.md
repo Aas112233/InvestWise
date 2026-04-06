@@ -203,7 +203,7 @@
 
 #### LinkedIn Post Framework
 ```
-🎯 Hook/Pattern Interrupt
+ Hook/Pattern Interrupt
 
 Context paragraph explaining the situation or challenge.
 
@@ -235,11 +235,11 @@ Question to encourage engagement?
 5/ Better approach - introduction
 
 6/ Step 1 of better approach
-   • Specific action
-   • Why it works
+ • Specific action
+ • Why it works
 
 7/ Step 2 of better approach
-   [Continue pattern]
+ [Continue pattern]
 
 8/ Real example or case study
 
@@ -250,9 +250,9 @@ Question to encourage engagement?
 11/ One powerful tip most people miss
 
 12/ Recap in 3 key points:
-    - Point 1
-    - Point 2  
-    - Point 3
+ - Point 1
+ - Point 2 
+ - Point 3
 
 13/ CTA: If you found this helpful, [action]
 
@@ -270,15 +270,15 @@ Here's what I learned:
 [Key insight or lesson]
 
 3 things that changed everything:
-1️⃣ [First point]
-2️⃣ [Second point]
-3️⃣ [Third point]
+1⃣ [First point]
+2⃣ [Second point]
+3⃣ [Third point]
 
 [Call-out or question to audience]
 
 Drop a [emoji] if you've experienced this too!
 
-What's your biggest challenge with [topic]? Let me know below 👇
+What's your biggest challenge with [topic]? Let me know below 
 
 -
 #hashtag1 #hashtag2 #hashtag3 #hashtag4 #hashtag5
@@ -340,9 +340,9 @@ I've got something that can help:
 [Solution introduction - what it is]
 
 Here's what you get:
-✓ Benefit 1 (not feature)
-✓ Benefit 2 (not feature)
-✓ Benefit 3 (not feature)
+ Benefit 1 (not feature)
+ Benefit 2 (not feature)
+ Benefit 3 (not feature)
 
 [Social proof - testimonial or results]
 
@@ -493,20 +493,20 @@ Section 3: [Key Point]
 ```
 Original: Blog Post (2000 words)
 ├── Social Media
-│   ├── 5 Twitter posts (key quotes)
-│   ├── 1 LinkedIn article (executive summary)
-│   ├── 3 Instagram carousels (main points)
-│   └── 1 Facebook post (intro + link)
+│ ├── 5 Twitter posts (key quotes)
+│ ├── 1 LinkedIn article (executive summary)
+│ ├── 3 Instagram carousels (main points)
+│ └── 1 Facebook post (intro + link)
 ├── Email
-│   └── Newsletter feature (summary + CTA)
+│ └── Newsletter feature (summary + CTA)
 ├── Video
-│   ├── YouTube explainer (script from post)
-│   └── TikTok/Reels (quick tips)
+│ ├── YouTube explainer (script from post)
+│ └── TikTok/Reels (quick tips)
 ├── Audio
-│   └── Podcast talking points
+│ └── Podcast talking points
 └── Visual
-    ├── Infographic (data points)
-    └── Slide deck (presentation)
+ ├── Infographic (data points)
+ └── Slide deck (presentation)
 ```
 
 ## Quick-Start Checklists

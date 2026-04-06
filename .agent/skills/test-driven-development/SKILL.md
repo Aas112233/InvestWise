@@ -48,23 +48,23 @@ Implement fresh from tests. Period.
 
 ```dot
 digraph tdd_cycle {
-    rankdir=LR;
-    red [label="RED\nWrite failing test", shape=box, style=filled, fillcolor="#ffcccc"];
-    verify_red [label="Verify fails\ncorrectly", shape=diamond];
-    green [label="GREEN\nMinimal code", shape=box, style=filled, fillcolor="#ccffcc"];
-    verify_green [label="Verify passes\nAll green", shape=diamond];
-    refactor [label="REFACTOR\nClean up", shape=box, style=filled, fillcolor="#ccccff"];
-    next [label="Next", shape=ellipse];
+ rankdir=LR;
+ red [label="RED\nWrite failing test", shape=box, style=filled, fillcolor="#ffcccc"];
+ verify_red [label="Verify fails\ncorrectly", shape=diamond];
+ green [label="GREEN\nMinimal code", shape=box, style=filled, fillcolor="#ccffcc"];
+ verify_green [label="Verify passes\nAll green", shape=diamond];
+ refactor [label="REFACTOR\nClean up", shape=box, style=filled, fillcolor="#ccccff"];
+ next [label="Next", shape=ellipse];
 
-    red -> verify_red;
-    verify_red -> green [label="yes"];
-    verify_red -> red [label="wrong\nfailure"];
-    green -> verify_green;
-    verify_green -> refactor [label="yes"];
-    verify_green -> green [label="no"];
-    refactor -> verify_green [label="stay\ngreen"];
-    verify_green -> next;
-    next -> red;
+ red -> verify_red;
+ verify_red -> green [label="yes"];
+ verify_red -> red [label="wrong\nfailure"];
+ green -> verify_green;
+ verify_green -> refactor [label="yes"];
+ verify_green -> green [label="no"];
+ refactor -> verify_green [label="stay\ngreen"];
+ verify_green -> next;
+ next -> red;
 }
 ```
 
@@ -75,17 +75,17 @@ Write one minimal test showing what should happen.
 <Good>
 ```typescript
 test('retries failed operations 3 times', async () => {
-  let attempts = 0;
-  const operation = () => {
-    attempts++;
-    if (attempts < 3) throw new Error('fail');
-    return 'success';
-  };
+ let attempts = 0;
+ const operation = () => {
+ attempts++;
+ if (attempts < 3) throw new Error('fail');
+ return 'success';
+ };
 
-  const result = await retryOperation(operation);
+ const result = await retryOperation(operation);
 
-  expect(result).toBe('success');
-  expect(attempts).toBe(3);
+ expect(result).toBe('success');
+ expect(attempts).toBe(3);
 });
 ```
 Clear name, tests real behavior, one thing
@@ -94,12 +94,12 @@ Clear name, tests real behavior, one thing
 <Bad>
 ```typescript
 test('retry works', async () => {
-  const mock = jest.fn()
-    .mockRejectedValueOnce(new Error())
-    .mockRejectedValueOnce(new Error())
-    .mockResolvedValueOnce('success');
-  await retryOperation(mock);
-  expect(mock).toHaveBeenCalledTimes(3);
+ const mock = jest.fn()
+ .mockRejectedValueOnce(new Error())
+ .mockRejectedValueOnce(new Error())
+ .mockResolvedValueOnce('success');
+ await retryOperation(mock);
+ expect(mock).toHaveBeenCalledTimes(3);
 });
 ```
 Vague name, tests mock not code
@@ -134,14 +134,14 @@ Write simplest code to pass the test.
 <Good>
 ```typescript
 async function retryOperation<T>(fn: () => Promise<T>): Promise<T> {
-  for (let i = 0; i < 3; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      if (i === 2) throw e;
-    }
-  }
-  throw new Error('unreachable');
+ for (let i = 0; i < 3; i++) {
+ try {
+ return await fn();
+ } catch (e) {
+ if (i === 2) throw e;
+ }
+ }
+ throw new Error('unreachable');
 }
 ```
 Just enough to pass
@@ -150,14 +150,14 @@ Just enough to pass
 <Bad>
 ```typescript
 async function retryOperation<T>(
-  fn: () => Promise<T>,
-  options?: {
-    maxRetries?: number;
-    backoff?: 'linear' | 'exponential';
-    onRetry?: (attempt: number) => void;
-  }
+ fn: () => Promise<T>,
+ options?: {
+ maxRetries?: number;
+ backoff?: 'linear' | 'exponential';
+ onRetry?: (attempt: number) => void;
+ }
 ): Promise<T> {
-  // YAGNI
+ // YAGNI
 }
 ```
 Over-engineered
@@ -294,8 +294,8 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 **RED**
 ```typescript
 test('rejects empty email', async () => {
-  const result = await submitForm({ email: '' });
-  expect(result.error).toBe('Email required');
+ const result = await submitForm({ email: '' });
+ expect(result.error).toBe('Email required');
 });
 ```
 
@@ -308,10 +308,10 @@ FAIL: expected 'Email required', got undefined
 **GREEN**
 ```typescript
 function submitForm(data: FormData) {
-  if (!data.email?.trim()) {
-    return { error: 'Email required' };
-  }
-  // ...
+ if (!data.email?.trim()) {
+ return { error: 'Email required' };
+ }
+ // ...
 }
 ```
 

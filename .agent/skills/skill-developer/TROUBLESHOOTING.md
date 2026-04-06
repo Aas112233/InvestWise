@@ -5,8 +5,8 @@ Complete debugging guide for skill activation problems.
 ## Table of Contents
 
 - [Skill Not Triggering](#skill-not-triggering)
-  - [UserPromptSubmit Not Suggesting](#userpromptsubmit-not-suggesting)
-  - [PreToolUse Not Blocking](#pretooluse-not-blocking)
+ - [UserPromptSubmit Not Suggesting](#userpromptsubmit-not-suggesting)
+ - [PreToolUse Not Blocking](#pretooluse-not-blocking)
 - [False Positives](#false-positives)
 - [Hook Not Executing](#hook-not-executing)
 - [Performance Issues](#performance-issues)
@@ -21,7 +21,7 @@ Complete debugging guide for skill activation problems.
 
 **Common Causes:**
 
-####  1. Keywords Don't Match
+#### 1. Keywords Don't Match
 
 **Check:**
 - Look at `promptTriggers.keywords` in skill-rules.json
@@ -32,10 +32,10 @@ Complete debugging guide for skill activation problems.
 ```json
 "keywords": ["layout", "grid"]
 ```
-- "how does the layout work?" → ✅ Matches "layout"
-- "how does the grid system work?" → ✅ Matches "grid"
-- "how do layouts work?" → ✅ Matches "layout"
-- "how does it work?" → ❌ No match
+- "how does the layout work?" → Matches "layout"
+- "how does the grid system work?" → Matches "grid"
+- "how do layouts work?" → Matches "layout"
+- "how does it work?" → No match
 
 **Fix:** Add more keyword variations to skill-rules.json
 
@@ -49,16 +49,16 @@ Complete debugging guide for skill activation problems.
 **Example:**
 ```json
 "intentPatterns": [
-  "(create|add).*?(database.*?table)"  // Too specific
+ "(create|add).*?(database.*?table)" // Too specific
 ]
 ```
-- "create a database table" → ✅ Matches
-- "add new table" → ❌ Doesn't match (missing "database")
+- "create a database table" → Matches
+- "add new table" → Doesn't match (missing "database")
 
 **Fix:** Broaden the pattern:
 ```json
 "intentPatterns": [
-  "(create|add).*?(table|database)"  // Better
+ "(create|add).*?(table|database)" // Better
 ]
 ```
 
@@ -76,8 +76,8 @@ name: project-catalog-developer
 ```
 ```json
 // skill-rules.json
-"project-catalogue-developer": {  // ❌ Typo: catalogue vs catalog
-  ...
+"project-catalogue-developer": { // Typo: catalogue vs catalog
+ ...
 }
 ```
 
@@ -106,7 +106,7 @@ Test the hook manually:
 
 ```bash
 echo '{"session_id":"debug","prompt":"your test prompt here"}' | \
-  npx tsx .claude/hooks/skill-activation-prompt.ts
+ npx tsx .claude/hooks/skill-activation-prompt.ts
 ```
 
 Expected: Your skill should appear in the output.
@@ -129,12 +129,12 @@ Expected: Your skill should appear in the output.
 **Example:**
 ```json
 "pathPatterns": [
-  "frontend/src/**/*.tsx"
+ "frontend/src/**/*.tsx"
 ]
 ```
-- Editing: `frontend/src/components/Dashboard.tsx` → ✅ Matches
-- Editing: `frontend/tests/Dashboard.test.tsx` → ✅ Matches (add exclusion!)
-- Editing: `backend/src/app.ts` → ❌ Doesn't match
+- Editing: `frontend/src/components/Dashboard.tsx` → Matches
+- Editing: `frontend/tests/Dashboard.test.tsx` → Matches (add exclusion!)
+- Editing: `backend/src/app.ts` → Doesn't match
 
 **Fix:** Adjust glob patterns or add the missing path
 
@@ -147,12 +147,12 @@ Expected: Your skill should appear in the output.
 **Example:**
 ```json
 "pathExclusions": [
-  "**/*.test.ts",
-  "**/*.spec.ts"
+ "**/*.test.ts",
+ "**/*.spec.ts"
 ]
 ```
-- Editing: `services/user.test.ts` → ❌ Excluded
-- Editing: `services/user.ts` → ✅ Not excluded
+- Editing: `services/user.test.ts` → Excluded
+- Editing: `services/user.ts` → Not excluded
 
 **Fix:** If test exclusion too broad, narrow it or remove
 
@@ -166,11 +166,11 @@ Expected: Your skill should appear in the output.
 **Example:**
 ```json
 "contentPatterns": [
-  "import.*[Pp]risma"
+ "import.*[Pp]risma"
 ]
 ```
-- File has: `import { PrismaService } from './prisma'` → ✅ Matches
-- File has: `import { Database } from './db'` → ❌ Doesn't match
+- File has: `import { PrismaService } from './prisma'` → Matches
+- File has: `import { Database } from './db'` → Doesn't match
 
 **Debug:**
 ```bash
@@ -191,8 +191,8 @@ cat .claude/hooks/state/skills-used-{session-id}.json
 **Example:**
 ```json
 {
-  "skills_used": ["database-verification"],
-  "files_verified": []
+ "skills_used": ["database-verification"],
+ "files_verified": []
 }
 ```
 
@@ -236,9 +236,9 @@ Test the hook manually:
 ```bash
 cat <<'EOF' | npx tsx .claude/hooks/skill-verification-guard.ts 2>&1
 {
-  "session_id": "debug",
-  "tool_name": "Edit",
-  "tool_input": {"file_path": "/root/git/your-project/form/src/services/user.ts"}
+ "session_id": "debug",
+ "tool_name": "Edit",
+ "tool_input": {"file_path": "/root/git/your-project/form/src/services/user.ts"}
 }
 EOF
 echo "Exit code: $?"
@@ -260,16 +260,16 @@ Expected:
 
 **Problem:**
 ```json
-"keywords": ["user", "system", "create"]  // Too broad
+"keywords": ["user", "system", "create"] // Too broad
 ```
 - Triggers on: "user manual", "file system", "create directory"
 
 **Solution:** Make keywords more specific
 ```json
 "keywords": [
-  "user authentication",
-  "user tracking",
-  "create feature"
+ "user authentication",
+ "user tracking",
+ "create feature"
 ]
 ```
 
@@ -278,7 +278,7 @@ Expected:
 **Problem:**
 ```json
 "intentPatterns": [
-  "(create)"  // Matches everything with "create"
+ "(create)" // Matches everything with "create"
 ]
 ```
 - Triggers on: "create file", "create folder", "create account"
@@ -286,13 +286,13 @@ Expected:
 **Solution:** Add context to patterns
 ```json
 "intentPatterns": [
-  "(create|add).*?(database|table|feature)"  // More specific
+ "(create|add).*?(database|table|feature)" // More specific
 ]
 ```
 
 **Advanced:** Use negative lookaheads to exclude
 ```regex
-(create)(?!.*test).*?(feature)  // Don't match if "test" appears
+(create)(?!.*test).*?(feature) // Don't match if "test" appears
 ```
 
 ### 3. File Paths Too Generic
@@ -300,7 +300,7 @@ Expected:
 **Problem:**
 ```json
 "pathPatterns": [
-  "form/**"  // Matches everything in form/
+ "form/**" // Matches everything in form/
 ]
 ```
 - Triggers on: test files, config files, everything
@@ -308,8 +308,8 @@ Expected:
 **Solution:** Use narrower patterns
 ```json
 "pathPatterns": [
-  "form/src/services/**/*.ts",  // Only service files
-  "form/src/controllers/**/*.ts"
+ "form/src/services/**/*.ts", // Only service files
+ "form/src/controllers/**/*.ts"
 ]
 ```
 
@@ -318,7 +318,7 @@ Expected:
 **Problem:**
 ```json
 "contentPatterns": [
-  "Prisma"  // Matches in comments, strings, etc.
+ "Prisma" // Matches in comments, strings, etc.
 ]
 ```
 - Triggers on: `// Don't use Prisma here`
@@ -327,9 +327,9 @@ Expected:
 **Solution:** Make patterns more specific
 ```json
 "contentPatterns": [
-  "import.*[Pp]risma",        // Only imports
-  "PrismaService\\.",         // Only actual usage
-  "prisma\\.(findMany|create)" // Specific methods
+ "import.*[Pp]risma", // Only imports
+ "PrismaService\\.", // Only actual usage
+ "prisma\\.(findMany|create)" // Specific methods
 ]
 ```
 
@@ -339,7 +339,7 @@ Expected:
 
 ```json
 {
-  "enforcement": "block"  // Change to "suggest"
+ "enforcement": "block" // Change to "suggest"
 }
 ```
 
@@ -366,18 +366,18 @@ Expected: Hook entries present
 **Fix:** Add missing hook registration:
 ```json
 {
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-activation-prompt.sh"
-          }
-        ]
-      }
-    ]
-  }
+ "hooks": {
+ "UserPromptSubmit": [
+ {
+ "hooks": [
+ {
+ "type": "command",
+ "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-activation-prompt.sh"
+ }
+ ]
+ }
+ ]
+ }
 }
 ```
 
@@ -462,7 +462,7 @@ Expected: No output (no errors)
 
 **Solution:** Simplify
 ```regex
-(create|add).*?(feature|endpoint)  // Fewer alternatives
+(create|add).*?(feature|endpoint) // Fewer alternatives
 ```
 
 ### 3. Too Many Files Checked
@@ -470,15 +470,15 @@ Expected: No output (no errors)
 **Problem:**
 ```json
 "pathPatterns": [
-  "**/*.ts"  // Checks ALL TypeScript files
+ "**/*.ts" // Checks ALL TypeScript files
 ]
 ```
 
 **Solution:** Be more specific
 ```json
 "pathPatterns": [
-  "form/src/services/**/*.ts",  // Only specific directory
-  "form/src/controllers/**/*.ts"
+ "form/src/services/**/*.ts", // Only specific directory
+ "form/src/controllers/**/*.ts"
 ]
 ```
 

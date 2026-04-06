@@ -5,14 +5,14 @@
 ## When to Use
 
 ```
-✅ Perfect fit:
+ Perfect fit:
 ├── TypeScript on both ends
 ├── Monorepo structure
 ├── Internal tools
 ├── Rapid development
 └── Type safety critical
 
-❌ Poor fit:
+ Poor fit:
 ├── Non-TypeScript clients
 ├── Public API
 ├── Need REST conventions

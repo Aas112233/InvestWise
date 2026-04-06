@@ -107,24 +107,24 @@ Choose one primary and one secondary archetype:
 Define 3-4 core themes that appear consistently:
 
 1. **Innovation & Technology**
-   - AI-powered solutions
-   - Data-driven insights
-   - Future-ready strategies
+ - AI-powered solutions
+ - Data-driven insights
+ - Future-ready strategies
 
 2. **Customer Success**
-   - Real results and ROI
-   - Partnership approach
-   - Tailored solutions
+ - Real results and ROI
+ - Partnership approach
+ - Tailored solutions
 
 3. **Expertise & Trust**
-   - Industry leadership
-   - Proven methodologies
-   - Transparent communication
+ - Industry leadership
+ - Proven methodologies
+ - Transparent communication
 
 4. **Growth & Transformation**
-   - Scaling businesses
-   - Digital transformation
-   - Continuous improvement
+ - Scaling businesses
+ - Digital transformation
+ - Continuous improvement
 
 ### 7. Audience Personas
 

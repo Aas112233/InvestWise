@@ -173,7 +173,7 @@ What works for dev portfolios
 
 ## Anti-Patterns
 
-### ❌ Template Portfolio
+### Template Portfolio
 
 **Why bad**: Looks like everyone else.
 No memorable impression.
@@ -185,7 +185,7 @@ Custom design elements.
 Unique project presentations.
 Your voice in the copy.
 
-### ❌ All Style No Substance
+### All Style No Substance
 
 **Why bad**: Fancy animations, weak projects.
 Style over substance.
@@ -197,7 +197,7 @@ Real work with real impact.
 Quality over quantity.
 Depth over breadth.
 
-### ❌ Resume Website
+### Resume Website
 
 **Why bad**: Boring, forgettable.
 Doesn't use the medium.
@@ -209,7 +209,7 @@ Visual case studies.
 Interactive elements.
 Personality throughout.
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

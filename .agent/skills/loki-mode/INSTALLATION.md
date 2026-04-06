@@ -74,19 +74,19 @@ mkdir -p ~/.claude/skills/loki-mode/references
 
 # Download core skill file
 curl -o ~/.claude/skills/loki-mode/SKILL.md \
-  https://raw.githubusercontent.com/asklokesh/loki-mode/main/SKILL.md
+ https://raw.githubusercontent.com/asklokesh/loki-mode/main/SKILL.md
 
 # Download agent definitions
 curl -o ~/.claude/skills/loki-mode/references/agents.md \
-  https://raw.githubusercontent.com/asklokesh/loki-mode/main/references/agents.md
+ https://raw.githubusercontent.com/asklokesh/loki-mode/main/references/agents.md
 
 # Download deployment guides
 curl -o ~/.claude/skills/loki-mode/references/deployment.md \
-  https://raw.githubusercontent.com/asklokesh/loki-mode/main/references/deployment.md
+ https://raw.githubusercontent.com/asklokesh/loki-mode/main/references/deployment.md
 
 # Download business operations reference
 curl -o ~/.claude/skills/loki-mode/references/business-ops.md \
-  https://raw.githubusercontent.com/asklokesh/loki-mode/main/references/business-ops.md
+ https://raw.githubusercontent.com/asklokesh/loki-mode/main/references/business-ops.md
 ```
 
 **Note:** This minimal install won't include examples, tests, or the autonomous runner. Use Option A or B for full functionality.
@@ -101,10 +101,10 @@ For using Loki Mode on the Claude.ai web interface:
 
 1. Go to [Releases](https://github.com/asklokesh/loki-mode/releases)
 2. Download **either**:
-   - `loki-mode-X.X.X.zip` (standard format)
-   - `loki-mode-X.X.X.skill` (skill format)
+ - `loki-mode-X.X.X.zip` (standard format)
+ - `loki-mode-X.X.X.skill` (skill format)
 
-   Both contain the same skill and will work.
+ Both contain the same skill and will work.
 
 ### Step 2: Upload to Claude.ai
 
@@ -127,7 +127,7 @@ For using Loki Mode through the Anthropic API Console (console.anthropic.com):
 1. Go to [Releases](https://github.com/asklokesh/loki-mode/releases)
 2. Download **`loki-mode-api-X.X.X.zip`** (note the `-api-` version)
 
-   **Important:** The API version has a different file structure than the web version.
+ **Important:** The API version has a different file structure than the web version.
 
 ### Step 2: Upload to API Console
 
@@ -179,30 +179,30 @@ After installation, you should have this structure:
 
 ```
 loki-mode/
-├── SKILL.md              # Main skill file (required)
-├── README.md             # Documentation
-├── INSTALLATION.md       # This file
-├── CHANGELOG.md          # Version history
-├── VERSION               # Current version number
-├── LICENSE               # MIT License
-├── references/           # Agent and deployment references
-│   ├── agents.md
-│   ├── deployment.md
-│   └── business-ops.md
-├── autonomy/             # Autonomous runner (CLI only)
-│   ├── run.sh
-│   └── README.md
-├── examples/             # Sample PRDs for testing
-│   ├── simple-todo-app.md
-│   ├── api-only.md
-│   ├── static-landing-page.md
-│   └── full-stack-demo.md
-├── tests/                # Test suite (CLI only)
-│   ├── run-all-tests.sh
-│   ├── test-bootstrap.sh
-│   └── ...
-└── integrations/         # Third-party integrations
-    └── vibe-kanban.md
+├── SKILL.md # Main skill file (required)
+├── README.md # Documentation
+├── INSTALLATION.md # This file
+├── CHANGELOG.md # Version history
+├── VERSION # Current version number
+├── LICENSE # MIT License
+├── references/ # Agent and deployment references
+│ ├── agents.md
+│ ├── deployment.md
+│ └── business-ops.md
+├── autonomy/ # Autonomous runner (CLI only)
+│ ├── run.sh
+│ └── README.md
+├── examples/ # Sample PRDs for testing
+│ ├── simple-todo-app.md
+│ ├── api-only.md
+│ ├── static-landing-page.md
+│ └── full-stack-demo.md
+├── tests/ # Test suite (CLI only)
+│ ├── run-all-tests.sh
+│ ├── test-bootstrap.sh
+│ └── ...
+└── integrations/ # Third-party integrations
+ └── vibe-kanban.md
 ```
 
 **Note:** Some files/directories (autonomy, tests, examples) are only available with full installation (Options A or B).
@@ -217,20 +217,20 @@ loki-mode/
 
 **Solutions:**
 1. **Check installation path:**
-   ```bash
-   ls -la ~/.claude/skills/loki-mode/SKILL.md
-   ```
+ ```bash
+ ls -la ~/.claude/skills/loki-mode/SKILL.md
+ ```
 
 2. **Verify YAML frontmatter:**
-   ```bash
-   cat ~/.claude/skills/loki-mode/SKILL.md | head -5
-   ```
-   Should show `name: loki-mode`
+ ```bash
+ cat ~/.claude/skills/loki-mode/SKILL.md | head -5
+ ```
+ Should show `name: loki-mode`
 
 3. **Restart Claude Code:**
-   ```bash
-   # Exit and restart claude command
-   ```
+ ```bash
+ # Exit and restart claude command
+ ```
 
 ### Permission Denied
 
@@ -253,15 +253,15 @@ ls -la ~/.claude/
 1. **Check internet connection**
 
 2. **Try alternate download method:**
-   ```bash
-   # Use wget instead of curl
-   wget -O ~/.claude/skills/loki-mode/SKILL.md \
-     https://raw.githubusercontent.com/asklokesh/loki-mode/main/SKILL.md
-   ```
+ ```bash
+ # Use wget instead of curl
+ wget -O ~/.claude/skills/loki-mode/SKILL.md \
+ https://raw.githubusercontent.com/asklokesh/loki-mode/main/SKILL.md
+ ```
 
 3. **Manual download:**
-   - Visit the URL in a browser
-   - Save file manually to `~/.claude/skills/loki-mode/`
+ - Visit the URL in a browser
+ - Save file manually to `~/.claude/skills/loki-mode/`
 
 ### Autonomous Runner Won't Start
 
@@ -269,25 +269,25 @@ ls -la ~/.claude/
 
 **Solutions:**
 1. **Make executable:**
-   ```bash
-   chmod +x autonomy/run.sh
-   ```
+ ```bash
+ chmod +x autonomy/run.sh
+ ```
 
 2. **Run from repository root:**
-   ```bash
-   # Make sure you're in the loki-mode directory
-   cd ~/.claude/skills/loki-mode
-   ./autonomy/run.sh
-   ```
+ ```bash
+ # Make sure you're in the loki-mode directory
+ cd ~/.claude/skills/loki-mode
+ ./autonomy/run.sh
+ ```
 
 3. **Check prerequisites:**
-   ```bash
-   # Ensure Claude Code is installed
-   claude --version
+ ```bash
+ # Ensure Claude Code is installed
+ claude --version
 
-   # Ensure Python 3 is available
-   python3 --version
-   ```
+ # Ensure Python 3 is available
+ python3 --version
+ ```
 
 ### References Not Loading
 
@@ -305,7 +305,7 @@ ls -la ~/.claude/skills/loki-mode/references/
 
 # If missing, download them:
 curl -o ~/.claude/skills/loki-mode/references/agents.md \
-  https://raw.githubusercontent.com/asklokesh/loki-mode/main/references/agents.md
+ https://raw.githubusercontent.com/asklokesh/loki-mode/main/references/agents.md
 ```
 
 ---
@@ -361,9 +361,9 @@ rm -rf ~/.claude/skills/loki-mode
 After installation:
 
 1. **Quick Test:** Run a simple example
-   ```bash
-   ./autonomy/run.sh examples/simple-todo-app.md
-   ```
+ ```bash
+ ./autonomy/run.sh examples/simple-todo-app.md
+ ```
 
 2. **Read Documentation:** Check out [README.md](README.md) for usage guides
 

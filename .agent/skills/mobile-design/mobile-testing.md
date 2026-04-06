@@ -6,7 +6,7 @@
 
 ---
 
-## 🧠 MOBILE TESTING MINDSET
+## MOBILE TESTING MINDSET
 
 ```
 Mobile testing differs from web:
@@ -21,9 +21,9 @@ Mobile testing differs from web:
 
 ---
 
-## 🚫 AI MOBILE TESTING ANTI-PATTERNS
+## AI MOBILE TESTING ANTI-PATTERNS
 
-| ❌ AI Default | Why It's Wrong | ✅ Mobile-Correct |
+| AI Default | Why It's Wrong | Mobile-Correct |
 |---------------|----------------|-------------------|
 | Jest-only testing | Misses native layer | Jest + E2E on device |
 | Enzyme patterns | Deprecated, web-focused | React Native Testing Library |
@@ -43,59 +43,59 @@ Mobile testing differs from web:
 
 ```
 WHAT ARE YOU TESTING?
-        │
-        ├── Pure functions, utilities, helpers
-        │   └── Jest (unit tests)
-        │       └── No special mobile setup needed
-        │
-        ├── Individual components (isolated)
-        │   ├── React Native → React Native Testing Library
-        │   └── Flutter → flutter_test (widget tests)
-        │
-        ├── Components with hooks, context, navigation
-        │   ├── React Native → RNTL + mocked providers
-        │   └── Flutter → integration_test package
-        │
-        ├── Full user flows (login, checkout, etc.)
-        │   ├── Detox (React Native, fast, reliable)
-        │   ├── Maestro (Cross-platform, YAML-based)
-        │   └── Appium (Legacy, slow, last resort)
-        │
-        └── Performance, memory, battery
-            ├── Flashlight (RN performance)
-            ├── Flutter DevTools
-            └── Real device profiling (Xcode/Android Studio)
+ │
+ ├── Pure functions, utilities, helpers
+ │ └── Jest (unit tests)
+ │ └── No special mobile setup needed
+ │
+ ├── Individual components (isolated)
+ │ ├── React Native → React Native Testing Library
+ │ └── Flutter → flutter_test (widget tests)
+ │
+ ├── Components with hooks, context, navigation
+ │ ├── React Native → RNTL + mocked providers
+ │ └── Flutter → integration_test package
+ │
+ ├── Full user flows (login, checkout, etc.)
+ │ ├── Detox (React Native, fast, reliable)
+ │ ├── Maestro (Cross-platform, YAML-based)
+ │ └── Appium (Legacy, slow, last resort)
+ │
+ └── Performance, memory, battery
+ ├── Flashlight (RN performance)
+ ├── Flutter DevTools
+ └── Real device profiling (Xcode/Android Studio)
 ```
 
 ### Tool Comparison
 
 | Tool | Platform | Speed | Reliability | Use When |
 |------|----------|-------|-------------|----------|
-| **Jest** | RN | ⚡⚡⚡ | ⚡⚡⚡ | Unit tests, logic |
-| **RNTL** | RN | ⚡⚡⚡ | ⚡⚡ | Component tests |
-| **flutter_test** | Flutter | ⚡⚡⚡ | ⚡⚡⚡ | Widget tests |
-| **Detox** | RN | ⚡⚡ | ⚡⚡⚡ | E2E, critical flows |
-| **Maestro** | Both | ⚡⚡ | ⚡⚡ | E2E, cross-platform |
-| **Appium** | Both | ⚡ | ⚡ | Legacy, last resort |
+| **Jest** | RN | | | Unit tests, logic |
+| **RNTL** | RN | | | Component tests |
+| **flutter_test** | Flutter | | | Widget tests |
+| **Detox** | RN | | | E2E, critical flows |
+| **Maestro** | Both | | | E2E, cross-platform |
+| **Appium** | Both | | | Legacy, last resort |
 
 ---
 
 ## 2. Testing Pyramid for Mobile
 
 ```
-                    ┌───────────────┐
-                    │    E2E Tests  │  10%
-                    │  (Real device) │  Slow, expensive, essential
-                    ├───────────────┤
-                    │  Integration  │  20%
-                    │    Tests      │  Component + context
-                    ├───────────────┤
-                    │  Component    │  30%
-                    │    Tests      │  Isolated UI
-                    ├───────────────┤
-                    │   Unit Tests  │  40%
-                    │    (Jest)     │  Pure logic
-                    └───────────────┘
+ ┌───────────────┐
+ │ E2E Tests │ 10%
+ │ (Real device) │ Slow, expensive, essential
+ ├───────────────┤
+ │ Integration │ 20%
+ │ Tests │ Component + context
+ ├───────────────┤
+ │ Component │ 30%
+ │ Tests │ Isolated UI
+ ├───────────────┤
+ │ Unit Tests │ 40%
+ │ (Jest) │ Pure logic
+ └───────────────┘
 ```
 
 ### Why This Distribution?
@@ -107,7 +107,7 @@ WHAT ARE YOU TESTING?
 | **Component 30%** | Fast feedback on UI changes |
 | **Unit 40%** | Fastest, most stable, logic coverage |
 
-> 🔴 **If you have 90% unit tests and 0% E2E, you're testing the wrong things.**
+> **If you have 90% unit tests and 0% E2E, you're testing the wrong things.**
 
 ---
 
@@ -116,14 +116,14 @@ WHAT ARE YOU TESTING?
 ### Unit Tests (Jest)
 
 ```
-✅ TEST:
+ TEST:
 ├── Utility functions (formatDate, calculatePrice)
 ├── State reducers (Redux, Zustand stores)
 ├── API response transformers
 ├── Validation logic
 └── Business rules
 
-❌ DON'T TEST:
+ DON'T TEST:
 ├── Component rendering (use component tests)
 ├── Navigation (use integration tests)
 ├── Native modules (mock them)
@@ -133,14 +133,14 @@ WHAT ARE YOU TESTING?
 ### Component Tests (RNTL / flutter_test)
 
 ```
-✅ TEST:
+ TEST:
 ├── Component renders correctly
 ├── User interactions (tap, type, swipe)
 ├── Loading/error/empty states
 ├── Accessibility labels exist
 └── Props change behavior
 
-❌ DON'T TEST:
+ DON'T TEST:
 ├── Internal implementation details
 ├── Snapshot everything (only key components)
 ├── Styling specifics (brittle)
@@ -150,14 +150,14 @@ WHAT ARE YOU TESTING?
 ### Integration Tests
 
 ```
-✅ TEST:
+ TEST:
 ├── Form submission flows
 ├── Navigation between screens
 ├── State persistence across screens
 ├── API integration (with mocked server)
 └── Context/provider interactions
 
-❌ DON'T TEST:
+ DON'T TEST:
 ├── Every possible path (use unit tests)
 ├── Third-party services (mock them)
 └── Backend logic (backend tests)
@@ -166,7 +166,7 @@ WHAT ARE YOU TESTING?
 ### E2E Tests
 
 ```
-✅ TEST:
+ TEST:
 ├── Critical user journeys (login, purchase, signup)
 ├── Offline → online transitions
 ├── Deep link handling
@@ -174,7 +174,7 @@ WHAT ARE YOU TESTING?
 ├── Permission flows
 └── Payment flows
 
-❌ DON'T TEST:
+ DON'T TEST:
 ├── Every edge case (too slow)
 ├── Visual regression (use snapshot tests)
 ├── Non-critical features
@@ -189,13 +189,13 @@ WHAT ARE YOU TESTING?
 
 | Area | iOS Behavior | Android Behavior | Test Both? |
 |------|--------------|------------------|------------|
-| **Back navigation** | Edge swipe | System back button | ✅ YES |
-| **Permissions** | Ask once, settings | Ask each time, rationale | ✅ YES |
-| **Keyboard** | Different appearance | Different behavior | ✅ YES |
-| **Date picker** | Wheel/modal | Material dialog | ⚠️ If custom UI |
-| **Push format** | APNs payload | FCM payload | ✅ YES |
-| **Deep links** | Universal Links | App Links | ✅ YES |
-| **Gestures** | Some unique | Material gestures | ⚠️ If custom |
+| **Back navigation** | Edge swipe | System back button | YES |
+| **Permissions** | Ask once, settings | Ask each time, rationale | YES |
+| **Keyboard** | Different appearance | Different behavior | YES |
+| **Date picker** | Wheel/modal | Material dialog | If custom UI |
+| **Push format** | APNs payload | FCM payload | YES |
+| **Deep links** | Universal Links | App Links | YES |
+| **Gestures** | Some unique | Material gestures | If custom |
 
 ### Platform Testing Strategy
 
@@ -204,8 +204,8 @@ FOR EACH PLATFORM:
 ├── Run unit tests (same on both)
 ├── Run component tests (same on both)
 ├── Run E2E on REAL DEVICE
-│   ├── iOS: iPhone (not just simulator)
-│   └── Android: Mid-range device (not flagship)
+│ ├── iOS: iPhone (not just simulator)
+│ └── Android: Mid-range device (not flagship)
 └── Test platform-specific features separately
 ```
 
@@ -319,7 +319,7 @@ MANUAL:
 
 ---
 
-## 📝 MOBILE TESTING CHECKLIST
+## MOBILE TESTING CHECKLIST
 
 ### Before PR
 - [ ] Unit tests for new logic
@@ -343,7 +343,7 @@ MANUAL:
 
 ---
 
-## 🎯 Testing Questions to Ask
+## Testing Questions to Ask
 
 Before writing tests, answer:
 

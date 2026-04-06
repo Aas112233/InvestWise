@@ -66,13 +66,13 @@ Combine semantic and keyword search
 
 ## Anti-Patterns
 
-### ❌ Fixed Chunk Size
+### Fixed Chunk Size
 
-### ❌ Embedding Everything
+### Embedding Everything
 
-### ❌ Ignoring Evaluation
+### Ignoring Evaluation
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

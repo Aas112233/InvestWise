@@ -8,19 +8,19 @@
 Who are the API consumers?
 │
 ├── Public API / Multiple platforms
-│   └── REST + OpenAPI (widest compatibility)
+│ └── REST + OpenAPI (widest compatibility)
 │
 ├── Complex data needs / Multiple frontends
-│   └── GraphQL (flexible queries)
+│ └── GraphQL (flexible queries)
 │
 ├── TypeScript frontend + backend (monorepo)
-│   └── tRPC (end-to-end type safety)
+│ └── tRPC (end-to-end type safety)
 │
 ├── Real-time / Event-driven
-│   └── WebSocket + AsyncAPI
+│ └── WebSocket + AsyncAPI
 │
 └── Internal microservices
-    └── gRPC (performance) or REST (simplicity)
+ └── gRPC (performance) or REST (simplicity)
 ```
 
 ## Comparison

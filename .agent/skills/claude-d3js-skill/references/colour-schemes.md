@@ -9,7 +9,7 @@ Comprehensive guide to colour selection in data visualisation with d3.js.
 ```javascript
 d3.schemeCategory10
 // ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-//  '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+// '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 ```
 
 **Characteristics:**
@@ -152,8 +152,8 @@ d3.interpolateViridis
 **Colour-blind accessible:**
 ```javascript
 d3.interpolateTurbo // Rainbow-like but perceptually uniform
-d3.interpolateCool  // Cyan to magenta
-d3.interpolateWarm  // Orange to yellow
+d3.interpolateCool // Cyan to magenta
+d3.interpolateWarm // Orange to yellow
 ```
 
 **Use cases:**
@@ -258,27 +258,27 @@ d3.interpolateSpectral // Full spectrum
 ```javascript
 // Okabe-Ito palette (colour-blind safe)
 const okabePalette = [
-  '#E69F00', // Orange
-  '#56B4E9', // Sky blue
-  '#009E73', // Bluish green
-  '#F0E442', // Yellow
-  '#0072B2', // Blue
-  '#D55E00', // Vermillion
-  '#CC79A7', // Reddish purple
-  '#000000'  // Black
+ '#E69F00', // Orange
+ '#56B4E9', // Sky blue
+ '#009E73', // Bluish green
+ '#F0E442', // Yellow
+ '#0072B2', // Blue
+ '#D55E00', // Vermillion
+ '#CC79A7', // Reddish purple
+ '#000000' // Black
 ];
 
 const colourScale = d3.scaleOrdinal()
-  .domain(categories)
-  .range(okabePalette);
+ .domain(categories)
+ .range(okabePalette);
 ```
 
 **Sequential:**
 ```javascript
 // Use Viridis, Cividis, or Blues
-d3.interpolateViridis  // Best overall
-d3.interpolateCividis  // Optimised for CVD
-d3.interpolateBlues    // Simple, safe
+d3.interpolateViridis // Best overall
+d3.interpolateCividis // Optimised for CVD
+d3.interpolateBlues // Simple, safe
 ```
 
 **Diverging:**
@@ -294,18 +294,18 @@ d3.interpolatePuOr
 
 ```javascript
 const customSequential = d3.scaleLinear()
-  .domain([0, 100])
-  .range(['#e8f4f8', '#006d9c']) // Light to dark blue
-  .interpolate(d3.interpolateLab); // Perceptually uniform
+ .domain([0, 100])
+ .range(['#e8f4f8', '#006d9c']) // Light to dark blue
+ .interpolate(d3.interpolateLab); // Perceptually uniform
 ```
 
 ### Creating custom diverging
 
 ```javascript
 const customDiverging = d3.scaleLinear()
-  .domain([0, 50, 100])
-  .range(['#ca0020', '#f7f7f7', '#0571b0']) // Red, grey, blue
-  .interpolate(d3.interpolateLab);
+ .domain([0, 50, 100])
+ .range(['#ca0020', '#f7f7f7', '#0571b0']) // Red, grey, blue
+ .interpolate(d3.interpolateLab);
 ```
 
 ### Creating custom categorical
@@ -313,16 +313,16 @@ const customDiverging = d3.scaleLinear()
 ```javascript
 // Brand colours
 const brandPalette = [
-  '#FF6B6B', // Primary red
-  '#4ECDC4', // Secondary teal
-  '#45B7D1', // Tertiary blue
-  '#FFA07A', // Accent coral
-  '#98D8C8'  // Accent mint
+ '#FF6B6B', // Primary red
+ '#4ECDC4', // Secondary teal
+ '#45B7D1', // Tertiary blue
+ '#FFA07A', // Accent coral
+ '#98D8C8' // Accent mint
 ];
 
 const colourScale = d3.scaleOrdinal()
-  .domain(categories)
-  .range(brandPalette);
+ .domain(categories)
+ .range(brandPalette);
 ```
 
 ## Semantic colour associations
@@ -359,27 +359,27 @@ const colourScale = d3.scaleOrdinal()
 **Financial:**
 ```javascript
 const financialColours = {
-  profit: '#27ae60',
-  loss: '#e74c3c',
-  neutral: '#95a5a6',
-  highlight: '#3498db'
+ profit: '#27ae60',
+ loss: '#e74c3c',
+ neutral: '#95a5a6',
+ highlight: '#3498db'
 };
 ```
 
 **Temperature:**
 ```javascript
 const temperatureScale = d3.scaleSequential(d3.interpolateRdYlBu)
-  .domain([40, -10]); // Hot to cold (reversed)
+ .domain([40, -10]); // Hot to cold (reversed)
 ```
 
 **Traffic/Status:**
 ```javascript
 const statusColours = {
-  success: '#27ae60',
-  warning: '#f39c12',
-  error: '#e74c3c',
-  info: '#3498db',
-  neutral: '#95a5a6'
+ success: '#27ae60',
+ warning: '#f39c12',
+ error: '#e74c3c',
+ info: '#3498db',
+ neutral: '#95a5a6'
 };
 ```
 
@@ -392,10 +392,10 @@ Ensure sufficient contrast between colours and backgrounds:
 ```javascript
 // Good contrast example
 const highContrast = {
-  background: '#ffffff',
-  text: '#2c3e50',
-  primary: '#3498db',
-  secondary: '#e74c3c'
+ background: '#ffffff',
+ text: '#2c3e50',
+ primary: '#3498db',
+ secondary: '#e74c3c'
 };
 ```
 
@@ -431,18 +431,18 @@ Test visualisations for colour blindness:
 ```javascript
 // Guardian style
 const guardianPalette = [
-  '#005689', // Guardian blue
-  '#c70000', // Guardian red
-  '#7d0068', // Guardian pink
-  '#951c75', // Guardian purple
+ '#005689', // Guardian blue
+ '#c70000', // Guardian red
+ '#7d0068', // Guardian pink
+ '#951c75', // Guardian purple
 ];
 
 // FT style
 const ftPalette = [
-  '#0f5499', // FT blue
-  '#990f3d', // FT red
-  '#593380', // FT purple
-  '#262a33', // FT black
+ '#0f5499', // FT blue
+ '#990f3d', // FT red
+ '#593380', // FT purple
+ '#262a33', // FT black
 ];
 ```
 
@@ -451,10 +451,10 @@ const ftPalette = [
 ```javascript
 // Nature journal style
 const naturePalette = [
-  '#0071b2', // Blue
-  '#d55e00', // Vermillion
-  '#009e73', // Green
-  '#f0e442', // Yellow
+ '#0071b2', // Blue
+ '#d55e00', // Vermillion
+ '#009e73', // Green
+ '#f0e442', // Yellow
 ];
 
 // Use Viridis for continuous data
@@ -466,11 +466,11 @@ const scientificScale = d3.scaleSequential(d3.interpolateViridis);
 ```javascript
 // Professional, conservative
 const corporatePalette = [
-  '#003f5c', // Dark blue
-  '#58508d', // Purple
-  '#bc5090', // Magenta
-  '#ff6361', // Coral
-  '#ffa600'  // Orange
+ '#003f5c', // Dark blue
+ '#58508d', // Purple
+ '#bc5090', // Magenta
+ '#ff6361', // Coral
+ '#ffa600' // Orange
 ];
 ```
 
@@ -480,19 +480,19 @@ const corporatePalette = [
 
 ```javascript
 function selectColourScheme(data) {
-  const extent = d3.extent(data);
-  const hasNegative = extent[0] < 0;
-  const hasPositive = extent[1] > 0;
-  
-  if (hasNegative && hasPositive) {
-    // Diverging: data crosses zero
-    return d3.scaleSequentialSymlog(d3.interpolateRdBu)
-      .domain([extent[0], 0, extent[1]]);
-  } else {
-    // Sequential: all positive or all negative
-    return d3.scaleSequential(d3.interpolateViridis)
-      .domain(extent);
-  }
+ const extent = d3.extent(data);
+ const hasNegative = extent[0] < 0;
+ const hasPositive = extent[1] > 0;
+ 
+ if (hasNegative && hasPositive) {
+ // Diverging: data crosses zero
+ return d3.scaleSequentialSymlog(d3.interpolateRdBu)
+ .domain([extent[0], 0, extent[1]]);
+ } else {
+ // Sequential: all positive or all negative
+ return d3.scaleSequential(d3.interpolateViridis)
+ .domain(extent);
+ }
 }
 ```
 
@@ -500,46 +500,46 @@ function selectColourScheme(data) {
 
 ```javascript
 function selectCategoricalScheme(categories) {
-  const n = categories.length;
-  
-  if (n <= 10) {
-    return d3.scaleOrdinal(d3.schemeTableau10);
-  } else if (n <= 12) {
-    return d3.scaleOrdinal(d3.schemePaired);
-  } else {
-    // For many categories, use sequential with quantize
-    return d3.scaleQuantize()
-      .domain([0, n - 1])
-      .range(d3.quantize(d3.interpolateRainbow, n));
-  }
+ const n = categories.length;
+ 
+ if (n <= 10) {
+ return d3.scaleOrdinal(d3.schemeTableau10);
+ } else if (n <= 12) {
+ return d3.scaleOrdinal(d3.schemePaired);
+ } else {
+ // For many categories, use sequential with quantize
+ return d3.scaleQuantize()
+ .domain([0, n - 1])
+ .range(d3.quantize(d3.interpolateRainbow, n));
+ }
 }
 ```
 
 ## Common colour mistakes to avoid
 
 1. **Rainbow gradients for sequential data**
-   - Problem: Not perceptually uniform, hard to read
-   - Solution: Use Viridis, Blues, or other uniform schemes
+ - Problem: Not perceptually uniform, hard to read
+ - Solution: Use Viridis, Blues, or other uniform schemes
 
 2. **Red-green for diverging (colour blindness)**
-   - Problem: 8% of males can't distinguish
-   - Solution: Use blue-orange or purple-green
+ - Problem: 8% of males can't distinguish
+ - Solution: Use blue-orange or purple-green
 
 3. **Too many categorical colours**
-   - Problem: Hard to distinguish and remember
-   - Solution: Limit to 5-8 categories, use grouping
+ - Problem: Hard to distinguish and remember
+ - Solution: Limit to 5-8 categories, use grouping
 
 4. **Insufficient contrast**
-   - Problem: Poor readability
-   - Solution: Test contrast ratios, use darker colours on light backgrounds
+ - Problem: Poor readability
+ - Solution: Test contrast ratios, use darker colours on light backgrounds
 
 5. **Culturally inconsistent colours**
-   - Problem: Confusing semantic meaning
-   - Solution: Research colour associations for target audience
+ - Problem: Confusing semantic meaning
+ - Solution: Research colour associations for target audience
 
 6. **Inverted temperature scales**
-   - Problem: Counterintuitive (red = cold)
-   - Solution: Red/orange = hot, blue = cold
+ - Problem: Counterintuitive (red = cold)
+ - Solution: Red/orange = hot, blue = cold
 
 ## Quick reference guide
 

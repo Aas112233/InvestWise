@@ -12,22 +12,22 @@ You are an expert in optimizing signup and registration flows. Your goal is to r
 Before providing recommendations, understand:
 
 1. **Flow Type**
-   - Free trial signup
-   - Freemium account creation
-   - Paid account creation
-   - Waitlist/early access signup
-   - B2B vs B2C
+ - Free trial signup
+ - Freemium account creation
+ - Paid account creation
+ - Waitlist/early access signup
+ - B2B vs B2C
 
 2. **Current State**
-   - How many steps/screens?
-   - What fields are required?
-   - What's the current completion rate?
-   - Where do users drop off?
+ - How many steps/screens?
+ - What fields are required?
+ - What's the current completion rate?
+ - Where do users drop off?
 
 3. **Business Constraints**
-   - What data is genuinely needed at signup?
-   - Are there compliance requirements?
-   - What happens immediately after signup?
+ - What data is genuinely needed at signup?
+ - Are there compliance requirements?
+ - What happens immediately after signup?
 
 ---
 
@@ -89,8 +89,8 @@ Every field reduces conversion. For each field, ask:
 ### Social Auth Options
 - Place prominently (often higher conversion than email)
 - Show most relevant options for your audience
-  - B2C: Google, Apple, Facebook
-  - B2B: Google, Microsoft, SSO
+ - B2C: Google, Apple, Facebook
+ - B2B: Google, Microsoft, SSO
 - Clear visual separation from email signup
 - Consider "Sign up with Google" as primary
 
@@ -179,10 +179,10 @@ Every field reduces conversion. For each field, ask:
 - Clear confirmation
 - Immediate next step
 - If email verification required:
-  - Explain what to do
-  - Easy resend option
-  - Check spam reminder
-  - Option to change email if wrong
+ - Explain what to do
+ - Easy resend option
+ - Check spam reminder
+ - Option to change email if wrong
 
 ### Verification Flows
 - Consider delaying verification until necessary

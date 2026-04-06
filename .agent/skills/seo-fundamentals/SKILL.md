@@ -93,7 +93,7 @@ allowed-tools: Read, Glob, Grep
 
 ### What Google Looks For
 
-| ✅ Do | ❌ Don't |
+| Do | Don't |
 |-------|----------|
 | AI draft + human edit | Publish raw AI content |
 | Add original insights | Copy without value |

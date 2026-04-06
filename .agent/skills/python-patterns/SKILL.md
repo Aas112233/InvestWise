@@ -11,7 +11,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 
 ---
 
-## ⚠️ How to Use This Skill
+## How to Use This Skill
 
 This skill teaches **decision-making principles**, not fixed code to copy.
 
@@ -29,19 +29,19 @@ This skill teaches **decision-making principles**, not fixed code to copy.
 What are you building?
 │
 ├── API-first / Microservices
-│   └── FastAPI (async, modern, fast)
+│ └── FastAPI (async, modern, fast)
 │
 ├── Full-stack web / CMS / Admin
-│   └── Django (batteries-included)
+│ └── Django (batteries-included)
 │
 ├── Simple / Script / Learning
-│   └── Flask (minimal, flexible)
+│ └── Flask (minimal, flexible)
 │
 ├── AI/ML API serving
-│   └── FastAPI (Pydantic, async, uvicorn)
+│ └── FastAPI (Pydantic, async, uvicorn)
 │
 └── Background workers
-    └── Celery + any framework
+ └── Celery + any framework
 ```
 
 ### Comparison Principles
@@ -174,23 +174,23 @@ Small project / Script:
 
 Medium API:
 ├── app/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── models/
-│   ├── routes/
-│   ├── services/
-│   └── schemas/
+│ ├── __init__.py
+│ ├── main.py
+│ ├── models/
+│ ├── routes/
+│ ├── services/
+│ └── schemas/
 ├── tests/
 └── pyproject.toml
 
 Large application:
 ├── src/
-│   └── myapp/
-│       ├── core/
-│       ├── api/
-│       ├── services/
-│       ├── models/
-│       └── ...
+│ └── myapp/
+│ ├── core/
+│ ├── api/
+│ ├── services/
+│ ├── models/
+│ └── ...
 ├── tests/
 └── pyproject.toml
 ```
@@ -209,11 +209,11 @@ By layer:
 
 By feature:
 ├── users/
-│   ├── routes.py
-│   ├── service.py
-│   └── schemas.py
+│ ├── routes.py
+│ ├── service.py
+│ └── schemas.py
 └── products/
-    └── ...
+ └── ...
 ```
 
 ---
@@ -299,8 +299,8 @@ Benefits:
 # Request validation
 @app.post("/users")
 async def create(user: UserCreate) -> UserResponse:
-    # user is already validated
-    ...
+ # user is already validated
+ ...
 
 # Response serialization
 # Return type becomes response schema
@@ -388,9 +388,9 @@ from httpx import AsyncClient
 
 @pytest.mark.asyncio
 async def test_endpoint():
-    async with AsyncClient(app=app, base_url="http://test") as client:
-        response = await client.get("/users")
-        assert response.status_code == 200
+ async with AsyncClient(app=app, base_url="http://test") as client:
+ response = await client.get("/users")
+ assert response.status_code == 200
 ```
 
 ### Fixtures Strategy
@@ -421,7 +421,7 @@ Before implementing:
 
 ## 11. Anti-Patterns to Avoid
 
-### ❌ DON'T:
+### DON'T:
 - Default to Django for simple APIs (FastAPI may be better)
 - Use sync libraries in async code
 - Skip type hints for public APIs
@@ -429,7 +429,7 @@ Before implementing:
 - Ignore N+1 queries
 - Mix async and sync carelessly
 
-### ✅ DO:
+### DO:
 - Choose framework based on context
 - Ask about async requirements
 - Use Pydantic for validation

@@ -2,7 +2,7 @@
 name: display-captions
 description: Displaying captions in Remotion with TikTok-style pages and word highlighting
 metadata:
-  tags: captions, subtitles, display, tiktok, highlight
+ tags: captions, subtitles, display, tiktok, highlight
 ---
 
 # Displaying captions in Remotion
@@ -36,10 +36,10 @@ import type {Caption} from '@remotion/captions';
 const SWITCH_CAPTIONS_EVERY_MS = 1200;
 
 const {pages} = useMemo(() => {
-  return createTikTokStyleCaptions({
-    captions,
-    combineTokensWithinMilliseconds: SWITCH_CAPTIONS_EVERY_MS,
-  });
+ return createTikTokStyleCaptions({
+ captions,
+ combineTokensWithinMilliseconds: SWITCH_CAPTIONS_EVERY_MS,
+ });
 }, [captions]);
 ```
 
@@ -52,35 +52,35 @@ import {Sequence, useVideoConfig, AbsoluteFill} from 'remotion';
 import type {TikTokPage} from '@remotion/captions';
 
 const CaptionedContent: React.FC = () => {
-  const {fps} = useVideoConfig();
+ const {fps} = useVideoConfig();
 
-  return (
-    <AbsoluteFill>
-      {pages.map((page, index) => {
-        const nextPage = pages[index + 1] ?? null;
-        const startFrame = (page.startMs / 1000) * fps;
-        const endFrame = Math.min(
-          nextPage ? (nextPage.startMs / 1000) * fps : Infinity,
-          startFrame + (SWITCH_CAPTIONS_EVERY_MS / 1000) * fps,
-        );
-        const durationInFrames = endFrame - startFrame;
+ return (
+ <AbsoluteFill>
+ {pages.map((page, index) => {
+ const nextPage = pages[index + 1] ?? null;
+ const startFrame = (page.startMs / 1000) * fps;
+ const endFrame = Math.min(
+ nextPage ? (nextPage.startMs / 1000) * fps : Infinity,
+ startFrame + (SWITCH_CAPTIONS_EVERY_MS / 1000) * fps,
+ );
+ const durationInFrames = endFrame - startFrame;
 
-        if (durationInFrames <= 0) {
-          return null;
-        }
+ if (durationInFrames <= 0) {
+ return null;
+ }
 
-        return (
-          <Sequence
-            key={index}
-            from={startFrame}
-            durationInFrames={durationInFrames}
-          >
-            <CaptionPage page={page} />
-          </Sequence>
-        );
-      })}
-    </AbsoluteFill>
-  );
+ return (
+ <Sequence
+ key={index}
+ from={startFrame}
+ durationInFrames={durationInFrames}
+ >
+ <CaptionPage page={page} />
+ </Sequence>
+ );
+ })}
+ </AbsoluteFill>
+ );
 };
 ```
 
@@ -95,32 +95,32 @@ import type {TikTokPage} from '@remotion/captions';
 const HIGHLIGHT_COLOR = '#39E508';
 
 const CaptionPage: React.FC<{page: TikTokPage}> = ({page}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
+ const frame = useCurrentFrame();
+ const {fps} = useVideoConfig();
 
-  // Current time relative to the start of the sequence
-  const currentTimeMs = (frame / fps) * 1000;
-  // Convert to absolute time by adding the page start
-  const absoluteTimeMs = page.startMs + currentTimeMs;
+ // Current time relative to the start of the sequence
+ const currentTimeMs = (frame / fps) * 1000;
+ // Convert to absolute time by adding the page start
+ const absoluteTimeMs = page.startMs + currentTimeMs;
 
-  return (
-    <AbsoluteFill style={{justifyContent: 'center', alignItems: 'center'}}>
-      <div style={{fontSize: 80, fontWeight: 'bold', whiteSpace: 'pre'}}>
-        {page.tokens.map((token) => {
-          const isActive =
-            token.fromMs <= absoluteTimeMs && token.toMs > absoluteTimeMs;
+ return (
+ <AbsoluteFill style={{justifyContent: 'center', alignItems: 'center'}}>
+ <div style={{fontSize: 80, fontWeight: 'bold', whiteSpace: 'pre'}}>
+ {page.tokens.map((token) => {
+ const isActive =
+ token.fromMs <= absoluteTimeMs && token.toMs > absoluteTimeMs;
 
-          return (
-            <span
-              key={token.fromMs}
-              style={{color: isActive ? HIGHLIGHT_COLOR : 'white'}}
-            >
-              {token.text}
-            </span>
-          );
-        })}
-      </div>
-    </AbsoluteFill>
-  );
+ return (
+ <span
+ key={token.fromMs}
+ style={{color: isActive ? HIGHLIGHT_COLOR : 'white'}}
+ >
+ {token.text}
+ </span>
+ );
+ })}
+ </div>
+ </AbsoluteFill>
+ );
 };
 ```

@@ -9,13 +9,13 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 > API design principles and decision-making for 2025.
 > **Learn to THINK, not copy fixed patterns.**
 
-## 🎯 Selective Reading Rule
+## Selective Reading Rule
 
 **Read ONLY files relevant to the request!** Check the content map, find what you need.
 
 ---
 
-## 📑 Content Map
+## Content Map
 
 | File | Description | When to Read |
 |------|-------------|--------------|
@@ -32,7 +32,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 
 ---
 
-## 🔗 Related Skills
+## Related Skills
 
 | Need | Skill |
 |------|-------|
@@ -42,7 +42,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 
 ---
 
-## ✅ Decision Checklist
+## Decision Checklist
 
 Before designing an API:
 
@@ -56,7 +56,7 @@ Before designing an API:
 
 ---
 
-## ❌ Anti-Patterns
+## Anti-Patterns
 
 **DON'T:**
 - Default to REST for everything

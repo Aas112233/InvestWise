@@ -45,13 +45,13 @@ Optimize build for faster deployments and smaller bundles
 
 ## Anti-Patterns
 
-### ❌ Secrets in NEXT_PUBLIC_
+### Secrets in NEXT_PUBLIC_
 
-### ❌ Same Database for Preview
+### Same Database for Preview
 
-### ❌ No Build Cache
+### No Build Cache
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

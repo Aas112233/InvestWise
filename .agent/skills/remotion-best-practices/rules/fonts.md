@@ -2,7 +2,7 @@
 name: fonts
 description: Loading Google Fonts and local fonts in Remotion
 metadata:
-  tags: fonts, google-fonts, typography, text
+ tags: fonts, google-fonts, typography, text
 ---
 
 # Using fonts in Remotion
@@ -29,7 +29,7 @@ import { loadFont } from "@remotion/google-fonts/Lobster";
 const { fontFamily } = loadFont();
 
 export const MyComposition = () => {
-  return <div style={{ fontFamily }}>Hello World</div>;
+ return <div style={{ fontFamily }}>Hello World</div>;
 };
 ```
 
@@ -39,8 +39,8 @@ Preferrably, specify only needed weights and subsets to reduce file size:
 import { loadFont } from "@remotion/google-fonts/Roboto";
 
 const { fontFamily } = loadFont("normal", {
-  weights: ["400", "700"],
-  subsets: ["latin"],
+ weights: ["400", "700"],
+ subsets: ["latin"],
 });
 ```
 
@@ -80,12 +80,12 @@ import { loadFont } from "@remotion/fonts";
 import { staticFile } from "remotion";
 
 await loadFont({
-  family: "MyFont",
-  url: staticFile("MyFont-Regular.woff2"),
+ family: "MyFont",
+ url: staticFile("MyFont-Regular.woff2"),
 });
 
 export const MyComposition = () => {
-  return <div style={{ fontFamily: "MyFont" }}>Hello World</div>;
+ return <div style={{ fontFamily: "MyFont" }}>Hello World</div>;
 };
 ```
 
@@ -98,16 +98,16 @@ import { loadFont } from "@remotion/fonts";
 import { staticFile } from "remotion";
 
 await Promise.all([
-  loadFont({
-    family: "Inter",
-    url: staticFile("Inter-Regular.woff2"),
-    weight: "400",
-  }),
-  loadFont({
-    family: "Inter",
-    url: staticFile("Inter-Bold.woff2"),
-    weight: "700",
-  }),
+ loadFont({
+ family: "Inter",
+ url: staticFile("Inter-Regular.woff2"),
+ weight: "400",
+ }),
+ loadFont({
+ family: "Inter",
+ url: staticFile("Inter-Bold.woff2"),
+ weight: "700",
+ }),
 ]);
 ```
 
@@ -115,12 +115,12 @@ await Promise.all([
 
 ```tsx
 loadFont({
-  family: "MyFont", // Required: name to use in CSS
-  url: staticFile("font.woff2"), // Required: font file URL
-  format: "woff2", // Optional: auto-detected from extension
-  weight: "400", // Optional: font weight
-  style: "normal", // Optional: normal or italic
-  display: "block", // Optional: font-display behavior
+ family: "MyFont", // Required: name to use in CSS
+ url: staticFile("font.woff2"), // Required: font file URL
+ format: "woff2", // Optional: auto-detected from extension
+ weight: "400", // Optional: font weight
+ style: "normal", // Optional: normal or italic
+ display: "block", // Optional: font-display behavior
 });
 ```
 
@@ -132,21 +132,21 @@ Call `loadFont()` at the top level of your component or in a separate file that'
 import { loadFont } from "@remotion/google-fonts/Montserrat";
 
 const { fontFamily } = loadFont("normal", {
-  weights: ["400", "700"],
-  subsets: ["latin"],
+ weights: ["400", "700"],
+ subsets: ["latin"],
 });
 
 export const Title: React.FC<{ text: string }> = ({ text }) => {
-  return (
-    <h1
-      style={{
-        fontFamily,
-        fontSize: 80,
-        fontWeight: "bold",
-      }}
-    >
-      {text}
-    </h1>
-  );
+ return (
+ <h1
+ style={{
+ fontFamily,
+ fontSize: 80,
+ fontWeight: "bold",
+ }}
+ >
+ {text}
+ </h1>
+ );
 };
 ```

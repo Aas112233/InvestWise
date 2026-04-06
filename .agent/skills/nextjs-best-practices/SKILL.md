@@ -18,13 +18,13 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 Does it need...?
 │
 ├── useState, useEffect, event handlers
-│   └── Client Component ('use client')
+│ └── Client Component ('use client')
 │
 ├── Direct data fetching, no interactivity
-│   └── Server Component (default)
+│ └── Server Component (default)
 │
 └── Both? 
-    └── Split: Server parent + Client child
+ └── Split: Server parent + Client child
 ```
 
 ### By Default
@@ -172,7 +172,7 @@ Does it need...?
 
 ## 9. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | 'use client' everywhere | Server by default |
 | Fetch in client components | Fetch in server |
@@ -186,16 +186,16 @@ Does it need...?
 
 ```
 app/
-├── (marketing)/     # Route group
-│   └── page.tsx
+├── (marketing)/ # Route group
+│ └── page.tsx
 ├── (dashboard)/
-│   ├── layout.tsx   # Dashboard layout
-│   └── page.tsx
+│ ├── layout.tsx # Dashboard layout
+│ └── page.tsx
 ├── api/
-│   └── [resource]/
-│       └── route.ts
+│ └── [resource]/
+│ └── route.ts
 └── components/
-    └── ui/
+ └── ui/
 ```
 
 ---

@@ -1,10 +1,10 @@
 ---
 name: shopify-development
 description: |
-  Build Shopify apps, extensions, themes using GraphQL Admin API, Shopify CLI, Polaris UI, and Liquid.
-  TRIGGER: "shopify", "shopify app", "checkout extension", "admin extension", "POS extension",
-  "shopify theme", "liquid template", "polaris", "shopify graphql", "shopify webhook",
-  "shopify billing", "app subscription", "metafields", "shopify functions"
+ Build Shopify apps, extensions, themes using GraphQL Admin API, Shopify CLI, Polaris UI, and Liquid.
+ TRIGGER: "shopify", "shopify app", "checkout extension", "admin extension", "POS extension",
+ "shopify theme", "liquid template", "polaris", "shopify graphql", "shopify webhook",
+ "shopify billing", "app subscription", "metafields", "shopify functions"
 ---
 
 # Shopify Development Skill
@@ -47,9 +47,9 @@ npm install -g @shopify/cli@latest
 Create and run app:
 
 ```bash
-shopify app init          # Create new app
-shopify app dev           # Start dev server with tunnel
-shopify app deploy        # Build and upload to Shopify
+shopify app init # Create new app
+shopify app dev # Start dev server with tunnel
+shopify app deploy # Build and upload to Shopify
 ```
 
 Generate extension:
@@ -65,10 +65,10 @@ shopify app generate extension --type function
 Theme development:
 
 ```bash
-shopify theme init        # Create new theme
-shopify theme dev         # Start local preview at localhost:9292
+shopify theme init # Create new theme
+shopify theme dev # Start local preview at localhost:9292
 shopify theme pull --live # Pull live theme
-shopify theme push --development  # Push to dev theme
+shopify theme push --development # Push to dev theme
 ```
 
 ---
@@ -98,29 +98,29 @@ Common scopes:
 
 ```graphql
 query GetProducts($first: Int!, $query: String) {
-  products(first: $first, query: $query) {
-    edges {
-      node {
-        id
-        title
-        handle
-        status
-        variants(first: 5) {
-          edges {
-            node {
-              id
-              price
-              inventoryQuantity
-            }
-          }
-        }
-      }
-    }
-    pageInfo {
-      hasNextPage
-      endCursor
-    }
-  }
+ products(first: $first, query: $query) {
+ edges {
+ node {
+ id
+ title
+ handle
+ status
+ variants(first: 5) {
+ edges {
+ node {
+ id
+ price
+ inventoryQuantity
+ }
+ }
+ }
+ }
+ }
+ pageInfo {
+ hasNextPage
+ endCursor
+ }
+ }
 }
 ```
 
@@ -128,22 +128,22 @@ query GetProducts($first: Int!, $query: String) {
 
 ```graphql
 query GetOrders($first: Int!) {
-  orders(first: $first) {
-    edges {
-      node {
-        id
-        name
-        createdAt
-        displayFinancialStatus
-        totalPriceSet {
-          shopMoney {
-            amount
-            currencyCode
-          }
-        }
-      }
-    }
-  }
+ orders(first: $first) {
+ edges {
+ node {
+ id
+ name
+ createdAt
+ displayFinancialStatus
+ totalPriceSet {
+ shopMoney {
+ amount
+ currencyCode
+ }
+ }
+ }
+ }
+ }
 }
 ```
 
@@ -151,18 +151,18 @@ query GetOrders($first: Int!) {
 
 ```graphql
 mutation SetMetafields($metafields: [MetafieldsSetInput!]!) {
-  metafieldsSet(metafields: $metafields) {
-    metafields {
-      id
-      namespace
-      key
-      value
-    }
-    userErrors {
-      field
-      message
-    }
-  }
+ metafieldsSet(metafields: $metafields) {
+ metafields {
+ id
+ namespace
+ key
+ value
+ }
+ userErrors {
+ field
+ message
+ }
+ }
 }
 ```
 
@@ -170,15 +170,15 @@ Variables example:
 
 ```json
 {
-  "metafields": [
-    {
-      "ownerId": "gid://shopify/Product/123",
-      "namespace": "custom",
-      "key": "care_instructions",
-      "value": "Handle with care",
-      "type": "single_line_text_field"
-    }
-  ]
+ "metafields": [
+ {
+ "ownerId": "gid://shopify/Product/123",
+ "namespace": "custom",
+ "key": "care_instructions",
+ "value": "Handle with care",
+ "type": "single_line_text_field"
+ }
+ ]
 }
 ```
 
@@ -188,47 +188,47 @@ Variables example:
 
 ```tsx
 import {
-  reactExtension,
-  BlockStack,
-  TextField,
-  Checkbox,
-  useApplyAttributeChange,
+ reactExtension,
+ BlockStack,
+ TextField,
+ Checkbox,
+ useApplyAttributeChange,
 } from "@shopify/ui-extensions-react/checkout";
 
 export default reactExtension("purchase.checkout.block.render", () => (
-  <GiftMessage />
+ <GiftMessage />
 ));
 
 function GiftMessage() {
-  const [isGift, setIsGift] = useState(false);
-  const [message, setMessage] = useState("");
-  const applyAttributeChange = useApplyAttributeChange();
+ const [isGift, setIsGift] = useState(false);
+ const [message, setMessage] = useState("");
+ const applyAttributeChange = useApplyAttributeChange();
 
-  useEffect(() => {
-    if (isGift && message) {
-      applyAttributeChange({
-        type: "updateAttribute",
-        key: "gift_message",
-        value: message,
-      });
-    }
-  }, [isGift, message]);
+ useEffect(() => {
+ if (isGift && message) {
+ applyAttributeChange({
+ type: "updateAttribute",
+ key: "gift_message",
+ value: message,
+ });
+ }
+ }, [isGift, message]);
 
-  return (
-    <BlockStack spacing="loose">
-      <Checkbox checked={isGift} onChange={setIsGift}>
-        This is a gift
-      </Checkbox>
-      {isGift && (
-        <TextField
-          label="Gift Message"
-          value={message}
-          onChange={setMessage}
-          multiline={3}
-        />
-      )}
-    </BlockStack>
-  );
+ return (
+ <BlockStack spacing="loose">
+ <Checkbox checked={isGift} onChange={setIsGift}>
+ This is a gift
+ </Checkbox>
+ {isGift && (
+ <TextField
+ label="Gift Message"
+ value={message}
+ onChange={setMessage}
+ multiline={3}
+ />
+ )}
+ </BlockStack>
+ );
 }
 ```
 
@@ -239,20 +239,20 @@ function GiftMessage() {
 ```liquid
 {% comment %} Product Card Snippet {% endcomment %}
 <div class="product-card">
-  <a href="{{ product.url }}">
-    {% if product.featured_image %}
-      <img
-        src="{{ product.featured_image | img_url: 'medium' }}"
-        alt="{{ product.title | escape }}"
-        loading="lazy"
-      >
-    {% endif %}
-    <h3>{{ product.title }}</h3>
-    <p class="price">{{ product.price | money }}</p>
-    {% if product.compare_at_price > product.price %}
-      <p class="sale-badge">Sale</p>
-    {% endif %}
-  </a>
+ <a href="{{ product.url }}">
+ {% if product.featured_image %}
+ <img
+ src="{{ product.featured_image | img_url: 'medium' }}"
+ alt="{{ product.title | escape }}"
+ loading="lazy"
+ >
+ {% endif %}
+ <h3>{{ product.title }}</h3>
+ <p class="price">{{ product.price | money }}</p>
+ {% if product.compare_at_price > product.price %}
+ <p class="sale-badge">Sale</p>
+ {% endif %}
+ </a>
 </div>
 ```
 

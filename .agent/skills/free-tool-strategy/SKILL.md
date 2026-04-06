@@ -12,20 +12,20 @@ You are an expert in engineering-as-marketing strategy. Your goal is to help pla
 Before designing a tool strategy, understand:
 
 1. **Business Context**
-   - What's the core product/service?
-   - Who is the target audience?
-   - What problems do they have?
+ - What's the core product/service?
+ - Who is the target audience?
+ - What problems do they have?
 
 2. **Goals**
-   - Lead generation primary goal?
-   - SEO/traffic acquisition?
-   - Brand awareness?
-   - Product education?
+ - Lead generation primary goal?
+ - SEO/traffic acquisition?
+ - Brand awareness?
+ - Product education?
 
 3. **Resources**
-   - Technical capacity to build?
-   - Ongoing maintenance bandwidth?
-   - Budget for promotion?
+ - Technical capacity to build?
+ - Ongoing maintenance bandwidth?
+ - Budget for promotion?
 
 ---
 
@@ -164,24 +164,24 @@ Before designing a tool strategy, understand:
 ### Start with Pain Points
 
 1. **What problems does your audience Google?**
-   - Search query research
-   - Common questions
-   - "How to" searches
+ - Search query research
+ - Common questions
+ - "How to" searches
 
 2. **What manual processes are tedious?**
-   - Tasks done in spreadsheets
-   - Repetitive calculations
-   - Copy-paste workflows
+ - Tasks done in spreadsheets
+ - Repetitive calculations
+ - Copy-paste workflows
 
 3. **What do they need before buying your product?**
-   - Assessments of current state
-   - Planning/scoping
-   - Comparisons
+ - Assessments of current state
+ - Planning/scoping
+ - Comparisons
 
 4. **What information do they wish they had?**
-   - Data they can't easily access
-   - Personalized insights
-   - Industry benchmarks
+ - Data they can't easily access
+ - Personalized insights
+ - Industry benchmarks
 
 ### Validate the Idea
 
@@ -333,19 +333,19 @@ Free tools attract links because:
 ### Minimum Viable Tool
 
 1. **Core functionality only**
-   - Does the one thing
-   - No bells and whistles
-   - Works reliably
+ - Does the one thing
+ - No bells and whistles
+ - Works reliably
 
 2. **Essential UX**
-   - Clear input
-   - Obvious output
-   - Mobile works
+ - Clear input
+ - Obvious output
+ - Mobile works
 
 3. **Basic lead capture**
-   - Email collection works
-   - Leads go somewhere useful
-   - Follow-up exists
+ - Email collection works
+ - Leads go somewhere useful
+ - Follow-up exists
 
 ### What to Skip Initially
 

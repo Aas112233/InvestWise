@@ -2,8 +2,8 @@
 name: Red Team Tools and Methodology
 description: This skill should be used when the user asks to "follow red team methodology", "perform bug bounty hunting", "automate reconnaissance", "hunt for XSS vulnerabilities", "enumerate subdomains", or needs security researcher techniques and tool configurations from top bug bounty hunters.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Red Team Tools and Methodology
@@ -163,7 +163,7 @@ cat params.txt | dalfox pipe --mining-dict params.txt -o xss_results.txt
 
 # Alternative workflow
 waybackurls target.com | grep "=" | qsreplace '"><script>alert(1)</script>' | while read url; do
-    curl -s "$url" | grep -q 'alert(1)' && echo "$url"
+ curl -s "$url" | grep -q 'alert(1)' && echo "$url"
 done > potential_xss.txt
 ```
 
@@ -194,7 +194,7 @@ ffuf -u https://target.com/api/v2/FUZZ -w api_wordlist.txt
 
 # Check for hidden methods
 for method in GET POST PUT DELETE PATCH; do
-    curl -X $method https://target.com/api/users -v
+ curl -X $method https://target.com/api/users -v
 done
 ```
 
@@ -205,8 +205,8 @@ done
 domain=$1
 
 if [[ -z $domain ]]; then
-    echo "Usage: ./recon.sh <domain>"
-    exit 1
+ echo "Usage: ./recon.sh <domain>"
+ exit 1
 fi
 
 mkdir -p "$domain"

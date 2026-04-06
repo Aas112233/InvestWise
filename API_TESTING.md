@@ -9,8 +9,8 @@
 ### Login
 ```bash
 curl -X POST http://localhost:5000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@investwise.com","password":"admin123"}'
+ -H "Content-Type: application/json" \
+ -d '{"email":"admin@investwise.com","password":"admin123"}'
 ```
 
 Save the `token` from response for subsequent requests.
@@ -20,43 +20,43 @@ Save the `token` from response for subsequent requests.
 ### CREATE Member
 ```bash
 curl -X POST http://localhost:5000/api/members \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "name": "John Doe",
-    "email": "john@example.com",
-    "phone": "1234567890",
-    "role": "Investor"
-  }'
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer YOUR_TOKEN" \
+ -d '{
+ "name": "John Doe",
+ "email": "john@example.com",
+ "phone": "1234567890",
+ "role": "Investor"
+ }'
 ```
 
 ### READ All Members
 ```bash
 curl -X GET http://localhost:5000/api/members \
-  -H "Authorization: Bearer YOUR_TOKEN"
+ -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### READ Single Member
 ```bash
 curl -X GET http://localhost:5000/api/members/MEMBER_ID \
-  -H "Authorization: Bearer YOUR_TOKEN"
+ -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### UPDATE Member
 ```bash
 curl -X PUT http://localhost:5000/api/members/MEMBER_ID \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "name": "John Updated",
-    "phone": "9876543210"
-  }'
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer YOUR_TOKEN" \
+ -d '{
+ "name": "John Updated",
+ "phone": "9876543210"
+ }'
 ```
 
 ### DELETE Member (Admin only)
 ```bash
 curl -X DELETE http://localhost:5000/api/members/MEMBER_ID \
-  -H "Authorization: Bearer YOUR_TOKEN"
+ -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ## 3. Projects CRUD
@@ -64,50 +64,50 @@ curl -X DELETE http://localhost:5000/api/members/MEMBER_ID \
 ### CREATE Project
 ```bash
 curl -X POST http://localhost:5000/api/projects \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "title": "New Investment Project",
-    "category": "Real Estate",
-    "description": "Property investment",
-    "initialInvestment": 100000,
-    "totalShares": 100
-  }'
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer YOUR_TOKEN" \
+ -d '{
+ "title": "New Investment Project",
+ "category": "Real Estate",
+ "description": "Property investment",
+ "initialInvestment": 100000,
+ "totalShares": 100
+ }'
 ```
 
 ### READ All Projects
 ```bash
 curl -X GET http://localhost:5000/api/projects \
-  -H "Authorization: Bearer YOUR_TOKEN"
+ -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### UPDATE Project
 ```bash
 curl -X PUT http://localhost:5000/api/projects/PROJECT_ID \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "status": "In Progress",
-    "currentFundBalance": 50000
-  }'
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer YOUR_TOKEN" \
+ -d '{
+ "status": "In Progress",
+ "currentFundBalance": 50000
+ }'
 ```
 
 ### DELETE Project (Admin only)
 ```bash
 curl -X DELETE http://localhost:5000/api/projects/PROJECT_ID \
-  -H "Authorization: Bearer YOUR_TOKEN"
+ -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### ADD Project Update
 ```bash
 curl -X POST http://localhost:5000/api/projects/PROJECT_ID/updates \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "type": "Earning",
-    "amount": 5000,
-    "description": "Monthly profit"
-  }'
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer YOUR_TOKEN" \
+ -d '{
+ "type": "Earning",
+ "amount": 5000,
+ "description": "Monthly profit"
+ }'
 ```
 
 ## 4. Funds CRUD
@@ -115,31 +115,31 @@ curl -X POST http://localhost:5000/api/projects/PROJECT_ID/updates \
 ### CREATE Fund (Admin only)
 ```bash
 curl -X POST http://localhost:5000/api/funds \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "name": "Investment Fund A",
-    "type": "Primary",
-    "balance": 50000,
-    "description": "Main investment fund"
-  }'
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer YOUR_TOKEN" \
+ -d '{
+ "name": "Investment Fund A",
+ "type": "Primary",
+ "balance": 50000,
+ "description": "Main investment fund"
+ }'
 ```
 
 ### READ All Funds
 ```bash
 curl -X GET http://localhost:5000/api/funds \
-  -H "Authorization: Bearer YOUR_TOKEN"
+ -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### UPDATE Fund (Admin only)
 ```bash
 curl -X PUT http://localhost:5000/api/funds/FUND_ID \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "balance": 75000,
-    "description": "Updated fund"
-  }'
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer YOUR_TOKEN" \
+ -d '{
+ "balance": 75000,
+ "description": "Updated fund"
+ }'
 ```
 
 ## 5. Finance Operations
@@ -147,46 +147,46 @@ curl -X PUT http://localhost:5000/api/funds/FUND_ID \
 ### ADD Deposit
 ```bash
 curl -X POST http://localhost:5000/api/finance/deposits \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "memberId": "MEMBER_ID",
-    "amount": 10000,
-    "fundId": "FUND_ID",
-    "description": "Monthly contribution"
-  }'
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer YOUR_TOKEN" \
+ -d '{
+ "memberId": "MEMBER_ID",
+ "amount": 10000,
+ "fundId": "FUND_ID",
+ "description": "Monthly contribution"
+ }'
 ```
 
 ### ADD Expense (Admin only)
 ```bash
 curl -X POST http://localhost:5000/api/finance/expenses \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "amount": 5000,
-    "fundId": "FUND_ID",
-    "description": "Office rent",
-    "category": "Operational"
-  }'
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer YOUR_TOKEN" \
+ -d '{
+ "amount": 5000,
+ "fundId": "FUND_ID",
+ "description": "Office rent",
+ "category": "Operational"
+ }'
 ```
 
 ### GET All Transactions
 ```bash
 curl -X GET http://localhost:5000/api/finance/transactions \
-  -H "Authorization: Bearer YOUR_TOKEN"
+ -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### TRANSFER Funds (Admin only)
 ```bash
 curl -X POST http://localhost:5000/api/finance/transfer \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "sourceFundId": "SOURCE_FUND_ID",
-    "targetFundId": "TARGET_FUND_ID",
-    "amount": 20000,
-    "description": "Fund reallocation"
-  }'
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer YOUR_TOKEN" \
+ -d '{
+ "sourceFundId": "SOURCE_FUND_ID",
+ "targetFundId": "TARGET_FUND_ID",
+ "amount": 20000,
+ "description": "Fund reallocation"
+ }'
 ```
 
 ## 6. Health Check
@@ -200,35 +200,35 @@ curl http://localhost:5000/api/health
 ### Success (200/201)
 ```json
 {
-  "_id": "...",
-  "name": "...",
-  ...
+ "_id": "...",
+ "name": "...",
+ ...
 }
 ```
 
 ### Validation Error (400)
 ```json
 {
-  "errors": [
-    {
-      "msg": "Valid email required",
-      "param": "email"
-    }
-  ]
+ "errors": [
+ {
+ "msg": "Valid email required",
+ "param": "email"
+ }
+ ]
 }
 ```
 
 ### Unauthorized (401)
 ```json
 {
-  "message": "Not authorized, no token"
+ "message": "Not authorized, no token"
 }
 ```
 
 ### Not Found (404)
 ```json
 {
-  "message": "Resource not found"
+ "message": "Resource not found"
 }
 ```
 

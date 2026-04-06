@@ -1,19 +1,19 @@
 import express from 'express';
 const router = express.Router();
 import {
-    getTransactions,
-    addDeposit,
-    addExpense,
-    addEarning,
-    transferFunds,
-    deleteTransaction,
-    approveDeposit,
-    distributeDividends,
-    transferEquity,
-    editDeposit,
-    editExpense,
-    reconcileFund,
-    bulkAddDeposits
+ getTransactions,
+ addDeposit,
+ addExpense,
+ addEarning,
+ transferFunds,
+ deleteTransaction,
+ approveDeposit,
+ distributeDividends,
+ transferEquity,
+ editDeposit,
+ editExpense,
+ reconcileFund,
+ bulkAddDeposits
 } from '../controllers/financeController.js';
 import { protect, requirePermission } from '../middleware/authMiddleware.js';
 import { transactionValidation } from '../middleware/businessValidator.js';

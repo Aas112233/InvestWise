@@ -100,7 +100,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 
 ```bash
 #!/bin/bash
-set -euo pipefail  # Exit on error, undefined var, pipe fail
+set -euo pipefail # Exit on error, undefined var, pipe fail
 
 # Colors (optional)
 RED='\033[0;31m'
@@ -116,9 +116,9 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 
 # Main
 main() {
-    log_info "Starting..."
-    # Your logic here
-    log_info "Done!"
+ log_info "Starting..."
+ # Your logic here
+ log_info "Done!"
 }
 
 main "$@"
@@ -132,7 +132,7 @@ main "$@"
 
 ```bash
 if command -v node &> /dev/null; then
-    echo "Node is installed"
+ echo "Node is installed"
 fi
 ```
 
@@ -146,7 +146,7 @@ NAME=${1:-"default_value"}
 
 ```bash
 while IFS= read -r line; do
-    echo "$line"
+ echo "$line"
 done < file.txt
 ```
 
@@ -154,7 +154,7 @@ done < file.txt
 
 ```bash
 for file in *.js; do
-    echo "Processing $file"
+ echo "Processing $file"
 done
 ```
 
@@ -178,18 +178,18 @@ done
 ### Set options
 
 ```bash
-set -e          # Exit on error
-set -u          # Exit on undefined variable
+set -e # Exit on error
+set -u # Exit on undefined variable
 set -o pipefail # Exit on pipe failure
-set -x          # Debug: print commands
+set -x # Debug: print commands
 ```
 
 ### Trap for cleanup
 
 ```bash
 cleanup() {
-    echo "Cleaning up..."
-    rm -f /tmp/tempfile
+ echo "Cleaning up..."
+ rm -f /tmp/tempfile
 }
 trap cleanup EXIT
 ```

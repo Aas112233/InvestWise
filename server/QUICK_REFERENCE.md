@@ -1,6 +1,6 @@
-# 🎯 Quick Reference - InvestWise Enhancements
+# Quick Reference - InvestWise Enhancements
 
-## 📦 Installation
+## Installation
 
 ```bash
 # Run automated setup
@@ -11,7 +11,7 @@ npm install
 cd server && npm install
 ```
 
-## 🔧 Configuration
+## Configuration
 
 **Frontend (.env.local):**
 ```env
@@ -27,7 +27,7 @@ PORT=5000
 NODE_ENV=development
 ```
 
-## 🚀 Running
+## Running
 
 ```bash
 # Backend (Terminal 1)
@@ -37,7 +37,7 @@ cd server && npm run dev
 npm run dev
 ```
 
-## 🔍 Testing Enhancements
+## Testing Enhancements
 
 ### Health Check
 ```bash
@@ -56,12 +56,12 @@ for i in {1..6}; do curl -X POST http://localhost:5000/api/auth/login -H "Conten
 curl -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/json" -d '{"email":"invalid","password":"123"}'
 ```
 
-## 📊 New Endpoints
+## New Endpoints
 
 - `GET /api/health` - System health status
 - `GET /api/ping` - Simple availability check
 
-## 🛡️ Security Middleware Applied
+## Security Middleware Applied
 
 1. **helmet** - Security headers
 2. **express-rate-limit** - Rate limiting
@@ -69,25 +69,25 @@ curl -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/
 4. **compression** - Response compression
 5. **morgan** - Request logging
 
-## 📁 New Files
+## New Files
 
 ```
 server/middleware/
-├── errorHandler.js    # Global error handling
-├── validator.js       # Input validation
-├── rateLimiter.js     # Rate limiting
-└── logger.js          # Request logging
+├── errorHandler.js # Global error handling
+├── validator.js # Input validation
+├── rateLimiter.js # Rate limiting
+└── logger.js # Request logging
 
 server/routes/
-└── healthRoutes.js    # Health monitoring
+└── healthRoutes.js # Health monitoring
 
 server/utils/
-└── cache.js           # Caching system
+└── cache.js # Caching system
 
-server/logs/           # Log files
+server/logs/ # Log files
 ```
 
-## 🔑 Key Features
+## Key Features
 
 ### Rate Limits
 - Auth routes: 5 requests / 15 min
@@ -107,7 +107,7 @@ server/logs/           # Log files
 - Dev: Console (colored)
 - Prod: File (access.log)
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 **Port already in use:**
 ```bash
@@ -124,24 +124,24 @@ taskkill /PID <PID> /F
 - Wait 15 minutes
 - Or restart server (dev only)
 
-## 📈 Performance Gains
+## Performance Gains
 
 - **Compression:** ~70% bandwidth reduction
 - **Caching:** Reduced DB queries
 - **Timeouts:** Prevents hanging requests
 - **Validation:** Early request rejection
 
-## 🔐 Security Checklist
+## Security Checklist
 
-- ✅ Environment variables secured
-- ✅ Rate limiting enabled
-- ✅ Input validation active
-- ✅ Security headers set
-- ✅ Error messages sanitized
-- ✅ JWT expiration configured
-- ✅ Password hashing enabled
+- Environment variables secured
+- Rate limiting enabled
+- Input validation active
+- Security headers set
+- Error messages sanitized
+- JWT expiration configured
+- Password hashing enabled
 
-## 📞 Support
+## Support
 
 Check logs: `server/logs/access.log`
 Health status: http://localhost:5000/api/health

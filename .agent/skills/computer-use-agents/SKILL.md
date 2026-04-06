@@ -34,54 +34,54 @@ import pyautogui
 import time
 
 class ComputerUseAgent:
-    """
-    Perception-Reasoning-Action loop implementation.
-    Based on Anthropic Computer Use patterns.
-    """
+ """
+ Perception-Reasoning-Action loop implementation.
+ Based on Anthropic Computer Use patterns.
+ """
 
-    def __init__(self, client: Anthropic, model: str = "claude-sonnet-4-20250514"):
-        self.client = client
-        self.model = model
-        self.max_steps = 50  # Prevent runaway loops
-        self.action_delay = 0.5  # Seconds between actions
+ def __init__(self, client: Anthropic, model: str = "claude-sonnet-4-20250514"):
+ self.client = client
+ self.model = model
+ self.max_steps = 50 # Prevent runaway loops
+ self.action_delay = 0.5 # Seconds between actions
 
-    def capture_screenshot(self) -> str:
-        """Capture screen and return base64 encoded image."""
-        screenshot = pyautogui.screenshot()
-        # Resize for token efficiency (1280x800 is good balance)
-        screenshot = screenshot.resize((1280, 800), Image.LANCZOS)
+ def capture_screenshot(self) -> str:
+ """Capture screen and return base64 encoded image."""
+ screenshot = pyautogui.screenshot()
+ # Resize for token efficiency (1280x800 is good balance)
+ screenshot = screenshot.resize((1280, 800), Image.LANCZOS)
 
-        import io
-        buffer = io.BytesIO()
-        screenshot.save(buffer, format="PNG")
-        return base64.b64encode(buffer.getvalue()).decode()
+ import io
+ buffer = io.BytesIO()
+ screenshot.save(buffer, format="PNG")
+ return base64.b64encode(buffer.getvalue()).decode()
 
-    def execute_action(self, action: dict) -> dict:
-        """Execute mouse/keyboard action on the computer."""
-        action_type = action.get("type")
+ def execute_action(self, action: dict) -> dict:
+ """Execute mouse/keyboard action on the computer."""
+ action_type = action.get("type")
 
-        if action_type == "click":
-            x, y = action["x"], action["y"]
-            button = action.get("button", "left")
-            pyautogui.click(x, y, button=button)
-            return {"success": True, "action": f"clicked at ({x}, {y})"}
+ if action_type == "click":
+ x, y = action["x"], action["y"]
+ button = action.get("button", "left")
+ pyautogui.click(x, y, button=button)
+ return {"success": True, "action": f"clicked at ({x}, {y})"}
 
-        elif action_type == "type":
-            text = action["text"]
-            pyautogui.typewrite(text, interval=0.02)
-            return {"success": True, "action": f"typed {len(text)} chars"}
+ elif action_type == "type":
+ text = action["text"]
+ pyautogui.typewrite(text, interval=0.02)
+ return {"success": True, "action": f"typed {len(text)} chars"}
 
-        elif action_type == "key":
-            key = action["key"]
-            pyautogui.press(key)
-            return {"success": True, "action": f"pressed {key}"}
+ elif action_type == "key":
+ key = action["key"]
+ pyautogui.press(key)
+ return {"success": True, "action": f"pressed {key}"}
 
-        elif action_type == "scroll":
-            direction = action.get("direction", "down")
-            amount = action.get("amount", 3)
-            scroll = -amount if direction == "down" else amount
-            pyautogui.scroll(scroll)
-            return {"success": True, "action": f"scrolled {dir
+ elif action_type == "scroll":
+ direction = action.get("direction", "down")
+ amount = action.get("amount", 3)
+ scroll = -amount if direction == "down" else amount
+ pyautogui.scroll(scroll)
+ return {"success": True, "action": f"scrolled {dir
 ```
 
 ### Sandboxed Environment Pattern
@@ -111,18 +111,18 @@ FROM ubuntu:22.04
 
 # Install desktop environment
 RUN apt-get update && apt-get install -y \
-    xvfb \
-    x11vnc \
-    fluxbox \
-    xterm \
-    firefox \
-    python3 \
-    python3-pip \
-    supervisor
+ xvfb \
+ x11vnc \
+ fluxbox \
+ xterm \
+ firefox \
+ python3 \
+ python3-pip \
+ supervisor
 
 # Security: Create non-root user
 RUN useradd -m -s /bin/bash agent && \
-    mkdir -p /home/agent/.vnc
+ mkdir -p /home/agent/.vnc
 
 # Install Python dependencies
 COPY requirements.txt /tmp/
@@ -130,7 +130,7 @@ RUN pip3 install -r /tmp/requirements.txt
 
 # Security: Drop capabilities
 RUN apt-get install -y --no-install-recommends libcap2-bin && \
-    setcap -r /usr/bin/python3 || true
+ setcap -r /usr/bin/python3 || true
 
 # Copy agent code
 COPY --chown=agent:agent . /app
@@ -153,53 +153,53 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 version: '3.8'
 
 services:
-  computer-use-agent:
-    build: .
-    ports:
-      - "5900:5900"  # VNC for observation
-      - "8080:8080"  # API for control
+ computer-use-agent:
+ build: .
+ ports:
+ - "5900:5900" # VNC for observation
+ - "8080:8080" # API for control
 
-    # Security constraints
-    security_opt:
-      - no-new-privileges:true
-      - seccomp:seccomp-profile.json
+ # Security constraints
+ security_opt:
+ - no-new-privileges:true
+ - seccomp:seccomp-profile.json
 
-    # Resource limits
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
-        reservations:
-          cpus: '0.5'
-          memory: 1G
+ # Resource limits
+ deploy:
+ resources:
+ limits:
+ cpus: '2'
+ memory: 4G
+ reservations:
+ cpus: '0.5'
+ memory: 1G
 
-    # Network isolation
-    networks:
-      - agent-network
+ # Network isolation
+ networks:
+ - agent-network
 
-    # No access to host filesystem
-    volumes:
-      - agent-tmp:/tmp
+ # No access to host filesystem
+ volumes:
+ - agent-tmp:/tmp
 
-    # Read-only root filesystem
-    read_only: true
-    tmpfs:
-      - /run
-      - /var/run
+ # Read-only root filesystem
+ read_only: true
+ tmpfs:
+ - /run
+ - /var/run
 
-    # Environment
-    environment:
-      - DISPLAY=:99
-      - NO_PROXY=localhost
+ # Environment
+ environment:
+ - DISPLAY=:99
+ - NO_PROXY=localhost
 
 networks:
-  agent-network:
-    driver: bridge
-    internal: true  # No internet by default
+ agent-network:
+ driver: bridge
+ internal: true # No internet by default
 
 volumes:
-  agent-tmp:
+ agent-tmp:
 
 ---
 
@@ -235,9 +235,9 @@ might be tricky for Claude to manipulate" - Anthropic docs
 ```python
 from anthropic import Anthropic
 from anthropic.types.beta import (
-    BetaToolComputerUse20241022,
-    BetaToolBash20241022,
-    BetaToolTextEditor20241022,
+ BetaToolComputerUse20241022,
+ BetaToolBash20241022,
+ BetaToolTextEditor20241022,
 )
 import subprocess
 import base64
@@ -245,64 +245,64 @@ from PIL import Image
 import io
 
 class AnthropicComputerUse:
-    """
-    Official Anthropic Computer Use implementation.
+ """
+ Official Anthropic Computer Use implementation.
 
-    Requires:
-    - Docker container with virtual display
-    - VNC for viewing agent actions
-    - Proper tool implementations
-    """
+ Requires:
+ - Docker container with virtual display
+ - VNC for viewing agent actions
+ - Proper tool implementations
+ """
 
-    def __init__(self):
-        self.client = Anthropic()
-        self.model = "claude-sonnet-4-20250514"  # Best for computer use
-        self.screen_size = (1280, 800)
+ def __init__(self):
+ self.client = Anthropic()
+ self.model = "claude-sonnet-4-20250514" # Best for computer use
+ self.screen_size = (1280, 800)
 
-    def get_tools(self) -> list:
-        """Define computer use tools."""
-        return [
-            BetaToolComputerUse20241022(
-                type="computer_20241022",
-                name="computer",
-                display_width_px=self.screen_size[0],
-                display_height_px=self.screen_size[1],
-            ),
-            BetaToolBash20241022(
-                type="bash_20241022",
-                name="bash",
-            ),
-            BetaToolTextEditor20241022(
-                type="text_editor_20241022",
-                name="str_replace_editor",
-            ),
-        ]
+ def get_tools(self) -> list:
+ """Define computer use tools."""
+ return [
+ BetaToolComputerUse20241022(
+ type="computer_20241022",
+ name="computer",
+ display_width_px=self.screen_size[0],
+ display_height_px=self.screen_size[1],
+ ),
+ BetaToolBash20241022(
+ type="bash_20241022",
+ name="bash",
+ ),
+ BetaToolTextEditor20241022(
+ type="text_editor_20241022",
+ name="str_replace_editor",
+ ),
+ ]
 
-    def execute_tool(self, name: str, input: dict) -> dict:
-        """Execute a tool and return result."""
+ def execute_tool(self, name: str, input: dict) -> dict:
+ """Execute a tool and return result."""
 
-        if name == "computer":
-            return self._handle_computer_action(input)
-        elif name == "bash":
-            return self._handle_bash(input)
-        elif name == "str_replace_editor":
-            return self._handle_editor(input)
-        else:
-            return {"error": f"Unknown tool: {name}"}
+ if name == "computer":
+ return self._handle_computer_action(input)
+ elif name == "bash":
+ return self._handle_bash(input)
+ elif name == "str_replace_editor":
+ return self._handle_editor(input)
+ else:
+ return {"error": f"Unknown tool: {name}"}
 
-    def _handle_computer_action(self, input: dict) -> dict:
-        """Handle computer control actions."""
-        action = input.get("action")
+ def _handle_computer_action(self, input: dict) -> dict:
+ """Handle computer control actions."""
+ action = input.get("action")
 
-        if action == "screenshot":
-            # Capture via xdotool/scrot
-            subprocess.run(["scrot", "/tmp/screenshot.png"])
+ if action == "screenshot":
+ # Capture via xdotool/scrot
+ subprocess.run(["scrot", "/tmp/screenshot.png"])
 
-            with open("/tmp/screenshot.png", "rb") as f:
-            
+ with open("/tmp/screenshot.png", "rb") as f:
+ 
 ```
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

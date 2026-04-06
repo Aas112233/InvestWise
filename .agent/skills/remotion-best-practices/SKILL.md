@@ -4,7 +4,7 @@ description: Best practices for Remotion - Video creation in React
 author: remotion-dev
 version: "1.0"
 metadata:
-  tags: remotion, video, react, animation, composition
+ tags: remotion, video, react, animation, composition
 ---
 
 ## When to use

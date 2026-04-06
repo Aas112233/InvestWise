@@ -63,9 +63,9 @@ Need max performance/control?
 import Spline from '@splinetool/react-spline';
 
 export default function Scene() {
-  return (
-    <Spline scene="https://prod.spline.design/xxx/scene.splinecode" />
-  );
+ return (
+ <Spline scene="https://prod.spline.design/xxx/scene.splinecode" />
+ );
 }
 ```
 
@@ -75,18 +75,18 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, useGLTF } from '@react-three/drei';
 
 function Model() {
-  const { scene } = useGLTF('/model.glb');
-  return <primitive object={scene} />;
+ const { scene } = useGLTF('/model.glb');
+ return <primitive object={scene} />;
 }
 
 export default function Scene() {
-  return (
-    <Canvas>
-      <ambientLight />
-      <Model />
-      <OrbitControls />
-    </Canvas>
-  );
+ return (
+ <Canvas>
+ <ambientLight />
+ <Model />
+ <OrbitControls />
+ </Canvas>
+ );
 }
 ```
 ```
@@ -125,8 +125,8 @@ npm install -g @gltf-transform/cli
 
 # Compress model
 gltf-transform optimize input.glb output.glb \
-  --compress draco \
-  --texture-compress webp
+ --compress draco \
+ --texture-compress webp
 ```
 
 ### Loading in R3F
@@ -135,18 +135,18 @@ import { useGLTF, useProgress, Html } from '@react-three/drei';
 import { Suspense } from 'react';
 
 function Loader() {
-  const { progress } = useProgress();
-  return <Html center>{progress.toFixed(0)}%</Html>;
+ const { progress } = useProgress();
+ return <Html center>{progress.toFixed(0)}%</Html>;
 }
 
 export default function Scene() {
-  return (
-    <Canvas>
-      <Suspense fallback={<Loader />}>
-        <Model />
-      </Suspense>
-    </Canvas>
-  );
+ return (
+ <Canvas>
+ <Suspense fallback={<Loader />}>
+ <Model />
+ </Suspense>
+ </Canvas>
+ );
 }
 ```
 ```
@@ -166,25 +166,25 @@ import { ScrollControls, useScroll } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 
 function RotatingModel() {
-  const scroll = useScroll();
-  const ref = useRef();
+ const scroll = useScroll();
+ const ref = useRef();
 
-  useFrame(() => {
-    // Rotate based on scroll position
-    ref.current.rotation.y = scroll.offset * Math.PI * 2;
-  });
+ useFrame(() => {
+ // Rotate based on scroll position
+ ref.current.rotation.y = scroll.offset * Math.PI * 2;
+ });
 
-  return <mesh ref={ref}>...</mesh>;
+ return <mesh ref={ref}>...</mesh>;
 }
 
 export default function Scene() {
-  return (
-    <Canvas>
-      <ScrollControls pages={3}>
-        <RotatingModel />
-      </ScrollControls>
-    </Canvas>
-  );
+ return (
+ <Canvas>
+ <ScrollControls pages={3}>
+ <RotatingModel />
+ </ScrollControls>
+ </Canvas>
+ );
 }
 ```
 
@@ -194,12 +194,12 @@ import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
 
 gsap.to(camera.position, {
-  scrollTrigger: {
-    trigger: '.section',
-    scrub: true,
-  },
-  z: 5,
-  y: 2,
+ scrollTrigger: {
+ trigger: '.section',
+ scrub: true,
+ },
+ z: 5,
+ y: 2,
 });
 ```
 
@@ -213,7 +213,7 @@ gsap.to(camera.position, {
 
 ## Anti-Patterns
 
-### ❌ 3D For 3D's Sake
+### 3D For 3D's Sake
 
 **Why bad**: Slows down the site.
 Confuses users.
@@ -225,7 +225,7 @@ Product visualization = good.
 Random floating shapes = probably not.
 Ask: would an image work?
 
-### ❌ Desktop-Only 3D
+### Desktop-Only 3D
 
 **Why bad**: Most traffic is mobile.
 Kills battery.
@@ -237,7 +237,7 @@ Reduce quality on mobile.
 Provide static fallback.
 Consider disabling 3D on low-end.
 
-### ❌ No Loading State
+### No Loading State
 
 **Why bad**: Users think it's broken.
 High bounce rate.

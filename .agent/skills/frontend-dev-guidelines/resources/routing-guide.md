@@ -20,15 +20,15 @@ TanStack Router implementation with folder-based routing and lazy loading patter
 
 ```
 routes/
-  __root.tsx                    # Root layout
-  index.tsx                     # Home route (/)
-  posts/
-    index.tsx                   # /posts
-    create/
-      index.tsx                 # /posts/create
-    $postId.tsx                 # /posts/:postId (dynamic)
-  comments/
-    index.tsx                   # /comments
+ __root.tsx # Root layout
+ index.tsx # Home route (/)
+ posts/
+ index.tsx # /posts
+ create/
+ index.tsx # /posts/create
+ $postId.tsx # /posts/:postId (dynamic)
+ comments/
+ index.tsx # /comments
 ```
 
 **Pattern**:
@@ -53,26 +53,26 @@ import { lazy } from 'react';
 
 // Lazy load the page component
 const PostsList = lazy(() =>
-    import('@/features/posts/components/PostsList').then(
-        (module) => ({ default: module.PostsList }),
-    ),
+ import('@/features/posts/components/PostsList').then(
+ (module) => ({ default: module.PostsList }),
+ ),
 );
 
 export const Route = createFileRoute('/posts/')({
-    component: PostsPage,
-    // Define breadcrumb data
-    loader: () => ({
-        crumb: 'Posts',
-    }),
+ component: PostsPage,
+ // Define breadcrumb data
+ loader: () => ({
+ crumb: 'Posts',
+ }),
 });
 
 function PostsPage() {
-    return (
-        <PostsList
-            title='All Posts'
-            showFilters={true}
-        />
-    );
+ return (
+ <PostsList
+ title='All Posts'
+ showFilters={true}
+ />
+ );
 }
 
 export default PostsPage;
@@ -96,9 +96,9 @@ import { lazy } from 'react';
 
 // For named exports, use .then() to map to default
 const MyPage = lazy(() =>
-    import('@/features/my-feature/components/MyPage').then(
-        (module) => ({ default: module.MyPage })
-    )
+ import('@/features/my-feature/components/MyPage').then(
+ (module) => ({ default: module.MyPage })
+ )
 );
 ```
 
@@ -126,11 +126,11 @@ const MyPage = lazy(() => import('@/features/my-feature/components/MyPage'));
 
 ```typescript
 export const Route = createFileRoute('/my-route/')({
-    component: MyRoutePage,
+ component: MyRoutePage,
 });
 
 function MyRoutePage() {
-    return <div>My Route Content</div>;
+ return <div>My Route Content</div>;
 }
 ```
 
@@ -138,10 +138,10 @@ function MyRoutePage() {
 
 ```typescript
 export const Route = createFileRoute('/my-route/')({
-    component: MyRoutePage,
-    loader: () => ({
-        crumb: 'My Route Title',
-    }),
+ component: MyRoutePage,
+ loader: () => ({
+ crumb: 'My Route Title',
+ }),
 });
 ```
 
@@ -151,12 +151,12 @@ Breadcrumb appears in navigation/app bar automatically.
 
 ```typescript
 export const Route = createFileRoute('/my-route/')({
-    component: MyRoutePage,
-    loader: async () => {
-        // Can prefetch data here
-        const data = await api.getData();
-        return { crumb: 'My Route', data };
-    },
+ component: MyRoutePage,
+ loader: async () => {
+ // Can prefetch data here
+ const data = await api.getData();
+ return { crumb: 'My Route', data };
+ },
 });
 ```
 
@@ -164,18 +164,18 @@ export const Route = createFileRoute('/my-route/')({
 
 ```typescript
 export const Route = createFileRoute('/search/')({
-    component: SearchPage,
-    validateSearch: (search: Record<string, unknown>) => {
-        return {
-            query: (search.query as string) || '',
-            page: Number(search.page) || 1,
-        };
-    },
+ component: SearchPage,
+ validateSearch: (search: Record<string, unknown>) => {
+ return {
+ query: (search.query as string) || '',
+ page: Number(search.page) || 1,
+ };
+ },
 });
 
 function SearchPage() {
-    const { query, page } = Route.useSearch();
-    // Use query and page
+ const { query, page } = Route.useSearch();
+ // Use query and page
 }
 ```
 
@@ -189,13 +189,13 @@ function SearchPage() {
 // routes/users/$userId.tsx
 
 export const Route = createFileRoute('/users/$userId')({
-    component: UserPage,
+ component: UserPage,
 });
 
 function UserPage() {
-    const { userId } = Route.useParams();
+ const { userId } = Route.useParams();
 
-    return <UserProfile userId={userId} />;
+ return <UserProfile userId={userId} />;
 }
 ```
 
@@ -205,13 +205,13 @@ function UserPage() {
 // routes/posts/$postId/comments/$commentId.tsx
 
 export const Route = createFileRoute('/posts/$postId/comments/$commentId')({
-    component: CommentPage,
+ component: CommentPage,
 });
 
 function CommentPage() {
-    const { postId, commentId } = Route.useParams();
+ const { postId, commentId } = Route.useParams();
 
-    return <CommentEditor postId={postId} commentId={commentId} />;
+ return <CommentEditor postId={postId} commentId={commentId} />;
 }
 ```
 
@@ -225,13 +225,13 @@ function CommentPage() {
 import { useNavigate } from '@tanstack/react-router';
 
 export const MyComponent: React.FC = () => {
-    const navigate = useNavigate();
+ const navigate = useNavigate();
 
-    const handleClick = () => {
-        navigate({ to: '/posts' });
-    };
+ const handleClick = () => {
+ navigate({ to: '/posts' });
+ };
 
-    return <Button onClick={handleClick}>View Posts</Button>;
+ return <Button onClick={handleClick}>View Posts</Button>;
 };
 ```
 
@@ -239,10 +239,10 @@ export const MyComponent: React.FC = () => {
 
 ```typescript
 const handleNavigate = () => {
-    navigate({
-        to: '/users/$userId',
-        params: { userId: '123' },
-    });
+ navigate({
+ to: '/users/$userId',
+ params: { userId: '123' },
+ });
 };
 ```
 
@@ -250,10 +250,10 @@ const handleNavigate = () => {
 
 ```typescript
 const handleSearch = () => {
-    navigate({
-        to: '/search',
-        search: { query: 'test', page: 1 },
-    });
+ navigate({
+ to: '/search',
+ search: { query: 'test', page: 1 },
+ });
 };
 ```
 
@@ -269,18 +269,18 @@ import { Box } from '@mui/material';
 import { CustomAppBar } from '~components/CustomAppBar';
 
 export const Route = createRootRoute({
-    component: RootLayout,
+ component: RootLayout,
 });
 
 function RootLayout() {
-    return (
-        <Box>
-            <CustomAppBar />
-            <Box sx={{ p: 2 }}>
-                <Outlet />  {/* Child routes render here */}
-            </Box>
-        </Box>
-    );
+ return (
+ <Box>
+ <CustomAppBar />
+ <Box sx={{ p: 2 }}>
+ <Outlet /> {/* Child routes render here */}
+ </Box>
+ </Box>
+ );
 }
 ```
 
@@ -289,18 +289,18 @@ function RootLayout() {
 ```typescript
 // routes/dashboard/index.tsx
 export const Route = createFileRoute('/dashboard/')({
-    component: DashboardLayout,
+ component: DashboardLayout,
 });
 
 function DashboardLayout() {
-    return (
-        <Box>
-            <DashboardSidebar />
-            <Box sx={{ flex: 1 }}>
-                <Outlet />  {/* Nested routes */}
-            </Box>
-        </Box>
-    );
+ return (
+ <Box>
+ <DashboardSidebar />
+ <Box sx={{ flex: 1 }}>
+ <Outlet /> {/* Nested routes */}
+ </Box>
+ </Box>
+ );
 }
 ```
 
@@ -320,26 +320,26 @@ import { SuspenseLoader } from '~components/SuspenseLoader';
 
 // Lazy load heavy component
 const UserProfile = lazy(() =>
-    import('@/features/users/components/UserProfile').then(
-        (module) => ({ default: module.UserProfile })
-    )
+ import('@/features/users/components/UserProfile').then(
+ (module) => ({ default: module.UserProfile })
+ )
 );
 
 export const Route = createFileRoute('/users/$userId')({
-    component: UserPage,
-    loader: () => ({
-        crumb: 'User Profile',
-    }),
+ component: UserPage,
+ loader: () => ({
+ crumb: 'User Profile',
+ }),
 });
 
 function UserPage() {
-    const { userId } = Route.useParams();
+ const { userId } = Route.useParams();
 
-    return (
-        <SuspenseLoader>
-            <UserProfile userId={userId} />
-        </SuspenseLoader>
-    );
+ return (
+ <SuspenseLoader>
+ <UserProfile userId={userId} />
+ </SuspenseLoader>
+ );
 }
 
 export default UserPage;
@@ -350,13 +350,13 @@ export default UserPage;
 ## Summary
 
 **Routing Checklist:**
-- ✅ Folder-based: `routes/my-route/index.tsx`
-- ✅ Lazy load components: `React.lazy(() => import())`
-- ✅ Use `createFileRoute` with route path
-- ✅ Add breadcrumb in `loader` function
-- ✅ Wrap in `SuspenseLoader` for loading states
-- ✅ Use `Route.useParams()` for dynamic params
-- ✅ Use `useNavigate()` for programmatic navigation
+- Folder-based: `routes/my-route/index.tsx`
+- Lazy load components: `React.lazy(() => import())`
+- Use `createFileRoute` with route path
+- Add breadcrumb in `loader` function
+- Wrap in `SuspenseLoader` for loading states
+- Use `Route.useParams()` for dynamic params
+- Use `useNavigate()` for programmatic navigation
 
 **See Also:**
 - [component-patterns.md](component-patterns.md) - Lazy loading patterns

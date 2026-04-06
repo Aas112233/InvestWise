@@ -10,7 +10,7 @@ allowed-tools: Read, Glob, Grep
 
 ---
 
-## 🎯 Selective Reading Rule
+## Selective Reading Rule
 
 **Read ONLY the template matching user's project type!**
 

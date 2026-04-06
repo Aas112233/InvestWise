@@ -6,12 +6,12 @@ Advanced patterns for using the NotebookLM skill effectively.
 
 **Every command must use the run.py wrapper:**
 ```bash
-# ✅ CORRECT:
+# CORRECT:
 python scripts/run.py auth_manager.py status
 python scripts/run.py ask_question.py --question "..."
 
-# ❌ WRONG:
-python scripts/auth_manager.py status  # Will fail!
+# WRONG:
+python scripts/auth_manager.py status # Will fail!
 ```
 
 ## Pattern 1: Initial Setup
@@ -28,10 +28,10 @@ python scripts/run.py auth_manager.py setup
 # Ask: "What does this notebook contain?"
 # Ask: "What topics should I tag it with?"
 python scripts/run.py notebook_manager.py add \
-  --url "https://notebooklm.google.com/notebook/..." \
-  --name "User provided name" \
-  --description "User provided description" \  # NEVER GUESS!
-  --topics "user,provided,topics"  # NEVER GUESS!
+ --url "https://notebooklm.google.com/notebook/..." \
+ --name "User provided name" \
+ --description "User provided description" \ # NEVER GUESS!
+ --topics "user,provided,topics" # NEVER GUESS!
 ```
 
 **Critical Notes:**
@@ -47,15 +47,15 @@ python scripts/run.py notebook_manager.py add \
 ```bash
 # 1. Query the notebook to discover its content
 python scripts/run.py ask_question.py \
-  --question "What is the content of this notebook? What topics are covered? Provide a complete overview briefly and concisely" \
-  --notebook-url "[URL]"
+ --question "What is the content of this notebook? What topics are covered? Provide a complete overview briefly and concisely" \
+ --notebook-url "[URL]"
 
 # 2. Use discovered info to add it
 python scripts/run.py notebook_manager.py add \
-  --url "[URL]" \
-  --name "[Based on content]" \
-  --description "[From discovery]" \
-  --topics "[Extracted topics]"
+ --url "[URL]" \
+ --name "[Based on content]" \
+ --description "[From discovery]" \
+ --topics "[Extracted topics]"
 ```
 
 **OPTION B: Ask User (Fallback)**
@@ -66,10 +66,10 @@ python scripts/run.py notebook_manager.py add \
 
 # Then add with user-provided info:
 python scripts/run.py notebook_manager.py add \
-  --url "[URL]" \
-  --name "[User's answer]" \
-  --description "[User's description]" \
-  --topics "[User's topics]"
+ --url "[URL]" \
+ --name "[User's answer]" \
+ --description "[User's description]" \
+ --topics "[User's topics]"
 ```
 
 **NEVER:**
@@ -85,12 +85,12 @@ python scripts/run.py notebook_manager.py list
 
 # Research with comprehensive questions
 python scripts/run.py ask_question.py \
-  --question "Detailed question with all context" \
-  --notebook-id notebook-id
+ --question "Detailed question with all context" \
+ --notebook-id notebook-id
 
 # Follow-up when you see "Is that ALL you need to know?"
 python scripts/run.py ask_question.py \
-  --question "Follow-up question with previous context"
+ --question "Follow-up question with previous context"
 ```
 
 ## Pattern 4: Follow-Up Questions (CRITICAL!)
@@ -102,7 +102,7 @@ When NotebookLM responds with "EXTREMELY IMPORTANT: Is that ALL you need to know
 # 2. ANALYZE - Is answer complete?
 # 3. If gaps exist, ask follow-up:
 python scripts/run.py ask_question.py \
-  --question "Specific follow-up with context from previous answer"
+ --question "Specific follow-up with context from previous answer"
 
 # 4. Repeat until complete
 # 5. Only then synthesize and respond to user
@@ -126,15 +126,15 @@ python scripts/run.py ask_question.py --question "Same question"
 ```bash
 # If authentication fails
 python scripts/run.py auth_manager.py status
-python scripts/run.py auth_manager.py reauth  # Browser visible!
+python scripts/run.py auth_manager.py reauth # Browser visible!
 
 # If browser crashes
 python scripts/run.py cleanup_manager.py --preserve-library
-python scripts/run.py auth_manager.py setup  # Browser visible!
+python scripts/run.py auth_manager.py setup # Browser visible!
 
 # If rate limited
 # Wait or switch accounts
-python scripts/run.py auth_manager.py reauth  # Login with different account
+python scripts/run.py auth_manager.py reauth # Login with different account
 ```
 
 ## Pattern 7: Batch Processing
@@ -143,17 +143,17 @@ python scripts/run.py auth_manager.py reauth  # Login with different account
 #!/bin/bash
 NOTEBOOK_ID="notebook-id"
 QUESTIONS=(
-    "First comprehensive question"
-    "Second comprehensive question"
-    "Third comprehensive question"
+ "First comprehensive question"
+ "Second comprehensive question"
+ "Third comprehensive question"
 )
 
 for question in "${QUESTIONS[@]}"; do
-    echo "Asking: $question"
-    python scripts/run.py ask_question.py \
-        --question "$question" \
-        --notebook-id "$NOTEBOOK_ID"
-    sleep 2  # Avoid rate limits
+ echo "Asking: $question"
+ python scripts/run.py ask_question.py \
+ --question "$question" \
+ --notebook-id "$NOTEBOOK_ID"
+ sleep 2 # Avoid rate limits
 done
 ```
 
@@ -164,23 +164,23 @@ done
 import subprocess
 
 def research_topic(topic, notebook_id):
-    # Comprehensive question
-    question = f"""
-    Explain {topic} in detail:
-    1. Core concepts
-    2. Implementation details
-    3. Best practices
-    4. Common pitfalls
-    5. Examples
-    """
+ # Comprehensive question
+ question = f"""
+ Explain {topic} in detail:
+ 1. Core concepts
+ 2. Implementation details
+ 3. Best practices
+ 4. Common pitfalls
+ 5. Examples
+ """
 
-    result = subprocess.run([
-        "python", "scripts/run.py", "ask_question.py",
-        "--question", question,
-        "--notebook-id", notebook_id
-    ], capture_output=True, text=True)
+ result = subprocess.run([
+ "python", "scripts/run.py", "ask_question.py",
+ "--question", question,
+ "--notebook-id", notebook_id
+ ], capture_output=True, text=True)
 
-    return result.stdout
+ return result.stdout
 ```
 
 ## Pattern 9: Notebook Organization
@@ -207,22 +207,22 @@ python scripts/run.py notebook_manager.py search --query "frontend"
 ```python
 # Query documentation during development
 def check_api_usage(api_endpoint):
-    result = subprocess.run([
-        "python", "scripts/run.py", "ask_question.py",
-        "--question", f"Parameters and response format for {api_endpoint}",
-        "--notebook-id", "api-docs"
-    ], capture_output=True, text=True)
+ result = subprocess.run([
+ "python", "scripts/run.py", "ask_question.py",
+ "--question", f"Parameters and response format for {api_endpoint}",
+ "--notebook-id", "api-docs"
+ ], capture_output=True, text=True)
 
-    # If follow-up needed
-    if "Is that ALL you need" in result.stdout:
-        # Ask for examples
-        follow_up = subprocess.run([
-            "python", "scripts/run.py", "ask_question.py",
-            "--question", f"Show code examples for {api_endpoint}",
-            "--notebook-id", "api-docs"
-        ], capture_output=True, text=True)
+ # If follow-up needed
+ if "Is that ALL you need" in result.stdout:
+ # Ask for examples
+ follow_up = subprocess.run([
+ "python", "scripts/run.py", "ask_question.py",
+ "--question", f"Show code examples for {api_endpoint}",
+ "--notebook-id", "api-docs"
+ ], capture_output=True, text=True)
 
-    return combine_answers(result.stdout, follow_up.stdout)
+ return combine_answers(result.stdout, follow_up.stdout)
 ```
 
 ## Best Practices
@@ -264,22 +264,22 @@ def check_api_usage(api_endpoint):
 ```python
 # 1. Detect URL in message
 if "notebooklm.google.com" in user_message:
-    url = extract_url(user_message)
+ url = extract_url(user_message)
 
-    # 2. Check if in library
-    notebooks = run("notebook_manager.py list")
+ # 2. Check if in library
+ notebooks = run("notebook_manager.py list")
 
-    if url not in notebooks:
-        # 3. ASK USER FOR METADATA (CRITICAL!)
-        name = ask_user("What should I call this notebook?")
-        description = ask_user("What does this notebook contain?")
-        topics = ask_user("What topics does it cover?")
+ if url not in notebooks:
+ # 3. ASK USER FOR METADATA (CRITICAL!)
+ name = ask_user("What should I call this notebook?")
+ description = ask_user("What does this notebook contain?")
+ topics = ask_user("What topics does it cover?")
 
-        # 4. Add with user-provided info
-        run(f"notebook_manager.py add --url {url} --name '{name}' --description '{description}' --topics '{topics}'")
+ # 4. Add with user-provided info
+ run(f"notebook_manager.py add --url {url} --name '{name}' --description '{description}' --topics '{topics}'")
 
-    # 5. Use the notebook
-    answer = run(f"ask_question.py --question '{user_question}'")
+ # 5. Use the notebook
+ answer = run(f"ask_question.py --question '{user_question}'")
 ```
 
 ### Workflow 2: Research Task
@@ -290,19 +290,19 @@ task = "Implement feature X"
 
 # 2. Formulate comprehensive questions
 questions = [
-    "Complete implementation guide for X",
-    "Error handling for X",
-    "Performance considerations for X"
+ "Complete implementation guide for X",
+ "Error handling for X",
+ "Performance considerations for X"
 ]
 
 # 3. Query with follow-ups
 for q in questions:
-    answer = run(f"ask_question.py --question '{q}'")
+ answer = run(f"ask_question.py --question '{q}'")
 
-    # Check if follow-up needed
-    if "Is that ALL you need" in answer:
-        # Ask more specific question
-        follow_up = run(f"ask_question.py --question 'Specific detail about {q}'")
+ # Check if follow-up needed
+ if "Is that ALL you need" in answer:
+ # Ask more specific question
+ follow_up = run(f"ask_question.py --question 'Specific detail about {q}'")
 
 # 4. Synthesize and implement
 ```
@@ -327,12 +327,12 @@ for q in questions:
 python scripts/run.py [script].py [args]
 
 # Common operations
-run.py auth_manager.py status          # Check auth
-run.py auth_manager.py setup           # Login (browser visible!)
-run.py notebook_manager.py list        # List notebooks
-run.py notebook_manager.py add ...     # Add (ask user for metadata!)
-run.py ask_question.py --question ...  # Query
-run.py cleanup_manager.py ...          # Clean up
+run.py auth_manager.py status # Check auth
+run.py auth_manager.py setup # Login (browser visible!)
+run.py notebook_manager.py list # List notebooks
+run.py notebook_manager.py add ... # Add (ask user for metadata!)
+run.py ask_question.py --question ... # Query
+run.py cleanup_manager.py ... # Clean up
 ```
 
 **Remember:** When in doubt, use run.py and ask the user for notebook details!

@@ -104,24 +104,24 @@ Verify test coverage:
 
 ### Example Issues to Catch:
 
-**❌ Bad - Missing validation:**
+** Bad - Missing validation:**
 \`\`\`javascript
 function createUser(email, password) {
-  // No validation!
-  return db.users.create({ email, password });
+ // No validation!
+ return db.users.create({ email, password });
 }
 \`\`\`
 
-**✅ Good - Proper validation:**
+** Good - Proper validation:**
 \`\`\`javascript
 function createUser(email, password) {
-  if (!email || !isValidEmail(email)) {
-    throw new Error('Invalid email address');
-  }
-  if (!password || password.length < 8) {
-    throw new Error('Password must be at least 8 characters');
-  }
-  return db.users.create({ email, password });
+ if (!email || !isValidEmail(email)) {
+ throw new Error('Invalid email address');
+ }
+ if (!password || password.length < 8) {
+ throw new Error('Password must be at least 8 characters');
+ }
+ return db.users.create({ email, password });
 }
 \`\`\`
 ```
@@ -160,28 +160,28 @@ function createUser(email, password) {
 
 ### Example Issues to Catch:
 
-**❌ Bad - SQL injection risk:**
+** Bad - SQL injection risk:**
 \`\`\`javascript
 const query = \`SELECT * FROM users WHERE email = '\${email}'\`;
 db.query(query);
 \`\`\`
 
-**✅ Good - Parameterized query:**
+** Good - Parameterized query:**
 \`\`\`javascript
 const query = 'SELECT * FROM users WHERE email = $1';
 db.query(query, [email]);
 \`\`\`
 
-**❌ Bad - Hardcoded secret:**
+** Bad - Hardcoded secret:**
 \`\`\`javascript
 const API_KEY = 'sk_live_abc123xyz';
 \`\`\`
 
-**✅ Good - Environment variable:**
+** Good - Environment variable:**
 \`\`\`javascript
 const API_KEY = process.env.API_KEY;
 if (!API_KEY) {
-  throw new Error('API_KEY environment variable is required');
+ throw new Error('API_KEY environment variable is required');
 }
 \`\`\`
 ```
@@ -214,67 +214,67 @@ if (!API_KEY) {
 
 ### Example Issues to Catch:
 
-**❌ Bad - Unclear naming:**
+** Bad - Unclear naming:**
 \`\`\`javascript
 function calc(a, b, c) {
-  return a * b + c;
+ return a * b + c;
 }
 \`\`\`
 
-**✅ Good - Descriptive naming:**
+** Good - Descriptive naming:**
 \`\`\`javascript
 function calculateTotalPrice(quantity, unitPrice, tax) {
-  return quantity * unitPrice + tax;
+ return quantity * unitPrice + tax;
 }
 \`\`\`
 
-**❌ Bad - Function doing too much:**
+** Bad - Function doing too much:**
 \`\`\`javascript
 function processOrder(order) {
-  // Validate order
-  if (!order.items) throw new Error('No items');
-  
-  // Calculate total
-  let total = 0;
-  for (let item of order.items) {
-    total += item.price * item.quantity;
-  }
-  
-  // Apply discount
-  if (order.coupon) {
-    total *= 0.9;
-  }
-  
-  // Process payment
-  const payment = stripe.charge(total);
-  
-  // Send email
-  sendEmail(order.email, 'Order confirmed');
-  
-  // Update inventory
-  updateInventory(order.items);
-  
-  return { orderId: order.id, total };
+ // Validate order
+ if (!order.items) throw new Error('No items');
+ 
+ // Calculate total
+ let total = 0;
+ for (let item of order.items) {
+ total += item.price * item.quantity;
+ }
+ 
+ // Apply discount
+ if (order.coupon) {
+ total *= 0.9;
+ }
+ 
+ // Process payment
+ const payment = stripe.charge(total);
+ 
+ // Send email
+ sendEmail(order.email, 'Order confirmed');
+ 
+ // Update inventory
+ updateInventory(order.items);
+ 
+ return { orderId: order.id, total };
 }
 \`\`\`
 
-**✅ Good - Separated concerns:**
+** Good - Separated concerns:**
 \`\`\`javascript
 function processOrder(order) {
-  validateOrder(order);
-  const total = calculateOrderTotal(order);
-  const payment = processPayment(total);
-  sendOrderConfirmation(order.email);
-  updateInventory(order.items);
-  
-  return { orderId: order.id, total };
+ validateOrder(order);
+ const total = calculateOrderTotal(order);
+ const payment = processPayment(total);
+ sendOrderConfirmation(order.email);
+ updateInventory(order.items);
+ 
+ return { orderId: order.id, total };
 }
 \`\`\`
 ```
 
 ## Best Practices
 
-### ✅ Do This
+### Do This
 
 - **Review Small Changes** - Smaller PRs are easier to review thoroughly
 - **Check Tests First** - Verify tests pass and cover new code
@@ -287,7 +287,7 @@ function processOrder(order) {
 - **Consider Performance** - Think about scale and efficiency
 - **Check for Regressions** - Ensure existing functionality still works
 
-### ❌ Don't Do This
+### Don't Do This
 
 - **Don't Approve Without Reading** - Actually review the code
 - **Don't Be Vague** - Provide specific feedback with examples

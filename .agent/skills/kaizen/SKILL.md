@@ -55,11 +55,11 @@ Small, frequent improvements compound into major gains.
 ```typescript
 // Iteration 1: Make it work
 const calculateTotal = (items: Item[]) => {
-  let total = 0;
-  for (let i = 0; i < items.length; i++) {
-    total += items[i].price * items[i].quantity;
-  }
-  return total;
+ let total = 0;
+ for (let i = 0; i < items.length; i++) {
+ total += items[i].price * items[i].quantity;
+ }
+ return total;
 };
 
 // Iteration 2: Make it clear (refactor)
@@ -89,15 +89,15 @@ Each step is complete, tested, and working
 ```typescript
 // Trying to do everything at once
 const calculateTotal = (items: Item[]): number => {
-  // Validate, optimize, add features, handle edge cases all together
-  if (!items?.length) return 0;
-  const validItems = items.filter(item => {
-    if (item.price < 0) throw new Error('Negative price');
-    if (item.quantity < 0) throw new Error('Negative quantity');
-    return item.quantity > 0; // Also filtering zero quantities
-  });
-  // Plus caching, plus logging, plus currency conversion...
-  return validItems.reduce(...); // Too many concerns at once
+ // Validate, optimize, add features, handle edge cases all together
+ if (!items?.length) return 0;
+ const validItems = items.filter(item => {
+ if (item.price < 0) throw new Error('Negative price');
+ if (item.quantity < 0) throw new Error('Negative quantity');
+ return item.quantity > 0; // Also filtering zero quantities
+ });
+ // Plus caching, plus logging, plus currency conversion...
+ return validItems.reduce(...); // Too many concerns at once
 };
 ````
 
@@ -161,8 +161,8 @@ Design systems that prevent errors at compile/design time, not runtime.
 ```typescript
 // Error: string status can be any value
 type OrderBad = {
-  status: string; // Can be "pending", "PENDING", "pnding", anything!
-  total: number;
+ status: string; // Can be "pending", "PENDING", "pnding", anything!
+ total: number;
 };
 
 // Good: Only valid states possible
@@ -191,13 +191,13 @@ Type system prevents entire classes of errors
 type NonEmptyArray<T> = [T, ...T[]];
 
 const firstItem = <T>(items: NonEmptyArray<T>): T => {
-  return items[0]; // Always safe, never undefined!
+ return items[0]; // Always safe, never undefined!
 };
 
 // Caller must prove array is non-empty
 const items: number[] = [1, 2, 3];
 if (items.length > 0) {
-  firstItem(items as NonEmptyArray<number>); // Safe
+ firstItem(items as NonEmptyArray<number>); // Safe
 }
 ````
 
@@ -210,9 +210,9 @@ Function signature guarantees safety
 ```typescript
 // Error: Validation after use
 const processPayment = (amount: number) => {
-  const fee = amount * 0.03; // Used before validation!
-  if (amount <= 0) throw new Error('Invalid amount');
-  // ...
+ const fee = amount * 0.03; // Used before validation!
+ if (amount <= 0) throw new Error('Invalid amount');
+ // ...
 };
 
 // Good: Validate immediately
@@ -257,23 +257,23 @@ Validate once at boundary, safe everywhere else
 ```typescript
 // Early returns prevent deeply nested code
 const processUser = (user: User | null) => {
-  if (!user) {
-    logger.error('User not found');
-    return;
-  }
+ if (!user) {
+ logger.error('User not found');
+ return;
+ }
 
-  if (!user.email) {
-    logger.error('User email missing');
-    return;
-  }
+ if (!user.email) {
+ logger.error('User email missing');
+ return;
+ }
 
-  if (!user.isActive) {
-    logger.info('User inactive, skipping');
-    return;
-  }
+ if (!user.isActive) {
+ logger.info('User inactive, skipping');
+ return;
+ }
 
-  // Main logic here, guaranteed user is valid and active
-  sendEmail(user.email, 'Welcome!');
+ // Main logic here, guaranteed user is valid and active
+ sendEmail(user.email, 'Welcome!');
 };
 ````
 
@@ -286,8 +286,8 @@ Guards make assumptions explicit and enforced
 ```typescript
 // Error: Optional config with unsafe defaults
 type ConfigBad = {
-  apiKey?: string;
-  timeout?: number;
+ apiKey?: string;
+ timeout?: number;
 };
 
 const client = new APIClient({ timeout: 5000 }); // apiKey missing!
@@ -368,16 +368,16 @@ Follow established patterns. Document what works. Make good practices easy to fo
 ```typescript
 // Existing codebase pattern for API clients
 class UserAPIClient {
-  async getUser(id: string): Promise<User> {
-    return this.fetch(`/users/${id}`);
-  }
+ async getUser(id: string): Promise<User> {
+ return this.fetch(`/users/${id}`);
+ }
 }
 
 // New code follows the same pattern
 class OrderAPIClient {
-  async getOrder(id: string): Promise<Order> {
-    return this.fetch(`/orders/${id}`);
-  }
+ async getOrder(id: string): Promise<Order> {
+ return this.fetch(`/orders/${id}`);
+ }
 }
 ````
 
@@ -407,22 +407,22 @@ type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
 // All services follow this pattern
 const fetchUser = async (id: string): Promise<Result<User, Error>> => {
-  try {
-    const user = await db.users.findById(id);
-    if (!user) {
-      return { ok: false, error: new Error('User not found') };
-    }
-    return { ok: true, value: user };
-  } catch (err) {
-    return { ok: false, error: err as Error };
-  }
+ try {
+ const user = await db.users.findById(id);
+ if (!user) {
+ return { ok: false, error: new Error('User not found') };
+ }
+ return { ok: true, value: user };
+ } catch (err) {
+ return { ok: false, error: err as Error };
+ }
 };
 
 // Callers use consistent pattern
 const result = await fetchUser('123');
 if (!result.ok) {
-  logger.error('Failed to fetch user', result.error);
-  return;
+ logger.error('Failed to fetch user', result.error);
+ return;
 }
 const user = result.value; // Type-safe!
 ````
@@ -443,15 +443,15 @@ Standard pattern across codebase
  *
  * @example
  * const result = await retry(
- *   () => fetch('https://api.example.com/data'),
- *   { maxAttempts: 3, baseDelay: 1000 }
+ * () => fetch('https://api.example.com/data'),
+ * { maxAttempts: 3, baseDelay: 1000 }
  * );
  */
 const retry = async <T>(
-  operation: () => Promise<T>,
-  options: RetryOptions
+ operation: () => Promise<T>,
+ options: RetryOptions
 ): Promise<T> => {
-  // Implementation...
+ // Implementation...
 };
 ```
 Documents why, when, and how
@@ -513,7 +513,7 @@ Build what's needed now. No more, no less. Avoid premature optimization and over
 ```typescript
 // Current requirement: Log errors to console
 const logError = (error: Error) => {
-  console.error(error.message);
+ console.error(error.message);
 };
 ```
 Simple, meets current need
@@ -523,7 +523,7 @@ Simple, meets current need
 ```typescript
 // Over-engineered for "future needs"
 interface LogTransport {
-  write(level: LogLevel, message: string, meta?: LogMetadata): Promise<void>;
+ write(level: LogLevel, message: string, meta?: LogMetadata): Promise<void>;
 }
 
 class ConsoleTransport implements LogTransport { /_... _/ }
@@ -557,20 +557,20 @@ Building for imaginary future requirements
 ```typescript
 // Start simple
 const formatCurrency = (amount: number): string => {
-  return `$${amount.toFixed(2)}`;
+ return `$${amount.toFixed(2)}`;
 };
 
 // Requirement evolves: support multiple currencies
 const formatCurrency = (amount: number, currency: string): string => {
-  const symbols = { USD: '$', EUR: '€', GBP: '£' };
-  return `${symbols[currency]}${amount.toFixed(2)}`;
+ const symbols = { USD: '$', EUR: '€', GBP: '£' };
+ return `${symbols[currency]}${amount.toFixed(2)}`;
 };
 
 // Requirement evolves: support localization
 const formatCurrency = (amount: number, locale: string): string => {
-  return new Intl.NumberFormat(locale, {\n    style: 'currency',
-    currency: locale === 'en-US' ? 'USD' : 'EUR',
-  }).format(amount);
+ return new Intl.NumberFormat(locale, {\n style: 'currency',
+ currency: locale === 'en-US' ? 'USD' : 'EUR',
+ }).format(amount);
 };
 ````
 
@@ -583,11 +583,11 @@ Complexity added only when needed
 ```typescript
 // One use case, but building generic framework
 abstract class BaseCRUDService<T> {
-  abstract getAll(): Promise<T[]>;
-  abstract getById(id: string): Promise<T>;
-  abstract create(data: Partial<T>): Promise<T>;
-  abstract update(id: string, data: Partial<T>): Promise<T>;
-  abstract delete(id: string): Promise<void>;
+ abstract getAll(): Promise<T[]>;
+ abstract getById(id: string): Promise<T>;
+ abstract create(data: Partial<T>): Promise<T>;
+ abstract update(id: string, data: Partial<T>): Promise<T>;
+ abstract delete(id: string): Promise<void>;
 }
 
 class GenericRepository<T> { /_300 lines _/ }
@@ -602,11 +602,11 @@ Massive abstraction for uncertain future
 ```typescript
 // Simple functions for current needs
 const getUsers = async (): Promise<User[]> => {
-  return db.query('SELECT * FROM users');
+ return db.query('SELECT * FROM users');
 };
 
 const getUserById = async (id: string): Promise<User | null> => {
-  return db.query('SELECT * FROM users WHERE id = $1', [id]);
+ return db.query('SELECT * FROM users WHERE id = $1', [id]);
 };
 
 // When pattern emerges across multiple entities, then abstract
@@ -621,11 +621,11 @@ Abstract only when pattern proven across 3+ cases
 ```typescript
 // Current: Simple approach
 const filterActiveUsers = (users: User[]): User[] => {
-  return users.filter(user => user.isActive);
+ return users.filter(user => user.isActive);
 };
 
 // Benchmark shows: 50ms for 1000 users (acceptable)
-// ✓ Ship it, no optimization needed
+// Ship it, no optimization needed
 
 // Later: After profiling shows this is bottleneck
 // Then optimize with indexed lookup or caching
@@ -638,12 +638,12 @@ Optimize based on measurement, not assumptions
 ```typescript
 // Premature optimization
 const filterActiveUsers = (users: User[]): User[] => {
-  // "This might be slow, so let's cache and index"
-  const cache = new WeakMap();
-  const indexed = buildBTreeIndex(users, 'isActive');
-  // 100 lines of optimization code
-  // Adds complexity, harder to maintain
-  // No evidence it was needed
+ // "This might be slow, so let's cache and index"
+ const cache = new WeakMap();
+ const indexed = buildBTreeIndex(users, 'isActive');
+ // 100 lines of optimization code
+ // Adds complexity, harder to maintain
+ // No evidence it was needed
 };\
 ````
 

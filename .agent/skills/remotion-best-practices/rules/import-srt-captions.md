@@ -2,7 +2,7 @@
 name: import-srt-captions
 description: Importing .srt subtitle files into Remotion using @remotion/captions
 metadata:
-  tags: captions, subtitles, srt, import, parse
+ tags: captions, subtitles, srt, import, parse
 ---
 
 # Importing .srt subtitles into Remotion
@@ -32,31 +32,31 @@ import {parseSrt} from '@remotion/captions';
 import type {Caption} from '@remotion/captions';
 
 export const MyComponent: React.FC = () => {
-  const [captions, setCaptions] = useState<Caption[] | null>(null);
-  const {delayRender, continueRender, cancelRender} = useDelayRender();
-  const [handle] = useState(() => delayRender());
+ const [captions, setCaptions] = useState<Caption[] | null>(null);
+ const {delayRender, continueRender, cancelRender} = useDelayRender();
+ const [handle] = useState(() => delayRender());
 
-  const fetchCaptions = useCallback(async () => {
-    try {
-      const response = await fetch(staticFile('subtitles.srt'));
-      const text = await response.text();
-      const {captions: parsed} = parseSrt({input: text});
-      setCaptions(parsed);
-      continueRender(handle);
-    } catch (e) {
-      cancelRender(e);
-    }
-  }, [continueRender, cancelRender, handle]);
+ const fetchCaptions = useCallback(async () => {
+ try {
+ const response = await fetch(staticFile('subtitles.srt'));
+ const text = await response.text();
+ const {captions: parsed} = parseSrt({input: text});
+ setCaptions(parsed);
+ continueRender(handle);
+ } catch (e) {
+ cancelRender(e);
+ }
+ }, [continueRender, cancelRender, handle]);
 
-  useEffect(() => {
-    fetchCaptions();
-  }, [fetchCaptions]);
+ useEffect(() => {
+ fetchCaptions();
+ }, [fetchCaptions]);
 
-  if (!captions) {
-    return null;
-  }
+ if (!captions) {
+ return null;
+ }
 
-  return <AbsoluteFill>{/* Use captions here */}</AbsoluteFill>;
+ return <AbsoluteFill>{/* Use captions here */}</AbsoluteFill>;
 };
 ```
 

@@ -10,6 +10,73 @@ import { logAudit } from '../utils/auditLogger.js';
 import { getPaginationParams, formatPaginatedResponse } from '../utils/paginationHelper.js';
 import { recalculateAllStats } from './analyticsController.js';
 
+const DEPOSIT_MONTH_INDEX = {
+    january: 0,
+    february: 1,
+    march: 2,
+    april: 3,
+    may: 4,
+    june: 5,
+    july: 6,
+    august: 7,
+    september: 8,
+    october: 9,
+    november: 10,
+    december: 11,
+    'জানুয়ারি': 0,
+    'ফেব্রুয়ারি': 1,
+    'মার্চ': 2,
+    'এপ্রিল': 3,
+    'মে': 4,
+    'জুন': 5,
+    'জুলাই': 6,
+    'আগস্ট': 7,
+    'সেপ্টেম্বর': 8,
+    'অক্টোবর': 9,
+    'নভেম্বর': 10,
+    'ডিসেম্বর': 11
+};
+
+const normalizeBanglaDigits = (value = '') =>
+    value.replace(/[০-৯]/g, (digit) => String('০১২৩৪৫৬৭৮৯'.indexOf(digit)));
+
+const parseDepositMonthLabel = (depositMonth) => {
+    if (!depositMonth || typeof depositMonth !== 'string') return null;
+
+    const normalizedLabel = normalizeBanglaDigits(depositMonth.trim());
+    const parts = normalizedLabel.split(/\s+/);
+    if (parts.length < 2) return null;
+
+    const year = Number(parts[parts.length - 1]);
+    const monthLabel = parts.slice(0, -1).join(' ').toLowerCase();
+    const monthIndex = DEPOSIT_MONTH_INDEX[monthLabel];
+
+    if (monthIndex === undefined || Number.isNaN(year)) {
+        return null;
+    }
+
+    return new Date(Date.UTC(year, monthIndex, 1));
+};
+
+const resolveDepositDate = ({ date, depositMonth }) => {
+    const monthDate = parseDepositMonthLabel(depositMonth);
+    const parsedDate = date ? new Date(date) : null;
+    const hasValidDate = parsedDate instanceof Date && !Number.isNaN(parsedDate.getTime());
+
+    if (monthDate && hasValidDate) {
+        const sameMonth =
+            parsedDate.getUTCFullYear() === monthDate.getUTCFullYear() &&
+            parsedDate.getUTCMonth() === monthDate.getUTCMonth();
+
+        return sameMonth ? parsedDate : monthDate;
+    }
+
+    if (monthDate) return monthDate;
+    if (hasValidDate) return parsedDate;
+
+    return new Date();
+};
+
 // @desc    Get all transactions
 // @route   GET /api/finance/transactions
 // @access  Private
@@ -181,7 +248,6 @@ const getTransactions = asyncHandler(async (req, res) => {
 // @route   POST /api/finance/deposits
 // @access  Private (Admin/Manager)
 const addDeposit = asyncHandler(async (req, res) => {
-    console.log('DEBUG addDeposit body:', req.body);
     const { memberId, amount, fundId, description, date, shareNumber, status, cashierName, handlingOfficer, depositMethod } = req.body;
 
     // Validate inputs
@@ -204,6 +270,7 @@ const addDeposit = asyncHandler(async (req, res) => {
         if (!fund || !member) throw new Error('Fund or Member not found');
 
         const balanceBefore = fund.balance;
+        const depositDate = resolveDepositDate({ date, depositMonth: description });
 
         // 1. Create Transaction Record
         const transaction = await Transaction.create([{
@@ -212,7 +279,7 @@ const addDeposit = asyncHandler(async (req, res) => {
             description: description,
             memberId,
             fundId,
-            date: date || Date.now(),
+            date: depositDate,
             status: status || 'Completed', // Default to Completed if not specified
             authorizedBy: req.user._id,
             createdBy: req.user._id,
@@ -321,11 +388,12 @@ const editDeposit = asyncHandler(async (req, res) => {
         }
 
         // 3. Update Transaction Record
+        const depositDate = resolveDepositDate({ date, depositMonth: description || transaction.description });
         transaction.amount = newAmount;
         transaction.fundId = fundId;
         transaction.memberId = memberId;
         transaction.description = description;
-        transaction.date = date;
+        transaction.date = depositDate;
         transaction.handlingOfficer = req.user.name;
         transaction.depositMethod = depositMethod;
         transaction.referenceNumber = req.body.referenceNumber;
@@ -1238,7 +1306,7 @@ const bulkAddDeposits = asyncHandler(async (req, res) => {
         const seenEntries = new Set();
 
         for (const dep of deposits) {
-            const { memberId, amount, shareNumber, depositMonth } = dep;
+            const { memberId, amount, shareNumber, depositMonth, date } = dep;
             const month = depositMonth || commonMonth;
             const entryKey = `${memberId}-${month}`;
 
@@ -1261,13 +1329,14 @@ const bulkAddDeposits = asyncHandler(async (req, res) => {
             await member.save({ session });
 
             // Create Transaction
+            const depositDate = resolveDepositDate({ date, depositMonth: month });
             const transaction = await Transaction.create([{
                 type: 'Deposit',
                 amount: depositAmount,
                 description: `Bulk Deposit [${month}]`,
                 memberId: member._id,
                 fundId: fund._id,
-                date: Date.now(),
+                date: depositDate,
                 status: 'Completed',
                 authorizedBy: req.user._id,
                 createdBy: req.user._id,

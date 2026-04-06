@@ -2,8 +2,8 @@
 name: Metasploit Framework
 description: This skill should be used when the user asks to "use Metasploit for penetration testing", "exploit vulnerabilities with msfconsole", "create payloads with msfvenom", "perform post-exploitation", "use auxiliary modules for scanning", or "develop custom exploits". It provides comprehensive guidance for leveraging the Metasploit Framework in security assessments.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Metasploit Framework
@@ -59,15 +59,15 @@ msfconsole
 msfconsole -q
 
 # Basic navigation commands
-msf6 > help                    # Show all commands
-msf6 > search [term]           # Search modules
-msf6 > use [module]            # Select module
-msf6 > info                    # Show module details
-msf6 > show options            # Display required options
-msf6 > set [OPTION] [value]    # Configure option
-msf6 > run / exploit           # Execute module
-msf6 > back                    # Return to main console
-msf6 > exit                    # Exit msfconsole
+msf6 > help # Show all commands
+msf6 > search [term] # Search modules
+msf6 > use [module] # Select module
+msf6 > info # Show module details
+msf6 > show options # Display required options
+msf6 > set [OPTION] [value] # Configure option
+msf6 > run / exploit # Execute module
+msf6 > back # Return to main console
+msf6 > exit # Exit msfconsole
 ```
 
 ### Phase 2: Module Types

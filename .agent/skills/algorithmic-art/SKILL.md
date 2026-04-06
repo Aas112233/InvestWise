@@ -102,7 +102,7 @@ This is **VERY IMPORTANT**: The reference must be so refined that it enhances th
 
 With the philosophy AND conceptual framework established, express it through code. Pause to gather thoughts before proceeding. Use only the algorithmic philosophy created and the instructions below.
 
-### ⚠️ STEP 0: READ THE TEMPLATE FIRST ⚠️
+### STEP 0: READ THE TEMPLATE FIRST 
 
 **CRITICAL: BEFORE writing any HTML:**
 
@@ -113,16 +113,16 @@ With the philosophy AND conceptual framework established, express it through cod
 5. **Replace only the VARIABLE sections** marked in the file's comments (algorithm, parameters, UI controls for parameters)
 
 **Avoid:**
-- ❌ Creating HTML from scratch
-- ❌ Inventing custom styling or color schemes
-- ❌ Using system fonts or dark themes
-- ❌ Changing the sidebar structure
+- Creating HTML from scratch
+- Inventing custom styling or color schemes
+- Using system fonts or dark themes
+- Changing the sidebar structure
 
 **Follow these practices:**
-- ✅ Copy the template's exact HTML structure
-- ✅ Keep Anthropic branding (Poppins/Lora fonts, light colors, gradient backdrop)
-- ✅ Maintain the sidebar layout (Seed → Parameters → Colors? → Actions)
-- ✅ Replace only the p5.js algorithm and parameter controls
+- Copy the template's exact HTML structure
+- Keep Anthropic branding (Poppins/Lora fonts, light colors, gradient backdrop)
+- Maintain the sidebar layout (Seed → Parameters → Colors? → Actions)
+- Replace only the p5.js algorithm and parameter controls
 
 The template is the foundation. Build on it, don't rebuild it.
 
@@ -146,15 +146,15 @@ To establish parameters that emerge naturally from the algorithmic philosophy, c
 
 ```javascript
 let params = {
-  seed: 12345,  // Always include seed for reproducibility
-  // colors
-  // Add parameters that control YOUR algorithm:
-  // - Quantities (how many?)
-  // - Scales (how big? how fast?)
-  // - Probabilities (how likely?)
-  // - Ratios (what proportions?)
-  // - Angles (what direction?)
-  // - Thresholds (when does behavior change?)
+ seed: 12345, // Always include seed for reproducibility
+ // colors
+ // Add parameters that control YOUR algorithm:
+ // - Quantities (how many?)
+ // - Scales (how big? how fast?)
+ // - Probabilities (how likely?)
+ // - Ratios (what proportions?)
+ // - Angles (what direction?)
+ // - Thresholds (when does behavior change?)
 };
 ```
 
@@ -188,13 +188,13 @@ To guide the implementation, let the conceptual essence inform creative and orig
 **Canvas Setup**: Standard p5.js structure:
 ```javascript
 function setup() {
-  createCanvas(1200, 1200);
-  // Initialize your system
+ createCanvas(1200, 1200);
+ // Initialize your system
 }
 
 function draw() {
-  // Your generative algorithm
-  // Can be static (noLoop) or animated
+ // Your generative algorithm
+ // Can be static (noLoop) or animated
 }
 ```
 
@@ -232,27 +232,27 @@ The `templates/viewer.html` file is the foundation. It contains the exact struct
 - Layout structure (header, sidebar, main canvas area)
 - Anthropic branding (UI colors, fonts, gradients)
 - Seed section in sidebar:
-  - Seed display
-  - Previous/Next buttons
-  - Random button
-  - Jump to seed input + Go button
+ - Seed display
+ - Previous/Next buttons
+ - Random button
+ - Jump to seed input + Go button
 - Actions section in sidebar:
-  - Regenerate button
-  - Reset button
+ - Regenerate button
+ - Reset button
 
 **VARIABLE (customize for each artwork):**
 - The entire p5.js algorithm (setup/draw/classes)
 - The parameters object (define what the art needs)
 - The Parameters section in sidebar:
-  - Number of parameter controls
-  - Parameter names
-  - Min/max/step values for sliders
-  - Control types (sliders, inputs, etc.)
+ - Number of parameter controls
+ - Parameter names
+ - Min/max/step values for sliders
+ - Control types (sliders, inputs, etc.)
 - Colors section (optional):
-  - Some art needs color pickers
-  - Some art might use fixed colors
-  - Some art might be monochrome (no color controls needed)
-  - Decide based on the art's needs
+ - Some art needs color pickers
+ - Some art might use fixed colors
+ - Some art might be monochrome (no color controls needed)
+ - Decide based on the art's needs
 
 **Every artwork should have unique parameters and algorithm!** The fixed parts provide consistent UX - everything else expresses the unique vision.
 
@@ -276,25 +276,25 @@ The `templates/viewer.html` file is the foundation. It contains the exact struct
 <!DOCTYPE html>
 <html>
 <head>
-  <!-- p5.js from CDN - always available -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
-  <style>
-    /* All styling inline - clean, minimal */
-    /* Canvas on top, controls below */
-  </style>
+ <!-- p5.js from CDN - always available -->
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+ <style>
+ /* All styling inline - clean, minimal */
+ /* Canvas on top, controls below */
+ </style>
 </head>
 <body>
-  <div id="canvas-container"></div>
-  <div id="controls">
-    <!-- All parameter controls -->
-  </div>
-  <script>
-    // ALL p5.js code inline here
-    // Parameter objects, classes, functions
-    // setup() and draw()
-    // UI handlers
-    // Everything self-contained
-  </script>
+ <div id="canvas-container"></div>
+ <div id="controls">
+ <!-- All parameter controls -->
+ </div>
+ <script>
+ // ALL p5.js code inline here
+ // Parameter objects, classes, functions
+ // setup() and draw()
+ // UI handlers
+ // Everything self-contained
+ </script>
 </body>
 </html>
 ```
@@ -312,9 +312,9 @@ The sidebar structure:
 **2. Parameters (VARIABLE)** - Create controls for the art:
 ```html
 <div class="control-group">
-    <label>Parameter Name</label>
-    <input type="range" id="param" min="..." max="..." step="..." value="..." oninput="updateParam('param', this.value)">
-    <span class="value-display" id="param-value">...</span>
+ <label>Parameter Name</label>
+ <input type="range" id="param" min="..." max="..." step="..." value="..." oninput="updateParam('param', this.value)">
+ <span class="value-display" id="param-value">...</span>
 </div>
 ```
 Add as many control-group divs as there are parameters.
@@ -388,15 +388,15 @@ To achieve the best results, trust creativity and let the philosophy guide the i
 This skill includes helpful templates and documentation:
 
 - **templates/viewer.html**: REQUIRED STARTING POINT for all HTML artifacts.
-  - This is the foundation - contains the exact structure and Anthropic branding
-  - **Keep unchanged**: Layout structure, sidebar organization, Anthropic colors/fonts, seed controls, action buttons
-  - **Replace**: The p5.js algorithm, parameter definitions, and UI controls in Parameters section
-  - The extensive comments in the file mark exactly what to keep vs replace
+ - This is the foundation - contains the exact structure and Anthropic branding
+ - **Keep unchanged**: Layout structure, sidebar organization, Anthropic colors/fonts, seed controls, action buttons
+ - **Replace**: The p5.js algorithm, parameter definitions, and UI controls in Parameters section
+ - The extensive comments in the file mark exactly what to keep vs replace
 
 - **templates/generator_template.js**: Reference for p5.js best practices and code structure principles.
-  - Shows how to organize parameters, use seeded randomness, structure classes
-  - NOT a pattern menu - use these principles to build unique algorithms
-  - Embed algorithms inline in the HTML artifact (don't create separate .js files)
+ - Shows how to organize parameters, use seeded randomness, structure classes
+ - NOT a pattern menu - use these principles to build unique algorithms
+ - Embed algorithms inline in the HTML artifact (don't create separate .js files)
 
 **Critical reminder**:
 - The **template is the STARTING POINT**, not inspiration

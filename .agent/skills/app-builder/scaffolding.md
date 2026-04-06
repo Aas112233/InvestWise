@@ -9,47 +9,47 @@
 ```
 project-name/
 ├── src/
-│   ├── app/                        # Routes only (thin layer)
-│   │   ├── layout.tsx
-│   │   ├── page.tsx
-│   │   ├── globals.css
-│   │   ├── (auth)/                 # Route group - auth pages
-│   │   │   ├── login/page.tsx
-│   │   │   └── register/page.tsx
-│   │   ├── (dashboard)/            # Route group - dashboard layout
-│   │   │   ├── layout.tsx
-│   │   │   └── page.tsx
-│   │   └── api/
-│   │       └── [resource]/route.ts
-│   │
-│   ├── features/                   # Feature-based modules
-│   │   ├── auth/
-│   │   │   ├── components/
-│   │   │   ├── hooks/
-│   │   │   ├── actions.ts          # Server Actions
-│   │   │   ├── queries.ts          # Data fetching
-│   │   │   └── types.ts
-│   │   ├── products/
-│   │   │   ├── components/
-│   │   │   ├── actions.ts
-│   │   │   └── queries.ts
-│   │   └── cart/
-│   │       └── ...
-│   │
-│   ├── shared/                     # Shared utilities
-│   │   ├── components/ui/          # Reusable UI components
-│   │   ├── lib/                    # Utils, helpers
-│   │   └── hooks/                  # Global hooks
-│   │
-│   └── server/                     # Server-only code
-│       ├── db/                     # Database client (Prisma)
-│       ├── auth/                   # Auth config
-│       └── services/               # External API integrations
+│ ├── app/ # Routes only (thin layer)
+│ │ ├── layout.tsx
+│ │ ├── page.tsx
+│ │ ├── globals.css
+│ │ ├── (auth)/ # Route group - auth pages
+│ │ │ ├── login/page.tsx
+│ │ │ └── register/page.tsx
+│ │ ├── (dashboard)/ # Route group - dashboard layout
+│ │ │ ├── layout.tsx
+│ │ │ └── page.tsx
+│ │ └── api/
+│ │ └── [resource]/route.ts
+│ │
+│ ├── features/ # Feature-based modules
+│ │ ├── auth/
+│ │ │ ├── components/
+│ │ │ ├── hooks/
+│ │ │ ├── actions.ts # Server Actions
+│ │ │ ├── queries.ts # Data fetching
+│ │ │ └── types.ts
+│ │ ├── products/
+│ │ │ ├── components/
+│ │ │ ├── actions.ts
+│ │ │ └── queries.ts
+│ │ └── cart/
+│ │ └── ...
+│ │
+│ ├── shared/ # Shared utilities
+│ │ ├── components/ui/ # Reusable UI components
+│ │ ├── lib/ # Utils, helpers
+│ │ └── hooks/ # Global hooks
+│ │
+│ └── server/ # Server-only code
+│ ├── db/ # Database client (Prisma)
+│ ├── auth/ # Auth config
+│ └── services/ # External API integrations
 │
 ├── prisma/
-│   ├── schema.prisma
-│   ├── migrations/
-│   └── seed.ts
+│ ├── schema.prisma
+│ ├── migrations/
+│ └── seed.ts
 │
 ├── public/
 ├── .env.example
@@ -92,14 +92,14 @@ project-name/
 
 ```json
 {
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["./src/*"],
-      "@/features/*": ["./src/features/*"],
-      "@/shared/*": ["./src/shared/*"],
-      "@/server/*": ["./src/server/*"]
-    }
-  }
+ "compilerOptions": {
+ "paths": {
+ "@/*": ["./src/*"],
+ "@/features/*": ["./src/features/*"],
+ "@/shared/*": ["./src/shared/*"],
+ "@/server/*": ["./src/server/*"]
+ }
+ }
 }
 ```
 

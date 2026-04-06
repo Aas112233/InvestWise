@@ -24,27 +24,27 @@ description: Nuxt 3 full-stack template. Vue 3, Pinia, Tailwind, Prisma.
 ```
 project-name/
 ├── prisma/
-│   └── schema.prisma
+│ └── schema.prisma
 ├── server/
-│   ├── api/
-│   │   └── [resource]/
-│   │       └── index.ts
-│   └── utils/
-│       └── db.ts         # Prisma client
+│ ├── api/
+│ │ └── [resource]/
+│ │ └── index.ts
+│ └── utils/
+│ └── db.ts # Prisma client
 ├── composables/
-│   └── useAuth.ts
+│ └── useAuth.ts
 ├── stores/
-│   └── user.ts           # Pinia store
+│ └── user.ts # Pinia store
 ├── components/
-│   └── ui/
+│ └── ui/
 ├── pages/
-│   ├── index.vue
-│   └── [...slug].vue
+│ ├── index.vue
+│ └── [...slug].vue
 ├── layouts/
-│   └── default.vue
+│ └── default.vue
 ├── assets/
-│   └── css/
-│       └── main.css
+│ └── css/
+│ └── main.css
 ├── .env.example
 ├── nuxt.config.ts
 └── package.json
@@ -80,9 +80,9 @@ project-name/
 3. `npm install @pinia/nuxt @prisma/client prisma zod`
 4. `npm install -D @nuxtjs/tailwindcss`
 5. Add modules to `nuxt.config.ts`:
-   ```ts
-   modules: ['@pinia/nuxt', '@nuxtjs/tailwindcss']
-   ```
+ ```ts
+ modules: ['@pinia/nuxt', '@nuxtjs/tailwindcss']
+ ```
 6. `npx prisma init`
 7. Configure schema
 8. `npx prisma db push`

@@ -25,11 +25,11 @@ allowed-tools: Read, Glob, Grep
 
 | Project Type | i18n Needed? |
 |--------------|--------------|
-| Public web app | ✅ Yes |
-| SaaS product | ✅ Yes |
-| Internal tool | ⚠️ Maybe |
-| Single-region app | ⚠️ Consider future |
-| Personal project | ❌ Optional |
+| Public web app | Yes |
+| SaaS product | Yes |
+| Internal tool | Maybe |
+| Single-region app | Consider future |
+| Personal project | Optional |
 
 ---
 
@@ -41,8 +41,8 @@ allowed-tools: Read, Glob, Grep
 import { useTranslation } from 'react-i18next';
 
 function Welcome() {
-  const { t } = useTranslation();
-  return <h1>{t('welcome.title')}</h1>;
+ const { t } = useTranslation();
+ return <h1>{t('welcome.title')}</h1>;
 }
 ```
 
@@ -52,8 +52,8 @@ function Welcome() {
 import { useTranslations } from 'next-intl';
 
 export default function Page() {
-  const t = useTranslations('Home');
-  return <h1>{t('title')}</h1>;
+ const t = useTranslations('Home');
+ return <h1>{t('title')}</h1>;
 }
 ```
 
@@ -72,22 +72,22 @@ print(_("Welcome to our app"))
 ```
 locales/
 ├── en/
-│   ├── common.json
-│   ├── auth.json
-│   └── errors.json
+│ ├── common.json
+│ ├── auth.json
+│ └── errors.json
 ├── tr/
-│   ├── common.json
-│   ├── auth.json
-│   └── errors.json
-└── ar/          # RTL
-    └── ...
+│ ├── common.json
+│ ├── auth.json
+│ └── errors.json
+└── ar/ # RTL
+ └── ...
 ```
 
 ---
 
 ## 5. Best Practices
 
-### DO ✅
+### DO 
 
 - Use translation keys, not raw text
 - Namespace translations by feature
@@ -96,7 +96,7 @@ locales/
 - Plan for RTL from the start
 - Use ICU message format for complex strings
 
-### DON'T ❌
+### DON'T 
 
 - Hardcode strings in components
 - Concatenate translated strings
@@ -123,12 +123,12 @@ locales/
 ```css
 /* CSS Logical Properties */
 .container {
-  margin-inline-start: 1rem;  /* Not margin-left */
-  padding-inline-end: 1rem;   /* Not padding-right */
+ margin-inline-start: 1rem; /* Not margin-left */
+ padding-inline-end: 1rem; /* Not padding-right */
 }
 
 [dir="rtl"] .icon {
-  transform: scaleX(-1);
+ transform: scaleX(-1);
 }
 ```
 

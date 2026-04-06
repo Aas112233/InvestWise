@@ -42,13 +42,13 @@ Include relevant memories in prompts
 
 ## Anti-Patterns
 
-### ❌ Remember Everything
+### Remember Everything
 
-### ❌ No Memory Retrieval
+### No Memory Retrieval
 
-### ❌ Single Memory Store
+### Single Memory Store
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

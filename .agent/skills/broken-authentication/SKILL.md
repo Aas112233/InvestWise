@@ -2,8 +2,8 @@
 name: Broken Authentication Testing
 description: This skill should be used when the user asks to "test for broken authentication vulnerabilities", "assess session management security", "perform credential stuffing tests", "evaluate password policies", "test for session fixation", or "identify authentication bypass flaws". It provides comprehensive techniques for identifying authentication and session management weaknesses in web applications.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Broken Authentication Testing
@@ -108,8 +108,8 @@ Test account lockout and rate limiting:
 ```bash
 # Using Hydra for form-based auth
 hydra -l admin -P /usr/share/wordlists/rockyou.txt \
-  target.com http-post-form \
-  "/login:username=^USER^&password=^PASS^:Invalid credentials"
+ target.com http-post-form \
+ "/login:username=^USER^&password=^PASS^:Invalid credentials"
 
 # Using Burp Intruder
 1. Capture login request
@@ -184,9 +184,9 @@ import hashlib
 # Collect multiple session tokens
 tokens = []
 for i in range(100):
-    response = requests.get("https://target.com/login")
-    token = response.cookies.get("SESSIONID")
-    tokens.append(token)
+ response = requests.get("https://target.com/login")
+ token = response.cookies.get("SESSIONID")
+ tokens.append(token)
 
 # Analyze for patterns
 # Check for sequential increments
@@ -219,7 +219,7 @@ Attack scenario:
 # Attacker workflow:
 1. Attacker visits site, gets session: SESSIONID=attacker_session
 2. Attacker sends link to victim with fixed session:
-   https://target.com/login?SESSIONID=attacker_session
+ https://target.com/login?SESSIONID=attacker_session
 3. Victim logs in with attacker's session
 4. Attacker now has authenticated session
 ```
@@ -297,10 +297,10 @@ Analyze password reset security:
 1. Request password reset
 2. Capture reset link
 3. Analyze token:
-   - Length and randomness
-   - Expiration time
-   - Single-use enforcement
-   - Account binding
+ - Length and randomness
+ - Expiration time
+ - Single-use enforcement
+ - Account binding
 
 # Token manipulation
 https://target.com/reset?token=abc123&user=victim

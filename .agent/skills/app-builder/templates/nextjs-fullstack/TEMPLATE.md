@@ -23,19 +23,19 @@ description: Next.js full-stack template principles. App Router, Prisma, Tailwin
 ```
 project-name/
 ├── prisma/
-│   └── schema.prisma
+│ └── schema.prisma
 ├── src/
-│   ├── app/
-│   │   ├── layout.tsx
-│   │   ├── page.tsx
-│   │   ├── globals.css
-│   │   └── api/
-│   ├── components/
-│   │   └── ui/
-│   ├── lib/
-│   │   ├── db.ts        # Prisma client
-│   │   └── utils.ts
-│   └── types/
+│ ├── app/
+│ │ ├── layout.tsx
+│ │ ├── page.tsx
+│ │ ├── globals.css
+│ │ └── api/
+│ ├── components/
+│ │ └── ui/
+│ ├── lib/
+│ │ ├── db.ts # Prisma client
+│ │ └── utils.ts
+│ └── types/
 ├── .env.example
 └── package.json
 ```

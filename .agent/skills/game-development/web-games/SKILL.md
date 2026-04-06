@@ -18,15 +18,15 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 What type of game?
 │
 ├── 2D Game
-│   ├── Full game engine features? → Phaser
-│   └── Raw rendering power? → PixiJS
+│ ├── Full game engine features? → Phaser
+│ └── Raw rendering power? → PixiJS
 │
 ├── 3D Game
-│   ├── Full engine (physics, XR)? → Babylon.js
-│   └── Rendering focused? → Three.js
+│ ├── Full engine (physics, XR)? → Babylon.js
+│ └── Rendering focused? → Three.js
 │
 └── Hybrid / Canvas
-    └── Custom → Raw Canvas/WebGL
+ └── Custom → Raw Canvas/WebGL
 ```
 
 ### Comparison (2025)
@@ -46,10 +46,10 @@ What type of game?
 
 | Browser | Support |
 |---------|---------|
-| Chrome | ✅ Since v113 |
-| Edge | ✅ Since v113 |
-| Firefox | ✅ Since v131 |
-| Safari | ✅ Since 18.0 |
+| Chrome | Since v113 |
+| Edge | Since v113 |
+| Firefox | Since v131 |
+| Safari | Since 18.0 |
 | **Total** | **~73%** global |
 
 ### Decision
@@ -137,7 +137,7 @@ What type of game?
 
 ## 7. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | Load all assets upfront | Progressive loading |
 | Ignore tab visibility | Pause when hidden |

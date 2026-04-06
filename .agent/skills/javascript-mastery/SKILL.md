@@ -3,7 +3,7 @@ name: javascript-mastery
 description: "Comprehensive JavaScript reference covering 33+ essential concepts every developer should know. From fundamentals like primitives and closures to advanced patterns like async/await and functional programming. Use when explaining JS concepts, debugging JavaScript issues, or teaching JavaScript fundamentals."
 ---
 
-# 🧠 JavaScript Mastery
+# JavaScript Mastery
 
 > 33+ essential JavaScript concepts every developer should know, inspired by [33-js-concepts](https://github.com/leonardomso/33-js-concepts).
 
@@ -62,7 +62,7 @@ JavaScript implicitly converts types:
 ```javascript
 // String coercion
 "5" + 3; // "53" (number → string)
-"5" - 3; // 2    (string → number)
+"5" - 3; // 2 (string → number)
 
 // Boolean coercion
 Boolean(""); // false
@@ -71,7 +71,7 @@ Boolean(0); // false
 Boolean([]); // true (!)
 
 // Equality coercion
-"5" == 5; // true  (coerces)
+"5" == 5; // true (coerces)
 "5" === 5; // false (strict)
 ```
 
@@ -107,15 +107,15 @@ Object.is(-0, 0); // false (0 === -0 is true!)
 var globalVar = "global";
 
 function outer() {
-  // Function scope
-  var functionVar = "function";
+ // Function scope
+ var functionVar = "function";
 
-  if (true) {
-    // Block scope (let/const only)
-    let blockVar = "block";
-    const alsoBlock = "block";
-    var notBlock = "function"; // var ignores blocks!
-  }
+ if (true) {
+ // Block scope (let/const only)
+ let blockVar = "block";
+ const alsoBlock = "block";
+ var notBlock = "function"; // var ignores blocks!
+ }
 }
 ```
 
@@ -125,19 +125,19 @@ A closure is a function that remembers its lexical scope:
 
 ```javascript
 function createCounter() {
-  let count = 0; // "closed over" variable
+ let count = 0; // "closed over" variable
 
-  return {
-    increment() {
-      return ++count;
-    },
-    decrement() {
-      return --count;
-    },
-    getCount() {
-      return count;
-    },
-  };
+ return {
+ increment() {
+ return ++count;
+ },
+ decrement() {
+ return --count;
+ },
+ getCount() {
+ return count;
+ },
+ };
 }
 
 const counter = createCounter();
@@ -182,13 +182,13 @@ obj.b = 3; // OK
 
 ```javascript
 function first() {
-  console.log("first start");
-  second();
-  console.log("first end");
+ console.log("first start");
+ second();
+ console.log("first end");
 }
 
 function second() {
-  console.log("second");
+ console.log("second");
 }
 
 first();
@@ -202,7 +202,7 @@ Stack overflow example:
 
 ```javascript
 function infinite() {
-  infinite(); // No base case!
+ infinite(); // No base case!
 }
 infinite(); // RangeError: Maximum call stack size exceeded
 ```
@@ -220,13 +220,13 @@ let b = 5;
 // Function hoisting
 sayHi(); // Works!
 function sayHi() {
-  console.log("Hi!");
+ console.log("Hi!");
 }
 
 // Function expressions don't hoist
 sayBye(); // TypeError
 var sayBye = function () {
-  console.log("Bye!");
+ console.log("Bye!");
 };
 ```
 
@@ -238,23 +238,23 @@ console.log(this); // window (browser) or global (Node)
 
 // Object method
 const obj = {
-  name: "Alice",
-  greet() {
-    console.log(this.name); // "Alice"
-  },
+ name: "Alice",
+ greet() {
+ console.log(this.name); // "Alice"
+ },
 };
 
 // Arrow functions (lexical this)
 const obj2 = {
-  name: "Bob",
-  greet: () => {
-    console.log(this.name); // undefined (inherits outer this)
-  },
+ name: "Bob",
+ greet: () => {
+ console.log(this.name); // undefined (inherits outer this)
+ },
 };
 
 // Explicit binding
 function greet() {
-  console.log(this.name);
+ console.log(this.name);
 }
 greet.call({ name: "Charlie" }); // "Charlie"
 greet.apply({ name: "Diana" }); // "Diana"
@@ -292,29 +292,29 @@ console.log("4");
 ```javascript
 // Callback pattern
 function fetchData(callback) {
-  setTimeout(() => {
-    callback(null, { data: "result" });
-  }, 1000);
+ setTimeout(() => {
+ callback(null, { data: "result" });
+ }, 1000);
 }
 
 // Error-first convention
 fetchData((error, result) => {
-  if (error) {
-    console.error(error);
-    return;
-  }
-  console.log(result);
+ if (error) {
+ console.error(error);
+ return;
+ }
+ console.log(result);
 });
 
 // Callback hell (avoid this!)
 getData((data) => {
-  processData(data, (processed) => {
-    saveData(processed, (saved) => {
-      notify(saved, () => {
-        // 😱 Pyramid of doom
-      });
-    });
-  });
+ processData(data, (processed) => {
+ saveData(processed, (saved) => {
+ notify(saved, () => {
+ // Pyramid of doom
+ });
+ });
+ });
 });
 ```
 
@@ -323,17 +323,17 @@ getData((data) => {
 ```javascript
 // Creating a Promise
 const promise = new Promise((resolve, reject) => {
-  setTimeout(() => {
-    resolve("Success!");
-    // or: reject(new Error("Failed!"));
-  }, 1000);
+ setTimeout(() => {
+ resolve("Success!");
+ // or: reject(new Error("Failed!"));
+ }, 1000);
 });
 
 // Consuming Promises
 promise
-  .then((result) => console.log(result))
-  .catch((error) => console.error(error))
-  .finally(() => console.log("Done"));
+ .then((result) => console.log(result))
+ .catch((error) => console.error(error))
+ .finally(() => console.log("Done"));
 
 // Promise combinators
 Promise.all([p1, p2, p3]); // All must succeed
@@ -346,24 +346,24 @@ Promise.any([p1, p2]); // First to succeed
 
 ```javascript
 async function fetchUserData(userId) {
-  try {
-    const response = await fetch(`/api/users/${userId}`);
-    if (!response.ok) throw new Error("Failed to fetch");
-    const user = await response.json();
-    return user;
-  } catch (error) {
-    console.error("Error:", error);
-    throw error; // Re-throw for caller to handle
-  }
+ try {
+ const response = await fetch(`/api/users/${userId}`);
+ if (!response.ok) throw new Error("Failed to fetch");
+ const user = await response.json();
+ return user;
+ } catch (error) {
+ console.error("Error:", error);
+ throw error; // Re-throw for caller to handle
+ }
 }
 
 // Parallel execution
 async function fetchAll() {
-  const [users, posts] = await Promise.all([
-    fetch("/api/users"),
-    fetch("/api/posts"),
-  ]);
-  return { users, posts };
+ const [users, posts] = await Promise.all([
+ fetch("/api/users"),
+ fetch("/api/posts"),
+ ]);
+ return { users, posts };
 }
 ```
 
@@ -382,9 +382,9 @@ const doubled = numbers.map((n) => n * 2); // [2, 4, 6]
 
 // Returns a function
 function multiply(a) {
-  return function (b) {
-    return a * b;
-  };
+ return function (b) {
+ return a * b;
+ };
 }
 const double = multiply(2);
 double(5); // 10
@@ -395,19 +395,19 @@ double(5); // 10
 ```javascript
 // Pure: same input → same output, no side effects
 function add(a, b) {
-  return a + b;
+ return a + b;
 }
 
 // Impure: modifies external state
 let total = 0;
 function addToTotal(value) {
-  total += value; // Side effect!
-  return total;
+ total += value; // Side effect!
+ return total;
 }
 
 // Impure: depends on external state
 function getDiscount(price) {
-  return price * globalDiscountRate; // External dependency
+ return price * globalDiscountRate; // External dependency
 }
 ```
 
@@ -415,9 +415,9 @@ function getDiscount(price) {
 
 ```javascript
 const users = [
-  { name: "Alice", age: 25 },
-  { name: "Bob", age: 30 },
-  { name: "Charlie", age: 35 },
+ { name: "Alice", age: 25 },
+ { name: "Bob", age: 30 },
+ { name: "Charlie", age: 35 },
 ];
 
 // map: transform each element
@@ -434,9 +434,9 @@ const totalAge = users.reduce((sum, u) => sum + u.age, 0);
 
 // Chaining
 const result = users
-  .filter((u) => u.age >= 30)
-  .map((u) => u.name)
-  .join(", ");
+ .filter((u) => u.age >= 30)
+ .map((u) => u.name)
+ .join(", ");
 // "Bob, Charlie"
 ```
 
@@ -445,12 +445,12 @@ const result = users
 ```javascript
 // Currying: transform f(a, b, c) into f(a)(b)(c)
 const curry = (fn) => {
-  return function curried(...args) {
-    if (args.length >= fn.length) {
-      return fn.apply(this, args);
-    }
-    return (...moreArgs) => curried(...args, ...moreArgs);
-  };
+ return function curried(...args) {
+ if (args.length >= fn.length) {
+ return fn.apply(this, args);
+ }
+ return (...moreArgs) => curried(...args, ...moreArgs);
+ };
 };
 
 const add = curry((a, b, c) => a + b + c);
@@ -460,14 +460,14 @@ add(1)(2, 3); // 6
 
 // Composition: combine functions
 const compose =
-  (...fns) =>
-  (x) =>
-    fns.reduceRight((acc, fn) => fn(acc), x);
+ (...fns) =>
+ (x) =>
+ fns.reduceRight((acc, fn) => fn(acc), x);
 
 const pipe =
-  (...fns) =>
-  (x) =>
-    fns.reduce((acc, fn) => fn(acc), x);
+ (...fns) =>
+ (x) =>
+ fns.reduce((acc, fn) => fn(acc), x);
 
 const addOne = (x) => x + 1;
 const double = (x) => x * 2;
@@ -488,14 +488,14 @@ doubleThenAdd(5); // 11 = (5 * 2) + 1
 ```javascript
 // Prototype chain
 const animal = {
-  speak() {
-    console.log("Some sound");
-  },
+ speak() {
+ console.log("Some sound");
+ },
 };
 
 const dog = Object.create(animal);
 dog.bark = function () {
-  console.log("Woof!");
+ console.log("Woof!");
 };
 
 dog.speak(); // "Some sound" (inherited)
@@ -503,15 +503,15 @@ dog.bark(); // "Woof!" (own method)
 
 // ES6 Classes (syntactic sugar)
 class Animal {
-  speak() {
-    console.log("Some sound");
-  }
+ speak() {
+ console.log("Some sound");
+ }
 }
 
 class Dog extends Animal {
-  bark() {
-    console.log("Woof!");
-  }
+ bark() {
+ console.log("Woof!");
+ }
 }
 ```
 
@@ -561,7 +561,7 @@ const { name: userName } = { name: "Bob" };
 
 // Nested
 const {
-  address: { street },
+ address: { street },
 } = { address: { street: "123 Main" } };
 ```
 
@@ -577,7 +577,7 @@ const obj2 = { ...obj1, b: 2 }; // { a: 1, b: 2 }
 
 // Rest: collect remaining
 function sum(...numbers) {
-  return numbers.reduce((a, b) => a + b, 0);
+ return numbers.reduce((a, b) => a + b, 0);
 }
 sum(1, 2, 3, 4); // 10
 ```
@@ -588,7 +588,7 @@ sum(1, 2, 3, 4); // 10
 // Named exports
 export const PI = 3.14159;
 export function square(x) {
-  return x * x;
+ return x * x;
 }
 
 // Default export
@@ -624,16 +624,16 @@ const value2 = 0 || "default"; // "default" (0 is falsy)
 
 ## Quick Reference Card
 
-| Concept        | Key Point                         |
+| Concept | Key Point |
 | :------------- | :-------------------------------- |
-| `==` vs `===`  | Always use `===`                  |
-| `var` vs `let` | Prefer `let`/`const`              |
-| Closures       | Function + lexical scope          |
-| `this`         | Depends on how function is called |
-| Event loop     | Microtasks before macrotasks      |
-| Pure functions | Same input → same output          |
-| Prototypes     | `__proto__` → prototype chain     |
-| `??` vs `\|\|` | `??` only checks null/undefined   |
+| `==` vs `===` | Always use `===` |
+| `var` vs `let` | Prefer `let`/`const` |
+| Closures | Function + lexical scope |
+| `this` | Depends on how function is called |
+| Event loop | Microtasks before macrotasks |
+| Pure functions | Same input → same output |
+| Prototypes | `__proto__` → prototype chain |
+| `??` vs `\|\|` | `??` only checks null/undefined |
 
 ---
 

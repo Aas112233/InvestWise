@@ -44,11 +44,11 @@ Functions that run on a schedule
 
 ## Anti-Patterns
 
-### ❌ Not Using Steps
+### Not Using Steps
 
-### ❌ Huge Event Payloads
+### Huge Event Payloads
 
-### ❌ Ignoring Concurrency
+### Ignoring Concurrency
 
 ## Related Skills
 

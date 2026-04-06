@@ -24,20 +24,20 @@ Proper file and directory structure for maintainable, scalable frontend code in 
 **Structure:**
 ```
 features/
-  my-feature/
-    api/
-      myFeatureApi.ts         # API service layer
-    components/
-      MyFeatureMain.tsx       # Main component
-      SubComponents/          # Related components
-    hooks/
-      useMyFeature.ts         # Custom hooks
-      useSuspenseMyFeature.ts # Suspense hooks
-    helpers/
-      myFeatureHelpers.ts     # Utility functions
-    types/
-      index.ts                # TypeScript types
-    index.ts                  # Public exports
+ my-feature/
+ api/
+ myFeatureApi.ts # API service layer
+ components/
+ MyFeatureMain.tsx # Main component
+ SubComponents/ # Related components
+ hooks/
+ useMyFeature.ts # Custom hooks
+ useSuspenseMyFeature.ts # Suspense hooks
+ helpers/
+ myFeatureHelpers.ts # Utility functions
+ types/
+ index.ts # TypeScript types
+ index.ts # Public exports
 ```
 
 ### components/ Directory
@@ -58,12 +58,12 @@ features/
 **Structure:**
 ```
 components/
-  SuspenseLoader/
-    SuspenseLoader.tsx
-    SuspenseLoader.test.tsx
-  CustomAppBar/
-    CustomAppBar.tsx
-    CustomAppBar.test.tsx
+ SuspenseLoader/
+ SuspenseLoader.tsx
+ SuspenseLoader.test.tsx
+ CustomAppBar/
+ CustomAppBar.tsx
+ CustomAppBar.test.tsx
 ```
 
 ---
@@ -76,46 +76,46 @@ Based on `features/posts/` structure:
 
 ```
 features/
-  posts/
-    api/
-      postApi.ts              # API service layer (GET, POST, PUT, DELETE)
+ posts/
+ api/
+ postApi.ts # API service layer (GET, POST, PUT, DELETE)
 
-    components/
-      PostTable.tsx           # Main container component
-      grids/
-        PostDataGrid/
-          PostDataGrid.tsx
-      drawers/
-        ProjectPostDrawer/
-          ProjectPostDrawer.tsx
-      cells/
-        editors/
-          TextEditCell.tsx
-        renderers/
-          DateCell.tsx
-      toolbar/
-        CustomToolbar.tsx
+ components/
+ PostTable.tsx # Main container component
+ grids/
+ PostDataGrid/
+ PostDataGrid.tsx
+ drawers/
+ ProjectPostDrawer/
+ ProjectPostDrawer.tsx
+ cells/
+ editors/
+ TextEditCell.tsx
+ renderers/
+ DateCell.tsx
+ toolbar/
+ CustomToolbar.tsx
 
-    hooks/
-      usePostQueries.ts       # Regular queries
-      useSuspensePost.ts      # Suspense queries
-      usePostMutations.ts     # Mutations
-      useGridLayout.ts              # Feature-specific hooks
+ hooks/
+ usePostQueries.ts # Regular queries
+ useSuspensePost.ts # Suspense queries
+ usePostMutations.ts # Mutations
+ useGridLayout.ts # Feature-specific hooks
 
-    helpers/
-      postHelpers.ts          # Utility functions
-      validation.ts                 # Validation logic
+ helpers/
+ postHelpers.ts # Utility functions
+ validation.ts # Validation logic
 
-    types/
-      index.ts                      # TypeScript types/interfaces
+ types/
+ index.ts # TypeScript types/interfaces
 
-    queries/
-      postQueries.ts          # Query key factories (optional)
+ queries/
+ postQueries.ts # Query key factories (optional)
 
-    context/
-      PostContext.tsx         # React context (if needed)
+ context/
+ PostContext.tsx # React context (if needed)
 
-    index.ts                        # Public API exports
+ index.ts # Public API exports
 ```
 
 ### Subdirectory Guidelines
@@ -133,14 +133,14 @@ features/
 import apiClient from '@/lib/apiClient';
 
 export const myFeatureApi = {
-    getItem: async (id: number) => {
-        const { data } = await apiClient.get(`/blog/items/${id}`);
-        return data;
-    },
-    createItem: async (payload) => {
-        const { data } = await apiClient.post('/blog/items', payload);
-        return data;
-    },
+ getItem: async (id: number) => {
+ const { data } = await apiClient.get(`/blog/items/${id}`);
+ return data;
+ },
+ createItem: async (payload) => {
+ const { data } = await apiClient.post('/blog/items', payload);
+ return data;
+ },
 };
 ```
 
@@ -155,17 +155,17 @@ export const myFeatureApi = {
 **Examples:**
 ```
 components/
-  MyFeatureMain.tsx           # Main component
-  MyFeatureHeader.tsx         # Supporting components
-  MyFeatureFooter.tsx
+ MyFeatureMain.tsx # Main component
+ MyFeatureHeader.tsx # Supporting components
+ MyFeatureFooter.tsx
 
-  # OR with subdirectories:
-  containers/
-    MyFeatureContainer.tsx
-  presentational/
-    MyFeatureDisplay.tsx
-  blogs/
-    MyFeatureBlog.tsx
+ # OR with subdirectories:
+ containers/
+ MyFeatureContainer.tsx
+ presentational/
+ MyFeatureDisplay.tsx
+ blogs/
+ MyFeatureBlog.tsx
 ```
 
 #### hooks/ Directory
@@ -179,10 +179,10 @@ components/
 **Examples:**
 ```
 hooks/
-  useMyFeature.ts               # Main hook
-  useSuspenseMyFeature.ts       # Suspense version
-  useMyFeatureMutations.ts      # Mutations
-  useMyFeatureFilters.ts        # Filters/search
+ useMyFeature.ts # Main hook
+ useSuspenseMyFeature.ts # Suspense version
+ useMyFeatureMutations.ts # Mutations
+ useMyFeatureFilters.ts # Filters/search
 ```
 
 #### helpers/ Directory
@@ -192,10 +192,10 @@ hooks/
 **Examples:**
 ```
 helpers/
-  myFeatureHelpers.ts           # General utilities
-  validation.ts                 # Validation logic
-  transblogers.ts               # Data transblogations
-  constants.ts                  # Constants
+ myFeatureHelpers.ts # General utilities
+ validation.ts # Validation logic
+ transblogers.ts # Data transblogations
+ constants.ts # Constants
 ```
 
 #### types/ Directory
@@ -205,8 +205,8 @@ helpers/
 **Files:**
 ```
 types/
-  index.ts                      # Main types, exported
-  internal.ts                   # Internal types (not exported)
+ index.ts # Main types, exported
+ internal.ts # Internal types (not exported)
 ```
 
 ---
@@ -227,13 +227,13 @@ From `vite.config.ts` lines 180-185:
 ### Usage Examples
 
 ```typescript
-// ✅ PREFERRED - Use aliases for absolute imports
+// PREFERRED - Use aliases for absolute imports
 import { apiClient } from '@/lib/apiClient';
 import { SuspenseLoader } from '~components/SuspenseLoader';
 import { postApi } from '~features/posts/api/postApi';
 import type { User } from '~types/user';
 
-// ❌ AVOID - Relative paths from deep nesting
+// AVOID - Relative paths from deep nesting
 import { apiClient } from '../../../lib/apiClient';
 import { SuspenseLoader } from '../../../components/SuspenseLoader';
 ```
@@ -280,9 +280,9 @@ CustomAppBar.tsx
 ```
 
 **Avoid:**
-- camelCase: `myComponent.tsx` ❌
-- kebab-case: `my-component.tsx` ❌
-- All caps: `MYCOMPONENT.tsx` ❌
+- camelCase: `myComponent.tsx` 
+- kebab-case: `my-component.tsx` 
+- All caps: `MYCOMPONENT.tsx` 
 
 ### Hooks
 
@@ -426,10 +426,10 @@ export type { MyFeatureData, MyFeatureConfig } from './types';
 
 **Usage:**
 ```typescript
-// ✅ Clean import from feature index
+// Clean import from feature index
 import { MyFeatureMain, useMyFeature } from '~features/my-feature';
 
-// ❌ Avoid deep imports (but OK if needed)
+// Avoid deep imports (but OK if needed)
 import { MyFeatureMain } from '~features/my-feature/components/MyFeatureMain';
 ```
 
@@ -439,49 +439,49 @@ import { MyFeatureMain } from '~features/my-feature/components/MyFeatureMain';
 
 ```
 src/
-├── features/                    # Domain-specific features
-│   ├── posts/
-│   │   ├── api/
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   ├── helpers/
-│   │   ├── types/
-│   │   └── index.ts
-│   ├── blogs/
-│   └── auth/
+├── features/ # Domain-specific features
+│ ├── posts/
+│ │ ├── api/
+│ │ ├── components/
+│ │ ├── hooks/
+│ │ ├── helpers/
+│ │ ├── types/
+│ │ └── index.ts
+│ ├── blogs/
+│ └── auth/
 │
-├── components/                  # Reusable components
-│   ├── SuspenseLoader/
-│   ├── CustomAppBar/
-│   ├── ErrorBoundary/
-│   └── LoadingOverlay/
+├── components/ # Reusable components
+│ ├── SuspenseLoader/
+│ ├── CustomAppBar/
+│ ├── ErrorBoundary/
+│ └── LoadingOverlay/
 │
-├── routes/                      # TanStack Router routes
-│   ├── __root.tsx
-│   ├── index.tsx
-│   ├── project-catalog/
-│   │   ├── index.tsx
-│   │   └── create/
-│   └── blogs/
+├── routes/ # TanStack Router routes
+│ ├── __root.tsx
+│ ├── index.tsx
+│ ├── project-catalog/
+│ │ ├── index.tsx
+│ │ └── create/
+│ └── blogs/
 │
-├── hooks/                       # Shared hooks
-│   ├── useAuth.ts
-│   ├── useMuiSnackbar.ts
-│   └── useDebounce.ts
+├── hooks/ # Shared hooks
+│ ├── useAuth.ts
+│ ├── useMuiSnackbar.ts
+│ └── useDebounce.ts
 │
-├── lib/                         # Shared utilities
-│   ├── apiClient.ts
-│   └── utils.ts
+├── lib/ # Shared utilities
+│ ├── apiClient.ts
+│ └── utils.ts
 │
-├── types/                       # Shared TypeScript types
-│   ├── user.ts
-│   ├── post.ts
-│   └── common.ts
+├── types/ # Shared TypeScript types
+│ ├── user.ts
+│ ├── post.ts
+│ └── common.ts
 │
-├── config/                      # Configuration
-│   └── theme.ts
+├── config/ # Configuration
+│ └── theme.ts
 │
-└── App.tsx                      # Root component
+└── App.tsx # Root component
 ```
 
 ---

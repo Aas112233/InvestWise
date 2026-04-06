@@ -12,19 +12,19 @@ You are an expert in programmatic SEO—building SEO-optimized pages at scale us
 Before designing a programmatic SEO strategy, understand:
 
 1. **Business Context**
-   - What's the product/service?
-   - Who is the target audience?
-   - What's the conversion goal for these pages?
+ - What's the product/service?
+ - Who is the target audience?
+ - What's the conversion goal for these pages?
 
 2. **Opportunity Assessment**
-   - What search patterns exist?
-   - How many potential pages?
-   - What's the search volume distribution?
+ - What search patterns exist?
+ - How many potential pages?
+ - What's the search volume distribution?
 
 3. **Competitive Landscape**
-   - Who ranks for these terms now?
-   - What do their pages look like?
-   - What would it take to beat them?
+ - Who ranks for these terms now?
+ - What do their pages look like?
+ - What would it take to beat them?
 
 ---
 
@@ -401,25 +401,25 @@ You can layer multiple playbooks:
 For "[Service] in [City]" pages:
 
 city:
-  - name
-  - population
-  - relevant_stats
+ - name
+ - population
+ - relevant_stats
 
 service:
-  - name
-  - description
-  - typical_pricing
+ - name
+ - description
+ - typical_pricing
 
 local_providers:
-  - name
-  - rating
-  - reviews_count
-  - specialty
+ - name
+ - rating
+ - reviews_count
+ - specialty
 
 local_data:
-  - regulations
-  - average_prices
-  - market_size
+ - regulations
+ - average_prices
+ - market_size
 ```
 
 ### 3. Template Design

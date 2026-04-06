@@ -7,11 +7,11 @@ Complete API documentation for all NotebookLM skill modules.
 **All commands must use the `run.py` wrapper to ensure proper environment:**
 
 ```bash
-# ✅ CORRECT:
+# CORRECT:
 python scripts/run.py [script_name].py [arguments]
 
-# ❌ WRONG:
-python scripts/[script_name].py [arguments]  # Will fail without venv!
+# WRONG:
+python scripts/[script_name].py [arguments] # Will fail without venv!
 ```
 
 ## Core Scripts
@@ -49,17 +49,17 @@ Manage notebook library with CRUD operations.
 python scripts/run.py ask_question.py --question "What is the content of this notebook? What topics are covered? Provide a complete overview briefly and concisely" --notebook-url "[URL]"
 # Then add with discovered info
 python scripts/run.py notebook_manager.py add \
-  --url "https://notebooklm.google.com/notebook/..." \
-  --name "Name" \
-  --description "Description" \
-  --topics "topic1,topic2"
+ --url "https://notebooklm.google.com/notebook/..." \
+ --name "Name" \
+ --description "Description" \
+ --topics "topic1,topic2"
 
 # Direct add (when you know the content)
 python scripts/run.py notebook_manager.py add \
-  --url "https://notebooklm.google.com/notebook/..." \
-  --name "Name" \
-  --description "What it contains" \
-  --topics "topic1,topic2"
+ --url "https://notebooklm.google.com/notebook/..." \
+ --name "Name" \
+ --description "What it contains" \
+ --topics "topic1,topic2"
 
 # List notebooks
 python scripts/run.py notebook_manager.py list
@@ -158,9 +158,9 @@ import json
 
 # Always use run.py wrapper
 result = subprocess.run([
-    "python", "scripts/run.py", "ask_question.py",
-    "--question", "Your question",
-    "--notebook-id", "notebook-id"
+ "python", "scripts/run.py", "ask_question.py",
+ "--question", "Your question",
+ "--notebook-id", "notebook-id"
 ], capture_output=True, text=True)
 
 answer = result.stdout
@@ -186,10 +186,10 @@ Location: `~/.claude/skills/notebooklm/data/`
 
 ```
 data/
-├── library.json       # Notebook metadata
-├── auth_info.json     # Auth status
-└── browser_state/     # Browser cookies
-    └── state.json
+├── library.json # Notebook metadata
+├── auth_info.json # Auth status
+└── browser_state/ # Browser cookies
+ └── state.json
 ```
 
 **Security:** Protected by `.gitignore`, never commit.
@@ -199,12 +199,12 @@ data/
 Optional `.env` file configuration:
 
 ```env
-HEADLESS=false           # Browser visibility
-SHOW_BROWSER=false       # Default display
-STEALTH_ENABLED=true     # Human behavior
-TYPING_WPM_MIN=160       # Typing speed
+HEADLESS=false # Browser visibility
+SHOW_BROWSER=false # Default display
+STEALTH_ENABLED=true # Human behavior
+TYPING_WPM_MIN=160 # Typing speed
 TYPING_WPM_MAX=240
-DEFAULT_NOTEBOOK_ID=     # Default notebook
+DEFAULT_NOTEBOOK_ID= # Default notebook
 ```
 
 ## Error Handling
@@ -214,18 +214,18 @@ Common patterns:
 ```python
 # Using run.py prevents most errors
 result = subprocess.run([
-    "python", "scripts/run.py", "ask_question.py",
-    "--question", "Question"
+ "python", "scripts/run.py", "ask_question.py",
+ "--question", "Question"
 ], capture_output=True, text=True)
 
 if result.returncode != 0:
-    error = result.stderr
-    if "rate limit" in error.lower():
-        # Wait or switch accounts
-        pass
-    elif "not authenticated" in error.lower():
-        # Run auth setup
-        subprocess.run(["python", "scripts/run.py", "auth_manager.py", "setup"])
+ error = result.stderr
+ if "rate limit" in error.lower():
+ # Wait or switch accounts
+ pass
+ elif "not authenticated" in error.lower():
+ # Run auth setup
+ subprocess.run(["python", "scripts/run.py", "auth_manager.py", "setup"])
 ```
 
 ## Rate Limits
@@ -246,36 +246,36 @@ import concurrent.futures
 import subprocess
 
 def query(question, notebook_id):
-    result = subprocess.run([
-        "python", "scripts/run.py", "ask_question.py",
-        "--question", question,
-        "--notebook-id", notebook_id
-    ], capture_output=True, text=True)
-    return result.stdout
+ result = subprocess.run([
+ "python", "scripts/run.py", "ask_question.py",
+ "--question", question,
+ "--notebook-id", notebook_id
+ ], capture_output=True, text=True)
+ return result.stdout
 
 # Run multiple queries simultaneously
 with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-    futures = [
-        executor.submit(query, q, nb)
-        for q, nb in zip(questions, notebooks)
-    ]
-    results = [f.result() for f in futures]
+ futures = [
+ executor.submit(query, q, nb)
+ for q, nb in zip(questions, notebooks)
+ ]
+ results = [f.result() for f in futures]
 ```
 
 ### Batch Processing
 
 ```python
 def batch_research(questions, notebook_id):
-    results = []
-    for question in questions:
-        result = subprocess.run([
-            "python", "scripts/run.py", "ask_question.py",
-            "--question", question,
-            "--notebook-id", notebook_id
-        ], capture_output=True, text=True)
-        results.append(result.stdout)
-        time.sleep(2)  # Avoid rate limits
-    return results
+ results = []
+ for question in questions:
+ result = subprocess.run([
+ "python", "scripts/run.py", "ask_question.py",
+ "--question", question,
+ "--notebook-id", notebook_id
+ ], capture_output=True, text=True)
+ results.append(result.stdout)
+ time.sleep(2) # Avoid rate limits
+ return results
 ```
 
 ## Module Classes

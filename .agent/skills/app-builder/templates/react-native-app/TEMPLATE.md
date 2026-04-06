@@ -22,18 +22,18 @@ description: React Native mobile app template principles. Expo, TypeScript, navi
 
 ```
 project-name/
-├── app/                 # Expo Router (file-based)
-│   ├── _layout.tsx      # Root layout
-│   ├── index.tsx        # Home
-│   ├── (tabs)/          # Tab navigation
-│   └── [id].tsx         # Dynamic route
+├── app/ # Expo Router (file-based)
+│ ├── _layout.tsx # Root layout
+│ ├── index.tsx # Home
+│ ├── (tabs)/ # Tab navigation
+│ └── [id].tsx # Dynamic route
 ├── components/
-│   ├── ui/              # Reusable
-│   └── features/
+│ ├── ui/ # Reusable
+│ └── features/
 ├── hooks/
 ├── lib/
-│   ├── api.ts
-│   └── storage.ts
+│ ├── api.ts
+│ └── storage.ts
 ├── store/
 ├── constants/
 └── app.json

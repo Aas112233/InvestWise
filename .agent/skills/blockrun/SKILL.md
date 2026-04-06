@@ -31,19 +31,19 @@ If the user specifies a budget (e.g., "use at most $1"), track spending and stop
 from blockrun_llm import setup_agent_wallet
 
 client = setup_agent_wallet()
-budget = 1.0  # User's budget
+budget = 1.0 # User's budget
 
 # Before each call, check if within budget
 spending = client.get_spending()
 if spending['total_usd'] >= budget:
-    print(f"Budget reached: ${spending['total_usd']:.4f} spent")
-    # Stop making calls
+ print(f"Budget reached: ${spending['total_usd']:.4f} spent")
+ # Stop making calls
 else:
-    response = client.chat("openai/gpt-5.2", "Hello!")
+ response = client.chat("openai/gpt-5.2", "Hello!")
 
 # At the end, report spending
 spending = client.get_spending()
-print(f"💰 Total spent: ${spending['total_usd']:.4f} across {spending['calls']} calls")
+print(f" Total spent: ${spending['total_usd']:.4f} across {spending['calls']} calls")
 ```
 
 ## When to Use
@@ -76,12 +76,12 @@ Use `setup_agent_wallet()` to auto-create a wallet and get a client. This shows 
 ```python
 from blockrun_llm import setup_agent_wallet
 
-client = setup_agent_wallet()  # Auto-creates wallet, shows QR if new
+client = setup_agent_wallet() # Auto-creates wallet, shows QR if new
 ```
 
 **Check balance (when user asks "show balance", "check wallet", etc.):**
 ```python
-balance = client.get_balance()  # On-chain USDC balance
+balance = client.get_balance() # On-chain USDC balance
 print(f"Balance: ${balance:.2f} USDC")
 print(f"Wallet: {client.get_wallet_address()}")
 ```
@@ -102,7 +102,7 @@ print(generate_wallet_qr_ascii(get_wallet_address()))
 ```python
 from blockrun_llm import setup_agent_wallet
 
-client = setup_agent_wallet()  # Auto-creates wallet if needed
+client = setup_agent_wallet() # Auto-creates wallet if needed
 response = client.chat("openai/gpt-5.2", "What is 2+2?")
 print(response)
 
@@ -122,9 +122,9 @@ client = setup_agent_wallet()
 
 # Simple: Enable live search with search=True
 response = client.chat(
-    "xai/grok-3",
-    "What are the latest posts from @blockrunai on X?",
-    search=True  # Enables real-time X/Twitter search
+ "xai/grok-3",
+ "What are the latest posts from @blockrunai on X?",
+ search=True # Enables real-time X/Twitter search
 )
 print(response)
 ```
@@ -137,20 +137,20 @@ from blockrun_llm import setup_agent_wallet
 client = setup_agent_wallet()
 
 response = client.chat(
-    "xai/grok-3",
-    "Analyze @blockrunai's recent content and engagement",
-    search_parameters={
-        "mode": "on",
-        "sources": [
-            {
-                "type": "x",
-                "included_x_handles": ["blockrunai"],
-                "post_favorite_count": 5
-            }
-        ],
-        "max_search_results": 20,
-        "return_citations": True
-    }
+ "xai/grok-3",
+ "Analyze @blockrunai's recent content and engagement",
+ search_parameters={
+ "mode": "on",
+ "sources": [
+ {
+ "type": "x",
+ "included_x_handles": ["blockrunai"],
+ "post_favorite_count": 5
+ }
+ ],
+ "max_search_results": 20,
+ "return_citations": True
+ }
 )
 print(response)
 ```
@@ -172,7 +172,7 @@ To reduce costs, set `max_search_results` to a lower value:
 ```python
 # Only use 5 sources (~$0.13)
 response = client.chat("xai/grok-3", "What's trending?",
-    search_parameters={"mode": "on", "max_search_results": 5})
+ search_parameters={"mode": "on", "max_search_results": 5})
 ```
 
 ### Search Parameters
@@ -191,30 +191,30 @@ response = client.chat("xai/grok-3", "What's trending?",
 **X/Twitter Source:**
 ```python
 {
-    "type": "x",
-    "included_x_handles": ["handle1", "handle2"],  # Max 10
-    "excluded_x_handles": ["spam_account"],        # Max 10
-    "post_favorite_count": 100,  # Min likes threshold
-    "post_view_count": 1000      # Min views threshold
+ "type": "x",
+ "included_x_handles": ["handle1", "handle2"], # Max 10
+ "excluded_x_handles": ["spam_account"], # Max 10
+ "post_favorite_count": 100, # Min likes threshold
+ "post_view_count": 1000 # Min views threshold
 }
 ```
 
 **Web Source:**
 ```python
 {
-    "type": "web",
-    "country": "US",  # ISO alpha-2 code
-    "allowed_websites": ["example.com"],  # Max 5
-    "safe_search": True
+ "type": "web",
+ "country": "US", # ISO alpha-2 code
+ "allowed_websites": ["example.com"], # Max 5
+ "safe_search": True
 }
 ```
 
 **News Source:**
 ```python
 {
-    "type": "news",
-    "country": "US",
-    "excluded_websites": ["tabloid.com"]  # Max 5
+ "type": "news",
+ "country": "US",
+ "excluded_websites": ["tabloid.com"] # Max 5
 }
 ```
 

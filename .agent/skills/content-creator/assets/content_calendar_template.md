@@ -75,12 +75,12 @@
 
 ### Top Performing Content
 1. **Title/Topic**: 
-   - **Metric**: 
-   - **Why it worked**: 
+ - **Metric**: 
+ - **Why it worked**: 
 
 2. **Title/Topic**: 
-   - **Metric**: 
-   - **Why it worked**: 
+ - **Metric**: 
+ - **Why it worked**: 
 
 ### Lessons Learned
 - 

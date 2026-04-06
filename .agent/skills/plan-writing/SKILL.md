@@ -36,11 +36,11 @@ This skill provides a framework for breaking down work into clear, actionable ta
 
 ## Planning Principles (NOT Templates!)
 
-> 🔴 **NO fixed templates. Each plan is UNIQUE to the task.**
+> **NO fixed templates. Each plan is UNIQUE to the task.**
 
 ### Principle 1: Keep It SHORT
 
-| ❌ Wrong | ✅ Right |
+| Wrong | Right |
 |----------|----------|
 | 50 tasks with sub-sub-tasks | 5-10 clear tasks max |
 | Every micro-step listed | Only actionable items |
@@ -52,7 +52,7 @@ This skill provides a framework for breaking down work into clear, actionable ta
 
 ### Principle 2: Be SPECIFIC, Not Generic
 
-| ❌ Wrong | ✅ Right |
+| Wrong | Right |
 |----------|----------|
 | "Set up project" | "Run `npx create-next-app`" |
 | "Add authentication" | "Install next-auth, create `/api/auth/[...nextauth].ts`" |
@@ -83,7 +83,7 @@ This skill provides a framework for breaking down work into clear, actionable ta
 
 ### Principle 4: Scripts Are Project-Specific
 
-> 🔴 **DO NOT copy-paste script commands. Choose based on project type.**
+> **DO NOT copy-paste script commands. Choose based on project type.**
 
 | Project Type | Relevant Scripts |
 |--------------|------------------|
@@ -100,7 +100,7 @@ This skill provides a framework for breaking down work into clear, actionable ta
 
 ### Principle 5: Verification is Simple
 
-| ❌ Wrong | ✅ Right |
+| Wrong | Right |
 |----------|----------|
 | "Verify the component works correctly" | "Run `npm run dev`, click button, see toast" |
 | "Test the API" | "curl localhost:3000/api/users returns 200" |

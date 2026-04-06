@@ -39,17 +39,17 @@ if (loading) return <LoadingState />; // Flashes on refetch!
 
 ```
 Is there an error?
-  → Yes: Show error state with retry option
-  → No: Continue
+ → Yes: Show error state with retry option
+ → No: Continue
 
 Is it loading AND we have no data?
-  → Yes: Show loading indicator (spinner/skeleton)
-  → No: Continue
+ → Yes: Show loading indicator (spinner/skeleton)
+ → No: Continue
 
 Do we have data?
-  → Yes, with items: Show the data
-  → Yes, but empty: Show empty state
-  → No: Show loading (fallback)
+ → Yes, with items: Show the data
+ → Yes, but empty: Show empty state
+ → No: Show loading (fallback)
 ```
 
 ### Skeleton vs Spinner
@@ -79,20 +79,20 @@ Do we have data?
 ```typescript
 // CORRECT - Error always surfaced to user
 const [createItem, { loading }] = useCreateItemMutation({
-  onCompleted: () => {
-    toast.success({ title: 'Item created' });
-  },
-  onError: (error) => {
-    console.error('createItem failed:', error);
-    toast.error({ title: 'Failed to create item' });
-  },
+ onCompleted: () => {
+ toast.success({ title: 'Item created' });
+ },
+ onError: (error) => {
+ console.error('createItem failed:', error);
+ toast.error({ title: 'Failed to create item' });
+ },
 });
 
 // WRONG - Error silently caught, user has no idea
 const [createItem] = useCreateItemMutation({
-  onError: (error) => {
-    console.error(error); // User sees nothing!
-  },
+ onError: (error) => {
+ console.error(error); // User sees nothing!
+ },
 });
 ```
 
@@ -100,20 +100,20 @@ const [createItem] = useCreateItemMutation({
 
 ```typescript
 interface ErrorStateProps {
-  error: Error;
-  onRetry?: () => void;
-  title?: string;
+ error: Error;
+ onRetry?: () => void;
+ title?: string;
 }
 
 const ErrorState = ({ error, onRetry, title }: ErrorStateProps) => (
-  <div className="error-state">
-    <Icon name="exclamation-circle" />
-    <h3>{title ?? 'Something went wrong'}</h3>
-    <p>{error.message}</p>
-    {onRetry && (
-      <Button onClick={onRetry}>Try Again</Button>
-    )}
-  </div>
+ <div className="error-state">
+ <Icon name="exclamation-circle" />
+ <h3>{title ?? 'Something went wrong'}</h3>
+ <p>{error.message}</p>
+ {onRetry && (
+ <Button onClick={onRetry}>Try Again</Button>
+ )}
+ </div>
 );
 ```
 
@@ -123,11 +123,11 @@ const ErrorState = ({ error, onRetry, title }: ErrorStateProps) => (
 
 ```tsx
 <Button
-  onClick={handleSubmit}
-  isLoading={isSubmitting}
-  disabled={!isValid || isSubmitting}
+ onClick={handleSubmit}
+ isLoading={isSubmitting}
+ disabled={!isValid || isSubmitting}
 >
-  Submit
+ Submit
 </Button>
 ```
 
@@ -138,16 +138,16 @@ const ErrorState = ({ error, onRetry, title }: ErrorStateProps) => (
 ```tsx
 // CORRECT - Button disabled while loading
 <Button
-  disabled={isSubmitting}
-  isLoading={isSubmitting}
-  onClick={handleSubmit}
+ disabled={isSubmitting}
+ isLoading={isSubmitting}
+ onClick={handleSubmit}
 >
-  Submit
+ Submit
 </Button>
 
 // WRONG - User can tap multiple times
 <Button onClick={handleSubmit}>
-  {isSubmitting ? 'Submitting...' : 'Submit'}
+ {isSubmitting ? 'Submitting...' : 'Submit'}
 </Button>
 ```
 
@@ -163,10 +163,10 @@ return <FlatList data={items} />;
 
 // CORRECT - Explicit empty state
 return (
-  <FlatList
-    data={items}
-    ListEmptyComponent={<EmptyState />}
-  />
+ <FlatList
+ data={items}
+ ListEmptyComponent={<EmptyState />}
+ />
 );
 ```
 
@@ -175,17 +175,17 @@ return (
 ```tsx
 // Search with no results
 <EmptyState
-  icon="search"
-  title="No results found"
-  description="Try different search terms"
+ icon="search"
+ title="No results found"
+ description="Try different search terms"
 />
 
 // List with no items yet
 <EmptyState
-  icon="plus-circle"
-  title="No items yet"
-  description="Create your first item"
-  action={{ label: 'Create Item', onClick: handleCreate }}
+ icon="plus-circle"
+ title="No items yet"
+ description="Create your first item"
+ action={{ label: 'Create Item', onClick: handleCreate }}
 />
 ```
 
@@ -193,36 +193,36 @@ return (
 
 ```tsx
 const MyForm = () => {
-  const [submit, { loading }] = useSubmitMutation({
-    onCompleted: handleSuccess,
-    onError: handleError,
-  });
+ const [submit, { loading }] = useSubmitMutation({
+ onCompleted: handleSuccess,
+ onError: handleError,
+ });
 
-  const handleSubmit = async () => {
-    if (!isValid) {
-      toast.error({ title: 'Please fix errors' });
-      return;
-    }
-    await submit({ variables: { input: values } });
-  };
+ const handleSubmit = async () => {
+ if (!isValid) {
+ toast.error({ title: 'Please fix errors' });
+ return;
+ }
+ await submit({ variables: { input: values } });
+ };
 
-  return (
-    <form>
-      <Input
-        value={values.name}
-        onChange={handleChange('name')}
-        error={touched.name ? errors.name : undefined}
-      />
-      <Button
-        type="submit"
-        onClick={handleSubmit}
-        disabled={!isValid || loading}
-        isLoading={loading}
-      >
-        Submit
-      </Button>
-    </form>
-  );
+ return (
+ <form>
+ <Input
+ value={values.name}
+ onChange={handleChange('name')}
+ error={touched.name ? errors.name : undefined}
+ />
+ <Button
+ type="submit"
+ onClick={handleSubmit}
+ disabled={!isValid || loading}
+ isLoading={loading}
+ >
+ Submit
+ </Button>
+ </form>
+ );
 };
 ```
 
@@ -243,15 +243,15 @@ if (loading && !data) return <Spinner />;
 ```typescript
 // WRONG - Error swallowed
 try {
-  await mutation();
+ await mutation();
 } catch (e) {
-  console.log(e); // User has no idea!
+ console.log(e); // User has no idea!
 }
 
 // CORRECT - Error surfaced
 onError: (error) => {
-  console.error('operation failed:', error);
-  toast.error({ title: 'Operation failed' });
+ console.error('operation failed:', error);
+ toast.error({ title: 'Operation failed' });
 }
 ```
 
@@ -263,7 +263,7 @@ onError: (error) => {
 
 // CORRECT - Disabled and shows loading
 <Button onClick={submit} disabled={loading} isLoading={loading}>
-  Submit
+ Submit
 </Button>
 ```
 

@@ -8,12 +8,12 @@ Handles partner onboarding and links physical members to system users for RBAC (
 ### 1. `POST /api/v1/members`
 Onboards a new partner.
 - **Logic**: 
-    - Create record in `members` table.
-    - If `hasUserAccess` is true:
-        - Trigger `POST /api/v1/users` internally.
-        - Encrypt the provided password using Argon2 or BCrypt.
-        - Map `memberId` to the new user record.
-        - Assign default permissions based on the selected `role`.
+ - Create record in `members` table.
+ - If `hasUserAccess` is true:
+ - Trigger `POST /api/v1/users` internally.
+ - Encrypt the provided password using Argon2 or BCrypt.
+ - Map `memberId` to the new user record.
+ - Assign default permissions based on the selected `role`.
 
 ### 2. `GET /api/v1/members/matrix`
 Returns the regularity matrix seen in the Analysis screen.

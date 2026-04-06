@@ -42,17 +42,17 @@ Avoid:
 
 :dart: Progress on Priorities
 - Area 1
-    - Sub-area 1
-    - Sub-area 2
-    - Sub-area 3
+ - Sub-area 1
+ - Sub-area 2
+ - Sub-area 3
 - Area 2
-    - Sub-area 1
-    - Sub-area 2
-    - Sub-area 3
+ - Sub-area 1
+ - Sub-area 2
+ - Sub-area 3
 - Area 3
-    - Sub-area 1
-    - Sub-area 2
-    - Sub-area 3
+ - Sub-area 1
+ - Sub-area 2
+ - Sub-area 3
 
 :pillar: Leadership Updates
 - Post 1

@@ -101,7 +101,7 @@ Get a user by ID.
 
 ### When to Comment
 
-| ✅ Comment | ❌ Don't Comment |
+| Comment | Don't Comment |
 |-----------|-----------------|
 | Why (business logic) | What (obvious) |
 | Complex algorithms | Every line |

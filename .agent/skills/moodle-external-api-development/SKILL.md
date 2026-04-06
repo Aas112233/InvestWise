@@ -42,9 +42,9 @@ use external_single_structure;
 use external_value;
 
 class your_api_name extends external_api {
-    
-    // Three required methods will go here
-    
+ 
+ // Three required methods will go here
+ 
 }
 ```
 
@@ -58,14 +58,14 @@ class your_api_name extends external_api {
 
 ```php
 public static function execute_parameters() {
-    return new external_function_parameters([
-        'userid' => new external_value(PARAM_INT, 'User ID', VALUE_REQUIRED),
-        'courseid' => new external_value(PARAM_INT, 'Course ID', VALUE_REQUIRED),
-        'options' => new external_single_structure([
-            'includedetails' => new external_value(PARAM_BOOL, 'Include details', VALUE_DEFAULT, false),
-            'limit' => new external_value(PARAM_INT, 'Result limit', VALUE_DEFAULT, 10)
-        ], 'Options', VALUE_OPTIONAL)
-    ]);
+ return new external_function_parameters([
+ 'userid' => new external_value(PARAM_INT, 'User ID', VALUE_REQUIRED),
+ 'courseid' => new external_value(PARAM_INT, 'Course ID', VALUE_REQUIRED),
+ 'options' => new external_single_structure([
+ 'includedetails' => new external_value(PARAM_BOOL, 'Include details', VALUE_DEFAULT, false),
+ 'limit' => new external_value(PARAM_INT, 'Result limit', VALUE_DEFAULT, 10)
+ ], 'Options', VALUE_OPTIONAL)
+ ]);
 }
 ```
 
@@ -91,52 +91,52 @@ public static function execute_parameters() {
 
 ```php
 public static function execute($userid, $courseid, $options = []) {
-    global $DB, $USER;
+ global $DB, $USER;
 
-    // 1. Validate parameters
-    $params = self::validate_parameters(self::execute_parameters(), [
-        'userid' => $userid,
-        'courseid' => $courseid,
-        'options' => $options
-    ]);
+ // 1. Validate parameters
+ $params = self::validate_parameters(self::execute_parameters(), [
+ 'userid' => $userid,
+ 'courseid' => $courseid,
+ 'options' => $options
+ ]);
 
-    // 2. Check permissions/capabilities
-    $context = \context_course::instance($params['courseid']);
-    self::validate_context($context);
-    require_capability('moodle/course:view', $context);
+ // 2. Check permissions/capabilities
+ $context = \context_course::instance($params['courseid']);
+ self::validate_context($context);
+ require_capability('moodle/course:view', $context);
 
-    // 3. Verify user access
-    if ($params['userid'] != $USER->id) {
-        require_capability('moodle/course:viewhiddenactivities', $context);
-    }
+ // 3. Verify user access
+ if ($params['userid'] != $USER->id) {
+ require_capability('moodle/course:viewhiddenactivities', $context);
+ }
 
-    // 4. Database operations
-    $sql = "SELECT id, name, timecreated
-            FROM {your_table}
-            WHERE userid = :userid
-              AND courseid = :courseid
-            LIMIT :limit";
-    
-    $records = $DB->get_records_sql($sql, [
-        'userid' => $params['userid'],
-        'courseid' => $params['courseid'],
-        'limit' => $params['options']['limit']
-    ]);
+ // 4. Database operations
+ $sql = "SELECT id, name, timecreated
+ FROM {your_table}
+ WHERE userid = :userid
+ AND courseid = :courseid
+ LIMIT :limit";
+ 
+ $records = $DB->get_records_sql($sql, [
+ 'userid' => $params['userid'],
+ 'courseid' => $params['courseid'],
+ 'limit' => $params['options']['limit']
+ ]);
 
-    // 5. Process and return data
-    $results = [];
-    foreach ($records as $record) {
-        $results[] = [
-            'id' => $record->id,
-            'name' => $record->name,
-            'timestamp' => $record->timecreated
-        ];
-    }
+ // 5. Process and return data
+ $results = [];
+ foreach ($records as $record) {
+ $results[] = [
+ 'id' => $record->id,
+ 'name' => $record->name,
+ 'timestamp' => $record->timecreated
+ ];
+ }
 
-    return [
-        'items' => $results,
-        'count' => count($results)
-    ];
+ return [
+ 'items' => $results,
+ 'count' => count($results)
+ ];
 }
 ```
 
@@ -151,16 +151,16 @@ public static function execute($userid, $courseid, $options = []) {
 
 ```php
 public static function execute_returns() {
-    return new external_single_structure([
-        'items' => new external_multiple_structure(
-            new external_single_structure([
-                'id' => new external_value(PARAM_INT, 'Item ID'),
-                'name' => new external_value(PARAM_TEXT, 'Item name'),
-                'timestamp' => new external_value(PARAM_INT, 'Creation time')
-            ])
-        ),
-        'count' => new external_value(PARAM_INT, 'Total items')
-    ]);
+ return new external_single_structure([
+ 'items' => new external_multiple_structure(
+ new external_single_structure([
+ 'id' => new external_value(PARAM_INT, 'Item ID'),
+ 'name' => new external_value(PARAM_TEXT, 'Item name'),
+ 'timestamp' => new external_value(PARAM_INT, 'Creation time')
+ ])
+ ),
+ 'count' => new external_value(PARAM_INT, 'Total items')
+ ]);
 }
 ```
 
@@ -179,26 +179,26 @@ public static function execute_returns() {
 defined('MOODLE_INTERNAL') || die();
 
 $functions = [
-    'local_yourplugin_your_api_name' => [
-        'classname'   => 'local_yourplugin\external\your_api_name',
-        'methodname'  => 'execute',
-        'classpath'   => 'local/yourplugin/classes/external/your_api_name.php',
-        'description' => 'Brief description of what this API does',
-        'type'        => 'read',  // or 'write'
-        'ajax'        => true,
-        'capabilities'=> 'moodle/course:view', // comma-separated if multiple
-        'services'    => [MOODLE_OFFICIAL_MOBILE_SERVICE] // Optional
-    ],
+ 'local_yourplugin_your_api_name' => [
+ 'classname' => 'local_yourplugin\external\your_api_name',
+ 'methodname' => 'execute',
+ 'classpath' => 'local/yourplugin/classes/external/your_api_name.php',
+ 'description' => 'Brief description of what this API does',
+ 'type' => 'read', // or 'write'
+ 'ajax' => true,
+ 'capabilities'=> 'moodle/course:view', // comma-separated if multiple
+ 'services' => [MOODLE_OFFICIAL_MOBILE_SERVICE] // Optional
+ ],
 ];
 
 $services = [
-    'Your Plugin Web Service' => [
-        'functions' => [
-            'local_yourplugin_your_api_name'
-        ],
-        'restrictedusers' => 0,
-        'enabled' => 1
-    ]
+ 'Your Plugin Web Service' => [
+ 'functions' => [
+ 'local_yourplugin_your_api_name'
+ ],
+ 'restrictedusers' => 0,
+ 'enabled' => 1
+ ]
 ];
 ```
 
@@ -214,47 +214,47 @@ $services = [
 
 ```php
 private static function log_debug($message) {
-    global $CFG;
-    $logdir = $CFG->dataroot . '/local_yourplugin';
-    if (!file_exists($logdir)) {
-        mkdir($logdir, 0777, true);
-    }
-    $debuglog = $logdir . '/api_debug.log';
-    $timestamp = date('Y-m-d H:i:s');
-    file_put_contents($debuglog, "[$timestamp] $message\n", FILE_APPEND | LOCK_EX);
+ global $CFG;
+ $logdir = $CFG->dataroot . '/local_yourplugin';
+ if (!file_exists($logdir)) {
+ mkdir($logdir, 0777, true);
+ }
+ $debuglog = $logdir . '/api_debug.log';
+ $timestamp = date('Y-m-d H:i:s');
+ file_put_contents($debuglog, "[$timestamp] $message\n", FILE_APPEND | LOCK_EX);
 }
 
 public static function execute($userid, $courseid) {
-    global $DB;
+ global $DB;
 
-    try {
-        self::log_debug("API called: userid=$userid, courseid=$courseid");
-        
-        // Validate parameters
-        $params = self::validate_parameters(self::execute_parameters(), [
-            'userid' => $userid,
-            'courseid' => $courseid
-        ]);
+ try {
+ self::log_debug("API called: userid=$userid, courseid=$courseid");
+ 
+ // Validate parameters
+ $params = self::validate_parameters(self::execute_parameters(), [
+ 'userid' => $userid,
+ 'courseid' => $courseid
+ ]);
 
-        // Your logic here
-        
-        self::log_debug("API completed successfully");
-        return $result;
+ // Your logic here
+ 
+ self::log_debug("API completed successfully");
+ return $result;
 
-    } catch (\invalid_parameter_exception $e) {
-        self::log_debug("Parameter validation failed: " . $e->getMessage());
-        throw $e;
-    } catch (\moodle_exception $e) {
-        self::log_debug("Moodle exception: " . $e->getMessage());
-        throw $e;
-    } catch (\Exception $e) {
-        // Log detailed error info
-        $lastsql = method_exists($DB, 'get_last_sql') ? $DB->get_last_sql() : '[N/A]';
-        self::log_debug("Fatal error: " . $e->getMessage());
-        self::log_debug("Last SQL: " . $lastsql);
-        self::log_debug("Stack trace: " . $e->getTraceAsString());
-        throw $e;
-    }
+ } catch (\invalid_parameter_exception $e) {
+ self::log_debug("Parameter validation failed: " . $e->getMessage());
+ throw $e;
+ } catch (\moodle_exception $e) {
+ self::log_debug("Moodle exception: " . $e->getMessage());
+ throw $e;
+ } catch (\Exception $e) {
+ // Log detailed error info
+ $lastsql = method_exists($DB, 'get_last_sql') ? $DB->get_last_sql() : '[N/A]';
+ self::log_debug("Fatal error: " . $e->getMessage());
+ self::log_debug("Last SQL: " . $lastsql);
+ self::log_debug("Stack trace: " . $e->getTraceAsString());
+ throw $e;
+ }
 }
 ```
 
@@ -274,17 +274,17 @@ public static function execute($userid, $courseid) {
 $transaction = $DB->start_delegated_transaction();
 
 try {
-    // Insert record
-    $recordid = $DB->insert_record('your_table', $dataobject);
-    
-    // Update related records
-    $DB->set_field('another_table', 'status', 1, ['recordid' => $recordid]);
-    
-    // Commit transaction
-    $transaction->allow_commit();
+ // Insert record
+ $recordid = $DB->insert_record('your_table', $dataobject);
+ 
+ // Update related records
+ $DB->set_field('another_table', 'status', 1, ['recordid' => $recordid]);
+ 
+ // Commit transaction
+ $transaction->allow_commit();
 } catch (\Exception $e) {
-    $transaction->rollback($e);
-    throw $e;
+ $transaction->rollback($e);
+ throw $e;
 }
 ```
 
@@ -324,35 +324,35 @@ $groupname = 'activity_' . $activityid . '_user_' . $userid;
 
 // Create or get group
 if (!$groupid = $DB->get_field('groups', 'id', ['courseid' => $courseid, 'name' => $groupname])) {
-    $groupdata = (object)[
-        'courseid' => $courseid,
-        'name' => $groupname,
-        'timecreated' => time(),
-        'timemodified' => time()
-    ];
-    $groupid = $DB->insert_record('groups', $groupdata);
+ $groupdata = (object)[
+ 'courseid' => $courseid,
+ 'name' => $groupname,
+ 'timecreated' => time(),
+ 'timemodified' => time()
+ ];
+ $groupid = $DB->insert_record('groups', $groupdata);
 }
 
 // Add user to group
 if (!$DB->record_exists('groups_members', ['groupid' => $groupid, 'userid' => $userid])) {
-    $DB->insert_record('groups_members', (object)[
-        'groupid' => $groupid,
-        'userid' => $userid,
-        'timeadded' => time()
-    ]);
+ $DB->insert_record('groups_members', (object)[
+ 'groupid' => $groupid,
+ 'userid' => $userid,
+ 'timeadded' => time()
+ ]);
 }
 
 // Set availability condition
 $restriction = [
-    'op' => '&',
-    'show' => false,
-    'c' => [
-        [
-            'type' => 'group',
-            'id' => $groupid
-        ]
-    ],
-    'showc' => [false]
+ 'op' => '&',
+ 'show' => false,
+ 'c' => [
+ [
+ 'type' => 'group',
+ 'id' => $groupid
+ ]
+ ],
+ 'showc' => [false]
 ];
 
 $DB->set_field('course_modules', 'availability', json_encode($restriction), ['id' => $cmid]);
@@ -362,27 +362,27 @@ $DB->set_field('course_modules', 'availability', json_encode($restriction), ['id
 
 ```php
 private static function get_random_questions($categoryid, $tagname, $limit) {
-    global $DB;
-    
-    $sql = "SELECT q.id
-            FROM {question} q
-            INNER JOIN {question_versions} qv ON qv.questionid = q.id
-            INNER JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
-            INNER JOIN {question_categories} qc ON qc.id = qbe.questioncategoryid
-            JOIN {tag_instance} ti ON ti.itemid = q.id
-            JOIN {tag} t ON t.id = ti.tagid
-            WHERE LOWER(t.name) = :tagname
-              AND qc.id = :categoryid
-              AND ti.itemtype = 'question'
-              AND q.qtype = 'multichoice'";
-    
-    $qids = $DB->get_fieldset_sql($sql, [
-        'categoryid' => $categoryid,
-        'tagname' => strtolower($tagname)
-    ]);
-    
-    shuffle($qids);
-    return array_slice($qids, 0, $limit);
+ global $DB;
+ 
+ $sql = "SELECT q.id
+ FROM {question} q
+ INNER JOIN {question_versions} qv ON qv.questionid = q.id
+ INNER JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
+ INNER JOIN {question_categories} qc ON qc.id = qbe.questioncategoryid
+ JOIN {tag_instance} ti ON ti.itemid = q.id
+ JOIN {tag} t ON t.id = ti.tagid
+ WHERE LOWER(t.name) = :tagname
+ AND qc.id = :categoryid
+ AND ti.itemtype = 'question'
+ AND q.qtype = 'multichoice'";
+ 
+ $qids = $DB->get_fieldset_sql($sql, [
+ 'categoryid' => $categoryid,
+ 'tagname' => strtolower($tagname)
+ ]);
+ 
+ shuffle($qids);
+ return array_slice($qids, 0, $limit);
 }
 ```
 
@@ -400,36 +400,36 @@ private static function get_random_questions($categoryid, $tagname, $limit) {
 ```bash
 # Get token first
 curl -X POST "https://yourmoodle.com/login/token.php" \
-  -d "username=admin" \
-  -d "password=yourpassword" \
-  -d "service=moodle_mobile_app"
+ -d "username=admin" \
+ -d "password=yourpassword" \
+ -d "service=moodle_mobile_app"
 
 # Call your API
 curl -X POST "https://yourmoodle.com/webservice/rest/server.php" \
-  -d "wstoken=YOUR_TOKEN" \
-  -d "wsfunction=local_yourplugin_your_api_name" \
-  -d "moodlewsrestformat=json" \
-  -d "userid=2" \
-  -d "courseid=3"
+ -d "wstoken=YOUR_TOKEN" \
+ -d "wsfunction=local_yourplugin_your_api_name" \
+ -d "moodlewsrestformat=json" \
+ -d "userid=2" \
+ -d "courseid=3"
 ```
 
 ### 3. Via JavaScript (AJAX)
 
 ```javascript
 require(['core/ajax'], function(ajax) {
-    var promises = ajax.call([{
-        methodname: 'local_yourplugin_your_api_name',
-        args: {
-            userid: 2,
-            courseid: 3
-        }
-    }]);
+ var promises = ajax.call([{
+ methodname: 'local_yourplugin_your_api_name',
+ args: {
+ userid: 2,
+ courseid: 3
+ }
+ }]);
 
-    promises[0].done(function(response) {
-        console.log('Success:', response);
-    }).fail(function(error) {
-        console.error('Error:', error);
-    });
+ promises[0].done(function(response) {
+ console.log('Success:', response);
+ }).fail(function(error) {
+ console.error('Error:', error);
+ });
 });
 ```
 
@@ -479,19 +479,19 @@ require(['core/ajax'], function(ajax) {
 
 ```
 local/yourplugin/
-├── version.php                 # Plugin version and metadata
+├── version.php # Plugin version and metadata
 ├── db/
-│   ├── services.php           # External service definitions
-│   └── access.php             # Capability definitions (optional)
+│ ├── services.php # External service definitions
+│ └── access.php # Capability definitions (optional)
 ├── classes/
-│   └── external/
-│       ├── your_api_name.php  # External API implementation
-│       └── another_api.php    # Additional APIs
+│ └── external/
+│ ├── your_api_name.php # External API implementation
+│ └── another_api.php # Additional APIs
 ├── lang/
-│   └── en/
-│       └── local_yourplugin.php  # Language strings
+│ └── en/
+│ └── local_yourplugin.php # Language strings
 └── tests/
-    └── external_test.php      # Unit tests (optional but recommended)
+ └── external_test.php # Unit tests (optional but recommended)
 ```
 
 ## Examples from Real Implementation
@@ -511,39 +511,39 @@ use external_single_structure;
 use external_value;
 
 class get_quiz_attempts extends external_api {
-    public static function execute_parameters() {
-        return new external_function_parameters([
-            'userid' => new external_value(PARAM_INT, 'User ID'),
-            'courseid' => new external_value(PARAM_INT, 'Course ID')
-        ]);
-    }
+ public static function execute_parameters() {
+ return new external_function_parameters([
+ 'userid' => new external_value(PARAM_INT, 'User ID'),
+ 'courseid' => new external_value(PARAM_INT, 'Course ID')
+ ]);
+ }
 
-    public static function execute($userid, $courseid) {
-        global $DB;
+ public static function execute($userid, $courseid) {
+ global $DB;
 
-        self::validate_parameters(self::execute_parameters(), [
-            'userid' => $userid,
-            'courseid' => $courseid
-        ]);
+ self::validate_parameters(self::execute_parameters(), [
+ 'userid' => $userid,
+ 'courseid' => $courseid
+ ]);
 
-        $sql = "SELECT COUNT(*) AS quiz_attempts
-                FROM {quiz_attempts} qa
-                JOIN {quiz} q ON qa.quiz = q.id
-                WHERE qa.userid = :userid AND q.course = :courseid";
+ $sql = "SELECT COUNT(*) AS quiz_attempts
+ FROM {quiz_attempts} qa
+ JOIN {quiz} q ON qa.quiz = q.id
+ WHERE qa.userid = :userid AND q.course = :courseid";
 
-        $attempts = $DB->get_field_sql($sql, [
-            'userid' => $userid,
-            'courseid' => $courseid
-        ]);
+ $attempts = $DB->get_field_sql($sql, [
+ 'userid' => $userid,
+ 'courseid' => $courseid
+ ]);
 
-        return ['quiz_attempts' => (int)$attempts];
-    }
+ return ['quiz_attempts' => (int)$attempts];
+ }
 
-    public static function execute_returns() {
-        return new external_single_structure([
-            'quiz_attempts' => new external_value(PARAM_INT, 'Total number of quiz attempts')
-        ]);
-    }
+ public static function execute_returns() {
+ return new external_single_structure([
+ 'quiz_attempts' => new external_value(PARAM_INT, 'Total number of quiz attempts')
+ ]);
+ }
 }
 ```
 
