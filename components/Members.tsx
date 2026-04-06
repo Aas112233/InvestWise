@@ -1,5 +1,7 @@
 
 import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Mail, Phone, MoreVertical, Plus, Edit2, Trash2, X, Search, Filter, Hash, UserCheck, Lock, User as UserIcon, ShieldCheck, Key, Info, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Member, User, AccessLevel, AppScreen } from '../types';
 import { useGlobalState } from '../context/GlobalStateContext';
@@ -14,6 +16,7 @@ import { formatCurrency } from '../utils/formatters';
 import Avatar from './Avatar';
 import { ModalForm, FormInput, FormSelect, FormLabel } from './ui/FormElements';
 import PermissionGuard from './PermissionGuard';
+import { memberSchema, MemberFormData } from '../utils/validations';
 
 const SHARE_VALUE = 1000;
 
@@ -106,16 +109,39 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
       type: 'success',
     });
 
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    role: 'Associate Member',
-    shares: '0',
-    memberId: '',
-    password: '',
-    userRole: 'Investor' as User['role']
+  // React Hook Form setup
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid, isSubmitting: isFormSubmitting },
+    reset,
+    setValue,
+    watch,
+    setError: setFieldError,
+    clearErrors
+  } = useForm<MemberFormData>({
+    resolver: zodResolver(memberSchema),
+    mode: 'onChange',
+    reValidateMode: 'onChange',
+    defaultValues: {
+      name: '',
+      phone: '',
+      email: '',
+      role: 'Associate Member',
+      shares: 0,
+      memberId: '',
+      password: '',
+      userRole: 'Investor',
+      createUserAccess: false
+    }
   });
+
+  // Watch form values for dynamic UI
+  const watchedShares = watch('shares');
+  const watchedCreateUserAccess = watch('createUserAccess');
+  const watchedUserRole = watch('userRole');
+  const watchedPassword = watch('password');
+  const watchedMemberId = watch('memberId');
 
   const showNotification = (message: string, type: ToastType = 'success') => {
     setToast({ isVisible: true, message, type });
@@ -128,29 +154,32 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
       setEditingMember(member);
       const linkedUser = systemUsers.find(u => u.memberId === member.memberId);
 
-      setFormData({
-        ...formData,
+      // Reset form with member data
+      reset({
         name: member.name,
         phone: member.phone,
         email: member.email,
         role: member.role,
-        shares: member.shares.toString(),
+        shares: member.shares,
         memberId: member.memberId,
         userRole: linkedUser?.role || 'Investor',
-        password: ''
+        password: '',
+        createUserAccess: !!member.hasUserAccess || !!linkedUser
       });
       setCreateUserAccess(!!member.hasUserAccess || !!linkedUser);
     } else {
       setEditingMember(null);
-      setFormData({
+      // Reset form with default values
+      reset({
         name: '',
         phone: '',
         email: '',
         role: 'Associate Member',
-        shares: '0',
-        memberId: '', // Server will generate if empty
+        shares: 0,
+        memberId: '',
         password: '',
-        userRole: 'Investor'
+        userRole: 'Investor',
+        createUserAccess: false
       });
       setCreateUserAccess(false);
     }
@@ -161,68 +190,68 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
     setIsModalOpen(false);
     setEditingMember(null);
     setCreateUserAccess(false);
-    setFormData({
+    reset({
       name: '',
       phone: '',
       email: '',
       role: 'Associate Member',
-      shares: '0',
+      shares: 0,
       memberId: '',
       password: '',
-      userRole: 'Investor'
+      userRole: 'Investor',
+      createUserAccess: false
     });
+    clearErrors();
   };
 
   // Onboarding is now handled via unified onboardMember backend logic.
   // This legacy function is removed for atomicity.
 
-  const executeSubmit = async () => {
+  const executeSubmit = async (data: MemberFormData) => {
     setIsSubmitting(true);
     try {
-      const sharesNum = parseInt(formData.shares) || 0;
-
       if (!editingMember) {
         // Unified Onboarding (Enterprise Grade)
         await onboardMember({
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
-          role: formData.role,
-          shares: sharesNum,
-          systemAccess: createUserAccess,
-          password: formData.password,
-          userRole: formData.userRole,
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          role: data.role,
+          shares: data.shares,
+          systemAccess: data.createUserAccess,
+          password: data.password,
+          userRole: data.userRole,
           status: 'active'
         });
-        showNotification(createUserAccess ? t('members.onboardedAccess', lang).replace('{name}', formData.name) : t('members.onboarded', lang).replace('{name}', formData.name));
+        showNotification(
+          data.createUserAccess 
+            ? t('members.onboardedAccess', lang).replace('{name}', data.name) 
+            : t('members.onboarded', lang).replace('{name}', data.name)
+        );
       } else {
         // Standard Update (Profile Only - Financials are immutable here)
         const updatedMember: any = {
-          id: editingMember.id, // Explicit ID for service
-          name: formData.name,
-          phone: formData.phone,
-          email: formData.email,
-          role: formData.role,
-          hasUserAccess: createUserAccess
+          id: editingMember.id,
+          name: data.name,
+          phone: data.phone,
+          email: data.email,
+          role: data.role,
+          hasUserAccess: data.createUserAccess
         };
         await updateMember(updatedMember);
 
         // Handle System Access & Password Update
         const linkedUser = systemUsers.find(u => u.memberId === editingMember.memberId);
-        if (createUserAccess && formData.password && linkedUser) {
+        if (data.createUserAccess && data.password && linkedUser) {
           try {
-            await updateUserPassword(linkedUser.id, formData.password);
+            await updateUserPassword(linkedUser.id, data.password);
           } catch (pwErr) {
             console.error("Failed to update password during member edit", pwErr);
             showNotification("Member updated, but password reset failed", "warning");
-            return;
           }
-        } else if (createUserAccess && !linkedUser) {
-          // Logic to create user if access is granted but no user exists could be added here
-          // For now, we focus on the password update for existing users as requested
         }
 
-        showNotification(t('members.updated', lang).replace('{name}', formData.name));
+        showNotification(t('members.updated', lang).replace('{name}', data.name));
       }
 
       handleCloseModal();
@@ -236,28 +265,21 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
     }
   };
 
-  const handleReviewSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Validation
-    if (createUserAccess && (!formData.password || formData.password.length < 6) && !editingMember) {
-      showNotification(t('members.passwordLengthError', lang), "error");
-      return;
-    }
-
+  const handleReviewSubmit = (data: MemberFormData) => {
+    // Show review dialog before submission
     setDialog({
       isOpen: true,
       type: 'review',
       title: editingMember ? t('members.reviewTitle', lang) : t('members.reviewTitle', lang),
       message: t('members.reviewMessage', lang),
       details: [
-        { label: t('members.legalName', lang), value: formData.name },
-        { label: t('members.memberId', lang), value: formData.memberId },
-        { label: t('members.accessRole', lang), value: formData.role },
-        { label: t('members.valuation', lang), value: `BDT ${formData.shares}` },
-        { label: t('members.systemAccess', lang), value: createUserAccess ? t('common.active', lang) : t('common.pending', lang) },
+        { label: t('members.legalName', lang), value: data.name },
+        { label: t('members.memberId', lang), value: data.memberId || 'Auto-generated' },
+        { label: t('members.accessRole', lang), value: data.role },
+        { label: t('members.valuation', lang), value: `BDT ${(data.shares * SHARE_VALUE).toLocaleString()}` },
+        { label: t('members.systemAccess', lang), value: data.createUserAccess ? t('common.active', lang) : t('common.pending', lang) },
       ],
-      onConfirm: executeSubmit
+      onConfirm: () => executeSubmit(data)
     });
   };
 
@@ -516,42 +538,42 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         title={t('members.intake', lang)}
-        subtitle={`${t('members.memberId', lang)}: #${formData.memberId}`}
-        onSubmit={handleReviewSubmit}
+        subtitle={`${t('members.memberId', lang)}: #${watchedMemberId || 'Auto'}`}
+        onSubmit={handleSubmit(handleReviewSubmit)}
         submitLabel="Authorize Partner"
         maxWidth="max-w-6xl"
-        loading={isSubmitting}
+        loading={isSubmitting || isFormSubmitting}
       >
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <FormInput
               label={t('members.legalName', lang)}
-              value={formData.name}
-              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              {...register('name')}
+              error={errors.name?.message}
               required
             />
             <FormInput
               label={t('auth.identifier', lang)}
               type="email"
-              value={formData.email}
-              onChange={e => setFormData({ ...formData, email: e.target.value })}
+              {...register('email')}
+              error={errors.email?.message}
               required
             />
             <FormInput
               label={t('members.contactInfo', lang)}
               type="tel"
-              placeholder="Phone Number"
-              value={formData.phone}
-              onChange={e => setFormData({ ...formData, phone: e.target.value })}
+              placeholder="+8801XXXXXXXXX"
+              {...register('phone')}
+              error={errors.phone?.message}
               required
             />
           </div>
 
           <FormInput
-            label={t('members.shares', lang)} // Simplified label, will handle extra info below if needed
+            label={t('members.shares', lang)}
             type="number"
-            value={formData.shares}
-            onChange={e => setFormData({ ...formData, shares: e.target.value })}
+            {...register('shares', { valueAsNumber: true })}
+            error={errors.shares?.message}
             required
             disabled={!!editingMember && editingMember.totalContributed > 0}
             title={editingMember && editingMember.totalContributed > 0 ? "Shares cannot be modified directly. Use Deposit/Investment transactions." : ""}
@@ -564,32 +586,35 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
           }
 
           {/* System Access Section */}
-          <div className={`p-6 rounded-[2rem] border transition-all duration-300 ${createUserAccess ? 'bg-brand/5 border-brand/20 dark:bg-brand/5 dark:border-brand/20' : 'bg-gray-50 dark:bg-[#111814] border-gray-100 dark:border-white/5'}`}>
+          <div className={`p-6 rounded-[2rem] border transition-all duration-300 ${watchedCreateUserAccess ? 'bg-brand/5 border-brand/20 dark:bg-brand/5 dark:border-brand/20' : 'bg-gray-50 dark:bg-[#111814] border-gray-100 dark:border-white/5'}`}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-xl transition-colors ${createUserAccess ? 'bg-brand text-dark' : 'bg-gray-200 dark:bg-white/5 text-gray-400'}`}>
+                <div className={`p-3 rounded-xl transition-colors ${watchedCreateUserAccess ? 'bg-brand text-dark' : 'bg-gray-200 dark:bg-white/5 text-gray-400'}`}>
                   <ShieldCheck size={20} />
                 </div>
                 <div>
-                  <h4 className={`text-xs font-black uppercase tracking-widest ${createUserAccess ? 'text-dark dark:text-brand' : 'text-gray-500'}`}>{t('members.systemAccessControl', lang)}</h4>
+                  <h4 className={`text-xs font-black uppercase tracking-widest ${watchedCreateUserAccess ? 'text-dark dark:text-brand' : 'text-gray-500'}`}>{t('members.systemAccessControl', lang)}</h4>
                   <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-                    {systemUsers.some(u => u.memberId === formData.memberId) ? t('members.portalActive', lang) : createUserAccess ? t('members.portalEnabled', lang) : t('members.noPortal', lang)}
+                    {systemUsers.some(u => u.memberId === watchedMemberId) ? t('members.portalActive', lang) : watchedCreateUserAccess ? t('members.portalEnabled', lang) : t('members.noPortal', lang)}
                   </p>
                 </div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" checked={createUserAccess} onChange={e => setCreateUserAccess(e.target.checked)} className="sr-only peer" />
+                <input 
+                  type="checkbox" 
+                  {...register('createUserAccess')} 
+                  className="sr-only peer" 
+                />
                 <div className="w-11 h-6 bg-gray-200 dark:bg-dark rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand shadow-inner"></div>
               </label>
             </div>
 
-            {createUserAccess && (
+            {watchedCreateUserAccess && (
               <div className="space-y-4 animate-in slide-in-from-top-2 duration-300 pt-4 border-t border-brand/10 dark:border-white/5">
                 <div className="grid grid-cols-2 gap-6">
                   <FormSelect
                     label="Access Role"
-                    value={formData.userRole}
-                    onChange={e => setFormData({ ...formData, userRole: e.target.value as any })}
+                    {...register('userRole')}
                     options={[
                       { value: "Admin", label: t('members.adminRole', lang) },
                       { value: "Manager", label: t('members.managerRole', lang) },
@@ -597,16 +622,17 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                       { value: "Investor", label: t('members.investorRole', lang) },
                       { value: "Member", label: t('members.memberRole', lang) }
                     ]}
+                    error={errors.userRole?.message}
                     icon={<UserCheck size={14} className="text-brand" />}
                   />
                   <FormInput
-                    label={systemUsers.some(u => u.memberId === formData.memberId) ? 'Reset Password' : 'Login Password'}
+                    label={systemUsers.some(u => u.memberId === watchedMemberId) ? 'Reset Password' : 'Login Password'}
                     type="password"
-                    minLength={6}
-                    required={!systemUsers.some(u => u.memberId === formData.memberId)}
-                    value={formData.password}
-                    onChange={e => setFormData({ ...formData, password: e.target.value })}
-                    placeholder={systemUsers.some(u => u.memberId === formData.memberId) ? "Leave empty to keep" : "Min 6 chars"}
+                    {...register('password')}
+                    error={errors.password?.message}
+                    required={!systemUsers.some(u => u.memberId === watchedMemberId)}
+                    placeholder={systemUsers.some(u => u.memberId === watchedMemberId) ? "Leave empty to keep" : "Min 6 chars"}
+                    showPasswordToggle
                     icon={<Key size={14} />}
                   />
                 </div>
@@ -615,14 +641,14 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                   <Info size={16} className="text-brand shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[10px] font-black text-dark dark:text-white uppercase tracking-widest mb-1">
-                      {formData.userRole} Permissions:
+                      {watchedUserRole} Permissions:
                     </p>
                     <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 leading-relaxed">
-                      {formData.userRole === 'Admin' && t('members.adminDesc', lang)}
-                      {formData.userRole === 'Manager' && t('members.managerDesc', lang)}
-                      {formData.userRole === 'Audit' && t('members.auditDesc', lang)}
-                      {formData.userRole === 'Investor' && t('members.investorDesc', lang)}
-                      {formData.userRole === 'Member' && t('members.memberDesc', lang)}
+                      {watchedUserRole === 'Admin' && t('members.adminDesc', lang)}
+                      {watchedUserRole === 'Manager' && t('members.managerDesc', lang)}
+                      {watchedUserRole === 'Audit' && t('members.auditDesc', lang)}
+                      {watchedUserRole === 'Investor' && t('members.investorDesc', lang)}
+                      {watchedUserRole === 'Member' && t('members.memberDesc', lang)}
                     </p>
                   </div>
                 </div>
@@ -632,7 +658,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
 
           <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-white/5 rounded-3xl">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Initial Valuation</p>
-            <p className="text-2xl font-black text-dark dark:text-brand tracking-tighter">BDT {(parseInt(formData.shares) * SHARE_VALUE).toLocaleString()}</p>
+            <p className="text-2xl font-black text-dark dark:text-brand tracking-tighter">BDT {((watchedShares || 0) * SHARE_VALUE).toLocaleString()}</p>
           </div>
         </div>
       </ModalForm>
