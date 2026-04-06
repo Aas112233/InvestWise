@@ -55,10 +55,10 @@ Unless otherwise stated by the user or existing template
 #### Documentation Requirements for Hardcodes
 - Comment or in cells beside (if end of table). Format: "Source: [System/Document], [Date], [Specific Reference], [URL if applicable]"
 - Examples:
-  - "Source: Company 10-K, FY2024, Page 45, Revenue Note, [SEC EDGAR URL]"
-  - "Source: Company 10-Q, Q2 2025, Exhibit 99.1, [SEC EDGAR URL]"
-  - "Source: Bloomberg Terminal, 8/15/2025, AAPL US Equity"
-  - "Source: FactSet, 8/20/2025, Consensus Estimates Screen"
+ - "Source: Company 10-K, FY2024, Page 45, Revenue Note, [SEC EDGAR URL]"
+ - "Source: Company 10-Q, Q2 2025, Exhibit 99.1, [SEC EDGAR URL]"
+ - "Source: Bloomberg Terminal, 8/15/2025, AAPL US Equity"
+ - "Source: FactSet, 8/20/2025, Consensus Estimates Screen"
 
 # XLSX creation, editing, and analysis
 
@@ -79,13 +79,13 @@ For data analysis, visualization, and basic operations, use **pandas** which pro
 import pandas as pd
 
 # Read Excel
-df = pd.read_excel('file.xlsx')  # Default: first sheet
-all_sheets = pd.read_excel('file.xlsx', sheet_name=None)  # All sheets as dict
+df = pd.read_excel('file.xlsx') # Default: first sheet
+all_sheets = pd.read_excel('file.xlsx', sheet_name=None) # All sheets as dict
 
 # Analyze
-df.head()      # Preview data
-df.info()      # Column info
-df.describe()  # Statistics
+df.head() # Preview data
+df.info() # Column info
+df.describe() # Statistics
 
 # Write Excel
 df.to_excel('output.xlsx', index=False)
@@ -97,22 +97,22 @@ df.to_excel('output.xlsx', index=False)
 
 **Always use Excel formulas instead of calculating values in Python and hardcoding them.** This ensures the spreadsheet remains dynamic and updateable.
 
-### ❌ WRONG - Hardcoding Calculated Values
+### WRONG - Hardcoding Calculated Values
 ```python
 # Bad: Calculating in Python and hardcoding result
 total = df['Sales'].sum()
-sheet['B10'] = total  # Hardcodes 5000
+sheet['B10'] = total # Hardcodes 5000
 
 # Bad: Computing growth rate in Python
 growth = (df.iloc[-1]['Revenue'] - df.iloc[0]['Revenue']) / df.iloc[0]['Revenue']
-sheet['C5'] = growth  # Hardcodes 0.15
+sheet['C5'] = growth # Hardcodes 0.15
 
 # Bad: Python calculation for average
 avg = sum(values) / len(values)
-sheet['D20'] = avg  # Hardcodes 42.5
+sheet['D20'] = avg # Hardcodes 42.5
 ```
 
-### ✅ CORRECT - Using Excel Formulas
+### CORRECT - Using Excel Formulas
 ```python
 # Good: Let Excel calculate the sum
 sheet['B10'] = '=SUM(B2:B9)'
@@ -132,18 +132,18 @@ This applies to ALL calculations - totals, percentages, ratios, differences, etc
 3. **Modify**: Add/edit data, formulas, and formatting
 4. **Save**: Write to file
 5. **Recalculate formulas (MANDATORY IF USING FORMULAS)**: Use the recalc.py script
-   ```bash
-   python recalc.py output.xlsx
-   ```
+ ```bash
+ python recalc.py output.xlsx
+ ```
 6. **Verify and fix any errors**: 
-   - The script returns JSON with error details
-   - If `status` is `errors_found`, check `error_summary` for specific error types and locations
-   - Fix the identified errors and recalculate again
-   - Common errors to fix:
-     - `#REF!`: Invalid cell references
-     - `#DIV/0!`: Division by zero
-     - `#VALUE!`: Wrong data type in formula
-     - `#NAME?`: Unrecognized formula name
+ - The script returns JSON with error details
+ - If `status` is `errors_found`, check `error_summary` for specific error types and locations
+ - Fix the identified errors and recalculate again
+ - Common errors to fix:
+ - `#REF!`: Invalid cell references
+ - `#DIV/0!`: Division by zero
+ - `#VALUE!`: Wrong data type in formula
+ - `#NAME?`: Unrecognized formula name
 
 ### Creating new Excel files
 
@@ -182,17 +182,17 @@ from openpyxl import load_workbook
 
 # Load existing file
 wb = load_workbook('existing.xlsx')
-sheet = wb.active  # or wb['SheetName'] for specific sheet
+sheet = wb.active # or wb['SheetName'] for specific sheet
 
 # Working with multiple sheets
 for sheet_name in wb.sheetnames:
-    sheet = wb[sheet_name]
-    print(f"Sheet: {sheet_name}")
+ sheet = wb[sheet_name]
+ print(f"Sheet: {sheet_name}")
 
 # Modify cells
 sheet['A1'] = 'New Value'
-sheet.insert_rows(2)  # Insert row at position 2
-sheet.delete_cols(3)  # Delete column 3
+sheet.insert_rows(2) # Insert row at position 2
+sheet.delete_cols(3) # Delete column 3
 
 # Add new sheet
 new_sheet = wb.create_sheet('NewSheet')
@@ -247,15 +247,15 @@ Quick checks to ensure formulas work correctly:
 The script returns JSON with error details:
 ```json
 {
-  "status": "success",           // or "errors_found"
-  "total_errors": 0,              // Total error count
-  "total_formulas": 42,           // Number of formulas in file
-  "error_summary": {              // Only present if errors found
-    "#REF!": {
-      "count": 2,
-      "locations": ["Sheet1!B5", "Sheet1!C10"]
-    }
-  }
+ "status": "success", // or "errors_found"
+ "total_errors": 0, // Total error count
+ "total_formulas": 42, // Number of formulas in file
+ "error_summary": { // Only present if errors found
+ "#REF!": {
+ "count": 2,
+ "locations": ["Sheet1!B5", "Sheet1!C10"]
+ }
+ }
 }
 ```
 

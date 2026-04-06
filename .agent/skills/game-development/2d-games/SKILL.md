@@ -107,7 +107,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 
 ## 6. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | Separate textures | Use atlases |
 | Complex collision shapes | Simplified collision |

@@ -15,27 +15,27 @@ claude --dangerously-skip-permissions
 ## Project Structure
 
 ```
-SKILL.md                    # Main skill definition (read this first)
-references/                 # Detailed documentation (loaded progressively)
-  openai-patterns.md        # OpenAI Agents SDK: guardrails, tripwires, handoffs
-  lab-research-patterns.md  # DeepMind + Anthropic: Constitutional AI, debate
-  production-patterns.md    # HN 2025: What actually works in production
-  advanced-patterns.md      # 2025 research patterns (MAR, Iter-VF, GoalAct)
-  tool-orchestration.md     # ToolOrchestra-inspired efficiency & rewards
-  memory-system.md          # Episodic/semantic memory architecture
-  quality-control.md        # Code review, anti-sycophancy, guardrails
-  agent-types.md            # 37 specialized agent definitions
-  sdlc-phases.md            # Full SDLC workflow
-  task-queue.md             # Queue system, circuit breakers
-  spec-driven-dev.md        # OpenAPI-first development
-  architecture.md           # Directory structure, state schemas
-  core-workflow.md          # RARV cycle, autonomy rules
-  claude-best-practices.md  # Boris Cherny patterns
-  deployment.md             # Cloud deployment instructions
-  business-ops.md           # Business operation workflows
-  mcp-integration.md        # MCP server capabilities
-autonomy/                   # Runtime state and constitution
-benchmarks/                 # SWE-bench and HumanEval benchmarks
+SKILL.md # Main skill definition (read this first)
+references/ # Detailed documentation (loaded progressively)
+ openai-patterns.md # OpenAI Agents SDK: guardrails, tripwires, handoffs
+ lab-research-patterns.md # DeepMind + Anthropic: Constitutional AI, debate
+ production-patterns.md # HN 2025: What actually works in production
+ advanced-patterns.md # 2025 research patterns (MAR, Iter-VF, GoalAct)
+ tool-orchestration.md # ToolOrchestra-inspired efficiency & rewards
+ memory-system.md # Episodic/semantic memory architecture
+ quality-control.md # Code review, anti-sycophancy, guardrails
+ agent-types.md # 37 specialized agent definitions
+ sdlc-phases.md # Full SDLC workflow
+ task-queue.md # Queue system, circuit breakers
+ spec-driven-dev.md # OpenAPI-first development
+ architecture.md # Directory structure, state schemas
+ core-workflow.md # RARV cycle, autonomy rules
+ claude-best-practices.md # Boris Cherny patterns
+ deployment.md # Cloud deployment instructions
+ business-ops.md # Business operation workflows
+ mcp-integration.md # MCP server capabilities
+autonomy/ # Runtime state and constitution
+benchmarks/ # SWE-bench and HumanEval benchmarks
 ```
 
 ## Key Concepts

@@ -1,20 +1,117 @@
 {
-    "short_name": "InvestWise",
-    "name": "InvestWise Enterprise Management",
-    "icons": [
-        {
-            "src": "favicon.ico",
-            "sizes": "64x64 32x32 24x24 16x16",
-            "type": "image/x-icon"
-        },
-        {
-            "src": "favicon.svg",
-            "type": "image/svg+xml",
-            "sizes": "any"
-        }
-    ],
-    "start_url": "/",
-    "display": "standalone",
-    "theme_color": "#151D18",
-    "background_color": "#ffffff"
+ "name": "InvestWise - Enterprise Investment Management",
+ "short_name": "InvestWise",
+ "description": "Enterprise-grade investment management platform with AI-powered insights",
+ "start_url": "/",
+ "display": "standalone",
+ "background_color": "#111814",
+ "theme_color": "#BFF300",
+ "orientation": "any",
+ "scope": "/",
+ "lang": "en",
+ "categories": ["finance", "business", "productivity"],
+ "icons": [
+ {
+ "src": "/icons/icon-72x72.png",
+ "sizes": "72x72",
+ "type": "image/png",
+ "purpose": "any maskable"
+ },
+ {
+ "src": "/icons/icon-96x96.png",
+ "sizes": "96x96",
+ "type": "image/png",
+ "purpose": "any maskable"
+ },
+ {
+ "src": "/icons/icon-128x128.png",
+ "sizes": "128x128",
+ "type": "image/png",
+ "purpose": "any maskable"
+ },
+ {
+ "src": "/icons/icon-144x144.png",
+ "sizes": "144x144",
+ "type": "image/png",
+ "purpose": "any maskable"
+ },
+ {
+ "src": "/icons/icon-152x152.png",
+ "sizes": "152x152",
+ "type": "image/png",
+ "purpose": "any maskable"
+ },
+ {
+ "src": "/icons/icon-192x192.png",
+ "sizes": "192x192",
+ "type": "image/png",
+ "purpose": "any maskable"
+ },
+ {
+ "src": "/icons/icon-384x384.png",
+ "sizes": "384x384",
+ "type": "image/png",
+ "purpose": "any maskable"
+ },
+ {
+ "src": "/icons/icon-512x512.png",
+ "sizes": "512x512",
+ "type": "image/png",
+ "purpose": "any maskable"
+ }
+ ],
+ "shortcuts": [
+ {
+ "name": "Dashboard",
+ "short_name": "Dashboard",
+ "description": "View investment dashboard",
+ "url": "/dashboard",
+ "icons": [
+ {
+ "src": "/icons/dashboard-96x96.png",
+ "sizes": "96x96"
+ }
+ ]
+ },
+ {
+ "name": "Add Member",
+ "short_name": "Add Member",
+ "description": "Add new member",
+ "url": "/members?action=add",
+ "icons": [
+ {
+ "src": "/icons/add-member-96x96.png",
+ "sizes": "96x96"
+ }
+ ]
+ },
+ {
+ "name": "Add Deposit",
+ "short_name": "Add Deposit",
+ "description": "Record new deposit",
+ "url": "/deposits?action=add",
+ "icons": [
+ {
+ "src": "/icons/deposit-96x96.png",
+ "sizes": "96x96"
+ }
+ ]
+ }
+ ],
+ "share_target": {
+ "action": "/share",
+ "method": "POST",
+ "enctype": "multipart/form-data",
+ "params": {
+ "title": "title",
+ "text": "text",
+ "url": "url",
+ "files": [
+ {
+ "name": "data",
+ "accept": [".csv", ".xlsx", ".json"]
+ }
+ ]
+ }
+ }
 }

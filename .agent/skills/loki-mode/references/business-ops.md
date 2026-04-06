@@ -19,27 +19,27 @@ Workflows and procedures for business swarm agents.
 ### SEO Optimization
 ```yaml
 Technical SEO:
-  - meta title: 50-60 characters, include primary keyword
-  - meta description: 150-160 characters, compelling
-  - canonical URL set
-  - robots.txt configured
-  - sitemap.xml generated
-  - structured data (JSON-LD)
-  - Open Graph tags
-  - Twitter Card tags
+ - meta title: 50-60 characters, include primary keyword
+ - meta description: 150-160 characters, compelling
+ - canonical URL set
+ - robots.txt configured
+ - sitemap.xml generated
+ - structured data (JSON-LD)
+ - Open Graph tags
+ - Twitter Card tags
 
 Performance:
-  - Largest Contentful Paint < 2.5s
-  - First Input Delay < 100ms
-  - Cumulative Layout Shift < 0.1
-  - Images optimized (WebP, lazy loading)
+ - Largest Contentful Paint < 2.5s
+ - First Input Delay < 100ms
+ - Cumulative Layout Shift < 0.1
+ - Images optimized (WebP, lazy loading)
 
 Content:
-  - H1 contains primary keyword
-  - H2-H6 hierarchy logical
-  - Internal linking strategy
-  - Alt text on all images
-  - Content length appropriate for intent
+ - H1 contains primary keyword
+ - H2-H6 hierarchy logical
+ - Internal linking strategy
+ - Alt text on all images
+ - Content length appropriate for intent
 ```
 
 ### Content Calendar Template
@@ -50,7 +50,7 @@ Content:
 - [ ] Blog post: [TITLE]
 - [ ] Social: LinkedIn announcement
 
-## Wednesday  
+## Wednesday 
 - [ ] Email newsletter
 - [ ] Social: Twitter thread
 
@@ -64,25 +64,25 @@ Content:
 **Onboarding Sequence:**
 ```
 Day 0: Welcome email (immediate)
-  - Thank you for signing up
-  - Quick start guide link
-  - Support contact
+ - Thank you for signing up
+ - Quick start guide link
+ - Support contact
 
 Day 1: Getting started
-  - First feature tutorial
-  - Video walkthrough
+ - First feature tutorial
+ - Video walkthrough
 
 Day 3: Value demonstration
-  - Success metrics
-  - Customer story
+ - Success metrics
+ - Customer story
 
 Day 7: Check-in
-  - How's it going?
-  - Feature discovery
+ - How's it going?
+ - Feature discovery
 
 Day 14: Advanced features
-  - Power user tips
-  - Integration options
+ - Power user tips
+ - Integration options
 ```
 
 **Abandoned Cart/Trial:**
@@ -111,20 +111,20 @@ Day 7: Final offer
 ### Qualification Framework (BANT)
 ```yaml
 Budget:
-  - What's the allocated budget?
-  - Who controls the budget?
-  
+ - What's the allocated budget?
+ - Who controls the budget?
+ 
 Authority:
-  - Who makes the final decision?
-  - Who else is involved?
-  
+ - Who makes the final decision?
+ - Who else is involved?
+ 
 Need:
-  - What problem are you solving?
-  - What's the impact of not solving it?
-  
+ - What problem are you solving?
+ - What's the impact of not solving it?
+ 
 Timeline:
-  - When do you need a solution?
-  - What's driving that timeline?
+ - When do you need a solution?
+ - What's driving that timeline?
 ```
 
 ### Outreach Template
@@ -148,27 +148,27 @@ Best,
 ### Demo Script Structure
 ```
 1. Rapport (2 min)
-   - Confirm attendees and roles
-   - Agenda overview
+ - Confirm attendees and roles
+ - Agenda overview
 
 2. Discovery (5 min)
-   - Confirm pain points
-   - Understand current process
-   - Success metrics
+ - Confirm pain points
+ - Understand current process
+ - Success metrics
 
 3. Solution (15 min)
-   - Map features to their needs
-   - Show don't tell
-   - Address specific use cases
+ - Map features to their needs
+ - Show don't tell
+ - Address specific use cases
 
 4. Social Proof (3 min)
-   - Relevant customer stories
-   - Metrics and outcomes
+ - Relevant customer stories
+ - Metrics and outcomes
 
 5. Pricing/Next Steps (5 min)
-   - Present options
-   - Answer objections
-   - Define next steps
+ - Present options
+ - Answer objections
+ - Define next steps
 ```
 
 ---
@@ -193,38 +193,38 @@ npm install stripe
 ### Webhook Events to Handle
 ```javascript
 const relevantEvents = [
-  'customer.subscription.created',
-  'customer.subscription.updated', 
-  'customer.subscription.deleted',
-  'invoice.paid',
-  'invoice.payment_failed',
-  'payment_intent.succeeded',
-  'payment_intent.payment_failed',
-  'customer.updated',
-  'charge.refunded'
+ 'customer.subscription.created',
+ 'customer.subscription.updated', 
+ 'customer.subscription.deleted',
+ 'invoice.paid',
+ 'invoice.payment_failed',
+ 'payment_intent.succeeded',
+ 'payment_intent.payment_failed',
+ 'customer.updated',
+ 'charge.refunded'
 ];
 ```
 
 ### Key Metrics Dashboard
 ```yaml
 Revenue Metrics:
-  - MRR (Monthly Recurring Revenue)
-  - ARR (Annual Recurring Revenue)
-  - Net Revenue Retention
-  - Expansion Revenue
-  - Churn Rate
+ - MRR (Monthly Recurring Revenue)
+ - ARR (Annual Recurring Revenue)
+ - Net Revenue Retention
+ - Expansion Revenue
+ - Churn Rate
 
 Customer Metrics:
-  - CAC (Customer Acquisition Cost)
-  - LTV (Lifetime Value)
-  - LTV:CAC Ratio (target: 3:1)
-  - Payback Period
+ - CAC (Customer Acquisition Cost)
+ - LTV (Lifetime Value)
+ - LTV:CAC Ratio (target: 3:1)
+ - Payback Period
 
 Product Metrics:
-  - Trial to Paid Conversion
-  - Activation Rate
-  - Feature Adoption
-  - NPS Score
+ - Trial to Paid Conversion
+ - Activation Rate
+ - Feature Adoption
+ - NPS Score
 ```
 
 ### Runway Calculation
@@ -298,10 +298,10 @@ Technical:
 ```javascript
 // Cookie categories
 const cookieCategories = {
-  necessary: true,      // Always enabled
-  functional: false,    // User preference
-  analytics: false,     // Tracking/analytics
-  marketing: false      // Advertising
+ necessary: true, // Always enabled
+ functional: false, // User preference
+ analytics: false, // Tracking/analytics
+ marketing: false // Advertising
 };
 
 // Required: Show banner before non-necessary cookies
@@ -360,27 +360,27 @@ Best,
 ```
 /help
 ├── /getting-started
-│   ├── quick-start-guide
-│   ├── account-setup
-│   └── first-steps
+│ ├── quick-start-guide
+│ ├── account-setup
+│ └── first-steps
 ├── /features
-│   ├── feature-a
-│   ├── feature-b
-│   └── feature-c
+│ ├── feature-a
+│ ├── feature-b
+│ └── feature-c
 ├── /billing
-│   ├── plans-and-pricing
-│   ├── payment-methods
-│   └── invoices
+│ ├── plans-and-pricing
+│ ├── payment-methods
+│ └── invoices
 ├── /integrations
-│   ├── integration-a
-│   └── integration-b
+│ ├── integration-a
+│ └── integration-b
 ├── /troubleshooting
-│   ├── common-issues
-│   └── error-messages
+│ ├── common-issues
+│ └── error-messages
 └── /api
-    ├── authentication
-    ├── endpoints
-    └── examples
+ ├── authentication
+ ├── endpoints
+ └── examples
 ```
 
 ---
@@ -390,73 +390,73 @@ Best,
 ### Event Tracking Plan
 ```yaml
 User Lifecycle:
-  - user_signed_up:
-      properties: [source, referrer, plan]
-  - user_activated:
-      properties: [activation_method, time_to_activate]
-  - user_converted:
-      properties: [plan, trial_length, conversion_path]
-  - user_churned:
-      properties: [reason, lifetime_value, last_active]
+ - user_signed_up:
+ properties: [source, referrer, plan]
+ - user_activated:
+ properties: [activation_method, time_to_activate]
+ - user_converted:
+ properties: [plan, trial_length, conversion_path]
+ - user_churned:
+ properties: [reason, lifetime_value, last_active]
 
 Core Actions:
-  - feature_used:
-      properties: [feature_name, context]
-  - action_completed:
-      properties: [action_type, duration, success]
-  - error_encountered:
-      properties: [error_type, page, context]
+ - feature_used:
+ properties: [feature_name, context]
+ - action_completed:
+ properties: [action_type, duration, success]
+ - error_encountered:
+ properties: [error_type, page, context]
 
 Engagement:
-  - page_viewed:
-      properties: [page_name, referrer, duration]
-  - button_clicked:
-      properties: [button_name, page, context]
-  - search_performed:
-      properties: [query, results_count]
+ - page_viewed:
+ properties: [page_name, referrer, duration]
+ - button_clicked:
+ properties: [button_name, page, context]
+ - search_performed:
+ properties: [query, results_count]
 ```
 
 ### A/B Testing Framework
 ```yaml
 Test Structure:
-  name: "Homepage CTA Test"
-  hypothesis: "Changing CTA from 'Sign Up' to 'Start Free' will increase conversions"
-  primary_metric: signup_rate
-  secondary_metrics: [time_on_page, bounce_rate]
-  
-  variants:
-    control:
-      description: "Original 'Sign Up' button"
-      allocation: 50%
-    variant_a:
-      description: "'Start Free' button"
-      allocation: 50%
-  
-  sample_size: 1000_per_variant
-  duration: 14_days
-  significance_level: 0.95
+ name: "Homepage CTA Test"
+ hypothesis: "Changing CTA from 'Sign Up' to 'Start Free' will increase conversions"
+ primary_metric: signup_rate
+ secondary_metrics: [time_on_page, bounce_rate]
+ 
+ variants:
+ control:
+ description: "Original 'Sign Up' button"
+ allocation: 50%
+ variant_a:
+ description: "'Start Free' button"
+ allocation: 50%
+ 
+ sample_size: 1000_per_variant
+ duration: 14_days
+ significance_level: 0.95
 
 Analysis:
-  - Calculate conversion rate per variant
-  - Run chi-squared test for significance
-  - Check for novelty effects
-  - Segment by user type if needed
-  - Document learnings
+ - Calculate conversion rate per variant
+ - Run chi-squared test for significance
+ - Check for novelty effects
+ - Segment by user type if needed
+ - Document learnings
 ```
 
 ### Funnel Analysis
 ```
 Signup Funnel:
-  1. Landing Page Visit    → 100% (baseline)
-  2. Signup Page View      → 40% (60% drop-off)
-  3. Form Submitted        → 25% (15% drop-off)
-  4. Email Verified        → 20% (5% drop-off)
-  5. Onboarding Complete   → 12% (8% drop-off)
-  6. First Value Action    → 8% (4% drop-off)
+ 1. Landing Page Visit → 100% (baseline)
+ 2. Signup Page View → 40% (60% drop-off)
+ 3. Form Submitted → 25% (15% drop-off)
+ 4. Email Verified → 20% (5% drop-off)
+ 5. Onboarding Complete → 12% (8% drop-off)
+ 6. First Value Action → 8% (4% drop-off)
 
 Optimization Targets:
-  - Biggest drop: Landing → Signup (improve CTA, value prop)
-  - Second biggest: Signup → Submit (simplify form)
+ - Biggest drop: Landing → Signup (improve CTA, value prop)
+ - Second biggest: Signup → Submit (simplify form)
 ```
 
 ### Weekly Metrics Report Template

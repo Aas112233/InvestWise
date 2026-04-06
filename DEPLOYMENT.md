@@ -14,9 +14,9 @@
 3. Create a database user with password
 4. Whitelist all IPs: `0.0.0.0/0` (for Render's dynamic IPs)
 5. Get your connection string:
-   ```
-   mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/investwise?retryWrites=true&w=majority
-   ```
+ ```
+ mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/investwise?retryWrites=true&w=majority
+ ```
 
 ---
 
@@ -35,10 +35,10 @@ The server is already configured for production with:
 3. Create a **New Web Service**
 4. Connect your GitHub repo
 5. Configure:
-   - **Name**: investwise-api
-   - **Root Directory**: `server`
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
+ - **Name**: investwise-api
+ - **Root Directory**: `server`
+ - **Build Command**: `npm install`
+ - **Start Command**: `npm start`
 
 ### Step 3: Set Environment Variables in Render
 
@@ -93,34 +93,34 @@ Create a `.htaccess` file in your `htdocs` folder:
 
 ```apache
 <IfModule mod_rewrite.c>
-  RewriteEngine On
-  RewriteBase /
-  
-  # Handle existing files and directories
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  
-  # Redirect all other requests to index.html
-  RewriteRule ^ index.html [L]
+ RewriteEngine On
+ RewriteBase /
+ 
+ # Handle existing files and directories
+ RewriteCond %{REQUEST_FILENAME} !-f
+ RewriteCond %{REQUEST_FILENAME} !-d
+ 
+ # Redirect all other requests to index.html
+ RewriteRule ^ index.html [L]
 </IfModule>
 
 # Security headers
 <IfModule mod_headers.c>
-  Header set X-Content-Type-Options "nosniff"
-  Header set X-Frame-Options "SAMEORIGIN"
-  Header set X-XSS-Protection "1; mode=block"
+ Header set X-Content-Type-Options "nosniff"
+ Header set X-Frame-Options "SAMEORIGIN"
+ Header set X-XSS-Protection "1; mode=block"
 </IfModule>
 
 # Caching for static assets
 <IfModule mod_expires.c>
-  ExpiresActive On
-  ExpiresByType image/png "access plus 1 month"
-  ExpiresByType image/jpg "access plus 1 month"
-  ExpiresByType image/jpeg "access plus 1 month"
-  ExpiresByType image/gif "access plus 1 month"
-  ExpiresByType image/svg+xml "access plus 1 month"
-  ExpiresByType text/css "access plus 1 week"
-  ExpiresByType application/javascript "access plus 1 week"
+ ExpiresActive On
+ ExpiresByType image/png "access plus 1 month"
+ ExpiresByType image/jpg "access plus 1 month"
+ ExpiresByType image/jpeg "access plus 1 month"
+ ExpiresByType image/gif "access plus 1 month"
+ ExpiresByType image/svg+xml "access plus 1 month"
+ ExpiresByType text/css "access plus 1 week"
+ ExpiresByType application/javascript "access plus 1 week"
 </IfModule>
 ```
 
@@ -132,8 +132,8 @@ Create a `.htaccess` file in your `htdocs` folder:
 2. Try to log in
 3. Check browser console for any CORS errors
 4. If you see CORS errors:
-   - Verify `CORS_ORIGINS` in Render includes your exact frontend URL
-   - Make sure there are no trailing slashes
+ - Verify `CORS_ORIGINS` in Render includes your exact frontend URL
+ - Make sure there are no trailing slashes
 
 ---
 
@@ -162,7 +162,7 @@ Create a `.htaccess` file in your `htdocs` folder:
 
 ## 6. Security Reminders
 
-⚠️ **Before going live**:
+ **Before going live**:
 
 1. Change `JWT_SECRET` to a strong random string (32+ characters)
 2. Never commit real credentials to Git

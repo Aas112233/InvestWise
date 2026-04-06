@@ -42,11 +42,11 @@ Summarize by importance, not just recency
 
 ## Anti-Patterns
 
-### ❌ Naive Truncation
+### Naive Truncation
 
-### ❌ Ignoring Token Costs
+### Ignoring Token Costs
 
-### ❌ One-Size-Fits-All
+### One-Size-Fits-All
 
 ## Related Skills
 

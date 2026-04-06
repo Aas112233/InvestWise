@@ -123,7 +123,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 
 ## 7. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | Mesh colliders everywhere | Simple shapes |
 | Real-time shadows on mobile | Baked or blob shadows |

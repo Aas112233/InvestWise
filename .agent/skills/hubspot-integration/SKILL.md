@@ -22,13 +22,13 @@ Create, read, update, delete CRM records
 
 ## Anti-Patterns
 
-### ❌ Using Deprecated API Keys
+### Using Deprecated API Keys
 
-### ❌ Individual Requests Instead of Batch
+### Individual Requests Instead of Batch
 
-### ❌ Polling Instead of Webhooks
+### Polling Instead of Webhooks
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

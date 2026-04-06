@@ -1,6 +1,6 @@
 ---
 name: agent-memory-systems
-description: "Memory is the cornerstone of intelligent agents. Without it, every interaction starts from zero. This skill covers the architecture of agent memory: short-term (context window), long-term (vector stores), and the cognitive architectures that organize them.  Key insight: Memory isn't just storage - it's retrieval. A million stored facts mean nothing if you can't find the right one. Chunking, embedding, and retrieval strategies determine whether your agent remembers or forgets.  The field is fragm"
+description: "Memory is the cornerstone of intelligent agents. Without it, every interaction starts from zero. This skill covers the architecture of agent memory: short-term (context window), long-term (vector stores), and the cognitive architectures that organize them. Key insight: Memory isn't just storage - it's retrieval. A million stored facts mean nothing if you can't find the right one. Chunking, embedding, and retrieval strategies determine whether your agent remembers or forgets. The field is fragm"
 source: vibeship-spawner-skills (Apache 2.0)
 ---
 
@@ -44,13 +44,13 @@ Breaking documents into retrievable chunks
 
 ## Anti-Patterns
 
-### ❌ Store Everything Forever
+### Store Everything Forever
 
-### ❌ Chunk Without Testing Retrieval
+### Chunk Without Testing Retrieval
 
-### ❌ Single Memory Type for All Data
+### Single Memory Type for All Data
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

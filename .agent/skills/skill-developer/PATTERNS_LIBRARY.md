@@ -50,37 +50,37 @@ Ready-to-use regex and glob patterns for skill triggers. Copy and customize for 
 
 ### Frontend
 ```glob
-frontend/src/**/*.tsx        # All React components
-frontend/src/**/*.ts         # All TypeScript files
-frontend/src/components/**   # Only components directory
+frontend/src/**/*.tsx # All React components
+frontend/src/**/*.ts # All TypeScript files
+frontend/src/components/** # Only components directory
 ```
 
 ### Backend Services
 ```glob
-form/src/**/*.ts            # Form service
-email/src/**/*.ts           # Email service
-users/src/**/*.ts           # Users service
-projects/src/**/*.ts        # Projects service
+form/src/**/*.ts # Form service
+email/src/**/*.ts # Email service
+users/src/**/*.ts # Users service
+projects/src/**/*.ts # Projects service
 ```
 
 ### Database
 ```glob
-**/schema.prisma            # Prisma schema (anywhere)
-**/migrations/**/*.sql      # Migration files
-database/src/**/*.ts        # Database scripts
+**/schema.prisma # Prisma schema (anywhere)
+**/migrations/**/*.sql # Migration files
+database/src/**/*.ts # Database scripts
 ```
 
 ### Workflows
 ```glob
-form/src/workflow/**/*.ts              # Workflow engine
+form/src/workflow/**/*.ts # Workflow engine
 form/src/workflow-definitions/**/*.json # Workflow definitions
 ```
 
 ### Test Exclusions
 ```glob
-**/*.test.ts                # TypeScript tests
-**/*.test.tsx               # React component tests
-**/*.spec.ts                # Spec files
+**/*.test.ts # TypeScript tests
+**/*.test.tsx # React component tests
+**/*.spec.ts # Spec files
 ```
 
 ---
@@ -89,10 +89,10 @@ form/src/workflow-definitions/**/*.json # Workflow definitions
 
 ### Prisma/Database
 ```regex
-import.*[Pp]risma                # Prisma imports
-PrismaService                    # PrismaService usage
-prisma\.                         # prisma.something
-\.findMany\(                     # Prisma query methods
+import.*[Pp]risma # Prisma imports
+PrismaService # PrismaService usage
+prisma\. # prisma.something
+\.findMany\( # Prisma query methods
 \.create\(
 \.update\(
 \.delete\(
@@ -100,23 +100,23 @@ prisma\.                         # prisma.something
 
 ### Controllers/Routes
 ```regex
-export class.*Controller         # Controller classes
-router\.                         # Express router
+export class.*Controller # Controller classes
+router\. # Express router
 app\.(get|post|put|delete|patch) # Express app routes
 ```
 
 ### Error Handling
 ```regex
-try\s*\{                        # Try blocks
-catch\s*\(                      # Catch blocks
-throw new                        # Throw statements
+try\s*\{ # Try blocks
+catch\s*\( # Catch blocks
+throw new # Throw statements
 ```
 
 ### React/Components
 ```regex
-export.*React\.FC               # React functional components
-export default function.*       # Default function exports
-useState|useEffect              # React hooks
+export.*React\.FC # React functional components
+export default function.* # Default function exports
+useState|useEffect # React hooks
 ```
 
 ---
@@ -125,22 +125,22 @@ useState|useEffect              # React hooks
 
 ```json
 {
-  "my-skill": {
-    "promptTriggers": {
-      "intentPatterns": [
-        "(create|add|build).*?(component|UI|page)"
-      ]
-    },
-    "fileTriggers": {
-      "pathPatterns": [
-        "frontend/src/**/*.tsx"
-      ],
-      "contentPatterns": [
-        "export.*React\\.FC",
-        "useState|useEffect"
-      ]
-    }
-  }
+ "my-skill": {
+ "promptTriggers": {
+ "intentPatterns": [
+ "(create|add|build).*?(component|UI|page)"
+ ]
+ },
+ "fileTriggers": {
+ "pathPatterns": [
+ "frontend/src/**/*.tsx"
+ ],
+ "contentPatterns": [
+ "export.*React\\.FC",
+ "useState|useEffect"
+ ]
+ }
+ }
 }
 ```
 

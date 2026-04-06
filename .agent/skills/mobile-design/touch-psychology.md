@@ -48,17 +48,17 @@ Where:
 
 ```
 ┌─────────────────────────────────────┐
-│                                     │
-│    ┌─────────────────────────┐      │
-│    │                         │      │
-│    │    [  BUTTON  ]         │ ← Visual: 36px
-│    │                         │      │
-│    └─────────────────────────┘      │
-│                                     │ ← Hit area: 48px (padding extends)
+│ │
+│ ┌─────────────────────────┐ │
+│ │ │ │
+│ │ [ BUTTON ] │ ← Visual: 36px
+│ │ │ │
+│ └─────────────────────────┘ │
+│ │ ← Hit area: 48px (padding extends)
 └─────────────────────────────────────┘
 
-✅ CORRECT: Visual can be smaller if hit area is minimum 44-48px
-❌ WRONG: Making hit area same as small visual element
+ CORRECT: Visual can be smaller if hit area is minimum 44-48px
+ WRONG: Making hit area same as small visual element
 ```
 
 ### Application Rules
@@ -82,24 +82,24 @@ Where:
 Research shows: 49% of users hold phone one-handed.
 
 ┌─────────────────────────────────────┐
-│                                     │
-│  ┌─────────────────────────────┐    │
-│  │       HARD TO REACH         │    │ ← Status bar, top nav
-│  │      (requires stretch)     │    │    Put: Back, menu, settings
-│  │                             │    │
-│  ├─────────────────────────────┤    │
-│  │                             │    │
-│  │       OK TO REACH           │    │ ← Content area
-│  │      (comfortable)          │    │    Put: Secondary actions, content
-│  │                             │    │
-│  ├─────────────────────────────┤    │
-│  │                             │    │
-│  │       EASY TO REACH         │    │ ← Tab bar, FAB zone
-│  │      (thumb's arc)          │    │    Put: PRIMARY CTAs!
-│  │                             │    │
-│  └─────────────────────────────┘    │
-│                                     │
-│          [    HOME    ]             │
+│ │
+│ ┌─────────────────────────────┐ │
+│ │ HARD TO REACH │ │ ← Status bar, top nav
+│ │ (requires stretch) │ │ Put: Back, menu, settings
+│ │ │ │
+│ ├─────────────────────────────┤ │
+│ │ │ │
+│ │ OK TO REACH │ │ ← Content area
+│ │ (comfortable) │ │ Put: Secondary actions, content
+│ │ │ │
+│ ├─────────────────────────────┤ │
+│ │ │ │
+│ │ EASY TO REACH │ │ ← Tab bar, FAB zone
+│ │ (thumb's arc) │ │ Put: PRIMARY CTAs!
+│ │ │ │
+│ └─────────────────────────────┘ │
+│ │
+│ [ HOME ] │
 └─────────────────────────────────────┘
 ```
 
@@ -109,13 +109,13 @@ Research shows: 49% of users hold phone one-handed.
 Right hand holding phone:
 
 ┌───────────────────────────────┐
-│  STRETCH      STRETCH    OK   │
-│                               │
-│  STRETCH        OK       EASY │
-│                               │
-│    OK          EASY      EASY │
-│                               │
-│   EASY         EASY      EASY │
+│ STRETCH STRETCH OK │
+│ │
+│ STRETCH OK EASY │
+│ │
+│ OK EASY EASY │
+│ │
+│ EASY EASY EASY │
 └───────────────────────────────┘
 
 Left hand is mirrored.
@@ -232,15 +232,15 @@ Solution: Always provide visible alternative
 Swipe actions need visual hints:
 
 ┌─────────────────────────────────────────┐
-│  ┌───┐                                  │
-│  │ ≡ │  Item with hidden actions...   → │ ← Edge hint (partial color)
-│  └───┘                                  │
+│ ┌───┐ │
+│ │ ≡ │ Item with hidden actions... → │ ← Edge hint (partial color)
+│ └───┘ │
 └─────────────────────────────────────────┘
 
-✅ Good: Slight color peek at edge suggesting swipe
-✅ Good: Drag handle icon ( ≡ ) suggesting reorder
-✅ Good: Onboarding tooltip explaining gesture
-❌ Bad: Hidden gestures with no visual affordance
+ Good: Slight color peek at edge suggesting swipe
+ Good: Drag handle icon ( ≡ ) suggesting reorder
+ Good: Onboarding tooltip explaining gesture
+ Bad: Hidden gestures with no visual affordance
 ```
 
 ### Platform Gesture Differences
@@ -299,7 +299,7 @@ Without haptics:
 ### Haptic Usage Guidelines
 
 ```
-✅ DO use haptics for:
+ DO use haptics for:
 ├── Button taps
 ├── Toggle switches
 ├── Picker/slider values
@@ -309,7 +309,7 @@ Without haptics:
 ├── Swipe action thresholds
 └── Important state changes
 
-❌ DON'T use haptics for:
+ DON'T use haptics for:
 ├── Every scroll position
 ├── Every list item
 ├── Background events
@@ -345,22 +345,22 @@ Without haptics:
 
 ```
 1. ONE PRIMARY ACTION per screen
-   └── Clear what to do next
-   
+ └── Clear what to do next
+ 
 2. PROGRESSIVE DISCLOSURE
-   └── Show only what's needed now
-   
+ └── Show only what's needed now
+ 
 3. SMART DEFAULTS
-   └── Pre-fill what you can
-   
+ └── Pre-fill what you can
+ 
 4. CHUNKING
-   └── Break long forms into steps
-   
+ └── Break long forms into steps
+ 
 5. RECOGNITION over RECALL
-   └── Show options, don't make user remember
-   
+ └── Show options, don't make user remember
+ 
 6. CONTEXT PERSISTENCE
-   └── Save state on interrupt/background
+ └── Save state on interrupt/background
 ```
 
 ### Miller's Law for Mobile
@@ -507,29 +507,29 @@ Trust signals in touch interactions:
 ### Touch Target Sizes
 
 ```
-                     iOS        Android     WCAG
-Minimum:           44pt       48dp       44px
-Recommended:       48pt+      56dp+      -
-Spacing:           8pt+       8dp+       8px+
+ iOS Android WCAG
+Minimum: 44pt 48dp 44px
+Recommended: 48pt+ 56dp+ -
+Spacing: 8pt+ 8dp+ 8px+
 ```
 
 ### Thumb Zone Actions
 
 ```
-TOP:      Navigation, settings, back (infrequent)
-MIDDLE:   Content, secondary actions
-BOTTOM:   Primary CTA, tab bar, FAB (frequent)
+TOP: Navigation, settings, back (infrequent)
+MIDDLE: Content, secondary actions
+BOTTOM: Primary CTA, tab bar, FAB (frequent)
 ```
 
 ### Haptic Selection
 
 ```
-Light:    Selection, toggle, minor
-Medium:   Tap, standard action
-Heavy:    Confirm, complete, drop
-Success:  Task done
-Error:    Failed action
-Warning:  Attention needed
+Light: Selection, toggle, minor
+Medium: Tap, standard action
+Heavy: Confirm, complete, drop
+Success: Task done
+Error: Failed action
+Warning: Attention needed
 ```
 
 ---

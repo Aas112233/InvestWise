@@ -3,13 +3,13 @@ name: content-creator
 description: Create SEO-optimized marketing content with consistent brand voice. Includes brand voice analyzer, SEO optimizer, content frameworks, and social media templates. Use when writing blog posts, creating social media content, analyzing brand voice, optimizing SEO, planning content calendars, or when user mentions content creation, brand voice, SEO optimization, social media marketing, or content strategy.
 license: MIT
 metadata:
-  version: 1.0.0
-  author: Alireza Rezvani
-  category: marketing
-  domain: content-marketing
-  updated: 2025-10-20
-  python-tools: brand_voice_analyzer.py, seo_optimizer.py
-  tech-stack: SEO, social-media-platforms
+ version: 1.0.0
+ author: Alireza Rezvani
+ category: marketing
+ domain: content-marketing
+ updated: 2025-10-20
+ python-tools: brand_voice_analyzer.py, seo_optimizer.py
+ tech-stack: SEO, social-media-platforms
 ---
 
 # Content Creator
@@ -46,78 +46,78 @@ content creation, blog posts, SEO, brand voice, social media, content calendar, 
 When creating content for a new brand or client:
 
 1. **Analyze Existing Content** (if available)
-   ```bash
-   python scripts/brand_voice_analyzer.py existing_content.txt
-   ```
-   
+ ```bash
+ python scripts/brand_voice_analyzer.py existing_content.txt
+ ```
+ 
 2. **Define Voice Attributes**
-   - Review brand personality archetypes in `references/brand_guidelines.md`
-   - Select primary and secondary archetypes
-   - Choose 3-5 tone attributes
-   - Document in brand guidelines
+ - Review brand personality archetypes in `references/brand_guidelines.md`
+ - Select primary and secondary archetypes
+ - Choose 3-5 tone attributes
+ - Document in brand guidelines
 
 3. **Create Voice Sample**
-   - Write 3 sample pieces in chosen voice
-   - Test consistency using analyzer
-   - Refine based on results
+ - Write 3 sample pieces in chosen voice
+ - Test consistency using analyzer
+ - Refine based on results
 
 ### Creating SEO-Optimized Blog Posts
 
 1. **Keyword Research**
-   - Identify primary keyword (search volume 500-5000/month)
-   - Find 3-5 secondary keywords
-   - List 10-15 LSI keywords
+ - Identify primary keyword (search volume 500-5000/month)
+ - Find 3-5 secondary keywords
+ - List 10-15 LSI keywords
 
 2. **Content Structure**
-   - Use blog template from `references/content_frameworks.md`
-   - Include keyword in title, first paragraph, and 2-3 H2s
-   - Aim for 1,500-2,500 words for comprehensive coverage
+ - Use blog template from `references/content_frameworks.md`
+ - Include keyword in title, first paragraph, and 2-3 H2s
+ - Aim for 1,500-2,500 words for comprehensive coverage
 
 3. **Optimization Check**
-   ```bash
-   python scripts/seo_optimizer.py blog_post.md "primary keyword" "secondary,keywords,list"
-   ```
+ ```bash
+ python scripts/seo_optimizer.py blog_post.md "primary keyword" "secondary,keywords,list"
+ ```
 
 4. **Apply SEO Recommendations**
-   - Adjust keyword density to 1-3%
-   - Ensure proper heading structure
-   - Add internal and external links
-   - Optimize meta description
+ - Adjust keyword density to 1-3%
+ - Ensure proper heading structure
+ - Add internal and external links
+ - Optimize meta description
 
 ### Social Media Content Creation
 
 1. **Platform Selection**
-   - Identify primary platforms based on audience
-   - Review platform-specific guidelines in `references/social_media_optimization.md`
+ - Identify primary platforms based on audience
+ - Review platform-specific guidelines in `references/social_media_optimization.md`
 
 2. **Content Adaptation**
-   - Start with blog post or core message
-   - Use repurposing matrix from `references/content_frameworks.md`
-   - Adapt for each platform following templates
+ - Start with blog post or core message
+ - Use repurposing matrix from `references/content_frameworks.md`
+ - Adapt for each platform following templates
 
 3. **Optimization Checklist**
-   - Platform-appropriate length
-   - Optimal posting time
-   - Correct image dimensions
-   - Platform-specific hashtags
-   - Engagement elements (polls, questions)
+ - Platform-appropriate length
+ - Optimal posting time
+ - Correct image dimensions
+ - Platform-specific hashtags
+ - Engagement elements (polls, questions)
 
 ### Content Calendar Planning
 
 1. **Monthly Planning**
-   - Copy `assets/content_calendar_template.md`
-   - Set monthly goals and KPIs
-   - Identify key campaigns/themes
+ - Copy `assets/content_calendar_template.md`
+ - Set monthly goals and KPIs
+ - Identify key campaigns/themes
 
 2. **Weekly Distribution**
-   - Follow 40/25/25/10 content pillar ratio
-   - Balance platforms throughout week
-   - Align with optimal posting times
+ - Follow 40/25/25/10 content pillar ratio
+ - Balance platforms throughout week
+ - Align with optimal posting times
 
 3. **Batch Creation**
-   - Create all weekly content in one session
-   - Maintain consistent voice across pieces
-   - Prepare all visual assets together
+ - Create all weekly content in one session
+ - Maintain consistent voice across pieces
+ - Prepare all visual assets together
 
 ## Key Scripts
 

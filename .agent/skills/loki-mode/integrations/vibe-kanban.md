@@ -33,9 +33,9 @@ Or create `.loki/config/integrations.yaml`:
 
 ```yaml
 vibe-kanban:
-  enabled: true
-  sync_interval: 30  # seconds
-  export_path: ~/.vibe-kanban/loki-tasks/
+ enabled: true
+ sync_interval: 30 # seconds
+ export_path: ~/.vibe-kanban/loki-tasks/
 ```
 
 ## How It Works
@@ -43,17 +43,17 @@ vibe-kanban:
 ### Task Sync Flow
 
 ```
-Loki Mode                          Vibe Kanban
-    │                                   │
-    ├─ Creates task ──────────────────► Task appears on board
-    │                                   │
-    ├─ Agent claims task ─────────────► Status: "In Progress"
-    │                                   │
-    │ ◄─────────────────── User pauses ─┤ (optional intervention)
-    │                                   │
-    ├─ Task completes ────────────────► Status: "Done"
-    │                                   │
-    └─ Review results ◄─────────────── User reviews diffs
+Loki Mode Vibe Kanban
+ │ │
+ ├─ Creates task ──────────────────► Task appears on board
+ │ │
+ ├─ Agent claims task ─────────────► Status: "In Progress"
+ │ │
+ │ ◄─────────────────── User pauses ─┤ (optional intervention)
+ │ │
+ ├─ Task completes ────────────────► Status: "Done"
+ │ │
+ └─ Review results ◄─────────────── User reviews diffs
 ```
 
 ### Task Export Format
@@ -62,18 +62,18 @@ Loki Mode exports tasks in Vibe Kanban compatible format:
 
 ```json
 {
-  "id": "loki-task-eng-frontend-001",
-  "title": "Implement user authentication UI",
-  "description": "Create login/signup forms with validation",
-  "status": "todo",
-  "agent": "claude-code",
-  "tags": ["eng-frontend", "phase-4", "priority-high"],
-  "metadata": {
-    "lokiPhase": "DEVELOPMENT",
-    "lokiSwarm": "engineering",
-    "lokiAgent": "eng-frontend",
-    "createdAt": "2025-01-15T10:00:00Z"
-  }
+ "id": "loki-task-eng-frontend-001",
+ "title": "Implement user authentication UI",
+ "description": "Create login/signup forms with validation",
+ "status": "todo",
+ "agent": "claude-code",
+ "tags": ["eng-frontend", "phase-4", "priority-high"],
+ "metadata": {
+ "lokiPhase": "DEVELOPMENT",
+ "lokiSwarm": "engineering",
+ "lokiAgent": "eng-frontend",
+ "createdAt": "2025-01-15T10:00:00Z"
+ }
 }
 ```
 
@@ -106,32 +106,32 @@ mkdir -p "$EXPORT_DIR"
 
 # Export pending tasks
 if [ -f "$LOKI_DIR/queue/pending.json" ]; then
-    python3 << EOF
+ python3 << EOF
 import json
 import os
 
 with open("$LOKI_DIR/queue/pending.json") as f:
-    tasks = json.load(f)
+ tasks = json.load(f)
 
 export_dir = os.path.expanduser("$EXPORT_DIR")
 
 for task in tasks:
-    vibe_task = {
-        "id": f"loki-{task['id']}",
-        "title": task.get('payload', {}).get('description', task['type']),
-        "description": json.dumps(task.get('payload', {}), indent=2),
-        "status": "todo",
-        "agent": "claude-code",
-        "tags": [task['type'], f"priority-{task.get('priority', 5)}"],
-        "metadata": {
-            "lokiTaskId": task['id'],
-            "lokiType": task['type'],
-            "createdAt": task.get('createdAt', '')
-        }
-    }
+ vibe_task = {
+ "id": f"loki-{task['id']}",
+ "title": task.get('payload', {}).get('description', task['type']),
+ "description": json.dumps(task.get('payload', {}), indent=2),
+ "status": "todo",
+ "agent": "claude-code",
+ "tags": [task['type'], f"priority-{task.get('priority', 5)}"],
+ "metadata": {
+ "lokiTaskId": task['id'],
+ "lokiType": task['type'],
+ "createdAt": task.get('createdAt', '')
+ }
+ }
 
-    with open(f"{export_dir}/{task['id']}.json", 'w') as out:
-        json.dump(vibe_task, out, indent=2)
+ with open(f"{export_dir}/{task['id']}.json", 'w') as out:
+ json.dump(vibe_task, out, indent=2)
 
 print(f"Exported {len(tasks)} tasks to {export_dir}")
 EOF
@@ -150,15 +150,15 @@ LOKI_DIR=".loki"
 
 # Watch for queue changes and sync
 while true; do
-    # Use fswatch on macOS, inotifywait on Linux
-    if command -v fswatch &> /dev/null; then
-        fswatch -1 "$LOKI_DIR/queue/"
-    else
-        inotifywait -e modify,create "$LOKI_DIR/queue/" 2>/dev/null
-    fi
+ # Use fswatch on macOS, inotifywait on Linux
+ if command -v fswatch &> /dev/null; then
+ fswatch -1 "$LOKI_DIR/queue/"
+ else
+ inotifywait -e modify,create "$LOKI_DIR/queue/" 2>/dev/null
+ fi
 
-    ./scripts/export-to-vibe-kanban.sh
-    sleep 2
+ ./scripts/export-to-vibe-kanban.sh
+ sleep 2
 done
 ```
 

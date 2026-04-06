@@ -9,29 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Modular Architecture** - Refactored codebase for better maintainability
-  - New `config.py` - Centralized configuration (paths, selectors, timeouts)
-  - New `browser_utils.py` - BrowserFactory and StealthUtils classes
-  - Cleaner separation of concerns across all scripts
+ - New `config.py` - Centralized configuration (paths, selectors, timeouts)
+ - New `browser_utils.py` - BrowserFactory and StealthUtils classes
+ - Cleaner separation of concerns across all scripts
 
 ### Changed
 - **Timeout increased to 120 seconds** - Long queries no longer timeout prematurely
-  - `ask_question.py`: 30s → 120s
-  - `browser_session.py`: 30s → 120s
-  - Resolves Issue #4
+ - `ask_question.py`: 30s → 120s
+ - `browser_session.py`: 30s → 120s
+ - Resolves Issue #4
 
 ### Fixed
 - **Thinking Message Detection** - Fixed incomplete answers showing placeholder text
-  - Now waits for `div.thinking-message` element to disappear before reading answer
-  - Answers like "Reviewing the content..." or "Looking for answers..." no longer returned prematurely
-  - Works reliably across all languages and NotebookLM UI changes
+ - Now waits for `div.thinking-message` element to disappear before reading answer
+ - Answers like "Reviewing the content..." or "Looking for answers..." no longer returned prematurely
+ - Works reliably across all languages and NotebookLM UI changes
 
 - **Correct CSS Selectors** - Updated to match current NotebookLM UI
-  - Changed from `.response-content, .message-content` to `.to-user-container .message-text-content`
-  - Consistent selectors across all scripts
+ - Changed from `.response-content, .message-content` to `.to-user-container .message-text-content`
+ - Consistent selectors across all scripts
 
 - **Stability Detection** - Improved answer completeness check
-  - Now requires 3 consecutive stable polls instead of 1 second wait
-  - Prevents truncated responses during streaming
+ - Now requires 3 consecutive stable polls instead of 1 second wait
+ - Prevents truncated responses during streaming
 
 ## [1.2.0] - 2025-10-28
 

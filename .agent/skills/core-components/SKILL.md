@@ -76,11 +76,11 @@ Base layout component with token support:
 
 ```tsx
 <Box
-  padding="$4"
-  backgroundColor="$backgroundPrimary"
-  borderRadius="$lg"
+ padding="$4"
+ backgroundColor="$backgroundPrimary"
+ borderRadius="$lg"
 >
-  {children}
+ {children}
 </Box>
 ```
 
@@ -90,13 +90,13 @@ Horizontal and vertical flex layouts:
 
 ```tsx
 <HStack gap="$3" alignItems="center">
-  <Icon name="user" />
-  <Text>Username</Text>
+ <Icon name="user" />
+ <Text>Username</Text>
 </HStack>
 
 <VStack gap="$4" padding="$4">
-  <Heading>Title</Heading>
-  <Text>Content</Text>
+ <Heading>Title</Heading>
+ <Text>Content</Text>
 </VStack>
 ```
 
@@ -106,11 +106,11 @@ Typography with token support:
 
 ```tsx
 <Text
-  fontSize="$lg"
-  fontWeight="$semibold"
-  color="$textPrimary"
+ fontSize="$lg"
+ fontWeight="$semibold"
+ color="$textPrimary"
 >
-  Hello World
+ Hello World
 </Text>
 ```
 
@@ -120,13 +120,13 @@ Interactive button with variants:
 
 ```tsx
 <Button
-  onPress={handlePress}
-  variant="solid"
-  size="md"
-  isLoading={loading}
-  isDisabled={disabled}
+ onPress={handlePress}
+ variant="solid"
+ size="md"
+ isLoading={loading}
+ isDisabled={disabled}
 >
-  Click Me
+ Click Me
 </Button>
 ```
 
@@ -143,11 +143,11 @@ Form input with validation:
 
 ```tsx
 <Input
-  value={value}
-  onChangeText={setValue}
-  placeholder="Enter text"
-  error={touched ? errors.field : undefined}
-  label="Field Name"
+ value={value}
+ onChangeText={setValue}
+ placeholder="Enter text"
+ error={touched ? errors.field : undefined}
+ label="Field Name"
 />
 ```
 
@@ -157,12 +157,12 @@ Content container:
 
 ```tsx
 <Card padding="$4" gap="$3">
-  <CardHeader>
-    <Heading size="sm">Card Title</Heading>
-  </CardHeader>
-  <CardBody>
-    <Text>Card content</Text>
-  </CardBody>
+ <CardHeader>
+ <Heading size="sm">Card Title</Heading>
+ </CardHeader>
+ <CardBody>
+ <Text>Card content</Text>
+ </CardBody>
 </Card>
 ```
 
@@ -172,12 +172,12 @@ Content container:
 
 ```tsx
 const MyScreen = () => (
-  <Screen>
-    <ScreenHeader title="Page Title" />
-    <ScreenContent padding="$4">
-      {/* Content */}
-    </ScreenContent>
-  </Screen>
+ <Screen>
+ <ScreenHeader title="Page Title" />
+ <ScreenContent padding="$4">
+ {/* Content */}
+ </ScreenContent>
+ </Screen>
 );
 ```
 
@@ -185,9 +185,9 @@ const MyScreen = () => (
 
 ```tsx
 <VStack gap="$4" padding="$4">
-  <Input label="Name" {...nameProps} />
-  <Input label="Email" {...emailProps} />
-  <Button isLoading={loading}>Submit</Button>
+ <Input label="Name" {...nameProps} />
+ <Input label="Email" {...emailProps} />
+ <Button isLoading={loading}>Submit</Button>
 </VStack>
 ```
 
@@ -195,18 +195,18 @@ const MyScreen = () => (
 
 ```tsx
 <HStack
-  padding="$4"
-  gap="$3"
-  alignItems="center"
-  borderBottomWidth={1}
-  borderColor="$borderLight"
+ padding="$4"
+ gap="$3"
+ alignItems="center"
+ borderBottomWidth={1}
+ borderColor="$borderLight"
 >
-  <Avatar source={{ uri: imageUrl }} size="md" />
-  <VStack flex={1}>
-    <Text fontWeight="$semibold">{title}</Text>
-    <Text color="$textSecondary" fontSize="$sm">{subtitle}</Text>
-  </VStack>
-  <Icon name="chevron-right" color="$textTertiary" />
+ <Avatar source={{ uri: imageUrl }} size="md" />
+ <VStack flex={1}>
+ <Text fontWeight="$semibold">{title}</Text>
+ <Text color="$textSecondary" fontSize="$sm">{subtitle}</Text>
+ </VStack>
+ <Icon name="chevron-right" color="$textTertiary" />
 </HStack>
 ```
 
@@ -240,20 +240,20 @@ When creating components, use token-based props:
 
 ```tsx
 interface CardProps {
-  padding?: '$2' | '$4' | '$6';
-  variant?: 'elevated' | 'outlined' | 'filled';
-  children: React.ReactNode;
+ padding?: '$2' | '$4' | '$6';
+ variant?: 'elevated' | 'outlined' | 'filled';
+ children: React.ReactNode;
 }
 
 const Card = ({ padding = '$4', variant = 'elevated', children }: CardProps) => (
-  <Box
-    padding={padding}
-    backgroundColor="$backgroundPrimary"
-    borderRadius="$lg"
-    {...variantStyles[variant]}
-  >
-    {children}
-  </Box>
+ <Box
+ padding={padding}
+ backgroundColor="$backgroundPrimary"
+ borderRadius="$lg"
+ {...variantStyles[variant]}
+ >
+ {children}
+ </Box>
 );
 ```
 

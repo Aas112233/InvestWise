@@ -76,9 +76,9 @@ Measure impact of changes:
 ## Performance Audit Results
 
 ### Current Metrics (Before Optimization)
-- **LCP (Largest Contentful Paint):** 4.2s ❌ (should be < 2.5s)
-- **FID (First Input Delay):** 180ms ❌ (should be < 100ms)
-- **CLS (Cumulative Layout Shift):** 0.25 ❌ (should be < 0.1)
+- **LCP (Largest Contentful Paint):** 4.2s (should be < 2.5s)
+- **FID (First Input Delay):** 180ms (should be < 100ms)
+- **CLS (Cumulative Layout Shift):** 0.25 (should be < 0.1)
 - **Lighthouse Score:** 62/100
 
 ### Issues Identified
@@ -100,16 +100,16 @@ Measure impact of changes:
 
 <!-- After: Optimized with modern formats -->
 <picture>
-  <source srcset="/hero.avif" type="image/avif">
-  <source srcset="/hero.webp" type="image/webp">
-  <img 
-    src="/hero.jpg" 
-    alt="Hero"
-    width="1200" 
-    height="600"
-    loading="eager"
-    fetchpriority="high"
-  >
+ <source srcset="/hero.avif" type="image/avif">
+ <source srcset="/hero.webp" type="image/webp">
+ <img 
+ src="/hero.jpg" 
+ alt="Hero"
+ width="1200" 
+ height="600"
+ loading="eager"
+ fetchpriority="high"
+ >
 </picture>
 \`\`\`
 
@@ -137,11 +137,11 @@ const ChatWidget = lazy(() => import('./chat'));
 
 // Load analytics after page interactive
 if (typeof window !== 'undefined') {
-  window.addEventListener('load', () => {
-    import('./analytics').then(({ Analytics }) => {
-      Analytics.init();
-    });
-  });
+ window.addEventListener('load', () => {
+ import('./analytics').then(({ Analytics }) => {
+ Analytics.init();
+ });
+ });
 }
 \`\`\`
 
@@ -151,7 +151,7 @@ if (typeof window !== 'undefined') {
 npx webpack-bundle-analyzer
 
 # Remove unused packages
-npm uninstall moment  # Use date-fns instead (smaller)
+npm uninstall moment # Use date-fns instead (smaller)
 npm install date-fns
 \`\`\`
 
@@ -175,11 +175,11 @@ npm install date-fns
 
 <!-- After: With dimensions -->
 <img 
-  src="/product.jpg" 
-  alt="Product"
-  width="400" 
-  height="300"
-  style="aspect-ratio: 4/3;"
+ src="/product.jpg" 
+ alt="Product"
+ width="400" 
+ height="300"
+ style="aspect-ratio: 4/3;"
 >
 \`\`\`
 
@@ -187,24 +187,24 @@ npm install date-fns
 \`\`\`css
 /* Reserve space for content that loads later */
 .skeleton-loader {
-  min-height: 200px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: loading 1.5s infinite;
+ min-height: 200px;
+ background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+ background-size: 200% 100%;
+ animation: loading 1.5s infinite;
 }
 
 @keyframes loading {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+ 0% { background-position: 200% 0; }
+ 100% { background-position: -200% 0; }
 }
 \`\`\`
 
 ### Results After Optimization
 
-- **LCP:** 1.8s ✅ (improved by 57%)
-- **FID:** 45ms ✅ (improved by 75%)
-- **CLS:** 0.05 ✅ (improved by 80%)
-- **Lighthouse Score:** 94/100 ✅
+- **LCP:** 1.8s (improved by 57%)
+- **FID:** 45ms (improved by 75%)
+- **CLS:** 0.05 (improved by 80%)
+- **Lighthouse Score:** 94/100 
 ```
 
 ### Example 2: Reducing JavaScript Bundle Size
@@ -276,12 +276,12 @@ import dynamic from 'next/dynamic';
 
 // Lazy load heavy components
 const Chart = dynamic(() => import('./Chart'), {
-  loading: () => <div>Loading chart...</div>,
-  ssr: false
+ loading: () => <div>Loading chart...</div>,
+ ssr: false
 });
 
 const AdminPanel = dynamic(() => import('./AdminPanel'), {
-  loading: () => <div>Loading...</div>
+ loading: () => <div>Loading...</div>
 });
 
 // Route-based code splitting (automatic in Next.js)
@@ -294,16 +294,16 @@ const AdminPanel = dynamic(() => import('./AdminPanel'), {
 \`\`\`javascript
 // Enable tree shaking in webpack.config.js
 module.exports = {
-  mode: 'production',
-  optimization: {
-    usedExports: true,
-    sideEffects: false
-  }
+ mode: 'production',
+ optimization: {
+ usedExports: true,
+ sideEffects: false
+ }
 };
 
 // In package.json
 {
-  "sideEffects": false
+ "sideEffects": false
 }
 \`\`\`
 
@@ -315,21 +315,21 @@ module.exports = {
 
 <!-- After: Load after page interactive -->
 <script>
-  window.addEventListener('load', () => {
-    const script = document.createElement('script');
-    script.src = 'https://analytics.com/script.js';
-    script.async = true;
-    document.body.appendChild(script);
-  });
+ window.addEventListener('load', () => {
+ const script = document.createElement('script');
+ script.src = 'https://analytics.com/script.js';
+ script.async = true;
+ document.body.appendChild(script);
+ });
 </script>
 \`\`\`
 
 ### Results
 
-- **Total Bundle:** 380KB ✅ (reduced by 55%)
-- **Main Bundle:** 180KB ✅
-- **Vendor Bundle:** 80KB ✅
-- **Load Time (3G):** 3.1s ✅ (improved by 62%)
+- **Total Bundle:** 380KB (reduced by 55%)
+- **Main Bundle:** 180KB 
+- **Vendor Bundle:** 80KB 
+- **Load Time (3G):** 3.1s (improved by 62%)
 ```
 
 ### Example 3: Image Optimization Strategy
@@ -357,28 +357,28 @@ const fs = require('fs');
 const path = require('path');
 
 async function optimizeImage(inputPath, outputDir) {
-  const filename = path.basename(inputPath, path.extname(inputPath));
-  
-  // Generate WebP
-  await sharp(inputPath)
-    .webp({ quality: 80 })
-    .toFile(path.join(outputDir, \`\${filename}.webp\`));
-  
-  // Generate AVIF (best compression)
-  await sharp(inputPath)
-    .avif({ quality: 70 })
-    .toFile(path.join(outputDir, \`\${filename}.avif\`));
-  
-  // Generate optimized JPEG fallback
-  await sharp(inputPath)
-    .jpeg({ quality: 80, progressive: true })
-    .toFile(path.join(outputDir, \`\${filename}.jpg\`));
+ const filename = path.basename(inputPath, path.extname(inputPath));
+ 
+ // Generate WebP
+ await sharp(inputPath)
+ .webp({ quality: 80 })
+ .toFile(path.join(outputDir, \`\${filename}.webp\`));
+ 
+ // Generate AVIF (best compression)
+ await sharp(inputPath)
+ .avif({ quality: 70 })
+ .toFile(path.join(outputDir, \`\${filename}.avif\`));
+ 
+ // Generate optimized JPEG fallback
+ await sharp(inputPath)
+ .jpeg({ quality: 80, progressive: true })
+ .toFile(path.join(outputDir, \`\${filename}.jpg\`));
 }
 
 // Process all images
 const images = fs.readdirSync('./images');
 images.forEach(img => {
-  optimizeImage(\`./images/\${img}\`, './images/optimized');
+ optimizeImage(\`./images/\${img}\`, './images/optimized');
 });
 \`\`\`
 
@@ -387,42 +387,42 @@ images.forEach(img => {
 \`\`\`html
 <!-- Responsive images with modern formats -->
 <picture>
-  <!-- AVIF for browsers that support it (best compression) -->
-  <source 
-    srcset="
-      /images/hero-400.avif 400w,
-      /images/hero-800.avif 800w,
-      /images/hero-1200.avif 1200w
-    "
-    type="image/avif"
-    sizes="(max-width: 768px) 100vw, 50vw"
-  >
-  
-  <!-- WebP for browsers that support it -->
-  <source 
-    srcset="
-      /images/hero-400.webp 400w,
-      /images/hero-800.webp 800w,
-      /images/hero-1200.webp 1200w
-    "
-    type="image/webp"
-    sizes="(max-width: 768px) 100vw, 50vw"
-  >
-  
-  <!-- JPEG fallback -->
-  <img 
-    src="/images/hero-800.jpg"
-    srcset="
-      /images/hero-400.jpg 400w,
-      /images/hero-800.jpg 800w,
-      /images/hero-1200.jpg 1200w
-    "
-    sizes="(max-width: 768px) 100vw, 50vw"
-    alt="Hero image"
-    width="1200"
-    height="600"
-    loading="lazy"
-  >
+ <!-- AVIF for browsers that support it (best compression) -->
+ <source 
+ srcset="
+ /images/hero-400.avif 400w,
+ /images/hero-800.avif 800w,
+ /images/hero-1200.avif 1200w
+ "
+ type="image/avif"
+ sizes="(max-width: 768px) 100vw, 50vw"
+ >
+ 
+ <!-- WebP for browsers that support it -->
+ <source 
+ srcset="
+ /images/hero-400.webp 400w,
+ /images/hero-800.webp 800w,
+ /images/hero-1200.webp 1200w
+ "
+ type="image/webp"
+ sizes="(max-width: 768px) 100vw, 50vw"
+ >
+ 
+ <!-- JPEG fallback -->
+ <img 
+ src="/images/hero-800.jpg"
+ srcset="
+ /images/hero-400.jpg 400w,
+ /images/hero-800.jpg 800w,
+ /images/hero-1200.jpg 1200w
+ "
+ sizes="(max-width: 768px) 100vw, 50vw"
+ alt="Hero image"
+ width="1200"
+ height="600"
+ loading="lazy"
+ >
 </picture>
 \`\`\`
 
@@ -431,19 +431,19 @@ images.forEach(img => {
 \`\`\`html
 <!-- Native lazy loading -->
 <img 
-  src="/image.jpg" 
-  alt="Description"
-  loading="lazy"
-  width="800"
-  height="600"
+ src="/image.jpg" 
+ alt="Description"
+ loading="lazy"
+ width="800"
+ height="600"
 >
 
 <!-- Eager loading for above-the-fold images -->
 <img 
-  src="/hero.jpg" 
-  alt="Hero"
-  loading="eager"
-  fetchpriority="high"
+ src="/hero.jpg" 
+ alt="Hero"
+ loading="eager"
+ fetchpriority="high"
 >
 \`\`\`
 
@@ -454,21 +454,21 @@ import Image from 'next/image';
 
 // Automatic optimization
 <Image
-  src="/hero.jpg"
-  alt="Hero"
-  width={1200}
-  height={600}
-  priority  // For above-the-fold images
-  quality={80}
+ src="/hero.jpg"
+ alt="Hero"
+ width={1200}
+ height={600}
+ priority // For above-the-fold images
+ quality={80}
 />
 
 // Lazy loaded
 <Image
-  src="/product.jpg"
-  alt="Product"
-  width={400}
-  height={300}
-  loading="lazy"
+ src="/product.jpg"
+ alt="Product"
+ width={400}
+ height={300}
+ loading="lazy"
 />
 \`\`\`
 
@@ -483,7 +483,7 @@ import Image from 'next/image';
 
 ## Best Practices
 
-### ✅ Do This
+### Do This
 
 - **Measure First** - Always establish baseline metrics before optimizing
 - **Use Lighthouse** - Run audits regularly to track progress
@@ -496,7 +496,7 @@ import Image from 'next/image';
 - **Use CDN** - Serve static assets from CDN for faster delivery
 - **Monitor Real Users** - Track Core Web Vitals from real users
 
-### ❌ Don't Do This
+### Don't Do This
 
 - **Don't Optimize Blindly** - Measure first, then optimize
 - **Don't Ignore Mobile** - Test on real mobile devices and slow networks
@@ -541,9 +541,9 @@ npx webpack-bundle-analyzer dist/stats.json
 - Reserve space with skeleton loaders
 ```css
 img {
-  aspect-ratio: 16 / 9;
-  width: 100%;
-  height: auto;
+ aspect-ratio: 16 / 9;
+ width: 100%;
+ height: auto;
 }
 ```
 
@@ -557,11 +557,11 @@ img {
 ```javascript
 // Next.js: Static generation
 export async function getStaticProps() {
-  const data = await fetchData();
-  return {
-    props: { data },
-    revalidate: 60 // Regenerate every 60 seconds
-  };
+ const data = await fetchData();
+ return {
+ props: { data },
+ revalidate: 60 // Regenerate every 60 seconds
+ };
 }
 ```
 

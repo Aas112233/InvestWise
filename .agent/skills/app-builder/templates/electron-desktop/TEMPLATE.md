@@ -23,15 +23,15 @@ description: Electron desktop app template principles. Cross-platform, React, Ty
 ```
 project-name/
 ├── electron/
-│   ├── main.ts          # Main process
-│   ├── preload.ts       # Preload script
-│   └── ipc/             # IPC handlers
+│ ├── main.ts # Main process
+│ ├── preload.ts # Preload script
+│ └── ipc/ # IPC handlers
 ├── src/
-│   ├── App.tsx
-│   ├── components/
-│   │   ├── TitleBar.tsx # Custom title bar
-│   │   └── ...
-│   └── hooks/
+│ ├── App.tsx
+│ ├── components/
+│ │ ├── TitleBar.tsx # Custom title bar
+│ │ └── ...
+│ └── hooks/
 ├── public/
 └── package.json
 ```

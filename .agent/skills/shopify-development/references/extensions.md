@@ -46,47 +46,47 @@ api_access = true
 
 ```javascript
 import {
-  reactExtension,
-  BlockStack,
-  TextField,
-  Checkbox,
-  useApi,
+ reactExtension,
+ BlockStack,
+ TextField,
+ Checkbox,
+ useApi,
 } from "@shopify/ui-extensions-react/checkout";
 
 export default reactExtension("purchase.checkout.block.render", () => (
-  <Extension />
+ <Extension />
 ));
 
 function Extension() {
-  const [message, setMessage] = useState("");
-  const [isGift, setIsGift] = useState(false);
-  const { applyAttributeChange } = useApi();
+ const [message, setMessage] = useState("");
+ const [isGift, setIsGift] = useState(false);
+ const { applyAttributeChange } = useApi();
 
-  useEffect(() => {
-    if (isGift) {
-      applyAttributeChange({
-        type: "updateAttribute",
-        key: "gift_message",
-        value: message,
-      });
-    }
-  }, [message, isGift]);
+ useEffect(() => {
+ if (isGift) {
+ applyAttributeChange({
+ type: "updateAttribute",
+ key: "gift_message",
+ value: message,
+ });
+ }
+ }, [message, isGift]);
 
-  return (
-    <BlockStack spacing="loose">
-      <Checkbox checked={isGift} onChange={setIsGift}>
-        This is a gift
-      </Checkbox>
-      {isGift && (
-        <TextField
-          label="Gift Message"
-          value={message}
-          onChange={setMessage}
-          multiline={3}
-        />
-      )}
-    </BlockStack>
-  );
+ return (
+ <BlockStack spacing="loose">
+ <Checkbox checked={isGift} onChange={setIsGift}>
+ This is a gift
+ </Checkbox>
+ {isGift && (
+ <TextField
+ label="Gift Message"
+ value={message}
+ onChange={setMessage}
+ multiline={3}
+ />
+ )}
+ </BlockStack>
+ );
 }
 ```
 
@@ -103,7 +103,7 @@ const { extensionPoint, shop, storefront, i18n, sessionToken } = useApi();
 ```javascript
 const lines = useCartLines();
 lines.forEach((line) => {
-  console.log(line.merchandise.product.title, line.quantity);
+ console.log(line.merchandise.product.title, line.quantity);
 });
 ```
 
@@ -120,11 +120,11 @@ console.log(address.city, address.countryCode);
 const applyChange = useApplyCartLinesChange();
 
 async function addItem() {
-  await applyChange({
-    type: "addCartLine",
-    merchandiseId: "gid://shopify/ProductVariant/123",
-    quantity: 1,
-  });
+ await applyChange({
+ type: "addCartLine",
+ merchandiseId: "gid://shopify/ProductVariant/123",
+ quantity: 1,
+ });
 }
 ```
 
@@ -175,32 +175,32 @@ shopify app generate extension --type admin_action
 
 ```javascript
 import {
-  reactExtension,
-  AdminAction,
-  Button,
+ reactExtension,
+ AdminAction,
+ Button,
 } from "@shopify/ui-extensions-react/admin";
 
 export default reactExtension("admin.product-details.action.render", () => (
-  <Extension />
+ <Extension />
 ));
 
 function Extension() {
-  const { data } = useData();
+ const { data } = useData();
 
-  async function handleExport() {
-    const response = await fetch("/api/export", {
-      method: "POST",
-      body: JSON.stringify({ productId: data.product.id }),
-    });
-    console.log("Exported:", await response.json());
-  }
+ async function handleExport() {
+ const response = await fetch("/api/export", {
+ method: "POST",
+ body: JSON.stringify({ productId: data.product.id }),
+ });
+ console.log("Exported:", await response.json());
+ }
 
-  return (
-    <AdminAction
-      title="Export Product"
-      primaryAction={<Button onPress={handleExport}>Export</Button>}
-    />
-  );
+ return (
+ <AdminAction
+ title="Export Product"
+ primaryAction={<Button onPress={handleExport}>Export</Button>}
+ />
+ );
 }
 ```
 
@@ -216,34 +216,34 @@ Embedded content in admin pages.
 
 ```javascript
 import {
-  reactExtension,
-  BlockStack,
-  Text,
-  Badge,
+ reactExtension,
+ BlockStack,
+ Text,
+ Badge,
 } from "@shopify/ui-extensions-react/admin";
 
 export default reactExtension("admin.product-details.block.render", () => (
-  <Extension />
+ <Extension />
 ));
 
 function Extension() {
-  const { data } = useData();
-  const [analytics, setAnalytics] = useState(null);
+ const { data } = useData();
+ const [analytics, setAnalytics] = useState(null);
 
-  useEffect(() => {
-    fetchAnalytics(data.product.id).then(setAnalytics);
-  }, []);
+ useEffect(() => {
+ fetchAnalytics(data.product.id).then(setAnalytics);
+ }, []);
 
-  return (
-    <BlockStack>
-      <Text variant="headingMd">Product Analytics</Text>
-      <Text>Views: {analytics?.views || 0}</Text>
-      <Text>Conversions: {analytics?.conversions || 0}</Text>
-      <Badge tone={analytics?.trending ? "success" : "info"}>
-        {analytics?.trending ? "Trending" : "Normal"}
-      </Badge>
-    </BlockStack>
-  );
+ return (
+ <BlockStack>
+ <Text variant="headingMd">Product Analytics</Text>
+ <Text>Views: {analytics?.views || 0}</Text>
+ <Text>Conversions: {analytics?.conversions || 0}</Text>
+ <Badge tone={analytics?.trending ? "success" : "info"}>
+ {analytics?.trending ? "Trending" : "Normal"}
+ </Badge>
+ </BlockStack>
+ );
 }
 ```
 
@@ -263,24 +263,24 @@ Quick access action on POS home screen.
 
 ```javascript
 import {
-  reactExtension,
-  SmartGridTile,
+ reactExtension,
+ SmartGridTile,
 } from "@shopify/ui-extensions-react/pos";
 
 export default reactExtension("pos.home.tile.render", () => <Extension />);
 
 function Extension() {
-  function handlePress() {
-    // Navigate to custom workflow
-  }
+ function handlePress() {
+ // Navigate to custom workflow
+ }
 
-  return (
-    <SmartGridTile
-      title="Gift Cards"
-      subtitle="Manage gift cards"
-      onPress={handlePress}
-    />
-  );
+ return (
+ <SmartGridTile
+ title="Gift Cards"
+ subtitle="Manage gift cards"
+ onPress={handlePress}
+ />
+ );
 }
 ```
 
@@ -290,33 +290,33 @@ Full-screen workflow.
 
 ```javascript
 import {
-  reactExtension,
-  Screen,
-  BlockStack,
-  Button,
-  TextField,
+ reactExtension,
+ Screen,
+ BlockStack,
+ Button,
+ TextField,
 } from "@shopify/ui-extensions-react/pos";
 
 export default reactExtension("pos.home.modal.render", () => <Extension />);
 
 function Extension() {
-  const { navigation } = useApi();
-  const [amount, setAmount] = useState("");
+ const { navigation } = useApi();
+ const [amount, setAmount] = useState("");
 
-  function handleIssue() {
-    // Issue gift card
-    navigation.pop();
-  }
+ function handleIssue() {
+ // Issue gift card
+ navigation.pop();
+ }
 
-  return (
-    <Screen name="Gift Card" title="Issue Gift Card">
-      <BlockStack>
-        <TextField label="Amount" value={amount} onChange={setAmount} />
-        <TextField label="Recipient Email" />
-        <Button onPress={handleIssue}>Issue</Button>
-      </BlockStack>
-    </Screen>
-  );
+ return (
+ <Screen name="Gift Card" title="Issue Gift Card">
+ <BlockStack>
+ <TextField label="Amount" value={amount} onChange={setAmount} />
+ <TextField label="Recipient Email" />
+ <Button onPress={handleIssue}>Issue</Button>
+ </BlockStack>
+ </Screen>
+ );
 }
 ```
 
@@ -328,31 +328,31 @@ Customize customer account pages.
 
 ```javascript
 import {
-  reactExtension,
-  BlockStack,
-  Text,
-  Button,
+ reactExtension,
+ BlockStack,
+ Text,
+ Button,
 } from "@shopify/ui-extensions-react/customer-account";
 
 export default reactExtension(
-  "customer-account.order-status.block.render",
-  () => <Extension />,
+ "customer-account.order-status.block.render",
+ () => <Extension />,
 );
 
 function Extension() {
-  const { order } = useApi();
+ const { order } = useApi();
 
-  function handleReturn() {
-    // Initiate return
-  }
+ function handleReturn() {
+ // Initiate return
+ }
 
-  return (
-    <BlockStack>
-      <Text variant="headingMd">Need to return?</Text>
-      <Text>Start return for order {order.name}</Text>
-      <Button onPress={handleReturn}>Start Return</Button>
-    </BlockStack>
-  );
+ return (
+ <BlockStack>
+ <Text variant="headingMd">Need to return?</Text>
+ <Text>Start return for order {order.name}</Text>
+ <Button onPress={handleReturn}>Start Return</Button>
+ </BlockStack>
+ );
 }
 ```
 
@@ -399,42 +399,42 @@ shopify app generate extension --type function
 ```javascript
 // input.graphql
 query Input {
-  cart {
-    lines {
-      quantity
-      merchandise {
-        ... on ProductVariant {
-          product {
-            hasTag(tag: "bulk-discount")
-          }
-        }
-      }
-    }
-  }
+ cart {
+ lines {
+ quantity
+ merchandise {
+ ... on ProductVariant {
+ product {
+ hasTag(tag: "bulk-discount")
+ }
+ }
+ }
+ }
+ }
 }
 
 // function.js
 export default function orderDiscount(input) {
-  const targets = input.cart.lines
-    .filter(line => line.merchandise.product.hasTag)
-    .map(line => ({
-      productVariant: { id: line.merchandise.id }
-    }));
+ const targets = input.cart.lines
+ .filter(line => line.merchandise.product.hasTag)
+ .map(line => ({
+ productVariant: { id: line.merchandise.id }
+ }));
 
-  if (targets.length === 0) {
-    return { discounts: [] };
-  }
+ if (targets.length === 0) {
+ return { discounts: [] };
+ }
 
-  return {
-    discounts: [{
-      targets,
-      value: {
-        percentage: {
-          value: 10  // 10% discount
-        }
-      }
-    }]
-  };
+ return {
+ discounts: [{
+ targets,
+ value: {
+ percentage: {
+ value: 10 // 10% discount
+ }
+ }
+ }]
+ };
 }
 ```
 
@@ -442,23 +442,23 @@ export default function orderDiscount(input) {
 
 ```javascript
 export default function paymentCustomization(input) {
-  const hidePaymentMethods = input.cart.lines.some(
-    (line) => line.merchandise.product.hasTag,
-  );
+ const hidePaymentMethods = input.cart.lines.some(
+ (line) => line.merchandise.product.hasTag,
+ );
 
-  if (!hidePaymentMethods) {
-    return { operations: [] };
-  }
+ if (!hidePaymentMethods) {
+ return { operations: [] };
+ }
 
-  return {
-    operations: [
-      {
-        hide: {
-          paymentMethodId: "gid://shopify/PaymentMethod/123",
-        },
-      },
-    ],
-  };
+ return {
+ operations: [
+ {
+ hide: {
+ paymentMethodId: "gid://shopify/PaymentMethod/123",
+ },
+ },
+ ],
+ };
 }
 ```
 
@@ -466,29 +466,29 @@ export default function paymentCustomization(input) {
 
 ```javascript
 export default function cartValidation(input) {
-  const errors = [];
+ const errors = [];
 
-  // Max 5 items per cart
-  if (input.cart.lines.length > 5) {
-    errors.push({
-      localizedMessage: "Maximum 5 items allowed per order",
-      target: "cart",
-    });
-  }
+ // Max 5 items per cart
+ if (input.cart.lines.length > 5) {
+ errors.push({
+ localizedMessage: "Maximum 5 items allowed per order",
+ target: "cart",
+ });
+ }
 
-  // Min $50 for wholesale
-  const isWholesale = input.cart.lines.some(
-    (line) => line.merchandise.product.hasTag,
-  );
+ // Min $50 for wholesale
+ const isWholesale = input.cart.lines.some(
+ (line) => line.merchandise.product.hasTag,
+ );
 
-  if (isWholesale && input.cart.cost.totalAmount.amount < 50) {
-    errors.push({
-      localizedMessage: "Wholesale orders require $50 minimum",
-      target: "cart",
-    });
-  }
+ if (isWholesale && input.cart.cost.totalAmount.amount < 50) {
+ errors.push({
+ localizedMessage: "Wholesale orders require $50 minimum",
+ target: "cart",
+ });
+ }
 
-  return { errors };
+ return { errors };
 }
 ```
 
@@ -500,20 +500,20 @@ Extensions can call external APIs.
 import { useApi } from "@shopify/ui-extensions-react/checkout";
 
 function Extension() {
-  const { sessionToken } = useApi();
+ const { sessionToken } = useApi();
 
-  async function fetchData() {
-    const token = await sessionToken.get();
+ async function fetchData() {
+ const token = await sessionToken.get();
 
-    const response = await fetch("https://your-app.com/api/data", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
+ const response = await fetch("https://your-app.com/api/data", {
+ headers: {
+ Authorization: `Bearer ${token}`,
+ "Content-Type": "application/json",
+ },
+ });
 
-    return await response.json();
-  }
+ return await response.json();
+ }
 }
 ```
 

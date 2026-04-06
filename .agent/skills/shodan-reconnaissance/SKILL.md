@@ -2,8 +2,8 @@
 name: Shodan Reconnaissance and Pentesting
 description: This skill should be used when the user asks to "search for exposed devices on the internet," "perform Shodan reconnaissance," "find vulnerable services using Shodan," "scan IP ranges with Shodan," or "discover IoT devices and open ports." It provides comprehensive guidance for using Shodan's search engine, CLI, and API for penetration testing reconnaissance.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Shodan Reconnaissance and Pentesting
@@ -53,7 +53,7 @@ shodan init YOUR_API_KEY
 # Verify setup
 shodan info
 # Output: Query credits available: 100
-#         Scan credits available: 100
+# Scan credits available: 100
 ```
 
 #### Check Account Status
@@ -82,9 +82,9 @@ shodan host 1.1.1.1
 # Organization: Mountain View Communications
 # Number of open ports: 3
 # Ports:
-#   53/udp
-#   80/tcp
-#   443/tcp
+# 53/udp
+# 80/tcp
+# 443/tcp
 ```
 
 #### Check if Host is Honeypot
@@ -93,7 +93,7 @@ shodan host 1.1.1.1
 shodan honeyscore 192.168.1.100
 
 # Output: Not a honeypot
-#         Score: 0.3
+# Score: 0.3
 ```
 
 ### 3. Search Queries
@@ -154,51 +154,51 @@ shodan parse --fields ip_str,port,org --separator , results.json.gz > results.cs
 
 #### Network Filters
 ```
-ip:1.2.3.4                  # Specific IP address
-net:192.168.0.0/24          # Network range (CIDR)
-hostname:example.com        # Hostname contains
-port:22                     # Specific port
-asn:AS15169                 # Autonomous System Number
+ip:1.2.3.4 # Specific IP address
+net:192.168.0.0/24 # Network range (CIDR)
+hostname:example.com # Hostname contains
+port:22 # Specific port
+asn:AS15169 # Autonomous System Number
 ```
 
 #### Geographic Filters
 ```
-country:US                  # Two-letter country code
-country:"United States"     # Full country name
-city:"San Francisco"        # City name
-state:CA                    # State/region
-postal:94102                # Postal/ZIP code
-geo:37.7,-122.4             # Lat/long coordinates
+country:US # Two-letter country code
+country:"United States" # Full country name
+city:"San Francisco" # City name
+state:CA # State/region
+postal:94102 # Postal/ZIP code
+geo:37.7,-122.4 # Lat/long coordinates
 ```
 
 #### Organization Filters
 ```
-org:"Google"                # Organization name
-isp:"Comcast"               # ISP name
+org:"Google" # Organization name
+isp:"Comcast" # ISP name
 ```
 
 #### Service/Product Filters
 ```
-product:nginx               # Software product
-version:1.14.0              # Software version
-os:"Windows Server 2019"    # Operating system
-http.title:"Dashboard"      # HTTP page title
-http.html:"login"           # HTML content
-http.status:200             # HTTP status code
-ssl.cert.subject.cn:*.example.com  # SSL certificate
-ssl:true                    # Has SSL enabled
+product:nginx # Software product
+version:1.14.0 # Software version
+os:"Windows Server 2019" # Operating system
+http.title:"Dashboard" # HTTP page title
+http.html:"login" # HTML content
+http.status:200 # HTTP status code
+ssl.cert.subject.cn:*.example.com # SSL certificate
+ssl:true # Has SSL enabled
 ```
 
 #### Vulnerability Filters
 ```
-vuln:CVE-2019-0708          # Specific CVE
-has_vuln:true               # Has any vulnerability
+vuln:CVE-2019-0708 # Specific CVE
+has_vuln:true # Has any vulnerability
 ```
 
 #### Screenshot Filters
 ```
-has_screenshot:true         # Has screenshot available
-screenshot.label:webcam     # Screenshot type
+has_screenshot:true # Has screenshot available
+screenshot.label:webcam # Screenshot type
 ```
 
 ### 5. On-Demand Scanning
@@ -282,14 +282,14 @@ api = shodan.Shodan('YOUR_API_KEY')
 results = api.search('apache')
 print(f'Results found: {results["total"]}')
 for result in results['matches']:
-    print(f'IP: {result["ip_str"]}')
+ print(f'IP: {result["ip_str"]}')
 
 # Host lookup
 host = api.host('1.1.1.1')
 print(f'IP: {host["ip_str"]}')
 print(f'Organization: {host.get("org", "n/a")}')
 for item in host['data']:
-    print(f'Port: {item["port"]}')
+ print(f'Port: {item["port"]}')
 ```
 
 ## Quick Reference
@@ -441,39 +441,39 @@ API_KEY = 'YOUR_API_KEY'
 api = shodan.Shodan(API_KEY)
 
 def recon_organization(org_name):
-    """Perform reconnaissance on an organization"""
-    try:
-        # Search for organization
-        query = f'org:"{org_name}"'
-        results = api.search(query)
-        
-        print(f"[*] Found {results['total']} hosts for {org_name}")
-        
-        # Collect unique IPs and ports
-        hosts = {}
-        for result in results['matches']:
-            ip = result['ip_str']
-            port = result['port']
-            product = result.get('product', 'unknown')
-            
-            if ip not in hosts:
-                hosts[ip] = []
-            hosts[ip].append({'port': port, 'product': product})
-        
-        # Output findings
-        for ip, services in hosts.items():
-            print(f"\n[+] {ip}")
-            for svc in services:
-                print(f"    - {svc['port']}/tcp ({svc['product']})")
-        
-        return hosts
-        
-    except shodan.APIError as e:
-        print(f"Error: {e}")
-        return None
+ """Perform reconnaissance on an organization"""
+ try:
+ # Search for organization
+ query = f'org:"{org_name}"'
+ results = api.search(query)
+ 
+ print(f"[*] Found {results['total']} hosts for {org_name}")
+ 
+ # Collect unique IPs and ports
+ hosts = {}
+ for result in results['matches']:
+ ip = result['ip_str']
+ port = result['port']
+ product = result.get('product', 'unknown')
+ 
+ if ip not in hosts:
+ hosts[ip] = []
+ hosts[ip].append({'port': port, 'product': product})
+ 
+ # Output findings
+ for ip, services in hosts.items():
+ print(f"\n[+] {ip}")
+ for svc in services:
+ print(f" - {svc['port']}/tcp ({svc['product']})")
+ 
+ return hosts
+ 
+ except shodan.APIError as e:
+ print(f"Error: {e}")
+ return None
 
 if __name__ == '__main__':
-    recon_organization("Target Company")
+ recon_organization("Target Company")
 ```
 
 ### Example 6: Network Range Assessment

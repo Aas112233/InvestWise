@@ -1,10 +1,10 @@
 import express from 'express';
 const router = express.Router();
 import {
-    getFunds,
-    getFundById,
-    createFund,
-    updateFund
+ getFunds,
+ getFundById,
+ createFund,
+ updateFund
 } from '../controllers/fundController.js';
 import { protect, requirePermission } from '../middleware/authMiddleware.js';
 import { fundValidation } from '../middleware/businessValidator.js';

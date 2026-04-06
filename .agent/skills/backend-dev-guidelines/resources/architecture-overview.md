@@ -19,44 +19,44 @@ Complete guide to the layered architecture pattern used in backend microservices
 
 ```
 ┌─────────────────────────────────────┐
-│         HTTP Request                │
+│ HTTP Request │
 └───────────────┬─────────────────────┘
-                ↓
+ ↓
 ┌─────────────────────────────────────┐
-│  Layer 1: ROUTES                    │
-│  - Route definitions only           │
-│  - Middleware registration          │
-│  - Delegate to controllers          │
-│  - NO business logic                │
+│ Layer 1: ROUTES │
+│ - Route definitions only │
+│ - Middleware registration │
+│ - Delegate to controllers │
+│ - NO business logic │
 └───────────────┬─────────────────────┘
-                ↓
+ ↓
 ┌─────────────────────────────────────┐
-│  Layer 2: CONTROLLERS               │
-│  - Request/response handling        │
-│  - Input validation                 │
-│  - Call services                    │
-│  - Format responses                 │
-│  - Error handling                   │
+│ Layer 2: CONTROLLERS │
+│ - Request/response handling │
+│ - Input validation │
+│ - Call services │
+│ - Format responses │
+│ - Error handling │
 └───────────────┬─────────────────────┘
-                ↓
+ ↓
 ┌─────────────────────────────────────┐
-│  Layer 3: SERVICES                  │
-│  - Business logic                   │
-│  - Orchestration                    │
-│  - Call repositories                │
-│  - No HTTP knowledge                │
+│ Layer 3: SERVICES │
+│ - Business logic │
+│ - Orchestration │
+│ - Call repositories │
+│ - No HTTP knowledge │
 └───────────────┬─────────────────────┘
-                ↓
+ ↓
 ┌─────────────────────────────────────┐
-│  Layer 4: REPOSITORIES              │
-│  - Data access abstraction          │
-│  - Prisma operations                │
-│  - Query optimization               │
-│  - Caching                          │
+│ Layer 4: REPOSITORIES │
+│ - Data access abstraction │
+│ - Prisma operations │
+│ - Query optimization │
+│ - Caching │
 └───────────────┬─────────────────────┘
-                ↓
+ ↓
 ┌─────────────────────────────────────┐
-│         Database (MySQL)            │
+│ Database (MySQL) │
 └─────────────────────────────────────┘
 ```
 
@@ -90,33 +90,33 @@ Complete guide to the layered architecture pattern used in backend microservices
 
 ```typescript
 1. HTTP POST /api/users
-   ↓
+ ↓
 2. Express matches route in userRoutes.ts
-   ↓
+ ↓
 3. Middleware chain executes:
-   - SSOMiddleware.verifyLoginStatus (authentication)
-   - auditMiddleware (context tracking)
-   ↓
+ - SSOMiddleware.verifyLoginStatus (authentication)
+ - auditMiddleware (context tracking)
+ ↓
 4. Route handler delegates to controller:
-   router.post('/users', (req, res) => userController.create(req, res))
-   ↓
+ router.post('/users', (req, res) => userController.create(req, res))
+ ↓
 5. Controller validates and calls service:
-   - Validate input with Zod
-   - Call userService.create(data)
-   - Handle success/error
-   ↓
+ - Validate input with Zod
+ - Call userService.create(data)
+ - Handle success/error
+ ↓
 6. Service executes business logic:
-   - Check business rules
-   - Call userRepository.create(data)
-   - Return result
-   ↓
+ - Check business rules
+ - Call userRepository.create(data)
+ - Return result
+ ↓
 7. Repository performs database operation:
-   - PrismaService.main.user.create({ data })
-   - Handle database errors
-   - Return created user
-   ↓
+ - PrismaService.main.user.create({ data })
+ - Handle database errors
+ - Return created user
+ ↓
 8. Response flows back:
-   Repository → Service → Controller → Express → Client
+ Repository → Service → Controller → Express → Client
 ```
 
 ### Middleware Execution Order
@@ -124,15 +124,15 @@ Complete guide to the layered architecture pattern used in backend microservices
 **Critical:** Middleware executes in registration order
 
 ```typescript
-app.use(Sentry.Handlers.requestHandler());  // 1. Sentry tracing (FIRST)
-app.use(express.json());                     // 2. Body parsing
+app.use(Sentry.Handlers.requestHandler()); // 1. Sentry tracing (FIRST)
+app.use(express.json()); // 2. Body parsing
 app.use(express.urlencoded({ extended: true })); // 3. URL encoding
-app.use(cookieParser());                     // 4. Cookie parsing
-app.use(SSOMiddleware.initialize());         // 5. Auth initialization
+app.use(cookieParser()); // 4. Cookie parsing
+app.use(SSOMiddleware.initialize()); // 5. Auth initialization
 // ... routes registered here
-app.use(auditMiddleware);                    // 6. Audit (if global)
-app.use(errorBoundary);                      // 7. Error handler (LAST)
-app.use(Sentry.Handlers.errorHandler());     // 8. Sentry errors (LAST)
+app.use(auditMiddleware); // 6. Audit (if global)
+app.use(errorBoundary); // 7. Error handler (LAST)
+app.use(Sentry.Handlers.errorHandler()); // 8. Sentry errors (LAST)
 ```
 
 **Rule:** Error handlers must be registered AFTER routes!
@@ -141,7 +141,7 @@ app.use(Sentry.Handlers.errorHandler());     // 8. Sentry errors (LAST)
 
 ## Service Comparison
 
-### Email Service (Mature Pattern ✅)
+### Email Service (Mature Pattern )
 
 **Strengths:**
 - Comprehensive BaseController with Sentry integration
@@ -155,23 +155,23 @@ app.use(Sentry.Handlers.errorHandler());     // 8. Sentry errors (LAST)
 ```
 email/src/
 ├── controllers/
-│   ├── BaseController.ts          ✅ Excellent template
-│   ├── NotificationController.ts  ✅ Extends BaseController
-│   └── EmailController.ts         ✅ Clean patterns
+│ ├── BaseController.ts Excellent template
+│ ├── NotificationController.ts Extends BaseController
+│ └── EmailController.ts Clean patterns
 ├── routes/
-│   ├── notificationRoutes.ts      ✅ Clean delegation
-│   └── emailRoutes.ts             ✅ No business logic
+│ ├── notificationRoutes.ts Clean delegation
+│ └── emailRoutes.ts No business logic
 ├── services/
-│   ├── NotificationService.ts     ✅ Dependency injection
-│   └── BatchingService.ts         ✅ Clear responsibility
+│ ├── NotificationService.ts Dependency injection
+│ └── BatchingService.ts Clear responsibility
 └── middleware/
-    ├── errorBoundary.ts           ✅ Comprehensive
-    └── DevImpersonationSSOMiddleware.ts
+ ├── errorBoundary.ts Comprehensive
+ └── DevImpersonationSSOMiddleware.ts
 ```
 
 **Use as template** for new services!
 
-### Form Service (Transitioning ⚠️)
+### Form Service (Transitioning )
 
 **Strengths:**
 - Excellent workflow architecture (event sourcing)
@@ -189,18 +189,18 @@ email/src/
 ```
 form/src/
 ├── routes/
-│   ├── responseRoutes.ts          ❌ Business logic in routes
-│   └── proxyRoutes.ts             ✅ Good validation pattern
+│ ├── responseRoutes.ts Business logic in routes
+│ └── proxyRoutes.ts Good validation pattern
 ├── controllers/
-│   ├── formController.ts          ⚠️ Lowercase naming
-│   └── UserProfileController.ts   ✅ PascalCase naming
-├── workflow/                      ✅ Excellent architecture!
-│   ├── core/
-│   │   ├── WorkflowEngineV3.ts   ✅ Event sourcing
-│   │   └── DryRunWrapper.ts      ✅ Innovative
-│   └── services/
+│ ├── formController.ts Lowercase naming
+│ └── UserProfileController.ts PascalCase naming
+├── workflow/ Excellent architecture!
+│ ├── core/
+│ │ ├── WorkflowEngineV3.ts Event sourcing
+│ │ └── DryRunWrapper.ts Innovative
+│ └── services/
 └── middleware/
-    └── auditMiddleware.ts         ✅ AsyncLocalStorage pattern
+ └── auditMiddleware.ts AsyncLocalStorage pattern
 ```
 
 **Learn from:** workflow/, middleware/auditMiddleware.ts
@@ -325,12 +325,12 @@ For large features, use subdirectories:
 
 ```
 src/workflow/
-├── core/              # Core engine
-├── services/          # Workflow-specific services
-├── actions/           # System actions
-├── models/            # Domain models
-├── validators/        # Workflow validation
-└── utils/             # Workflow utilities
+├── core/ # Core engine
+├── services/ # Workflow-specific services
+├── actions/ # System actions
+├── models/ # Domain models
+├── validators/ # Workflow validation
+└── utils/ # Workflow utilities
 ```
 
 **When to use:**
@@ -362,82 +362,82 @@ src/
 ### What Goes Where
 
 **Routes Layer:**
-- ✅ Route definitions
-- ✅ Middleware registration
-- ✅ Controller delegation
-- ❌ Business logic
-- ❌ Database operations
-- ❌ Validation logic (should be in validator or controller)
+- Route definitions
+- Middleware registration
+- Controller delegation
+- Business logic
+- Database operations
+- Validation logic (should be in validator or controller)
 
 **Controllers Layer:**
-- ✅ Request parsing (params, body, query)
-- ✅ Input validation (Zod)
-- ✅ Service calls
-- ✅ Response formatting
-- ✅ Error handling
-- ❌ Business logic
-- ❌ Database operations
+- Request parsing (params, body, query)
+- Input validation (Zod)
+- Service calls
+- Response formatting
+- Error handling
+- Business logic
+- Database operations
 
 **Services Layer:**
-- ✅ Business logic
-- ✅ Business rules enforcement
-- ✅ Orchestration (multiple repos)
-- ✅ Transaction management
-- ❌ HTTP concerns (Request/Response)
-- ❌ Direct Prisma calls (use repositories)
+- Business logic
+- Business rules enforcement
+- Orchestration (multiple repos)
+- Transaction management
+- HTTP concerns (Request/Response)
+- Direct Prisma calls (use repositories)
 
 **Repositories Layer:**
-- ✅ Prisma operations
-- ✅ Query construction
-- ✅ Database error handling
-- ✅ Caching
-- ❌ Business logic
-- ❌ HTTP concerns
+- Prisma operations
+- Query construction
+- Database error handling
+- Caching
+- Business logic
+- HTTP concerns
 
 ### Example: User Creation
 
 **Route:**
 ```typescript
 router.post('/users',
-    SSOMiddleware.verifyLoginStatus,
-    auditMiddleware,
-    (req, res) => userController.create(req, res)
+ SSOMiddleware.verifyLoginStatus,
+ auditMiddleware,
+ (req, res) => userController.create(req, res)
 );
 ```
 
 **Controller:**
 ```typescript
 async create(req: Request, res: Response): Promise<void> {
-    try {
-        const validated = createUserSchema.parse(req.body);
-        const user = await this.userService.create(validated);
-        this.handleSuccess(res, user, 'User created');
-    } catch (error) {
-        this.handleError(error, res, 'create');
-    }
+ try {
+ const validated = createUserSchema.parse(req.body);
+ const user = await this.userService.create(validated);
+ this.handleSuccess(res, user, 'User created');
+ } catch (error) {
+ this.handleError(error, res, 'create');
+ }
 }
 ```
 
 **Service:**
 ```typescript
 async create(data: CreateUserDTO): Promise<User> {
-    // Business rule: check if email already exists
-    const existing = await this.userRepository.findByEmail(data.email);
-    if (existing) throw new ConflictError('Email already exists');
+ // Business rule: check if email already exists
+ const existing = await this.userRepository.findByEmail(data.email);
+ if (existing) throw new ConflictError('Email already exists');
 
-    // Create user
-    return await this.userRepository.create(data);
+ // Create user
+ return await this.userRepository.create(data);
 }
 ```
 
 **Repository:**
 ```typescript
 async create(data: CreateUserDTO): Promise<User> {
-    return PrismaService.main.user.create({ data });
+ return PrismaService.main.user.create({ data });
 }
 
 async findByEmail(email: string): Promise<User | null> {
-    return PrismaService.main.user.findUnique({ where: { email } });
+ return PrismaService.main.user.findUnique({ where: { email } });
 }
 ```
 

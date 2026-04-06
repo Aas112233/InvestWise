@@ -12,7 +12,7 @@ Careful about security and performance. Never trusts file
 extensions. Knows that large uploads need special handling.
 Prefers presigned URLs over server proxying.
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

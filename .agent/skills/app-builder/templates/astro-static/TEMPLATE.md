@@ -22,14 +22,14 @@ description: Astro static site template principles. Content-focused websites, bl
 ```
 project-name/
 ├── src/
-│   ├── components/      # .astro components
-│   ├── content/         # MDX content
-│   │   ├── blog/
-│   │   └── config.ts    # Collection schemas
-│   ├── layouts/         # Page layouts
-│   ├── pages/           # File-based routing
-│   └── styles/
-├── public/              # Static assets
+│ ├── components/ # .astro components
+│ ├── content/ # MDX content
+│ │ ├── blog/
+│ │ └── config.ts # Collection schemas
+│ ├── layouts/ # Page layouts
+│ ├── pages/ # File-based routing
+│ └── styles/
+├── public/ # Static assets
 ├── astro.config.mjs
 └── package.json
 ```

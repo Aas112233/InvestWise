@@ -14,13 +14,13 @@ This skill enables coordinating multiple specialized agents through Claude Code'
 
 ## When to Use Orchestration
 
-✅ **Good for:**
+ **Good for:**
 - Complex tasks requiring multiple expertise domains
 - Code analysis from security, performance, and quality perspectives
 - Comprehensive reviews (architecture + security + testing)
 - Feature implementation needing backend + frontend + database work
 
-❌ **Not for:**
+ **Not for:**
 - Simple, single-domain tasks
 - Quick fixes or small changes
 - Tasks where one agent suffices
@@ -168,8 +168,8 @@ After all agents complete, synthesize:
 
 ## Key Benefits
 
-- ✅ **Single session** - All agents share context
-- ✅ **AI-controlled** - Claude orchestrates autonomously
-- ✅ **Native integration** - Works with built-in Explore, Plan agents
-- ✅ **Resume support** - Can continue previous agent work
-- ✅ **Context passing** - Findings flow between agents
+- **Single session** - All agents share context
+- **AI-controlled** - Claude orchestrates autonomously
+- **Native integration** - Works with built-in Explore, Plan agents
+- **Resume support** - Can continue previous agent work
+- **Context passing** - Findings flow between agents

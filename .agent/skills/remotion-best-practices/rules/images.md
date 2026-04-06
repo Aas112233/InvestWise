@@ -2,7 +2,7 @@
 name: images
 description: Embedding images in Remotion using the <Img> component
 metadata:
-  tags: images, img, staticFile, png, jpg, svg, webp
+ tags: images, img, staticFile, png, jpg, svg, webp
 ---
 
 # Using images in Remotion
@@ -15,7 +15,7 @@ Always use the `<Img>` component from `remotion` to display images:
 import { Img, staticFile } from "remotion";
 
 export const MyComposition = () => {
-  return <Img src={staticFile("photo.png")} />;
+ return <Img src={staticFile("photo.png")} />;
 };
 ```
 
@@ -36,9 +36,9 @@ Place images in the `public/` folder and use `staticFile()` to reference them:
 ```
 my-video/
 ├─ public/
-│  ├─ logo.png
-│  ├─ avatar.jpg
-│  └─ icon.svg
+│ ├─ logo.png
+│ ├─ avatar.jpg
+│ └─ icon.svg
 ├─ src/
 ├─ package.json
 ```
@@ -67,15 +67,15 @@ Use the `style` prop to control size and position:
 
 ```tsx
 <Img
-  src={staticFile("photo.png")}
-  style={{
-    width: 500,
-    height: 300,
-    position: "absolute",
-    top: 100,
-    left: 50,
-    objectFit: "cover",
-  }}
+ src={staticFile("photo.png")}
+ style={{
+ width: 500,
+ height: 300,
+ position: "absolute",
+ top: 100,
+ left: 50,
+ objectFit: "cover",
+ }}
 />
 ```
 
@@ -121,10 +121,10 @@ This is useful for calculating aspect ratios or sizing compositions:
 import { getImageDimensions, staticFile, CalculateMetadataFunction } from "remotion";
 
 const calculateMetadata: CalculateMetadataFunction = async () => {
-  const { width, height } = await getImageDimensions(staticFile("photo.png"));
-  return {
-    width,
-    height,
-  };
+ const { width, height } = await getImageDimensions(staticFile("photo.png"));
+ return {
+ width,
+ height,
+ };
 };
 ```

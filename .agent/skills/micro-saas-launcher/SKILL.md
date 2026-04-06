@@ -45,19 +45,19 @@ Validating before building
 
 ### Quick Validation Methods
 1. **Landing page test**
-   - Build landing page
-   - Drive traffic (ads, community)
-   - Measure signups/interest
+ - Build landing page
+ - Drive traffic (ads, community)
+ - Measure signups/interest
 
 2. **Pre-sale**
-   - Sell before building
-   - "Join waitlist for 50% off"
-   - If no sales, pivot
+ - Sell before building
+ - "Join waitlist for 50% off"
+ - If no sales, pivot
 
 3. **Competitor check**
-   - Competitors = validation
-   - No competitors = maybe no market
-   - Find gap you can fill
+ - Competitors = validation
+ - No competitors = maybe no market
+ - Find gap you can fill
 
 ### Red Flags
 - "Everyone needs this" (too broad)
@@ -162,7 +162,7 @@ Example:
 
 ## Anti-Patterns
 
-### ❌ Building in Secret
+### Building in Secret
 
 **Why bad**: No feedback loop.
 Building wrong thing.
@@ -174,7 +174,7 @@ Get feedback early.
 Build in public.
 Iterate based on users.
 
-### ❌ Feature Creep
+### Feature Creep
 
 **Why bad**: Never ships.
 Dilutes focus.
@@ -186,7 +186,7 @@ Ship, then iterate.
 Let users tell you what's missing.
 Say no to most requests.
 
-### ❌ Pricing Too Low
+### Pricing Too Low
 
 **Why bad**: Undervalues your work.
 Attracts price-sensitive customers.
@@ -198,7 +198,7 @@ Start higher, discount if needed.
 B2B can pay more.
 Your time has value.
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

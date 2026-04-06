@@ -40,10 +40,10 @@ The application was experiencing issues when database connections failed or were
 **Response on DB Unavailable:**
 ```json
 {
-  "success": false,
-  "message": "Database connection unavailable. Please try again in a few moments.",
-  "error": "SERVICE_UNAVAILABLE",
-  "retryAfter": 5
+ "success": false,
+ "message": "Database connection unavailable. Please try again in a few moments.",
+ "error": "SERVICE_UNAVAILABLE",
+ "retryAfter": 5
 }
 ```
 
@@ -59,19 +59,19 @@ The application was experiencing issues when database connections failed or were
 **Health Response:**
 ```json
 {
-  "status": "OK",
-  "database": {
-    "state": "connected",
-    "status": "healthy",
-    "pingMs": 45,
-    "host": "localhost",
-    "name": "investwise"
-  },
-  "memory": {
-    "heapUsed": "150 MB",
-    "heapTotal": "200 MB",
-    "rss": "250 MB"
-  }
+ "status": "OK",
+ "database": {
+ "state": "connected",
+ "status": "healthy",
+ "pingMs": 45,
+ "host": "localhost",
+ "name": "investwise"
+ },
+ "memory": {
+ "heapUsed": "150 MB",
+ "heapTotal": "200 MB",
+ "rss": "250 MB"
+ }
 }
 ```
 
@@ -143,18 +143,18 @@ The application was experiencing issues when database connections failed or were
 ## User Experience Improvements
 
 ### Before:
-- ❌ App crashes on DB connection failure
-- ❌ Unclear error messages
-- ❌ No automatic retry
-- ❌ Server refuses to start without DB
-- ❌ Users see generic errors
+- App crashes on DB connection failure
+- Unclear error messages
+- No automatic retry
+- Server refuses to start without DB
+- Users see generic errors
 
 ### After:
-- ✅ App continues working in offline mode
-- ✅ Clear, specific error messages
-- ✅ Automatic retry with backoff
-- ✅ Server starts and retries DB connection
-- ✅ Users see actionable messages with retry options
+- App continues working in offline mode
+- Clear, specific error messages
+- Automatic retry with backoff
+- Server starts and retries DB connection
+- Users see actionable messages with retry options
 
 ## Error Scenarios Handled
 
@@ -187,7 +187,7 @@ Check these endpoints for system health:
 ### Environment Variables
 ```bash
 MONGO_URI=mongodb://localhost:27017/investwise
-NODE_ENV=development  # or production
+NODE_ENV=development # or production
 PORT=5000
 ```
 

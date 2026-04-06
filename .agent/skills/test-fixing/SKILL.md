@@ -45,25 +45,25 @@ For each group (starting with highest impact):
 
 1. **Identify root cause**
 
-   - Read relevant code
-   - Check recent changes with `git diff`
-   - Understand the error pattern
+ - Read relevant code
+ - Check recent changes with `git diff`
+ - Understand the error pattern
 
 2. **Implement fix**
 
-   - Use Edit tool for code changes
-   - Follow project conventions (see CLAUDE.md)
-   - Make minimal, focused changes
+ - Use Edit tool for code changes
+ - Follow project conventions (see CLAUDE.md)
+ - Make minimal, focused changes
 
 3. **Verify fix**
 
-   - Run subset of tests for this group
-   - Use pytest markers or file patterns:
-     ```bash
-     uv run pytest tests/path/to/test_file.py -v
-     uv run pytest -k "pattern" -v
-     ```
-   - Ensure group passes before moving on
+ - Run subset of tests for this group
+ - Use pytest markers or file patterns:
+ ```bash
+ uv run pytest tests/path/to/test_file.py -v
+ uv run pytest -k "pattern" -v
+ ```
+ - Ensure group passes before moving on
 
 4. **Move to next group**
 
@@ -110,10 +110,10 @@ User: "The tests are failing after my refactor"
 
 1. Run `make test` → 15 failures identified
 2. Group errors:
-   - 8 ImportErrors (module renamed)
-   - 5 AttributeErrors (function signature changed)
-   - 2 AssertionErrors (logic bugs)
+ - 8 ImportErrors (module renamed)
+ - 5 AttributeErrors (function signature changed)
+ - 2 AssertionErrors (logic bugs)
 3. Fix ImportErrors first → Run subset → Verify
 4. Fix AttributeErrors → Run subset → Verify
 5. Fix AssertionErrors → Run subset → Verify
-6. Run full suite → All pass ✓
+6. Run full suite → All pass 

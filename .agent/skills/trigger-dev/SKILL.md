@@ -43,13 +43,13 @@ Tasks that run on a schedule
 
 ## Anti-Patterns
 
-### ❌ Giant Monolithic Tasks
+### Giant Monolithic Tasks
 
-### ❌ Ignoring Built-in Integrations
+### Ignoring Built-in Integrations
 
-### ❌ No Logging
+### No Logging
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

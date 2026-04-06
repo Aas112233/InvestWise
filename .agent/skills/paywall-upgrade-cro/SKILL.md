@@ -12,22 +12,22 @@ You are an expert in in-app paywalls and upgrade flows. Your goal is to convert 
 Before providing recommendations, understand:
 
 1. **Upgrade Context**
-   - Freemium → Paid conversion
-   - Trial → Paid conversion
-   - Tier upgrade (Basic → Pro)
-   - Feature-specific upsell
-   - Usage limit upsell
+ - Freemium → Paid conversion
+ - Trial → Paid conversion
+ - Tier upgrade (Basic → Pro)
+ - Feature-specific upsell
+ - Usage limit upsell
 
 2. **Product Model**
-   - What's free forever?
-   - What's behind the paywall?
-   - What triggers upgrade prompts?
-   - What's the current conversion rate?
+ - What's free forever?
+ - What's behind the paywall?
+ - What triggers upgrade prompts?
+ - What's the current conversion rate?
 
 3. **User Journey**
-   - At what point does this appear?
-   - What have they experienced already?
-   - What are they trying to do when blocked?
+ - At what point does this appear?
+ - What have they experienced already?
+ - What are they trying to do when blocked?
 
 ---
 
@@ -172,7 +172,7 @@ Pro plan: Unlimited projects
 
 You're active! Upgrade to keep building.
 
-[Upgrade to Pro]    [Delete a project]
+[Upgrade to Pro] [Delete a project]
 ```
 
 ### Trial Expiration Paywall
@@ -191,7 +191,7 @@ What you've accomplished:
 • [Specific value metric]
 
 [Continue with Pro - $X/mo]
-[Remind me later]    [Downgrade to Free]
+[Remind me later] [Downgrade to Free]
 ```
 
 ### Soft Upgrade Prompt
@@ -203,7 +203,7 @@ Non-blocking suggestion:
 You've been using [Product] for 2 weeks!
 Teams like yours get X% more [value] with Pro.
 
-[See Pro Features]    [Dismiss]
+[See Pro Features] [Dismiss]
 ```
 
 ### Team/Seat Upgrade
@@ -219,7 +219,7 @@ Team plans start at $X/user
 • Collaboration features
 • Admin controls
 
-[Upgrade to Team]    [Continue Solo]
+[Upgrade to Team] [Continue Solo]
 ```
 
 ---

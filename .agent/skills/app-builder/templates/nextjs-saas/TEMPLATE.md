@@ -24,23 +24,23 @@ description: Next.js SaaS template principles. Auth, payments, email.
 project-name/
 ├── prisma/
 ├── src/
-│   ├── app/
-│   │   ├── (auth)/      # Login, register
-│   │   ├── (dashboard)/ # Protected routes
-│   │   ├── (marketing)/ # Landing, pricing
-│   │   └── api/
-│   │       ├── auth/[...nextauth]/
-│   │       └── webhooks/stripe/
-│   ├── components/
-│   │   ├── auth/
-│   │   ├── billing/
-│   │   └── dashboard/
-│   ├── lib/
-│   │   ├── auth.ts      # NextAuth config
-│   │   ├── stripe.ts    # Stripe client
-│   │   └── email.ts     # Resend client
-│   └── config/
-│       └── subscriptions.ts
+│ ├── app/
+│ │ ├── (auth)/ # Login, register
+│ │ ├── (dashboard)/ # Protected routes
+│ │ ├── (marketing)/ # Landing, pricing
+│ │ └── api/
+│ │ ├── auth/[...nextauth]/
+│ │ └── webhooks/stripe/
+│ ├── components/
+│ │ ├── auth/
+│ │ ├── billing/
+│ │ └── dashboard/
+│ ├── lib/
+│ │ ├── auth.ts # NextAuth config
+│ │ ├── stripe.ts # Stripe client
+│ │ └── email.ts # Resend client
+│ └── config/
+│ └── subscriptions.ts
 └── package.json
 ```
 

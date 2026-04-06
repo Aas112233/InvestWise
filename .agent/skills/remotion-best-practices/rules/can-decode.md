@@ -2,7 +2,7 @@
 name: can-decode
 description: Check if a video can be decoded by the browser using Mediabunny
 metadata:
-  tags: decode, validation, video, audio, compatibility, browser
+ tags: decode, validation, video, audio, compatibility, browser
 ---
 
 # Checking if a video can be decoded
@@ -17,30 +17,30 @@ This function can be copy-pasted into any project.
 import { Input, ALL_FORMATS, UrlSource } from "mediabunny";
 
 export const canDecode = async (src: string) => {
-  const input = new Input({
-    formats: ALL_FORMATS,
-    source: new UrlSource(src, {
-      getRetryDelay: () => null,
-    }),
-  });
+ const input = new Input({
+ formats: ALL_FORMATS,
+ source: new UrlSource(src, {
+ getRetryDelay: () => null,
+ }),
+ });
 
-  try {
-    await input.getFormat();
-  } catch {
-    return false;
-  }
+ try {
+ await input.getFormat();
+ } catch {
+ return false;
+ }
 
-  const videoTrack = await input.getPrimaryVideoTrack();
-  if (videoTrack && !(await videoTrack.canDecode())) {
-    return false;
-  }
+ const videoTrack = await input.getPrimaryVideoTrack();
+ if (videoTrack && !(await videoTrack.canDecode())) {
+ return false;
+ }
 
-  const audioTrack = await input.getPrimaryAudioTrack();
-  if (audioTrack && !(await audioTrack.canDecode())) {
-    return false;
-  }
+ const audioTrack = await input.getPrimaryAudioTrack();
+ if (audioTrack && !(await audioTrack.canDecode())) {
+ return false;
+ }
 
-  return true;
+ return true;
 };
 ```
 
@@ -51,9 +51,9 @@ const src = "https://remotion.media/video.mp4";
 const isDecodable = await canDecode(src);
 
 if (isDecodable) {
-  console.log("Video can be decoded");
+ console.log("Video can be decoded");
 } else {
-  console.log("Video cannot be decoded by this browser");
+ console.log("Video cannot be decoded by this browser");
 }
 ```
 
@@ -65,11 +65,11 @@ For file uploads or drag-and-drop, use `BlobSource`:
 import { Input, ALL_FORMATS, BlobSource } from "mediabunny";
 
 export const canDecodeBlob = async (blob: Blob) => {
-  const input = new Input({
-    formats: ALL_FORMATS,
-    source: new BlobSource(blob),
-  });
+ const input = new Input({
+ formats: ALL_FORMATS,
+ source: new BlobSource(blob),
+ });
 
-  // Same validation logic as above
+ // Same validation logic as above
 };
 ```

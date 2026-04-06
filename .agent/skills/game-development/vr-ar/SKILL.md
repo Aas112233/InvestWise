@@ -111,7 +111,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 
 ## 6. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | Move camera without player | Player controls camera |
 | Drop below 90 FPS | Maintain frame rate |

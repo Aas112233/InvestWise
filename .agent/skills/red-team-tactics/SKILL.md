@@ -16,9 +16,9 @@ allowed-tools: Read, Glob, Grep
 
 ```
 RECONNAISSANCE → INITIAL ACCESS → EXECUTION → PERSISTENCE
-       ↓              ↓              ↓            ↓
-   PRIVILEGE ESC → DEFENSE EVASION → CRED ACCESS → DISCOVERY
-       ↓              ↓              ↓            ↓
+ ↓ ↓ ↓ ↓
+ PRIVILEGE ESC → DEFENSE EVASION → CRED ACCESS → DISCOVERY
+ ↓ ↓ ↓ ↓
 LATERAL MOVEMENT → COLLECTION → C2 → EXFILTRATION → IMPACT
 ```
 
@@ -187,7 +187,7 @@ For each successful technique:
 
 ## 10. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | Rush to exploitation | Follow methodology |
 | Cause damage | Minimize impact |

@@ -3,7 +3,7 @@ name: prompt-library
 description: "Curated collection of high-quality prompts for various use cases. Includes role-based prompts, task-specific templates, and prompt refinement techniques. Use when user needs prompt templates, role-play prompts, or ready-to-use prompt examples for coding, writing, analysis, or creative tasks."
 ---
 
-# 📝 Prompt Library
+# Prompt Library
 
 > A comprehensive collection of battle-tested prompts inspired by [awesome-chatgpt-prompts](https://github.com/f/awesome-chatgpt-prompts) and community best practices.
 
@@ -19,7 +19,7 @@ Use this skill when the user:
 
 ## Prompt Categories
 
-### 🎭 Role-Based Prompts
+### Role-Based Prompts
 
 #### Expert Developer
 
@@ -43,9 +43,9 @@ Act as a senior code reviewer. Your role is to:
 5. Suggest improvements with specific examples
 
 Format your review as:
-🔴 Critical Issues (must fix)
-🟡 Suggestions (should consider)
-🟢 Praise (what's done well)
+ Critical Issues (must fix)
+� Suggestions (should consider)
+� Praise (what's done well)
 ```
 
 #### Technical Writer
@@ -72,7 +72,7 @@ Act as a senior system architect designing for scale. Consider:
 Provide architecture decisions with trade-off analysis.
 ```
 
-### 🛠️ Task-Specific Prompts
+### Task-Specific Prompts
 
 #### Debug This Code
 
@@ -140,7 +140,7 @@ Generate API documentation for this endpoint including:
 Format as OpenAPI/Swagger or Markdown.
 ```
 
-### 📊 Analysis Prompts
+### Analysis Prompts
 
 #### Code Complexity Analysis
 
@@ -184,7 +184,7 @@ Perform a security review of this code:
 Classify issues by severity (Critical/High/Medium/Low).
 ```
 
-### 🎨 Creative Prompts
+### Creative Prompts
 
 #### Brainstorm Features
 
@@ -214,7 +214,7 @@ Provide 10 options in these categories:
 For each, explain the reasoning and check domain availability patterns.
 ```
 
-### 🔄 Transformation Prompts
+### Transformation Prompts
 
 #### Migrate Code
 
@@ -293,10 +293,10 @@ When responding:
 ```
 Respond in the following JSON format:
 {
-  "analysis": "your analysis here",
-  "recommendations": ["rec1", "rec2"],
-  "confidence": 0.0-1.0,
-  "caveats": ["caveat1"]
+ "analysis": "your analysis here",
+ "recommendations": ["rec1", "rec2"],
+ "confidence": 0.0-1.0,
+ "caveats": ["caveat1"]
 }
 ```
 
@@ -319,4 +319,4 @@ When crafting prompts, ensure:
 
 ---
 
-> 💡 **Tip**: The best prompts are specific, provide context, and include examples of desired output.
+> **Tip**: The best prompts are specific, provide context, and include examples of desired output.

@@ -10,13 +10,13 @@
 ### Why Mobile Type is Different
 
 ```
-DESKTOP:                        MOBILE:
-├── 20-30" viewing distance     ├── 12-15" viewing distance
-├── Large viewport              ├── Small viewport, narrow
-├── Hover for details           ├── Tap/scroll for details
-├── Controlled lighting         ├── Variable (outdoor, etc.)
-├── Fixed font size             ├── User-controlled sizing
-└── Long reading sessions       └── Quick scanning
+DESKTOP: MOBILE:
+├── 20-30" viewing distance ├── 12-15" viewing distance
+├── Large viewport ├── Small viewport, narrow
+├── Hover for details ├── Tap/scroll for details
+├── Controlled lighting ├── Variable (outdoor, etc.)
+├── Fixed font size ├── User-controlled sizing
+└── Long reading sessions └── Quick scanning
 ```
 
 ### Mobile Type Rules
@@ -70,14 +70,14 @@ Features:
 ### When to Use System Fonts
 
 ```
-✅ USE system fonts when:
+ USE system fonts when:
 ├── Brand doesn't mandate custom font
 ├── Reading efficiency is priority
 ├── App feels native/integrated important
 ├── Performance is critical
 ├── Wide language support needed
 
-❌ AVOID system fonts when:
+ AVOID system fonts when:
 ├── Brand identity requires custom
 ├── Design differentiation needed
 ├── Editorial/magazine style
@@ -166,17 +166,17 @@ Example with 1.25 ratio, 16px base:
 ### iOS Dynamic Type (MANDATORY)
 
 ```swift
-// ❌ WRONG: Fixed size (doesn't scale)
+// WRONG: Fixed size (doesn't scale)
 Text("Hello")
-    .font(.system(size: 17))
+ .font(.system(size: 17))
 
-// ✅ CORRECT: Dynamic Type
+// CORRECT: Dynamic Type
 Text("Hello")
-    .font(.body) // Scales with user setting
+ .font(.body) // Scales with user setting
 
 // Custom font with scaling
 Text("Hello")
-    .font(.custom("MyFont", size: 17, relativeTo: .body))
+ .font(.custom("MyFont", size: 17, relativeTo: .body))
 ```
 
 ### Android Text Scaling (MANDATORY)
@@ -262,11 +262,11 @@ Mobile recommendation:
 ### Color Adjustments
 
 ```
-Light Mode:               Dark Mode:
-├── Black text (#000)     ├── White/light gray (#E0E0E0)
-├── High contrast         ├── Slightly reduced contrast
-├── Full saturation       ├── Desaturated colors
-└── Dark = emphasis       └── Light = emphasis
+Light Mode: Dark Mode:
+├── Black text (#000) ├── White/light gray (#E0E0E0)
+├── High contrast ├── Slightly reduced contrast
+├── Full saturation ├── Desaturated colors
+└── Dark = emphasis └── Light = emphasis
 
 RULE: Don't use pure white (#FFF) on dark.
 Use off-white (#E0E0E0 to #F0F0F0) to reduce eye strain.
@@ -298,7 +298,7 @@ Consider:
 
 ## 7. Typography Anti-Patterns
 
-### ❌ Common Mistakes
+### Common Mistakes
 
 | Mistake | Problem | Fix |
 |---------|---------|-----|
@@ -311,7 +311,7 @@ Consider:
 | **All caps body** | Hard to read | Headlines only |
 | **Light gray on white** | Impossible in bright light | Higher contrast |
 
-### ❌ AI Typography Mistakes
+### AI Typography Mistakes
 
 ```
 AI tends to:
@@ -351,16 +351,16 @@ Recommendations:
 
 ```
 1. SYSTEM FONT FALLBACK
-   Show system font → swap when custom loads
-   
+ Show system font → swap when custom loads
+ 
 2. FONT DISPLAY SWAP
-   font-display: swap (CSS)
-   
+ font-display: swap (CSS)
+ 
 3. PRELOAD CRITICAL FONTS
-   Preload fonts needed above the fold
-   
+ Preload fonts needed above the fold
+ 
 4. DON'T BLOCK RENDER
-   Don't wait for fonts to show content
+ Don't wait for fonts to show content
 ```
 
 ---
@@ -393,38 +393,38 @@ Recommendations:
 
 ```
 // iOS
-.largeTitle  // 34pt, Bold
-.title       // 28pt, Bold
-.title2      // 22pt, Bold
-.title3      // 20pt, Semibold
-.headline    // 17pt, Semibold
-.body        // 17pt, Regular
+.largeTitle // 34pt, Bold
+.title // 28pt, Bold
+.title2 // 22pt, Bold
+.title3 // 20pt, Semibold
+.headline // 17pt, Semibold
+.body // 17pt, Regular
 .subheadline // 15pt, Regular
-.footnote    // 13pt, Regular
-.caption     // 12pt, Regular
+.footnote // 13pt, Regular
+.caption // 12pt, Regular
 
 // Android (Material 3)
-displayLarge   // 57sp
-headlineLarge  // 32sp
-titleLarge     // 22sp
-bodyLarge      // 16sp
-labelLarge     // 14sp
+displayLarge // 57sp
+headlineLarge // 32sp
+titleLarge // 22sp
+bodyLarge // 16sp
+labelLarge // 14sp
 ```
 
 ### Minimum Sizes
 
 ```
-Body:       14-16pt/sp (16 preferred)
-Secondary:  12-13pt/sp
-Caption:    11-12pt/sp
-Nothing:    < 11pt/sp
+Body: 14-16pt/sp (16 preferred)
+Secondary: 12-13pt/sp
+Caption: 11-12pt/sp
+Nothing: < 11pt/sp
 ```
 
 ### Line Height
 
 ```
-Headings:  1.1-1.3
-Body:      1.4-1.6
+Headings: 1.1-1.3
+Body: 1.4-1.6
 Long text: 1.5-1.75
 ```
 

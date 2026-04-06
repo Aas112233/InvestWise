@@ -1,16 +1,16 @@
-# 📋 Environment Variables Guide
+# Environment Variables Guide
 
 ## Overview
 Consolidated environment configuration for both frontend and backend.
 
 ---
 
-## ✅ **Active .env Files**
+## **Active .env Files**
 
 ### 1. **Root `.env`** (Main Configuration)
-**Location:** `/.env`  
-**Used By:** Both Frontend (Vite) and Backend (Node.js)  
-**Status:** ✅ **ACTIVE**
+**Location:** `/.env` 
+**Used By:** Both Frontend (Vite) and Backend (Node.js) 
+**Status:****ACTIVE**
 
 ```bash
 # Server
@@ -27,38 +27,38 @@ VITE_LONGCAT_API_KEY=
 
 ---
 
-## 📁 **Template Files**
+## **Template Files**
 
 ### 1. **`/.env.example`**
-**Purpose:** Template for frontend developers  
-**Copy To:** `/.env`  
+**Purpose:** Template for frontend developers 
+**Copy To:** `/.env` 
 **Variables:** Frontend only
 
-### 2. **`/server/.env.example`**  
-**Purpose:** Template for backend developers  
-**Copy To:** `/server/.env` (if needed)  
+### 2. **`/server/.env.example`** 
+**Purpose:** Template for backend developers 
+**Copy To:** `/server/.env` (if needed) 
 **Variables:** Backend only
 
 ---
 
-## 🔍 **How dotenv Loads**
+## **How dotenv Loads**
 
 ### Default Behavior
 ```javascript
 import dotenv from 'dotenv';
-dotenv.config();  // Loads .env from current directory
+dotenv.config(); // Loads .env from current directory
 ```
 
 ### Load Order
 ```
-1. process.cwd()/.env  →  /.env  ✅ USED
-2. .env.local          →  Not used
-3. .env.development    →  Not used
+1. process.cwd()/.env → /.env USED
+2. .env.local → Not used
+3. .env.development → Not used
 ```
 
 ---
 
-## 📊 **Variable Reference**
+## **Variable Reference**
 
 ### Required Variables
 
@@ -82,7 +82,7 @@ dotenv.config();  // Loads .env from current directory
 
 ---
 
-## 🚀 **Setup Instructions**
+## **Setup Instructions**
 
 ### 1. Development Setup
 
@@ -133,15 +133,15 @@ VITE_API_URL=https://api.yourdomain.com/api npm run build
 
 ---
 
-## ⚠️ **Common Issues**
+## **Common Issues**
 
 ### Issue: Variables not loading
 
 **Solution:** Check .env file location
 ```bash
 # Should be in project root
-/.env  ✅
-/server/.env  ❌ (Not loaded by default)
+/.env 
+/server/.env (Not loaded by default)
 ```
 
 ### Issue: Frontend can't find API
@@ -175,7 +175,7 @@ MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/investwise
 
 ---
 
-## 🔐 **Security Best Practices**
+## **Security Best Practices**
 
 ### 1. **Never Commit .env**
 ```bash
@@ -197,23 +197,23 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ### 3. **Environment-Specific Files**
 ```bash
 # Development
-.env.development  →  Local testing
+.env.development → Local testing
 
 # Production
-.env.production   →  Deployed servers
+.env.production → Deployed servers
 ```
 
 ### 4. **Use Environment Variables in CI/CD**
 ```yaml
 # GitHub Actions
 env:
-  MONGO_URI: ${{ secrets.MONGO_URI }}
-  JWT_SECRET: ${{ secrets.JWT_SECRET }}
+ MONGO_URI: ${{ secrets.MONGO_URI }}
+ JWT_SECRET: ${{ secrets.JWT_SECRET }}
 ```
 
 ---
 
-## 📦 **Deployment Platforms**
+## **Deployment Platforms**
 
 ### Render.com
 
@@ -253,7 +253,7 @@ heroku config:set CORS_ORIGINS=https://your-app.herokuapp.com
 
 ---
 
-## 🧪 **Testing Configuration**
+## **Testing Configuration**
 
 ### Check Loaded Variables
 
@@ -261,10 +261,10 @@ heroku config:set CORS_ORIGINS=https://your-app.herokuapp.com
 ```javascript
 // Add to server/index.js
 console.log('Loaded env:', {
-  NODE_ENV: process.env.NODE_ENV,
-  PORT: process.env.PORT,
-  MONGO_URI: process.env.MONGO_URI ? '✅ Set' : '❌ Missing',
-  JWT_SECRET: process.env.JWT_SECRET ? '✅ Set' : '❌ Missing',
+ NODE_ENV: process.env.NODE_ENV,
+ PORT: process.env.PORT,
+ MONGO_URI: process.env.MONGO_URI ? ' Set' : ' Missing',
+ JWT_SECRET: process.env.JWT_SECRET ? ' Set' : ' Missing',
 });
 ```
 
@@ -285,16 +285,16 @@ const required = ['MONGO_URI', 'JWT_SECRET', 'PORT'];
 const missing = required.filter(key => !process.env[key]);
 
 if (missing.length > 0) {
-  console.error('❌ Missing required env variables:', missing);
-  process.exit(1);
+ console.error(' Missing required env variables:', missing);
+ process.exit(1);
 }
 
-console.log('✅ All required env variables loaded');
+console.log(' All required env variables loaded');
 ```
 
 ---
 
-## 📝 **Quick Reference**
+## **Quick Reference**
 
 ### Development
 ```bash
@@ -331,19 +331,19 @@ VITE_API_URL=http://localhost:5001/api
 
 ---
 
-## 🎯 **Summary**
+## **Summary**
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `/.env` | Main configuration | ✅ **ACTIVE - USE THIS** |
-| `/.env.example` | Frontend template | 📋 Reference only |
-| `/server/.env.example` | Backend template | 📋 Reference only |
+| `/.env` | Main configuration | **ACTIVE - USE THIS** |
+| `/.env.example` | Frontend template | Reference only |
+| `/server/.env.example` | Backend template | Reference only |
 
 **Recommendation:** Use single `/.env` file for simplicity. Both frontend and backend will load from it.
 
 ---
 
-**Status**: ✅ **CONSOLIDATED**  
-**Active Files**: 1 (`/.env`)  
-**Template Files**: 2 (`.env.example`, `server/.env.example`)  
+**Status**: **CONSOLIDATED** 
+**Active Files**: 1 (`/.env`) 
+**Template Files**: 2 (`.env.example`, `server/.env.example`) 
 **Configuration**: **Unified**

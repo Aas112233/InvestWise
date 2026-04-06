@@ -69,13 +69,13 @@ Request step-by-step reasoning
 
 ## Anti-Patterns
 
-### ❌ Vague Instructions
+### Vague Instructions
 
-### ❌ Kitchen Sink Prompt
+### Kitchen Sink Prompt
 
-### ❌ No Negative Instructions
+### No Negative Instructions
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

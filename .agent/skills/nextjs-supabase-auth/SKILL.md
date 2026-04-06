@@ -45,11 +45,11 @@ Handle OAuth callback and exchange code for session
 
 ## Anti-Patterns
 
-### ❌ getSession in Server Components
+### getSession in Server Components
 
-### ❌ Auth State in Client Without Listener
+### Auth State in Client Without Listener
 
-### ❌ Storing Tokens Manually
+### Storing Tokens Manually
 
 ## Related Skills
 

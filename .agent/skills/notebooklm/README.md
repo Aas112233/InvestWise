@@ -17,7 +17,7 @@
 
 ---
 
-## ⚠️ Important: Local Claude Code Only
+## Important: Local Claude Code Only
 
 **This skill works ONLY with local [Claude Code](https://github.com/anthropics/claude-code) installations, NOT in the web UI.**
 
@@ -49,10 +49,10 @@ Your Task → Claude asks NotebookLM → Gemini synthesizes answer → Claude wr
 
 | Approach | Token Cost | Setup Time | Hallucinations | Answer Quality |
 |----------|------------|------------|----------------|----------------|
-| **Feed docs to Claude** | 🔴 Very high (multiple file reads) | Instant | Yes - fills gaps | Variable retrieval |
-| **Web search** | 🟡 Medium | Instant | High - unreliable sources | Hit or miss |
-| **Local RAG** | 🟡 Medium-High | Hours (embeddings, chunking) | Medium - retrieval gaps | Depends on setup |
-| **NotebookLM Skill** | 🟢 Minimal | 5 minutes | **Minimal** - source-grounded only | Expert synthesis |
+| **Feed docs to Claude** | Very high (multiple file reads) | Instant | Yes - fills gaps | Variable retrieval |
+| **Web search** | � Medium | Instant | High - unreliable sources | Hit or miss |
+| **Local RAG** | � Medium-High | Hours (embeddings, chunking) | Medium - retrieval gaps | Depends on setup |
+| **NotebookLM Skill** | � Minimal | 5 minutes | **Minimal** - source-grounded only | Expert synthesis |
 
 ### What Makes NotebookLM Superior?
 
@@ -111,12 +111,12 @@ Claude will list your available skills including NotebookLM.
 ### 3. Create your knowledge base
 
 Go to [notebooklm.google.com](https://notebooklm.google.com) → Create notebook → Upload your docs:
-- 📄 PDFs, Google Docs, markdown files
-- 🔗 Websites, GitHub repos
-- 🎥 YouTube videos
-- 📚 Multiple sources per notebook
+- PDFs, Google Docs, markdown files
+- Websites, GitHub repos
+- YouTube videos
+- Multiple sources per notebook
 
-Share: **⚙️ Share → Anyone with link → Copy**
+Share: ** Share → Anyone with link → Copy**
 
 ### 4. Add to your library
 
@@ -161,13 +161,13 @@ This is a **Claude Code Skill** - a local folder containing instructions and scr
 
 ```
 ~/.claude/skills/notebooklm/
-├── SKILL.md              # Instructions for Claude
-├── scripts/              # Python automation scripts
-│   ├── ask_question.py   # Query NotebookLM
-│   ├── notebook_manager.py # Library management
-│   └── auth_manager.py   # Google authentication
-├── .venv/                # Isolated Python environment (auto-created)
-└── data/                 # Local notebook library
+├── SKILL.md # Instructions for Claude
+├── scripts/ # Python automation scripts
+│ ├── ask_question.py # Query NotebookLM
+│ ├── notebook_manager.py # Library management
+│ └── auth_manager.py # Google authentication
+├── .venv/ # Isolated Python environment (auto-created)
+└── data/ # Local notebook library
 ```
 
 When you mention NotebookLM or send a notebook URL, Claude:
@@ -264,9 +264,9 @@ All data is stored locally within the skill directory:
 
 ```
 ~/.claude/skills/notebooklm/data/
-├── library.json       - Your notebook library with metadata
-├── auth_info.json     - Authentication status info
-└── browser_state/     - Browser cookies and session data
+├── library.json - Your notebook library with metadata
+├── auth_info.json - Authentication status info
+└── browser_state/ - Browser cookies and session data
 ```
 
 **Important Security Note:**
@@ -346,7 +346,7 @@ Say: `"Clear NotebookLM browser data"`
 cd ~/.claude/skills/notebooklm
 rm -rf .venv
 python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+source .venv/bin/activate # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
 ```
 

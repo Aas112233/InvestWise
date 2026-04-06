@@ -26,37 +26,37 @@
 
 ```
 loki-mode/
-├── SKILL.md                    # The main skill file (YAML frontmatter required)
-├── VERSION                     # Current version: 2.4.0
-├── CHANGELOG.md                # Full version history
-├── README.md                   # Main documentation
+├── SKILL.md # The main skill file (YAML frontmatter required)
+├── VERSION # Current version: 2.4.0
+├── CHANGELOG.md # Full version history
+├── README.md # Main documentation
 ├── references/
-│   ├── agents.md               # 37 agent type definitions
-│   ├── deployment.md           # Cloud deployment guides
-│   └── business-ops.md         # Business operation workflows
+│ ├── agents.md # 37 agent type definitions
+│ ├── deployment.md # Cloud deployment guides
+│ └── business-ops.md # Business operation workflows
 ├── examples/
-│   ├── simple-todo-app.md      # Simple PRD for testing
-│   ├── api-only.md             # Backend-only PRD
-│   ├── static-landing-page.md  # Frontend/marketing PRD
-│   └── full-stack-demo.md      # Complete bookmark manager PRD
+│ ├── simple-todo-app.md # Simple PRD for testing
+│ ├── api-only.md # Backend-only PRD
+│ ├── static-landing-page.md # Frontend/marketing PRD
+│ └── full-stack-demo.md # Complete bookmark manager PRD
 ├── tests/
-│   ├── run-all-tests.sh        # Main test runner (53 tests)
-│   ├── test-bootstrap.sh       # 8 tests
-│   ├── test-task-queue.sh      # 8 tests
-│   ├── test-circuit-breaker.sh # 8 tests
-│   ├── test-agent-timeout.sh   # 9 tests
-│   ├── test-state-recovery.sh  # 8 tests
-│   └── test-wrapper.sh         # 12 tests
+│ ├── run-all-tests.sh # Main test runner (53 tests)
+│ ├── test-bootstrap.sh # 8 tests
+│ ├── test-task-queue.sh # 8 tests
+│ ├── test-circuit-breaker.sh # 8 tests
+│ ├── test-agent-timeout.sh # 9 tests
+│ ├── test-state-recovery.sh # 8 tests
+│ └── test-wrapper.sh # 12 tests
 ├── scripts/
-│   ├── loki-wrapper.sh         # Legacy wrapper (deprecated)
-│   └── export-to-vibe-kanban.sh # Optional Vibe Kanban export
+│ ├── loki-wrapper.sh # Legacy wrapper (deprecated)
+│ └── export-to-vibe-kanban.sh # Optional Vibe Kanban export
 ├── integrations/
-│   └── vibe-kanban.md          # Vibe Kanban integration guide
+│ └── vibe-kanban.md # Vibe Kanban integration guide
 ├── autonomy/
-│   ├── run.sh                  # ⭐ MAIN ENTRY POINT - handles everything
-│   └── README.md               # Autonomy documentation
+│ ├── run.sh # MAIN ENTRY POINT - handles everything
+│ └── README.md # Autonomy documentation
 └── .github/workflows/
-    └── release.yml             # GitHub Actions for releases
+ └── release.yml # GitHub Actions for releases
 ```
 
 ---

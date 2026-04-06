@@ -6,7 +6,7 @@
 
 ---
 
-## 🧠 MOBILE BACKEND MINDSET
+## MOBILE BACKEND MINDSET
 
 ```
 Mobile clients are DIFFERENT from web clients:
@@ -22,11 +22,11 @@ Mobile clients are DIFFERENT from web clients:
 
 ---
 
-## 🚫 AI MOBILE BACKEND ANTI-PATTERNS
+## AI MOBILE BACKEND ANTI-PATTERNS
 
 ### These are common AI mistakes when building mobile backends:
 
-| ❌ AI Default | Why It's Wrong | ✅ Mobile-Correct |
+| AI Default | Why It's Wrong | Mobile-Correct |
 |---------------|----------------|-------------------|
 | Same API for web and mobile | Mobile needs compact responses | Separate mobile endpoints OR field selection |
 | Full object responses | Wastes bandwidth, battery | Partial responses, pagination |
@@ -45,20 +45,20 @@ Mobile clients are DIFFERENT from web clients:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    YOUR BACKEND                                  │
+│ YOUR BACKEND │
 ├─────────────────────────────────────────────────────────────────┤
-│                         │                                        │
-│              ┌──────────┴──────────┐                            │
-│              ▼                     ▼                            │
-│    ┌─────────────────┐   ┌─────────────────┐                    │
-│    │   FCM (Google)  │   │  APNs (Apple)   │                    │
-│    │   Firebase      │   │  Direct or FCM  │                    │
-│    └────────┬────────┘   └────────┬────────┘                    │
-│             │                     │                              │
-│             ▼                     ▼                              │
-│    ┌─────────────────┐   ┌─────────────────┐                    │
-│    │ Android Device  │   │   iOS Device    │                    │
-│    └─────────────────┘   └─────────────────┘                    │
+│ │ │
+│ ┌──────────┴──────────┐ │
+│ ▼ ▼ │
+│ ┌─────────────────┐ ┌─────────────────┐ │
+│ │ FCM (Google) │ │ APNs (Apple) │ │
+│ │ Firebase │ │ Direct or FCM │ │
+│ └────────┬────────┘ └────────┬────────┘ │
+│ │ │ │
+│ ▼ ▼ │
+│ ┌─────────────────┐ ┌─────────────────┐ │
+│ │ Android Device │ │ iOS Device │ │
+│ └─────────────────┘ └─────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -72,7 +72,7 @@ Mobile clients are DIFFERENT from web clients:
 
 ### Anti-Patterns
 
-| ❌ NEVER | ✅ ALWAYS |
+| NEVER | ALWAYS |
 |----------|----------|
 | Send sensitive data in push | Push says "New message", app fetches content |
 | Overload with pushes | Batch, dedupe, respect quiet hours |
@@ -99,22 +99,22 @@ TOKEN LIFECYCLE:
 
 ```
 WHAT TYPE OF DATA?
-        │
-        ├── Read-only (news, catalog)
-        │   └── Simple cache + TTL
-        │       └── ETag/Last-Modified for invalidation
-        │
-        ├── User-owned (notes, todos)
-        │   └── Last-write-wins (simple)
-        │       └── Or timestamp-based merge
-        │
-        ├── Collaborative (shared docs)
-        │   └── CRDT or OT required
-        │       └── Consider Firebase/Supabase
-        │
-        └── Critical (payments, inventory)
-            └── Server is source of truth
-                └── Optimistic UI + server confirmation
+ │
+ ├── Read-only (news, catalog)
+ │ └── Simple cache + TTL
+ │ └── ETag/Last-Modified for invalidation
+ │
+ ├── User-owned (notes, todos)
+ │ └── Last-write-wins (simple)
+ │ └── Or timestamp-based merge
+ │
+ ├── Collaborative (shared docs)
+ │ └── CRDT or OT required
+ │ └── Consider Firebase/Supabase
+ │
+ └── Critical (payments, inventory)
+ └── Server is source of truth
+ └── Optimistic UI + server confirmation
 ```
 
 ### Conflict Resolution Strategies
@@ -182,16 +182,16 @@ CURSOR (Good for mobile):
 ```
 Instead of:
 GET /users/1
-GET /users/2  
+GET /users/2 
 GET /users/3
 (3 round trips, 3x latency)
 
 Use:
 POST /batch
 { requests: [
-    { method: "GET", path: "/users/1" },
-    { method: "GET", path: "/users/2" },
-    { method: "GET", path: "/users/3" }
+ { method: "GET", path: "/users/1" },
+ { method: "GET", path: "/users/2" },
+ { method: "GET", path: "/users/3" }
 ]}
 (1 round trip)
 ```
@@ -205,22 +205,22 @@ POST /batch
 ```
 GET /api/app-config
 Headers:
-  X-App-Version: 2.1.0
-  X-Platform: ios
-  X-Device-ID: abc123
+ X-App-Version: 2.1.0
+ X-Platform: ios
+ X-Device-ID: abc123
 
 Response:
 {
-  "minimum_version": "2.0.0",
-  "latest_version": "2.3.0",
-  "force_update": false,
-  "update_url": "https://apps.apple.com/...",
-  "feature_flags": {
-    "new_player": true,
-    "dark_mode": true
-  },
-  "maintenance": false,
-  "maintenance_message": null
+ "minimum_version": "2.0.0",
+ "latest_version": "2.3.0",
+ "force_update": false,
+ "update_url": "https://apps.apple.com/...",
+ "feature_flags": {
+ "new_player": true,
+ "dark_mode": true
+ },
+ "maintenance": false,
+ "maintenance_message": null
 }
 ```
 
@@ -230,7 +230,7 @@ Response:
 CLIENT VERSION vs MINIMUM VERSION:
 ├── client >= minimum → Continue normally
 ├── client < minimum → Show force update screen
-│   └── Block app usage until updated
+│ └── Block app usage until updated
 └── client < latest → Show optional update prompt
 
 FEATURE FLAGS:
@@ -271,13 +271,13 @@ DEVICE TOKEN:
 REQUEST FLOW:
 ├── Make request with access token
 ├── 401 Unauthorized?
-│   ├── Have refresh token?
-│   │   ├── Yes → Call /auth/refresh
-│   │   │   ├── Success → Retry original request
-│   │   │   └── Failure → Force logout
-│   │   └── No → Force logout
-│   └── Token just expired (not invalid)
-│       └── Auto-refresh, user doesn't notice
+│ ├── Have refresh token?
+│ │ ├── Yes → Call /auth/refresh
+│ │ │ ├── Success → Retry original request
+│ │ │ └── Failure → Force logout
+│ │ └── No → Force logout
+│ └── Token just expired (not invalid)
+│ └── Auto-refresh, user doesn't notice
 └── Success → Continue
 ```
 
@@ -289,19 +289,19 @@ REQUEST FLOW:
 
 ```json
 {
-  "error": {
-    "code": "PAYMENT_DECLINED",
-    "message": "Your payment was declined",
-    "user_message": "Please check your card details or try another payment method",
-    "action": {
-      "type": "navigate",
-      "destination": "payment_methods"
-    },
-    "retry": {
-      "allowed": true,
-      "after_seconds": 5
-    }
-  }
+ "error": {
+ "code": "PAYMENT_DECLINED",
+ "message": "Your payment was declined",
+ "user_message": "Please check your card details or try another payment method",
+ "action": {
+ "type": "navigate",
+ "destination": "payment_methods"
+ },
+ "retry": {
+ "allowed": true,
+ "after_seconds": 5
+ }
+ }
 }
 ```
 
@@ -341,16 +341,16 @@ SERVER RESPONSE:
 ```
 UPLOAD FLOW:
 1. POST /uploads/init
-   { filename, size, mime_type }
-   → { upload_id, chunk_size }
+ { filename, size, mime_type }
+ → { upload_id, chunk_size }
 
 2. PUT /uploads/{upload_id}/chunks/{n}
-   → Upload each chunk (1-5 MB)
-   → Can resume if interrupted
+ → Upload each chunk (1-5 MB)
+ → Can resume if interrupted
 
 3. POST /uploads/{upload_id}/complete
-   → Server assembles chunks
-   → Return final file URL
+ → Server assembles chunks
+ → Return final file URL
 ```
 
 ### Streaming Audio/Video
@@ -364,9 +364,9 @@ REQUIREMENTS:
 └── Offline download chunks
 
 ENDPOINTS:
-GET /media/{id}/manifest.m3u8  → HLS manifest
+GET /media/{id}/manifest.m3u8 → HLS manifest
 GET /media/{id}/segment_{n}.ts → Video segment
-GET /media/{id}/download       → Full file for offline
+GET /media/{id}/download → Full file for offline
 ```
 
 ---
@@ -378,9 +378,9 @@ GET /media/{id}/download       → Full file for offline
 ```
 VERIFY REAL DEVICE (not emulator/bot):
 ├── iOS: DeviceCheck API
-│   └── Server verifies with Apple
+│ └── Server verifies with Apple
 ├── Android: Play Integrity API (replaces SafetyNet)
-│   └── Server verifies with Google
+│ └── Server verifies with Google
 └── Fail closed: Reject if attestation fails
 ```
 
@@ -454,7 +454,7 @@ ALERTS:
 
 ---
 
-## 📝 MOBILE BACKEND CHECKLIST
+## MOBILE BACKEND CHECKLIST
 
 ### Before API Design
 - [ ] Identified mobile-specific requirements?

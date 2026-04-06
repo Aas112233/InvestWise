@@ -13,7 +13,7 @@ This skill defines distinct behavioral modes that optimize AI performance for sp
 
 ## Available Modes
 
-### 1. 🧠 BRAINSTORM Mode
+### 1. BRAINSTORM Mode
 
 **When to use:** Early project planning, feature ideation, architecture decisions
 
@@ -29,19 +29,19 @@ This skill defines distinct behavioral modes that optimize AI performance for sp
 "Let's explore this together. Here are some approaches:
 
 Option A: [description]
-  ✅ Pros: ...
-  ❌ Cons: ...
+ Pros: ...
+ Cons: ...
 
 Option B: [description]
-  ✅ Pros: ...
-  ❌ Cons: ...
+ Pros: ...
+ Cons: ...
 
 What resonates with you? Or should we explore a different direction?"
 ```
 
 ---
 
-### 2. ⚡ IMPLEMENT Mode
+### 2. IMPLEMENT Mode
 
 **When to use:** Writing code, building features, executing plans
 
@@ -67,9 +67,9 @@ What resonates with you? Or should we explore a different direction?"
 ```
 "Building [feature]...
 
-✓ Created [file1]
-✓ Created [file2]
-✓ Updated [file3]
+ Created [file1]
+ Created [file2]
+ Updated [file3]
 
 [long explanation]
 
@@ -78,7 +78,7 @@ Run `npm run dev` to test."
 
 ---
 
-### 3. 🔍 DEBUG Mode
+### 3. DEBUG Mode
 
 **When to use:** Fixing bugs, troubleshooting errors, investigating issues
 
@@ -93,15 +93,15 @@ Run `npm run dev` to test."
 ```
 "Investigating...
 
-🔍 Symptom: [what's happening]
-🎯 Root cause: [why it's happening]
-✅ Fix: [the solution]
-🛡️ Prevention: [how to avoid in future]
+ Symptom: [what's happening]
+ Root cause: [why it's happening]
+ Fix: [the solution]
+ Prevention: [how to avoid in future]
 ```
 
 ---
 
-### 4. 📋 REVIEW Mode
+### 4. REVIEW Mode
 
 **When to use:** Code review, architecture review, security audit
 
@@ -116,19 +116,19 @@ Run `npm run dev` to test."
 ```
 ## Code Review: [file/feature]
 
-### 🔴 Critical
+### Critical
 - [issue with explanation]
 
-### 🟠 Improvements
+### � Improvements
 - [suggestion with example]
 
-### 🟢 Good
+### � Good
 - [positive observation]
 ```
 
 ---
 
-### 5. 📚 TEACH Mode
+### 5. TEACH Mode
 
 **When to use:** Explaining concepts, documentation, onboarding
 
@@ -158,7 +158,7 @@ Run `npm run dev` to test."
 
 ---
 
-### 6. 🚀 SHIP Mode
+### 6. SHIP Mode
 
 **When to use:** Production deployment, final polish, release preparation
 
@@ -173,20 +173,20 @@ Run `npm run dev` to test."
 ```
 ## Pre-Ship Checklist
 
-### ✅ Code Quality
+### Code Quality
 - [ ] No TypeScript errors
 - [ ] ESLint passing
 - [ ] All tests passing
 
-### ✅ Security
+### Security
 - [ ] No exposed secrets
 - [ ] Input validation complete
 
-### ✅ Performance
+### Performance
 - [ ] Bundle size acceptable
 - [ ] No console.logs
 
-### 🚀 Ready to deploy
+### Ready to deploy
 ```
 
 ---
@@ -210,18 +210,18 @@ The AI should automatically detect the appropriate mode based on:
 
 Modern architectures optimized for agent-to-agent collaboration:
 
-### 1. 🔭 EXPLORE Mode
+### 1. EXPLORE Mode
 **Role:** Discovery and Analysis (Explorer Agent)
 **Behavior:** Socratic questioning, deep-dive code reading, dependency mapping.
 **Output:** `discovery-report.json`, architectural visualization.
 
-### 2. 🗺️ PLAN-EXECUTE-CRITIC (PEC)
+### 2. PLAN-EXECUTE-CRITIC (PEC)
 Cyclic mode transitions for high-complexity tasks:
 1. **Planner:** Decomposes the task into atomic steps (`task.md`).
 2. **Executor:** Performs the actual coding (`IMPLEMENT`).
 3. **Critic:** Reviews the code, performs security and performance checks (`REVIEW`).
 
-### 3. 🧠 MENTAL MODEL SYNC
+### 3. MENTAL MODEL SYNC
 Behavior for creating and loading "Mental Model" summaries to preserve context between sessions.
 
 ---

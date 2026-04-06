@@ -102,16 +102,16 @@ RULES:
 **Architecture:**
 ```
 ┌─────────────────────────────────┐
-│         PLANNER AGENT           │
-│  └─ Assigns tasks to sub-agents │
+│ PLANNER AGENT │
+│ └─ Assigns tasks to sub-agents │
 ├─────────────────────────────────┤
-│       KNOWLEDGE MANAGER         │
-│  └─ Reviews conversations       │
-│  └─ Determines filesystem store │
+│ KNOWLEDGE MANAGER │
+│ └─ Reviews conversations │
+│ └─ Determines filesystem store │
 ├─────────────────────────────────┤
-│      EXECUTOR SUB-AGENTS        │
-│  └─ Perform assigned tasks      │
-│  └─ Have own context windows    │
+│ EXECUTOR SUB-AGENTS │
+│ └─ Perform assigned tasks │
+│ └─ Have own context windows │
 └─────────────────────────────────┘
 ```
 
@@ -133,33 +133,33 @@ Manus operates in a continuous 7-step loop:
 
 ```
 ┌─────────────────────────────────────────┐
-│  1. ANALYZE CONTEXT                      │
-│     - Understand user intent             │
-│     - Assess current state               │
-│     - Review recent observations         │
+│ 1. ANALYZE CONTEXT │
+│ - Understand user intent │
+│ - Assess current state │
+│ - Review recent observations │
 ├─────────────────────────────────────────┤
-│  2. THINK                                │
-│     - Should I update the plan?          │
-│     - What's the next logical action?    │
-│     - Are there blockers?                │
+│ 2. THINK │
+│ - Should I update the plan? │
+│ - What's the next logical action? │
+│ - Are there blockers? │
 ├─────────────────────────────────────────┤
-│  3. SELECT TOOL                          │
-│     - Choose ONE tool                    │
-│     - Ensure parameters available        │
+│ 3. SELECT TOOL │
+│ - Choose ONE tool │
+│ - Ensure parameters available │
 ├─────────────────────────────────────────┤
-│  4. EXECUTE ACTION                       │
-│     - Tool runs in sandbox               │
+│ 4. EXECUTE ACTION │
+│ - Tool runs in sandbox │
 ├─────────────────────────────────────────┤
-│  5. RECEIVE OBSERVATION                  │
-│     - Result appended to context         │
+│ 5. RECEIVE OBSERVATION │
+│ - Result appended to context │
 ├─────────────────────────────────────────┤
-│  6. ITERATE                              │
-│     - Return to step 1                   │
-│     - Continue until complete            │
+│ 6. ITERATE │
+│ - Return to step 1 │
+│ - Continue until complete │
 ├─────────────────────────────────────────┤
-│  7. DELIVER OUTCOME                      │
-│     - Send results to user               │
-│     - Attach all relevant files          │
+│ 7. DELIVER OUTCOME │
+│ - Send results to user │
+│ - Attach all relevant files │
 └─────────────────────────────────────────┘
 ```
 

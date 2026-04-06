@@ -1,67 +1,67 @@
 import mongoose from 'mongoose';
 
 const sessionSchema = mongoose.Schema({
-    user: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
-        index: true,
-    },
-    sessionId: {
-        type: String,
-        required: true,
-        unique: true,
-        index: true,
-    },
-    ipAddress: {
-        type: String,
-        required: true,
-        index: true,
-    },
-    userAgent: {
-        type: String,
-        required: true,
-    },
-    location: {
-        country: String,
-        city: String,
-        region: String,
-    },
-    loginTime: {
-        type: Date,
-        default: Date.now,
-        index: true,
-    },
-    lastActivity: {
-        type: Date,
-        default: Date.now,
-    },
-    logoutTime: {
-        type: Date,
-    },
-    isActive: {
-        type: Boolean,
-        default: true,
-        index: true,
-    },
-    isExpired: {
-        type: Boolean,
-        default: false,
-    },
-    deviceInfo: {
-        type: String,
-        default: 'Unknown',
-    },
-    osInfo: {
-        type: String,
-        default: 'Unknown',
-    },
-    browserInfo: {
-        type: String,
-        default: 'Unknown',
-    },
+ user: {
+ type: mongoose.Schema.Types.ObjectId,
+ ref: 'User',
+ required: true,
+ index: true,
+ },
+ sessionId: {
+ type: String,
+ required: true,
+ unique: true,
+ index: true,
+ },
+ ipAddress: {
+ type: String,
+ required: true,
+ index: true,
+ },
+ userAgent: {
+ type: String,
+ required: true,
+ },
+ location: {
+ country: String,
+ city: String,
+ region: String,
+ },
+ loginTime: {
+ type: Date,
+ default: Date.now,
+ index: true,
+ },
+ lastActivity: {
+ type: Date,
+ default: Date.now,
+ },
+ logoutTime: {
+ type: Date,
+ },
+ isActive: {
+ type: Boolean,
+ default: true,
+ index: true,
+ },
+ isExpired: {
+ type: Boolean,
+ default: false,
+ },
+ deviceInfo: {
+ type: String,
+ default: 'Unknown',
+ },
+ osInfo: {
+ type: String,
+ default: 'Unknown',
+ },
+ browserInfo: {
+ type: String,
+ default: 'Unknown',
+ },
 }, {
-    timestamps: true,
+ timestamps: true,
 });
 
 // Index for active sessions

@@ -27,7 +27,7 @@ Claude's output is displayed in real-time - you can see exactly what's happening
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  CLAUDE CODE OUTPUT (live)
+ CLAUDE CODE OUTPUT (live)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [Claude's output appears here in real-time...]
@@ -39,7 +39,7 @@ The runner updates `.loki/STATUS.txt` every 5 seconds with task progress:
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
-║                    LOKI MODE STATUS                            ║
+║ LOKI MODE STATUS ║
 ╚════════════════════════════════════════════════════════════════╝
 
 Updated: Sat Dec 28 15:30:00 PST 2025
@@ -47,10 +47,10 @@ Updated: Sat Dec 28 15:30:00 PST 2025
 Phase: DEVELOPMENT
 
 Tasks:
-  ├─ Pending:     10
-  ├─ In Progress: 1
-  ├─ Completed:   5
-  └─ Failed:      0
+ ├─ Pending: 10
+ ├─ In Progress: 1
+ ├─ Completed: 5
+ └─ Failed: 0
 
 Monitor: watch -n 2 cat .loki/STATUS.txt
 ```
@@ -82,9 +82,9 @@ Environment variables:
 
 ```bash
 # Retry settings
-export LOKI_MAX_RETRIES=50      # Max retry attempts (default: 50)
-export LOKI_BASE_WAIT=60        # Base wait time in seconds (default: 60)
-export LOKI_MAX_WAIT=3600       # Max wait time in seconds (default: 3600)
+export LOKI_MAX_RETRIES=50 # Max retry attempts (default: 50)
+export LOKI_BASE_WAIT=60 # Base wait time in seconds (default: 60)
+export LOKI_MAX_WAIT=3600 # Max wait time in seconds (default: 3600)
 
 # Skip prerequisite checks (for CI/CD or repeat runs)
 export LOKI_SKIP_PREREQS=true
@@ -97,39 +97,39 @@ LOKI_MAX_RETRIES=100 LOKI_BASE_WAIT=120 ./autonomy/run.sh ./docs/prd.md
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  ./autonomy/run.sh prd.md                                   │
+│ ./autonomy/run.sh prd.md │
 └─────────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-              ┌───────────────────────┐
-              │  Check Prerequisites  │
-              └───────────────────────┘
-                          │
-                          ▼
-              ┌───────────────────────┐
-              │  Initialize .loki/    │
-              └───────────────────────┘
-                          │
-                          ▼
-         ┌────────────────────────────────┐
-         │  Run Claude Code with prompt   │◄────────────────┐
-         └────────────────────────────────┘                 │
-                          │                                 │
-                          ▼                                 │
-              ┌───────────────────────┐                     │
-              │  Claude exits         │                     │
-              └───────────────────────┘                     │
-                          │                                 │
-              ┌───────────┴───────────┐                     │
-              ▼                       ▼                     │
-      ┌───────────────┐       ┌───────────────┐             │
-      │  Completed?   │──Yes──│   SUCCESS!    │             │
-      └───────────────┘       └───────────────┘             │
-              │ No                                          │
-              ▼                                             │
-      ┌───────────────┐                                     │
-      │ Wait (backoff)│─────────────────────────────────────┘
-      └───────────────┘
+ │
+ ▼
+ ┌───────────────────────┐
+ │ Check Prerequisites │
+ └───────────────────────┘
+ │
+ ▼
+ ┌───────────────────────┐
+ │ Initialize .loki/ │
+ └───────────────────────┘
+ │
+ ▼
+ ┌────────────────────────────────┐
+ │ Run Claude Code with prompt │◄────────────────┐
+ └────────────────────────────────┘ │
+ │ │
+ ▼ │
+ ┌───────────────────────┐ │
+ │ Claude exits │ │
+ └───────────────────────┘ │
+ │ │
+ ┌───────────┴───────────┐ │
+ ▼ ▼ │
+ ┌───────────────┐ ┌───────────────┐ │
+ │ Completed? │──Yes──│ SUCCESS! │ │
+ └───────────────┘ └───────────────┘ │
+ │ No │
+ ▼ │
+ ┌───────────────┐ │
+ │ Wait (backoff)│─────────────────────────────────────┘
+ └───────────────┘
 ```
 
 ## State Files
@@ -138,12 +138,12 @@ The autonomy runner creates:
 
 ```
 .loki/
-├── autonomy-state.json    # Runner state (retry count, status)
+├── autonomy-state.json # Runner state (retry count, status)
 ├── logs/
-│   └── autonomy-*.log     # Execution logs
+│ └── autonomy-*.log # Execution logs
 ├── state/
-│   └── orchestrator.json  # Loki Mode phase tracking
-└── COMPLETED              # Created when done
+│ └── orchestrator.json # Loki Mode phase tracking
+└── COMPLETED # Created when done
 ```
 
 ## Resuming After Interruption

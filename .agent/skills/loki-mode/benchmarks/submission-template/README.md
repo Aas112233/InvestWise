@@ -22,8 +22,8 @@ Loki Mode uses a **4-agent pipeline** with a RARV (Reason-Act-Reflect-Verify) cy
 
 ```
 Issue -> [Architect] -> [Engineer] -> [QA] -> [Reviewer] -> Patch
-                ^                                |
-                |______ RARV Retry Loop ________|
+ ^ |
+ |______ RARV Retry Loop ________|
 ```
 
 ### Agent Roles
@@ -85,19 +85,19 @@ git clone https://github.com/asklokesh/loki-mode.git
 
 ```
 evaluation/lite/20260105_loki_mode/
-├── README.md           # This file
-├── metadata.yaml       # Submission metadata
-├── all_preds.jsonl     # Predictions in JSONL format
-├── trajs/              # Reasoning trajectories (1 per problem)
-│   ├── django__django-11039.md
-│   ├── matplotlib__matplotlib-23299.md
-│   └── ...
-└── logs/               # Execution logs (1 dir per problem)
-    ├── django__django-11039/
-    │   ├── patch.diff
-    │   ├── report.json
-    │   └── test_output.txt
-    └── ...
+├── README.md # This file
+├── metadata.yaml # Submission metadata
+├── all_preds.jsonl # Predictions in JSONL format
+├── trajs/ # Reasoning trajectories (1 per problem)
+│ ├── django__django-11039.md
+│ ├── matplotlib__matplotlib-23299.md
+│ └── ...
+└── logs/ # Execution logs (1 dir per problem)
+ ├── django__django-11039/
+ │ ├── patch.diff
+ │ ├── report.json
+ │ └── test_output.txt
+ └── ...
 ```
 
 ## Acknowledgments

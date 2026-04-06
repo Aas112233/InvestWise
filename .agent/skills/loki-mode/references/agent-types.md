@@ -107,14 +107,14 @@ Loki Mode has 37 predefined agent types organized into 7 specialized swarms. The
 ```bash
 # Option 1: Sequential (simple, reliable)
 for agent in frontend backend database; do
-  claude -p "Act as $agent agent..." --dangerously-skip-permissions
+ claude -p "Act as $agent agent..." --dangerously-skip-permissions
 done
 
 # Option 2: Parallel via tmux (complex, faster)
 tmux new-session -d -s loki-pool
 for i in {1..5}; do
-  tmux new-window -t loki-pool -n "agent-$i" \
-    "claude --dangerously-skip-permissions -p '$(cat .loki/prompts/agent-$i.md)'"
+ tmux new-window -t loki-pool -n "agent-$i" \
+ "claude --dangerously-skip-permissions -p '$(cat .loki/prompts/agent-$i.md)'"
 done
 
 # Option 3: Role switching (recommended)
@@ -140,20 +140,20 @@ done
 
 ```
 SPAWN -> INITIALIZE -> POLL_QUEUE -> CLAIM_TASK -> EXECUTE -> REPORT -> POLL_QUEUE
-           |              |                        |          |
-           |         circuit open?             timeout?    success?
-           |              |                        |          |
-           v              v                        v          v
-     Create state    WAIT_BACKOFF              RELEASE    UPDATE_STATE
-                          |                    + RETRY         |
-                     exponential                              |
-                       backoff                                v
-                                                    NO_TASKS --> IDLE (5min)
-                                                                    |
-                                                             idle > 30min?
-                                                                    |
-                                                                    v
-                                                               TERMINATE
+ | | | |
+ | circuit open? timeout? success?
+ | | | |
+ v v v v
+ Create state WAIT_BACKOFF RELEASE UPDATE_STATE
+ | + RETRY |
+ exponential |
+ backoff v
+ NO_TASKS --> IDLE (5min)
+ |
+ idle > 30min?
+ |
+ v
+ TERMINATE
 ```
 
 ---

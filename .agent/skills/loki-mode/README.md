@@ -122,22 +122,22 @@ watch -n 2 cat .loki/STATUS.txt
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
-║                    LOKI MODE STATUS                            ║
+║ LOKI MODE STATUS ║
 ╚════════════════════════════════════════════════════════════════╝
 
 Phase: DEVELOPMENT
 
 Active Agents: 47
-  ├─ Engineering: 18
-  ├─ Operations: 12
-  ├─ QA: 8
-  └─ Business: 9
+ ├─ Engineering: 18
+ ├─ Operations: 12
+ ├─ QA: 8
+ └─ Business: 9
 
 Tasks:
-  ├─ Pending:     10
-  ├─ In Progress: 47
-  ├─ Completed:   203
-  └─ Failed:      0
+ ├─ Pending: 10
+ ├─ In Progress: 47
+ ├─ Completed: 203
+ └─ Failed: 0
 
 Last Updated: 2026-01-04 20:45:32
 ```
@@ -163,30 +163,30 @@ Loki Mode doesn't just write code—it **thinks, acts, learns, and verifies**:
 
 ```
 1. REASON
-   └─ Read .loki/CONTINUITY.md including "Mistakes & Learnings"
-   └─ Check .loki/state/ and .loki/queue/
-   └─ Identify next task or improvement
+ └─ Read .loki/CONTINUITY.md including "Mistakes & Learnings"
+ └─ Check .loki/state/ and .loki/queue/
+ └─ Identify next task or improvement
 
 2. ACT
-   └─ Execute task, write code
-   └─ Commit changes atomically (git checkpoint)
+ └─ Execute task, write code
+ └─ Commit changes atomically (git checkpoint)
 
 3. REFLECT
-   └─ Update .loki/CONTINUITY.md with progress
-   └─ Update state files
-   └─ Identify NEXT improvement
+ └─ Update .loki/CONTINUITY.md with progress
+ └─ Update state files
+ └─ Identify NEXT improvement
 
 4. VERIFY
-   └─ Run automated tests (unit, integration, E2E)
-   └─ Check compilation/build
-   └─ Verify against spec
+ └─ Run automated tests (unit, integration, E2E)
+ └─ Check compilation/build
+ └─ Verify against spec
 
-   IF VERIFICATION FAILS:
-   ├─ Capture error details (stack trace, logs)
-   ├─ Analyze root cause
-   ├─ UPDATE "Mistakes & Learnings" in CONTINUITY.md
-   ├─ Rollback to last good git checkpoint if needed
-   └─ Apply learning and RETRY from REASON
+ IF VERIFICATION FAILS:
+ ├─ Capture error details (stack trace, logs)
+ ├─ Analyze root cause
+ ├─ UPDATE "Mistakes & Learnings" in CONTINUITY.md
+ ├─ Rollback to last good git checkpoint if needed
+ └─ Apply learning and RETRY from REASON
 ```
 
 **Result:** 2-3x quality improvement through continuous self-verification.
@@ -338,10 +338,10 @@ Every code change goes through **3 specialized reviewers simultaneously**:
 
 ```
 IMPLEMENT → REVIEW (parallel) → AGGREGATE → FIX → RE-REVIEW → COMPLETE
-                │
-                ├─ code-reviewer (Opus) - Code quality, patterns, best practices
-                ├─ business-logic-reviewer (Opus) - Requirements, edge cases, UX
-                └─ security-reviewer (Opus) - Vulnerabilities, OWASP Top 10
+ │
+ ├─ code-reviewer (Opus) - Code quality, patterns, best practices
+ ├─ business-logic-reviewer (Opus) - Requirements, edge cases, UX
+ └─ security-reviewer (Opus) - Vulnerabilities, OWASP Top 10
 ```
 
 **Severity-based issue handling:**
@@ -353,17 +353,17 @@ IMPLEMENT → REVIEW (parallel) → AGGREGATE → FIX → RE-REVIEW → COMPLETE
 
 ```
 .loki/
-├── state/          # Orchestrator and agent states
-├── queue/          # Task queue (pending, in-progress, completed, dead-letter)
-├── memory/         # Episodic, semantic, and procedural memory
-├── metrics/        # Efficiency tracking and reward signals
-├── messages/       # Inter-agent communication
-├── logs/           # Audit logs
-├── config/         # Configuration files
-├── prompts/        # Agent role prompts
-├── artifacts/      # Releases, reports, backups
-├── dashboard/      # Real-time monitoring dashboard
-└── scripts/        # Helper scripts
+├── state/ # Orchestrator and agent states
+├── queue/ # Task queue (pending, in-progress, completed, dead-letter)
+├── memory/ # Episodic, semantic, and procedural memory
+├── metrics/ # Efficiency tracking and reward signals
+├── messages/ # Inter-agent communication
+├── logs/ # Audit logs
+├── config/ # Configuration files
+├── prompts/ # Agent role prompts
+├── artifacts/ # Releases, reports, backups
+├── dashboard/ # Real-time monitoring dashboard
+└── scripts/ # Helper scripts
 ```
 
 ---
@@ -411,8 +411,8 @@ LOKI_MAX_WAIT=7200 \
 ```yaml
 # .loki/config/circuit-breakers.yaml
 defaults:
-  failureThreshold: 5
-  cooldownSeconds: 300
+ failureThreshold: 5
+ cooldownSeconds: 300
 ```
 
 ### **External Alerting**
@@ -420,12 +420,12 @@ defaults:
 ```yaml
 # .loki/config/alerting.yaml
 channels:
-  slack:
-    webhook_url: "${SLACK_WEBHOOK_URL}"
-    severity: [critical, high]
-  pagerduty:
-    integration_key: "${PAGERDUTY_KEY}"
-    severity: [critical]
+ slack:
+ webhook_url: "${SLACK_WEBHOOK_URL}"
+ severity: [critical, high]
+ pagerduty:
+ integration_key: "${PAGERDUTY_KEY}"
+ severity: [critical]
 ```
 
 ---
@@ -477,11 +477,11 @@ Run the comprehensive test suite:
 ./tests/run-all-tests.sh
 
 # Or run individual test suites
-./tests/test-bootstrap.sh        # Directory structure, state init
-./tests/test-task-queue.sh       # Queue operations, priorities
-./tests/test-circuit-breaker.sh  # Failure handling, recovery
-./tests/test-agent-timeout.sh    # Timeout, stuck process handling
-./tests/test-state-recovery.sh   # Checkpoints, recovery
+./tests/test-bootstrap.sh # Directory structure, state init
+./tests/test-task-queue.sh # Queue operations, priorities
+./tests/test-circuit-breaker.sh # Failure handling, recovery
+./tests/test-agent-timeout.sh # Timeout, stuck process handling
+./tests/test-state-recovery.sh # Checkpoints, recovery
 ```
 
 ---

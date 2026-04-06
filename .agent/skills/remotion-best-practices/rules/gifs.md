@@ -2,7 +2,7 @@
 name: gif
 description: Displaying GIFs, APNG, AVIF and WebP in Remotion
 metadata:
-  tags: gif, animation, images, animated, apng, avif, webp
+ tags: gif, animation, images, animated, apng, avif, webp
 ---
 
 # Using Animated images in Remotion
@@ -15,7 +15,7 @@ Use `<AnimatedImage>` to display a GIF, APNG, AVIF or WebP image synchronized wi
 import {AnimatedImage, staticFile} from 'remotion';
 
 export const MyComposition = () => {
-  return <AnimatedImage src={staticFile('animation.gif')} width={500} height={500} />;
+ return <AnimatedImage src={staticFile('animation.gif')} width={500} height={500} />;
 };
 ```
 
@@ -70,15 +70,15 @@ Use the `style` prop for additional CSS (use `width` and `height` props for sizi
 
 ```tsx
 <AnimatedImage
-  src={staticFile('animation.gif')}
-  width={500}
-  height={500}
-  style={{
-    borderRadius: 20,
-    position: 'absolute',
-    top: 100,
-    left: 50,
-  }}
+ src={staticFile('animation.gif')}
+ width={500}
+ height={500}
+ style={{
+ borderRadius: 20,
+ position: 'absolute',
+ top: 100,
+ left: 50,
+ }}
 />
 ```
 
@@ -108,10 +108,10 @@ import {getGifDurationInSeconds} from '@remotion/gif';
 import {staticFile, CalculateMetadataFunction} from 'remotion';
 
 const calculateMetadata: CalculateMetadataFunction = async () => {
-  const duration = await getGifDurationInSeconds(staticFile('animation.gif'));
-  return {
-    durationInFrames: Math.ceil(duration * 30),
-  };
+ const duration = await getGifDurationInSeconds(staticFile('animation.gif'));
+ return {
+ durationInFrames: Math.ceil(duration * 30),
+ };
 };
 ```
 
@@ -131,7 +131,7 @@ import {Gif} from '@remotion/gif';
 import {staticFile} from 'remotion';
 
 export const MyComposition = () => {
-  return <Gif src={staticFile('animation.gif')} width={500} height={500} />;
+ return <Gif src={staticFile('animation.gif')} width={500} height={500} />;
 };
 ```
 

@@ -84,10 +84,10 @@ Provide feedback on:
 
 # Usage
 prompt = template.format(
-    language="Python",
-    focus_area="security vulnerabilities",
-    code_block=user_code,
-    checklist="1. SQL injection\n2. XSS risks\n3. Authentication"
+ language="Python",
+ focus_area="security vulnerabilities",
+ code_block=user_code,
+ checklist="1. SQL injection\n2. XSS risks\n3. Authentication"
 )
 ```
 
@@ -124,18 +124,18 @@ Start with simple prompts, add complexity only when needed:
 
 1. **Level 1**: Direct instruction
 
-   - "Summarize this article"
+ - "Summarize this article"
 
 2. **Level 2**: Add constraints
 
-   - "Summarize this article in 3 bullet points, focusing on key findings"
+ - "Summarize this article in 3 bullet points, focusing on key findings"
 
 3. **Level 3**: Add reasoning
 
-   - "Read this article, identify the main findings, then summarize in 3 bullet points"
+ - "Read this article, identify the main findings, then summarize in 3 bullet points"
 
 4. **Level 4**: Add examples
-   - Include 2-3 example summaries with input-output pairs
+ - Include 2-3 example summaries with input-output pairs
 
 ### Instruction Hierarchy
 

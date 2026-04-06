@@ -54,15 +54,15 @@ Automatically activates when working on:
 
 ```
 HTTP Request
-    ↓
+ ↓
 Routes (routing only)
-    ↓
+ ↓
 Controllers (request handling)
-    ↓
+ ↓
 Services (business logic)
-    ↓
+ ↓
 Repositories (data access)
-    ↓
+ ↓
 Database (Prisma)
 ```
 
@@ -76,19 +76,19 @@ See [architecture-overview.md](architecture-overview.md) for complete details.
 
 ```
 service/src/
-├── config/              # UnifiedConfig
-├── controllers/         # Request handlers
-├── services/            # Business logic
-├── repositories/        # Data access
-├── routes/              # Route definitions
-├── middleware/          # Express middleware
-├── types/               # TypeScript types
-├── validators/          # Zod schemas
-├── utils/               # Utilities
-├── tests/               # Tests
-├── instrument.ts        # Sentry (FIRST IMPORT)
-├── app.ts               # Express setup
-└── server.ts            # HTTP server
+├── config/ # UnifiedConfig
+├── controllers/ # Request handlers
+├── services/ # Business logic
+├── repositories/ # Data access
+├── routes/ # Route definitions
+├── middleware/ # Express middleware
+├── types/ # TypeScript types
+├── validators/ # Zod schemas
+├── utils/ # Utilities
+├── tests/ # Tests
+├── instrument.ts # Sentry (FIRST IMPORT)
+├── app.ts # Express setup
+└── server.ts # HTTP server
 ```
 
 **Naming Conventions:**
@@ -104,12 +104,12 @@ service/src/
 ### 1. Routes Only Route, Controllers Control
 
 ```typescript
-// ❌ NEVER: Business logic in routes
+// NEVER: Business logic in routes
 router.post('/submit', async (req, res) => {
-    // 200 lines of logic
+ // 200 lines of logic
 });
 
-// ✅ ALWAYS: Delegate to controller
+// ALWAYS: Delegate to controller
 router.post('/submit', (req, res) => controller.submit(req, res));
 ```
 
@@ -117,14 +117,14 @@ router.post('/submit', (req, res) => controller.submit(req, res));
 
 ```typescript
 export class UserController extends BaseController {
-    async getUser(req: Request, res: Response): Promise<void> {
-        try {
-            const user = await this.userService.findById(req.params.id);
-            this.handleSuccess(res, user);
-        } catch (error) {
-            this.handleError(error, res, 'getUser');
-        }
-    }
+ async getUser(req: Request, res: Response): Promise<void> {
+ try {
+ const user = await this.userService.findById(req.params.id);
+ this.handleSuccess(res, user);
+ } catch (error) {
+ this.handleError(error, res, 'getUser');
+ }
+ }
 }
 ```
 
@@ -132,20 +132,20 @@ export class UserController extends BaseController {
 
 ```typescript
 try {
-    await operation();
+ await operation();
 } catch (error) {
-    Sentry.captureException(error);
-    throw error;
+ Sentry.captureException(error);
+ throw error;
 }
 ```
 
 ### 4. Use unifiedConfig, NEVER process.env
 
 ```typescript
-// ❌ NEVER
+// NEVER
 const timeout = process.env.TIMEOUT_MS;
 
-// ✅ ALWAYS
+// ALWAYS
 import { config } from './config/unifiedConfig';
 const timeout = config.timeouts.default;
 ```
@@ -168,9 +168,9 @@ const users = await userRepository.findActive();
 
 ```typescript
 describe('UserService', () => {
-    it('should create user', async () => {
-        expect(user).toBeDefined();
-    });
+ it('should create user', async () => {
+ expect(user).toBeDefined();
+ });
 });
 ```
 
@@ -218,19 +218,19 @@ import { asyncErrorWrapper } from './middleware/errorBoundary';
 
 ### Service Templates
 
-**Blog API** (✅ Mature) - Use as template for REST APIs
-**Auth Service** (✅ Mature) - Use as template for authentication patterns
+**Blog API** ( Mature) - Use as template for REST APIs
+**Auth Service** ( Mature) - Use as template for authentication patterns
 
 ---
 
 ## Anti-Patterns to Avoid
 
-❌ Business logic in routes
-❌ Direct process.env usage
-❌ Missing error handling
-❌ No input validation
-❌ Direct Prisma everywhere
-❌ console.log instead of Sentry
+ Business logic in routes
+ Direct process.env usage
+ Missing error handling
+ No input validation
+ Direct Prisma everywhere
+ console.log instead of Sentry
 
 ---
 
@@ -297,6 +297,6 @@ Full examples, refactoring guide
 
 ---
 
-**Skill Status**: COMPLETE ✅
-**Line Count**: < 500 ✅
-**Progressive Disclosure**: 11 resource files ✅
+**Skill Status**: COMPLETE 
+**Line Count**: < 500 
+**Progressive Disclosure**: 11 resource files 

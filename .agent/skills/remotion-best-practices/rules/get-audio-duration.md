@@ -2,7 +2,7 @@
 name: get-audio-duration
 description: Getting the duration of an audio file in seconds with Mediabunny
 metadata:
-  tags: duration, audio, length, time, seconds, mp3, wav
+ tags: duration, audio, length, time, seconds, mp3, wav
 ---
 
 # Getting audio duration with Mediabunny
@@ -15,15 +15,15 @@ Mediabunny can extract the duration of an audio file. It works in browser, Node.
 import { Input, ALL_FORMATS, UrlSource } from "mediabunny";
 
 export const getAudioDuration = async (src: string) => {
-  const input = new Input({
-    formats: ALL_FORMATS,
-    source: new UrlSource(src, {
-      getRetryDelay: () => null,
-    }),
-  });
+ const input = new Input({
+ formats: ALL_FORMATS,
+ source: new UrlSource(src, {
+ getRetryDelay: () => null,
+ }),
+ });
 
-  const durationInSeconds = await input.computeDuration();
-  return durationInSeconds;
+ const durationInSeconds = await input.computeDuration();
+ return durationInSeconds;
 };
 ```
 
@@ -42,8 +42,8 @@ For local files, use `FileSource` instead of `UrlSource`:
 import { Input, ALL_FORMATS, FileSource } from "mediabunny";
 
 const input = new Input({
-  formats: ALL_FORMATS,
-  source: new FileSource(file), // File object from input or drag-drop
+ formats: ALL_FORMATS,
+ source: new FileSource(file), // File object from input or drag-drop
 });
 
 const durationInSeconds = await input.computeDuration();

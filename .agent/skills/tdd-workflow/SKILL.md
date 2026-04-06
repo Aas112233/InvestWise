@@ -13,13 +13,13 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ## 1. The TDD Cycle
 
 ```
-🔴 RED → Write failing test
-    ↓
-🟢 GREEN → Write minimal code to pass
-    ↓
-🔵 REFACTOR → Improve code quality
-    ↓
-   Repeat...
+ RED → Write failing test
+ ↓
+� GREEN → Write minimal code to pass
+ ↓
+ REFACTOR → Improve code quality
+ ↓
+ Repeat...
 ```
 
 ---
@@ -124,7 +124,7 @@ Every test follows:
 
 ## 9. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | Skip the RED phase | Watch test fail first |
 | Write tests after | Write tests before |

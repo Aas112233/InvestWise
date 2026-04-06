@@ -2,7 +2,7 @@
 name: assets
 description: Importing images, videos, audio, and fonts into Remotion
 metadata:
-  tags: assets, staticFile, images, fonts, public
+ tags: assets, staticFile, images, fonts, public
 ---
 
 # Importing assets in Remotion
@@ -19,7 +19,7 @@ You MUST use `staticFile()` to reference files from the `public/` folder:
 import {Img, staticFile} from 'remotion';
 
 export const MyComposition = () => {
-  return <Img src={staticFile('logo.png')} />;
+ return <Img src={staticFile('logo.png')} />;
 };
 ```
 

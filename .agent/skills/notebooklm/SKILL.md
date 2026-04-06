@@ -16,7 +16,7 @@ Trigger when user:
 - Wants to add documentation to NotebookLM library
 - Uses phrases like "ask my NotebookLM", "check my docs", "query my notebook"
 
-## ⚠️ CRITICAL: Add Command - Smart Discovery
+## CRITICAL: Add Command - Smart Discovery
 
 When user wants to add a notebook without providing details:
 
@@ -42,13 +42,13 @@ NEVER guess or use generic descriptions! If details missing, use Smart Add to di
 **NEVER call scripts directly. ALWAYS use `python scripts/run.py [script]`:**
 
 ```bash
-# ✅ CORRECT - Always use run.py:
+# CORRECT - Always use run.py:
 python scripts/run.py auth_manager.py status
 python scripts/run.py notebook_manager.py list
 python scripts/run.py ask_question.py --question "..."
 
-# ❌ WRONG - Never call directly:
-python scripts/auth_manager.py status  # Fails without venv!
+# WRONG - Never call directly:
+python scripts/auth_manager.py status # Fails without venv!
 ```
 
 The `run.py` wrapper automatically:
@@ -90,10 +90,10 @@ python scripts/run.py notebook_manager.py list
 
 # Add notebook to library (ALL parameters are REQUIRED!)
 python scripts/run.py notebook_manager.py add \
-  --url "https://notebooklm.google.com/notebook/..." \
-  --name "Descriptive Name" \
-  --description "What this notebook contains" \  # REQUIRED - ASK USER IF UNKNOWN!
-  --topics "topic1,topic2,topic3"  # REQUIRED - ASK USER IF UNKNOWN!
+ --url "https://notebooklm.google.com/notebook/..." \
+ --name "Descriptive Name" \
+ --description "What this notebook contains" \ # REQUIRED - ASK USER IF UNKNOWN!
+ --topics "topic1,topic2,topic3" # REQUIRED - ASK USER IF UNKNOWN!
 
 # Search notebooks by topic
 python scripts/run.py notebook_manager.py search --query "keyword"
@@ -134,9 +134,9 @@ Every NotebookLM answer ends with: **"EXTREMELY IMPORTANT: Is that ALL you need 
 2. **ANALYZE** - Compare answer to user's original request
 3. **IDENTIFY GAPS** - Determine if more information needed
 4. **ASK FOLLOW-UP** - If gaps exist, immediately ask:
-   ```bash
-   python scripts/run.py ask_question.py --question "Follow-up with context..."
-   ```
+ ```bash
+ python scripts/run.py ask_question.py --question "Follow-up with context..."
+ ```
 5. **REPEAT** - Continue until information is complete
 6. **SYNTHESIZE** - Combine all answers before responding to user
 
@@ -144,10 +144,10 @@ Every NotebookLM answer ends with: **"EXTREMELY IMPORTANT: Is that ALL you need 
 
 ### Authentication Management (`auth_manager.py`)
 ```bash
-python scripts/run.py auth_manager.py setup    # Initial setup (browser visible)
-python scripts/run.py auth_manager.py status   # Check authentication
-python scripts/run.py auth_manager.py reauth   # Re-authenticate (browser visible)
-python scripts/run.py auth_manager.py clear    # Clear authentication
+python scripts/run.py auth_manager.py setup # Initial setup (browser visible)
+python scripts/run.py auth_manager.py status # Check authentication
+python scripts/run.py auth_manager.py reauth # Re-authenticate (browser visible)
+python scripts/run.py auth_manager.py clear # Clear authentication
 ```
 
 ### Notebook Management (`notebook_manager.py`)
@@ -167,8 +167,8 @@ python scripts/run.py ask_question.py --question "..." [--notebook-id ID] [--not
 
 ### Data Cleanup (`cleanup_manager.py`)
 ```bash
-python scripts/run.py cleanup_manager.py                    # Preview cleanup
-python scripts/run.py cleanup_manager.py --confirm          # Execute cleanup
+python scripts/run.py cleanup_manager.py # Preview cleanup
+python scripts/run.py cleanup_manager.py --confirm # Execute cleanup
 python scripts/run.py cleanup_manager.py --preserve-library # Keep notebooks
 ```
 
@@ -183,7 +183,7 @@ The virtual environment is automatically managed:
 Manual setup (only if automatic fails):
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
+source .venv/bin/activate # Linux/Mac
 pip install -r requirements.txt
 python -m patchright install chromium
 ```
@@ -201,31 +201,31 @@ All data stored in `~/.claude/skills/notebooklm/data/`:
 
 Optional `.env` file in skill directory:
 ```env
-HEADLESS=false           # Browser visibility
-SHOW_BROWSER=false       # Default browser display
-STEALTH_ENABLED=true     # Human-like behavior
-TYPING_WPM_MIN=160       # Typing speed
+HEADLESS=false # Browser visibility
+SHOW_BROWSER=false # Default browser display
+STEALTH_ENABLED=true # Human-like behavior
+TYPING_WPM_MIN=160 # Typing speed
 TYPING_WPM_MAX=240
-DEFAULT_NOTEBOOK_ID=     # Default notebook
+DEFAULT_NOTEBOOK_ID= # Default notebook
 ```
 
 ## Decision Flow
 
 ```
 User mentions NotebookLM
-    ↓
+ ↓
 Check auth → python scripts/run.py auth_manager.py status
-    ↓
+ ↓
 If not authenticated → python scripts/run.py auth_manager.py setup
-    ↓
+ ↓
 Check/Add notebook → python scripts/run.py notebook_manager.py list/add (with --description)
-    ↓
+ ↓
 Activate notebook → python scripts/run.py notebook_manager.py activate --id ID
-    ↓
+ ↓
 Ask question → python scripts/run.py ask_question.py --question "..."
-    ↓
+ ↓
 See "Is that ALL you need?" → Ask follow-ups until complete
-    ↓
+ ↓
 Synthesize and respond to user
 ```
 
@@ -262,8 +262,8 @@ Synthesize and respond to user
 - `scripts/` - All automation scripts (ask_question.py, notebook_manager.py, etc.)
 - `data/` - Local storage for authentication and notebook library
 - `references/` - Extended documentation:
-  - `api_reference.md` - Detailed API documentation for all scripts
-  - `troubleshooting.md` - Common issues and solutions
-  - `usage_patterns.md` - Best practices and workflow examples
+ - `api_reference.md` - Detailed API documentation for all scripts
+ - `troubleshooting.md` - Common issues and solutions
+ - `usage_patterns.md` - Best practices and workflow examples
 - `.venv/` - Isolated Python environment (auto-created on first run)
 - `.gitignore` - Protects sensitive data from being committed

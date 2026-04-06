@@ -25,34 +25,34 @@ This JSON file defines all skills and their trigger conditions for the auto-acti
 
 ```typescript
 interface SkillRules {
-    version: string;
-    skills: Record<string, SkillRule>;
+ version: string;
+ skills: Record<string, SkillRule>;
 }
 
 interface SkillRule {
-    type: 'guardrail' | 'domain';
-    enforcement: 'block' | 'suggest' | 'warn';
-    priority: 'critical' | 'high' | 'medium' | 'low';
+ type: 'guardrail' | 'domain';
+ enforcement: 'block' | 'suggest' | 'warn';
+ priority: 'critical' | 'high' | 'medium' | 'low';
 
-    promptTriggers?: {
-        keywords?: string[];
-        intentPatterns?: string[];  // Regex strings
-    };
+ promptTriggers?: {
+ keywords?: string[];
+ intentPatterns?: string[]; // Regex strings
+ };
 
-    fileTriggers?: {
-        pathPatterns: string[];     // Glob patterns
-        pathExclusions?: string[];  // Glob patterns
-        contentPatterns?: string[]; // Regex strings
-        createOnly?: boolean;       // Only trigger on file creation
-    };
+ fileTriggers?: {
+ pathPatterns: string[]; // Glob patterns
+ pathExclusions?: string[]; // Glob patterns
+ contentPatterns?: string[]; // Regex strings
+ createOnly?: boolean; // Only trigger on file creation
+ };
 
-    blockMessage?: string;  // For guardrails, {file_path} placeholder
+ blockMessage?: string; // For guardrails, {file_path} placeholder
 
-    skipConditions?: {
-        sessionSkillUsed?: boolean;      // Skip if used in session
-        fileMarkers?: string[];          // e.g., ["@skip-validation"]
-        envOverride?: string;            // e.g., "SKIP_DB_VERIFICATION"
-    };
+ skipConditions?: {
+ sessionSkillUsed?: boolean; // Skip if used in session
+ fileMarkers?: string[]; // e.g., ["@skip-validation"]
+ envOverride?: string; // e.g., "SKIP_DB_VERIFICATION"
+ };
 }
 ```
 
@@ -115,70 +115,70 @@ Complete example of a blocking guardrail skill with all features:
 
 ```json
 {
-  "database-verification": {
-    "type": "guardrail",
-    "enforcement": "block",
-    "priority": "critical",
+ "database-verification": {
+ "type": "guardrail",
+ "enforcement": "block",
+ "priority": "critical",
 
-    "promptTriggers": {
-      "keywords": [
-        "prisma",
-        "database",
-        "table",
-        "column",
-        "schema",
-        "query",
-        "migration"
-      ],
-      "intentPatterns": [
-        "(add|create|implement).*?(user|login|auth|tracking|feature)",
-        "(modify|update|change).*?(table|column|schema|field)",
-        "database.*?(change|update|modify|migration)"
-      ]
-    },
+ "promptTriggers": {
+ "keywords": [
+ "prisma",
+ "database",
+ "table",
+ "column",
+ "schema",
+ "query",
+ "migration"
+ ],
+ "intentPatterns": [
+ "(add|create|implement).*?(user|login|auth|tracking|feature)",
+ "(modify|update|change).*?(table|column|schema|field)",
+ "database.*?(change|update|modify|migration)"
+ ]
+ },
 
-    "fileTriggers": {
-      "pathPatterns": [
-        "**/schema.prisma",
-        "**/migrations/**/*.sql",
-        "database/src/**/*.ts",
-        "form/src/**/*.ts",
-        "email/src/**/*.ts",
-        "users/src/**/*.ts",
-        "projects/src/**/*.ts",
-        "utilities/src/**/*.ts"
-      ],
-      "pathExclusions": [
-        "**/*.test.ts",
-        "**/*.spec.ts"
-      ],
-      "contentPatterns": [
-        "import.*[Pp]risma",
-        "PrismaService",
-        "prisma\\.",
-        "\\.findMany\\(",
-        "\\.findUnique\\(",
-        "\\.findFirst\\(",
-        "\\.create\\(",
-        "\\.createMany\\(",
-        "\\.update\\(",
-        "\\.updateMany\\(",
-        "\\.upsert\\(",
-        "\\.delete\\(",
-        "\\.deleteMany\\("
-      ]
-    },
+ "fileTriggers": {
+ "pathPatterns": [
+ "**/schema.prisma",
+ "**/migrations/**/*.sql",
+ "database/src/**/*.ts",
+ "form/src/**/*.ts",
+ "email/src/**/*.ts",
+ "users/src/**/*.ts",
+ "projects/src/**/*.ts",
+ "utilities/src/**/*.ts"
+ ],
+ "pathExclusions": [
+ "**/*.test.ts",
+ "**/*.spec.ts"
+ ],
+ "contentPatterns": [
+ "import.*[Pp]risma",
+ "PrismaService",
+ "prisma\\.",
+ "\\.findMany\\(",
+ "\\.findUnique\\(",
+ "\\.findFirst\\(",
+ "\\.create\\(",
+ "\\.createMany\\(",
+ "\\.update\\(",
+ "\\.updateMany\\(",
+ "\\.upsert\\(",
+ "\\.delete\\(",
+ "\\.deleteMany\\("
+ ]
+ },
 
-    "blockMessage": "⚠️ BLOCKED - Database Operation Detected\n\n📋 REQUIRED ACTION:\n1. Use Skill tool: 'database-verification'\n2. Verify ALL table and column names against schema\n3. Check database structure with DESCRIBE commands\n4. Then retry this edit\n\nReason: Prevent column name errors in Prisma queries\nFile: {file_path}\n\n💡 TIP: Add '// @skip-validation' comment to skip future checks",
+ "blockMessage": " BLOCKED - Database Operation Detected\n\n REQUIRED ACTION:\n1. Use Skill tool: 'database-verification'\n2. Verify ALL table and column names against schema\n3. Check database structure with DESCRIBE commands\n4. Then retry this edit\n\nReason: Prevent column name errors in Prisma queries\nFile: {file_path}\n\n TIP: Add '// @skip-validation' comment to skip future checks",
 
-    "skipConditions": {
-      "sessionSkillUsed": true,
-      "fileMarkers": [
-        "@skip-validation"
-      ],
-      "envOverride": "SKIP_DB_VERIFICATION"
-    }
-  }
+ "skipConditions": {
+ "sessionSkillUsed": true,
+ "fileMarkers": [
+ "@skip-validation"
+ ],
+ "envOverride": "SKIP_DB_VERIFICATION"
+ }
+ }
 }
 ```
 
@@ -200,53 +200,53 @@ Complete example of a suggestion-based domain skill:
 
 ```json
 {
-  "project-catalog-developer": {
-    "type": "domain",
-    "enforcement": "suggest",
-    "priority": "high",
+ "project-catalog-developer": {
+ "type": "domain",
+ "enforcement": "suggest",
+ "priority": "high",
 
-    "promptTriggers": {
-      "keywords": [
-        "layout",
-        "layout system",
-        "grid",
-        "grid layout",
-        "toolbar",
-        "column",
-        "cell editor",
-        "cell renderer",
-        "submission",
-        "submissions",
-        "blog dashboard",
-        "datagrid",
-        "data grid",
-        "CustomToolbar",
-        "GridLayoutDialog",
-        "useGridLayout",
-        "auto-save",
-        "column order",
-        "column width",
-        "filter",
-        "sort"
-      ],
-      "intentPatterns": [
-        "(how does|how do|explain|what is|describe).*?(layout|grid|toolbar|column|submission|catalog)",
-        "(add|create|modify|change).*?(toolbar|column|cell|editor|renderer)",
-        "blog dashboard.*?"
-      ]
-    },
+ "promptTriggers": {
+ "keywords": [
+ "layout",
+ "layout system",
+ "grid",
+ "grid layout",
+ "toolbar",
+ "column",
+ "cell editor",
+ "cell renderer",
+ "submission",
+ "submissions",
+ "blog dashboard",
+ "datagrid",
+ "data grid",
+ "CustomToolbar",
+ "GridLayoutDialog",
+ "useGridLayout",
+ "auto-save",
+ "column order",
+ "column width",
+ "filter",
+ "sort"
+ ],
+ "intentPatterns": [
+ "(how does|how do|explain|what is|describe).*?(layout|grid|toolbar|column|submission|catalog)",
+ "(add|create|modify|change).*?(toolbar|column|cell|editor|renderer)",
+ "blog dashboard.*?"
+ ]
+ },
 
-    "fileTriggers": {
-      "pathPatterns": [
-        "frontend/src/features/submissions/**/*.tsx",
-        "frontend/src/features/submissions/**/*.ts"
-      ],
-      "pathExclusions": [
-        "**/*.test.tsx",
-        "**/*.test.ts"
-      ]
-    }
-  }
+ "fileTriggers": {
+ "pathPatterns": [
+ "frontend/src/features/submissions/**/*.tsx",
+ "frontend/src/features/submissions/**/*.ts"
+ ],
+ "pathExclusions": [
+ "**/*.test.tsx",
+ "**/*.test.ts"
+ ]
+ }
+ }
 }
 ```
 
@@ -277,21 +277,21 @@ If valid, jq will pretty-print the JSON. If invalid, it will show the error.
 **Trailing comma:**
 ```json
 {
-  "keywords": ["one", "two",]  // ❌ Trailing comma
+ "keywords": ["one", "two",] // Trailing comma
 }
 ```
 
 **Missing quotes:**
 ```json
 {
-  type: "guardrail"  // ❌ Missing quotes on key
+ type: "guardrail" // Missing quotes on key
 }
 ```
 
 **Single quotes (invalid JSON):**
 ```json
 {
-  'type': 'guardrail'  // ❌ Must use double quotes
+ 'type': 'guardrail' // Must use double quotes
 }
 ```
 

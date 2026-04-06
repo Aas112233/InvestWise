@@ -1,4 +1,4 @@
-# 🚀 InvestWise - Enterprise Investment Management
+# InvestWise - Enterprise Investment Management
 
 <div align="center">
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
@@ -6,17 +6,17 @@
 
 A modern, full-stack enterprise investment management platform with AI-powered financial advisory.
 
-## ✨ Features
+## Features
 
-- 🔐 **Secure Authentication** - JWT-based auth with role-based access control
-- 💼 **Investment Management** - Track funds, projects, and member portfolios
-- 📊 **Real-time Analytics** - Interactive dashboards with financial insights
-- 🤖 **AI Financial Advisor** - Gemini AI-powered investment recommendations
-- 🌍 **Multi-language Support** - i18n with English and more
-- 🌙 **Dark Mode** - Beautiful UI with light/dark themes
-- 📱 **Responsive Design** - Works seamlessly on all devices
+- **Secure Authentication** - JWT-based auth with role-based access control
+- **Investment Management** - Track funds, projects, and member portfolios
+- **Real-time Analytics** - Interactive dashboards with financial insights
+- **AI Financial Advisor** - Gemini AI-powered investment recommendations
+- **Multi-language Support** - i18n with English and more
+- **Dark Mode** - Beautiful UI with light/dark themes
+- **Responsive Design** - Works seamlessly on all devices
 
-## 🏗️ Tech Stack
+## Tech Stack
 
 ### Frontend
 - **React 19** with TypeScript
@@ -34,7 +34,7 @@ A modern, full-stack enterprise investment management platform with AI-powered f
 - **Morgan** for logging
 - **Compression** for response optimization
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Node.js (v18+)
@@ -93,17 +93,17 @@ npm run dev
 
 Visit: http://localhost:3000
 
-## 🔒 Security Enhancements
+## Security Enhancements
 
-✅ **Helmet** - Security headers  
-✅ **Rate Limiting** - Prevent brute force attacks  
-✅ **Input Validation** - Express-validator for sanitization  
-✅ **JWT Expiration** - 30-day token expiry  
-✅ **Password Hashing** - bcrypt with salt rounds  
-✅ **CORS** - Configured cross-origin policies  
-✅ **Error Handling** - Global error middleware  
+ **Helmet** - Security headers 
+ **Rate Limiting** - Prevent brute force attacks 
+ **Input Validation** - Express-validator for sanitization 
+ **JWT Expiration** - 30-day token expiry 
+ **Password Hashing** - bcrypt with salt rounds 
+ **CORS** - Configured cross-origin policies 
+ **Error Handling** - Global error middleware 
 
-## 📦 API Endpoints
+## API Endpoints
 
 ### Authentication
 - `POST /api/auth/login` - User login
@@ -130,25 +130,25 @@ Visit: http://localhost:3000
 - `POST /api/finance/deposits` - Add deposit
 - `POST /api/finance/expenses` - Add expense
 
-## 🎨 Project Structure
+## Project Structure
 
 ```
 investwise/
-├── components/          # React components
-├── context/            # Global state management
-├── services/           # API & Gemini services
-├── i18n/              # Translations
+├── components/ # React components
+├── context/ # Global state management
+├── services/ # API & Gemini services
+├── i18n/ # Translations
 ├── server/
-│   ├── config/        # Database config
-│   ├── controllers/   # Route controllers
-│   ├── middleware/    # Auth, validation, logging
-│   ├── models/        # Mongoose schemas
-│   ├── routes/        # API routes
-│   └── utils/         # Helper functions
-└── docs/              # Documentation
+│ ├── config/ # Database config
+│ ├── controllers/ # Route controllers
+│ ├── middleware/ # Auth, validation, logging
+│ ├── models/ # Mongoose schemas
+│ ├── routes/ # API routes
+│ └── utils/ # Helper functions
+└── docs/ # Documentation
 ```
 
-## 🛠️ Development
+## Development
 
 ```bash
 # Frontend dev server
@@ -161,13 +161,13 @@ cd server && npm run dev
 npm run build
 ```
 
-## 📝 Default Credentials
+## Default Credentials
 
 After seeding:
 - **Email:** admin@investwise.com
 - **Password:** admin123
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create your feature branch
@@ -175,15 +175,15 @@ After seeding:
 4. Push to the branch
 5. Open a Pull Request
 
-## 📄 License
+## License
 
 ISC License
 
-## 🔗 Links
+## Links
 
 - AI Studio: https://ai.studio/apps/drive/1Xe3FcuNJbr7mr-4rzNMYcx1bYgeUoZRn
 - Documentation: See `/docs` folder
 
 ---
 
-Built with ❤️ using React, Node.js, and Gemini AI
+Built with using React, Node.js, and Gemini AI

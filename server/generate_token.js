@@ -6,8 +6,8 @@ dotenv.config();
 const secret = process.env.JWT_SECRET;
 
 if (!secret) {
-    console.error('Error: JWT_SECRET environment variable not found. Please set JWT_SECRET in your .env file.');
-    process.exit(1);
+ console.error('Error: JWT_SECRET environment variable not found. Please set JWT_SECRET in your .env file.');
+ process.exit(1);
 }
 
 const id = '6978f35100028474faee6ed3';

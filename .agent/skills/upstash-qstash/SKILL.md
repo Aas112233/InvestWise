@@ -44,13 +44,13 @@ Verifying QStash message signatures in your endpoint
 
 ## Anti-Patterns
 
-### ❌ Skipping Signature Verification
+### Skipping Signature Verification
 
-### ❌ Using Private Endpoints
+### Using Private Endpoints
 
-### ❌ No Error Handling in Endpoints
+### No Error Handling in Endpoints
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

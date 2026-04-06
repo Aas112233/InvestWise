@@ -9,26 +9,26 @@
 
 ```
 WHAT TYPE OF APP?
-        │
-        ├── 3-5 top-level sections (equal importance)
-        │   └── ✅ Tab Bar / Bottom Navigation
-        │       Examples: Social, E-commerce, Utility
-        │
-        ├── Deep hierarchical content (drill down)
-        │   └── ✅ Stack Navigation
-        │       Examples: Settings, Email folders
-        │
-        ├── Many destinations (>5 top-level)
-        │   └── ✅ Drawer Navigation
-        │       Examples: Gmail, complex enterprise
-        │
-        ├── Single linear flow
-        │   └── ✅ Stack only (wizard/onboarding)
-        │       Examples: Checkout, Setup flow
-        │
-        └── Tablet/Foldable
-            └── ✅ Navigation Rail + List-Detail
-                Examples: Mail, Notes on iPad
+ │
+ ├── 3-5 top-level sections (equal importance)
+ │ └── Tab Bar / Bottom Navigation
+ │ Examples: Social, E-commerce, Utility
+ │
+ ├── Deep hierarchical content (drill down)
+ │ └── Stack Navigation
+ │ Examples: Settings, Email folders
+ │
+ ├── Many destinations (>5 top-level)
+ │ └── Drawer Navigation
+ │ Examples: Gmail, complex enterprise
+ │
+ ├── Single linear flow
+ │ └── Stack only (wizard/onboarding)
+ │ Examples: Checkout, Setup flow
+ │
+ └── Tablet/Foldable
+ └── Navigation Rail + List-Detail
+ Examples: Mail, Notes on iPad
 ```
 
 ---
@@ -38,14 +38,14 @@ WHAT TYPE OF APP?
 ### When to Use
 
 ```
-✅ USE Tab Bar when:
+ USE Tab Bar when:
 ├── 3-5 top-level destinations
 ├── Destinations are of equal importance
 ├── User frequently switches between them
 ├── Each tab has independent navigation stack
 └── App is used in short sessions
 
-❌ AVOID Tab Bar when:
+ AVOID Tab Bar when:
 ├── More than 5 destinations
 ├── Destinations have clear hierarchy
 ├── Tabs would be used very unequally
@@ -143,14 +143,14 @@ Cross-Platform Rule:
 ### When to Use
 
 ```
-✅ USE Drawer when:
+ USE Drawer when:
 ├── More than 5 top-level destinations
 ├── Less frequently accessed destinations
 ├── Complex app with many features
 ├── Need for branding/user info in nav
 └── Tablet/large screen with persistent drawer
 
-❌ AVOID Drawer when:
+ AVOID Drawer when:
 ├── 5 or fewer destinations (use tabs)
 ├── All destinations equally important
 ├── Mobile-first simple app
@@ -163,7 +163,7 @@ Cross-Platform Rule:
 Modal Drawer:
 ├── Opens over content (scrim behind)
 ├── Swipe to open from edge
-├── Hamburger icon ( ☰ ) triggers
+├── Hamburger icon ( ) triggers
 └── Most common on mobile
 
 Permanent Drawer:
@@ -186,12 +186,12 @@ Navigation Rail (Android):
 ### Modal vs Push
 
 ```
-PUSH (Stack):                    MODAL:
-├── Horizontal slide             ├── Vertical slide up (sheet)
-├── Part of hierarchy            ├── Separate task
-├── Back returns                 ├── Dismiss (X) returns
-├── Same navigation context      ├── Own navigation context
-└── "Drill in"                   └── "Focus on task"
+PUSH (Stack): MODAL:
+├── Horizontal slide ├── Vertical slide up (sheet)
+├── Part of hierarchy ├── Separate task
+├── Back returns ├── Dismiss (X) returns
+├── Same navigation context ├── Own navigation context
+└── "Drill in" └── "Focus on task"
 
 USE MODAL for:
 ├── Creating new content
@@ -267,28 +267,28 @@ Hierarchy should match navigation:
 
 ```
 1. FULL STACK CONSTRUCTION
-   Deep link to myapp://product/123 should:
-   ├── Put Home at root of stack
-   ├── Push Product screen on top
-   └── Back button returns to Home
+ Deep link to myapp://product/123 should:
+ ├── Put Home at root of stack
+ ├── Push Product screen on top
+ └── Back button returns to Home
 
 2. AUTHENTICATION AWARENESS
-   If deep link requires auth:
-   ├── Save intended destination
-   ├── Redirect to login
-   ├── After login, navigate to destination
+ If deep link requires auth:
+ ├── Save intended destination
+ ├── Redirect to login
+ ├── After login, navigate to destination
 
 3. INVALID LINKS
-   If deep link target doesn't exist:
-   ├── Navigate to fallback (home)
-   ├── Show error message
-   └── Never crash or blank screen
+ If deep link target doesn't exist:
+ ├── Navigate to fallback (home)
+ ├── Show error message
+ └── Never crash or blank screen
 
 4. STATEFUL NAVIGATION
-   Deep link during active session:
-   ├── Don't blow away current stack
-   ├── Push on top OR
-   ├── Ask user if should navigate away
+ Deep link during active session:
+ ├── Don't blow away current stack
+ ├── Push on top OR
+ ├── Ask user if should navigate away
 ```
 
 ---
@@ -320,21 +320,21 @@ const [isReady, setIsReady] = useState(false);
 const [initialState, setInitialState] = useState();
 
 useEffect(() => {
-  const loadState = async () => {
-    const savedState = await AsyncStorage.getItem('NAV_STATE');
-    if (savedState) setInitialState(JSON.parse(savedState));
-    setIsReady(true);
-  };
-  loadState();
+ const loadState = async () => {
+ const savedState = await AsyncStorage.getItem('NAV_STATE');
+ if (savedState) setInitialState(JSON.parse(savedState));
+ setIsReady(true);
+ };
+ loadState();
 }, []);
 
 const handleStateChange = (state) => {
-  AsyncStorage.setItem('NAV_STATE', JSON.stringify(state));
+ AsyncStorage.setItem('NAV_STATE', JSON.stringify(state));
 };
 
 <NavigationContainer
-  initialState={initialState}
-  onStateChange={handleStateChange}
+ initialState={initialState}
+ onStateChange={handleStateChange}
 >
 ```
 
@@ -380,7 +380,7 @@ When to use default:
 Connect elements between screens:
 
 Screen A: Product card with image
-            ↓ (tap)
+ ↓ (tap)
 Screen B: Product detail with same image (expanded)
 
 Image animates from card position to detail position.
@@ -396,7 +396,7 @@ Implementation:
 
 ## 9. Navigation Anti-Patterns
 
-### ❌ Navigation Sins
+### Navigation Sins
 
 | Anti-Pattern | Problem | Solution |
 |--------------|---------|----------|
@@ -408,7 +408,7 @@ Implementation:
 | **Tab stack reset** | Work lost on switch | Preserve tab states |
 | **Modal for primary flow** | Can't back track | Use stack navigation |
 
-### ❌ AI Navigation Mistakes
+### AI Navigation Mistakes
 
 ```
 AI tends to:

@@ -26,7 +26,7 @@ Topic-based activation where user explicitly mentions the subject.
 
 ```json
 "promptTriggers": {
-  "keywords": ["layout", "grid", "toolbar", "submission"]
+ "keywords": ["layout", "grid", "toolbar", "submission"]
 }
 ```
 
@@ -59,10 +59,10 @@ Action-based activation where user describes what they want to do rather than th
 
 ```json
 "promptTriggers": {
-  "intentPatterns": [
-    "(create|add|implement).*?(feature|endpoint)",
-    "(how does|explain).*?(layout|workflow)"
-  ]
+ "intentPatterns": [
+ "(create|add|implement).*?(feature|endpoint)",
+ "(how does|explain).*?(layout|workflow)"
+ ]
 }
 ```
 
@@ -122,14 +122,14 @@ Domain/area-specific activation based on file location in the project.
 
 ```json
 "fileTriggers": {
-  "pathPatterns": [
-    "frontend/src/**/*.tsx",
-    "form/src/**/*.ts"
-  ],
-  "pathExclusions": [
-    "**/*.test.ts",
-    "**/*.spec.ts"
-  ]
+ "pathPatterns": [
+ "frontend/src/**/*.tsx",
+ "form/src/**/*.ts"
+ ],
+ "pathExclusions": [
+ "**/*.test.ts",
+ "**/*.spec.ts"
+ ]
 }
 ```
 
@@ -138,9 +138,9 @@ Domain/area-specific activation based on file location in the project.
 - `**` = Any number of directories (including zero)
 - `*` = Any characters within a directory name
 - Examples:
-  - `frontend/src/**/*.tsx` = All .tsx files in frontend/src and subdirs
-  - `**/schema.prisma` = schema.prisma anywhere in project
-  - `form/src/**/*.ts` = All .ts files in form/src subdirs
+ - `frontend/src/**/*.tsx` = All .tsx files in frontend/src and subdirs
+ - `**/schema.prisma` = schema.prisma anywhere in project
+ - `form/src/**/*.ts` = All .ts files in form/src subdirs
 
 ### Example
 
@@ -160,28 +160,28 @@ Domain/area-specific activation based on file location in the project.
 
 ```glob
 # Frontend
-frontend/src/**/*.tsx        # All React components
-frontend/src/**/*.ts         # All TypeScript files
-frontend/src/components/**   # Only components directory
+frontend/src/**/*.tsx # All React components
+frontend/src/**/*.ts # All TypeScript files
+frontend/src/components/** # Only components directory
 
 # Backend Services
-form/src/**/*.ts            # Form service
-email/src/**/*.ts           # Email service
-users/src/**/*.ts           # Users service
+form/src/**/*.ts # Form service
+email/src/**/*.ts # Email service
+users/src/**/*.ts # Users service
 
 # Database
-**/schema.prisma            # Prisma schema (anywhere)
-**/migrations/**/*.sql      # Migration files
-database/src/**/*.ts        # Database scripts
+**/schema.prisma # Prisma schema (anywhere)
+**/migrations/**/*.sql # Migration files
+database/src/**/*.ts # Database scripts
 
 # Workflows
-form/src/workflow/**/*.ts              # Workflow engine
+form/src/workflow/**/*.ts # Workflow engine
 form/src/workflow-definitions/**/*.json # Workflow definitions
 
 # Test Exclusions
-**/*.test.ts                # TypeScript tests
-**/*.test.tsx               # React component tests
-**/*.spec.ts                # Spec files
+**/*.test.ts # TypeScript tests
+**/*.test.tsx # React component tests
+**/*.spec.ts # Spec files
 ```
 
 ---
@@ -200,12 +200,12 @@ Technology-specific activation based on what the code imports or uses (Prisma, c
 
 ```json
 "fileTriggers": {
-  "contentPatterns": [
-    "import.*[Pp]risma",
-    "PrismaService",
-    "\\.findMany\\(",
-    "\\.create\\("
-  ]
+ "contentPatterns": [
+ "import.*[Pp]risma",
+ "PrismaService",
+ "\\.findMany\\(",
+ "\\.create\\("
+ ]
 }
 ```
 
@@ -233,28 +233,28 @@ Technology-specific activation based on what the code imports or uses (Prisma, c
 
 ```regex
 # Prisma/Database
-import.*[Pp]risma                # Prisma imports
-PrismaService                    # PrismaService usage
-prisma\.                         # prisma.something
-\.findMany\(                     # Prisma query methods
+import.*[Pp]risma # Prisma imports
+PrismaService # PrismaService usage
+prisma\. # prisma.something
+\.findMany\( # Prisma query methods
 \.create\(
 \.update\(
 \.delete\(
 
 # Controllers/Routes
-export class.*Controller         # Controller classes
-router\.                         # Express router
+export class.*Controller # Controller classes
+router\. # Express router
 app\.(get|post|put|delete|patch) # Express app routes
 
 # Error Handling
-try\s*\{                        # Try blocks
-catch\s*\(                      # Catch blocks
-throw new                        # Throw statements
+try\s*\{ # Try blocks
+catch\s*\( # Catch blocks
+throw new # Throw statements
 
 # React/Components
-export.*React\.FC               # React functional components
-export default function.*       # Default function exports
-useState|useEffect              # React hooks
+export.*React\.FC # React functional components
+export default function.* # Default function exports
+useState|useEffect # React hooks
 ```
 
 ---
@@ -262,37 +262,37 @@ useState|useEffect              # React hooks
 ## Best Practices Summary
 
 ### DO:
-✅ Use specific, unambiguous keywords
-✅ Test all patterns with real examples
-✅ Include common variations
-✅ Use non-greedy regex: `.*?`
-✅ Escape special characters in content patterns
-✅ Add exclusions for test files
-✅ Make file path patterns narrow and specific
+ Use specific, unambiguous keywords
+ Test all patterns with real examples
+ Include common variations
+ Use non-greedy regex: `.*?`
+ Escape special characters in content patterns
+ Add exclusions for test files
+ Make file path patterns narrow and specific
 
 ### DON'T:
-❌ Use overly generic keywords ("system", "work")
-❌ Make intent patterns too broad (false positives)
-❌ Make patterns too specific (false negatives)
-❌ Forget to test with regex tester (https://regex101.com/)
-❌ Use greedy regex: `.*` instead of `.*?`
-❌ Match too broadly in file paths
+ Use overly generic keywords ("system", "work")
+ Make intent patterns too broad (false positives)
+ Make patterns too specific (false negatives)
+ Forget to test with regex tester (https://regex101.com/)
+ Use greedy regex: `.*` instead of `.*?`
+ Match too broadly in file paths
 
 ### Testing Your Triggers
 
 **Test keyword/intent triggers:**
 ```bash
 echo '{"session_id":"test","prompt":"your test prompt"}' | \
-  npx tsx .claude/hooks/skill-activation-prompt.ts
+ npx tsx .claude/hooks/skill-activation-prompt.ts
 ```
 
 **Test file path/content triggers:**
 ```bash
 cat <<'EOF' | npx tsx .claude/hooks/skill-verification-guard.ts
 {
-  "session_id": "test",
-  "tool_name": "Edit",
-  "tool_input": {"file_path": "/path/to/test/file.ts"}
+ "session_id": "test",
+ "tool_name": "Edit",
+ "tool_input": {"file_path": "/path/to/test/file.ts"}
 }
 EOF
 ```

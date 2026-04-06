@@ -37,21 +37,21 @@ description: Multi-agent autonomous startup system for Claude Code. Triggers on 
 
 ```
 START
-  |
-  +-- Read CONTINUITY.md ----------+
-  |                                |
-  +-- Task in-progress?            |
-  |   +-- YES: Resume              |
-  |   +-- NO: Check pending queue  |
-  |                                |
-  +-- Pending tasks?               |
-  |   +-- YES: Claim highest priority
-  |   +-- NO: Check phase completion
-  |                                |
-  +-- Phase done?                  |
-  |   +-- YES: Advance to next phase
-  |   +-- NO: Generate tasks for phase
-  |                                |
+ |
+ +-- Read CONTINUITY.md ----------+
+ | |
+ +-- Task in-progress? |
+ | +-- YES: Resume |
+ | +-- NO: Check pending queue |
+ | |
+ +-- Pending tasks? |
+ | +-- YES: Claim highest priority
+ | +-- NO: Check phase completion
+ | |
+ +-- Phase done? |
+ | +-- YES: Advance to next phase
+ | +-- NO: Generate tasks for phase
+ | |
 LOOP <-----------------------------+
 ```
 
@@ -59,12 +59,12 @@ LOOP <-----------------------------+
 
 ```
 Bootstrap -> Discovery -> Architecture -> Infrastructure
-     |           |            |              |
-  (Setup)   (Analyze PRD)  (Design)    (Cloud/DB Setup)
-                                             |
+ | | | |
+ (Setup) (Analyze PRD) (Design) (Cloud/DB Setup)
+ |
 Development <- QA <- Deployment <- Business Ops <- Growth Loop
-     |         |         |            |            |
- (Build)    (Test)   (Release)    (Monitor)    (Iterate)
+ | | | | |
+ (Build) (Test) (Release) (Monitor) (Iterate)
 ```
 
 ### Essential Patterns
@@ -128,33 +128,33 @@ If bugs are found in these files, document them in `.loki/CONTINUITY.md` under "
 
 ```
 +-------------------------------------------------------------------+
-| REASON: What needs to be done next?                               |
-| - READ .loki/CONTINUITY.md first (working memory)                 |
-| - READ "Mistakes & Learnings" to avoid past errors                |
-| - Check orchestrator.json, review pending.json                    |
-| - Identify highest priority unblocked task                        |
+| REASON: What needs to be done next? |
+| - READ .loki/CONTINUITY.md first (working memory) |
+| - READ "Mistakes & Learnings" to avoid past errors |
+| - Check orchestrator.json, review pending.json |
+| - Identify highest priority unblocked task |
 +-------------------------------------------------------------------+
-| ACT: Execute the task                                             |
-| - Dispatch subagent via Task tool OR execute directly             |
-| - Write code, run tests, fix issues                               |
-| - Commit changes atomically (git checkpoint)                      |
+| ACT: Execute the task |
+| - Dispatch subagent via Task tool OR execute directly |
+| - Write code, run tests, fix issues |
+| - Commit changes atomically (git checkpoint) |
 +-------------------------------------------------------------------+
-| REFLECT: Did it work? What next?                                  |
-| - Verify task success (tests pass, no errors)                     |
-| - UPDATE .loki/CONTINUITY.md with progress                        |
-| - Check completion promise - are we done?                         |
+| REFLECT: Did it work? What next? |
+| - Verify task success (tests pass, no errors) |
+| - UPDATE .loki/CONTINUITY.md with progress |
+| - Check completion promise - are we done? |
 +-------------------------------------------------------------------+
-| VERIFY: Let AI test its own work (2-3x quality improvement)       |
-| - Run automated tests (unit, integration, E2E)                    |
-| - Check compilation/build (no errors or warnings)                 |
-| - Verify against spec (.loki/specs/openapi.yaml)                  |
-|                                                                   |
-| IF VERIFICATION FAILS:                                            |
-|   1. Capture error details (stack trace, logs)                    |
-|   2. Analyze root cause                                           |
-|   3. UPDATE CONTINUITY.md "Mistakes & Learnings"                  |
-|   4. Rollback to last good git checkpoint (if needed)             |
-|   5. Apply learning and RETRY from REASON                         |
+| VERIFY: Let AI test its own work (2-3x quality improvement) |
+| - Run automated tests (unit, integration, E2E) |
+| - Check compilation/build (no errors or warnings) |
+| - Verify against spec (.loki/specs/openapi.yaml) |
+| |
+| IF VERIFICATION FAILS: |
+| 1. Capture error details (stack trace, logs) |
+| 2. Analyze root cause |
+| 3. UPDATE CONTINUITY.md "Mistakes & Learnings" |
+| 4. Rollback to last good git checkpoint (if needed) |
+| 5. Apply learning and RETRY from REASON |
 +-------------------------------------------------------------------+
 ```
 
@@ -212,9 +212,9 @@ Task(subagent_type="general-purpose", model="haiku", description="Check service 
 ```python
 # Launch 10+ Haiku agents in parallel for unit test suite
 for test_file in test_files:
-    Task(subagent_type="general-purpose", model="haiku",
-         description=f"Run unit tests: {test_file}",
-         run_in_background=True)
+ Task(subagent_type="general-purpose", model="haiku",
+ description=f"Run unit tests: {test_file}",
+ run_in_background=True)
 ```
 
 ### Advanced Task Tool Parameters
@@ -252,32 +252,32 @@ Task(resume="agent-abc123", prompt="Continue from where you left off")
 **Decision Logic:**
 ```
 Task Received
-    |
-    +-- Is task single-domain? (one file, one skill, clear scope)
-    |   +-- YES: Direct Route to specialist agent
-    |   |        - Faster (no orchestration overhead)
-    |   |        - Minimal context (avoid confusion)
-    |   |        - Examples: "Fix typo in README", "Run unit tests"
-    |   |
-    |   +-- NO: Supervisor Mode
-    |            - Full task decomposition
-    |            - Coordinate multiple agents
-    |            - Synthesize results
-    |            - Examples: "Implement auth system", "Refactor API layer"
-    |
-    +-- Fallback: If intent unclear, use Supervisor Mode
+ |
+ +-- Is task single-domain? (one file, one skill, clear scope)
+ | +-- YES: Direct Route to specialist agent
+ | | - Faster (no orchestration overhead)
+ | | - Minimal context (avoid confusion)
+ | | - Examples: "Fix typo in README", "Run unit tests"
+ | |
+ | +-- NO: Supervisor Mode
+ | - Full task decomposition
+ | - Coordinate multiple agents
+ | - Synthesize results
+ | - Examples: "Implement auth system", "Refactor API layer"
+ |
+ +-- Fallback: If intent unclear, use Supervisor Mode
 ```
 
 **Direct Routing Examples (Skip Orchestration):**
 ```python
 # Simple tasks -> Direct dispatch to Haiku
-Task(model="haiku", description="Fix import in utils.py", prompt="...")       # Direct
-Task(model="haiku", description="Run linter on src/", prompt="...")           # Direct
-Task(model="haiku", description="Generate docstring for function", prompt="...")  # Direct
+Task(model="haiku", description="Fix import in utils.py", prompt="...") # Direct
+Task(model="haiku", description="Run linter on src/", prompt="...") # Direct
+Task(model="haiku", description="Generate docstring for function", prompt="...") # Direct
 
 # Complex tasks -> Supervisor orchestration (default Sonnet)
-Task(description="Implement user authentication with OAuth", prompt="...")    # Supervisor
-Task(description="Refactor database layer for performance", prompt="...")     # Supervisor
+Task(description="Implement user authentication with OAuth", prompt="...") # Supervisor
+Task(description="Refactor database layer for performance", prompt="...") # Supervisor
 ```
 
 **Context Depth by Routing Mode:**
@@ -294,7 +294,7 @@ Task(description="Refactor database layer for performance", prompt="...")     # 
 # Enable Playwright MCP for E2E testing
 # In settings or via mcp_servers config:
 mcp_servers = {
-    "playwright": {"command": "npx", "args": ["@playwright/mcp@latest"]}
+ "playwright": {"command": "npx", "args": ["@playwright/mcp@latest"]}
 }
 
 # Agent can then automate browser to verify features work visually
@@ -330,7 +330,7 @@ mcp_servers = {
 ### Reward Signals (Learn From Outcomes)
 
 ```
-OUTCOME REWARD:  +1.0 (success) | 0.0 (partial) | -1.0 (failure)
+OUTCOME REWARD: +1.0 (success) | 0.0 (partial) | -1.0 (failure)
 EFFICIENCY REWARD: 0.0-1.0 based on resources vs baseline
 PREFERENCE REWARD: Inferred from user actions (commit/revert/edit)
 ```
@@ -519,14 +519,14 @@ Context Priority:
 
 ```yaml
 core_principles:
-  - "Never delete production data without explicit backup"
-  - "Never commit secrets or credentials to version control"
-  - "Never bypass quality gates for speed"
-  - "Always verify tests pass before marking task complete"
-  - "Never claim completion without running actual tests"
-  - "Prefer simple solutions over clever ones"
-  - "Document decisions, not just code"
-  - "When unsure, reject action or flag for review"
+ - "Never delete production data without explicit backup"
+ - "Never commit secrets or credentials to version control"
+ - "Never bypass quality gates for speed"
+ - "Always verify tests pass before marking task complete"
+ - "Never claim completion without running actual tests"
+ - "Prefer simple solutions over clever ones"
+ - "Document decisions, not just code"
+ - "When unsure, reject action or flag for review"
 ```
 
 ### Self-Critique Workflow
@@ -547,15 +547,15 @@ See `references/lab-research-patterns.md` for Constitutional AI implementation.
 **For critical changes, use structured debate between AI critics.**
 
 ```
-Proponent (defender)  -->  Presents proposal with evidence
-         |
-         v
-Opponent (challenger) -->  Finds flaws, challenges claims
-         |
-         v
-Synthesizer           -->  Weighs arguments, produces verdict
-         |
-         v
+Proponent (defender) --> Presents proposal with evidence
+ |
+ v
+Opponent (challenger) --> Finds flaws, challenges claims
+ |
+ v
+Synthesizer --> Weighs arguments, produces verdict
+ |
+ v
 If disagreement persists --> Escalate to human
 ```
 
@@ -573,21 +573,21 @@ See `references/lab-research-patterns.md` for debate verification details.
 
 ```yaml
 task_constraints:
-  max_steps_before_review: 3-5
-  characteristics:
-    - Specific, well-defined objectives
-    - Pre-classified inputs
-    - Deterministic success criteria
-    - Verifiable outputs
+ max_steps_before_review: 3-5
+ characteristics:
+ - Specific, well-defined objectives
+ - Pre-classified inputs
+ - Deterministic success criteria
+ - Verifiable outputs
 ```
 
 ### Confidence-Based Routing
 
 ```
-confidence >= 0.95  -->  Auto-approve with audit log
-confidence >= 0.70  -->  Quick human review
-confidence >= 0.40  -->  Detailed human review
-confidence < 0.40   -->  Escalate immediately
+confidence >= 0.95 --> Auto-approve with audit log
+confidence >= 0.70 --> Quick human review
+confidence >= 0.40 --> Detailed human review
+confidence < 0.40 --> Escalate immediately
 ```
 
 ### Deterministic Outer Loops
@@ -606,14 +606,14 @@ confidence < 0.40   -->  Escalate immediately
 
 ```yaml
 principles:
-  - "Less is more" - focused beats comprehensive
-  - Manual selection outperforms automatic RAG
-  - Fresh conversations per major task
-  - Remove outdated information aggressively
+ - "Less is more" - focused beats comprehensive
+ - Manual selection outperforms automatic RAG
+ - Fresh conversations per major task
+ - Remove outdated information aggressively
 
 context_budget:
-  target: "< 10k tokens for context"
-  reserve: "90% for model reasoning"
+ target: "< 10k tokens for context"
+ reserve: "90% for model reasoning"
 ```
 
 ### Sub-Agents for Context Isolation
@@ -622,8 +622,8 @@ context_budget:
 
 ```
 Main agent (focused) --> Sub-agent (file search)
-                     --> Sub-agent (test running)
-                     --> Sub-agent (linting)
+ --> Sub-agent (test running)
+ --> Sub-agent (linting)
 ```
 
 See `references/production-patterns.md` for full practitioner patterns.
@@ -646,30 +646,30 @@ See `references/production-patterns.md` for full practitioner patterns.
 
 ```
 .loki/
-+-- CONTINUITY.md           # Working memory (read/update every turn)
++-- CONTINUITY.md # Working memory (read/update every turn)
 +-- specs/
-|   +-- openapi.yaml        # API spec - source of truth
+| +-- openapi.yaml # API spec - source of truth
 +-- queue/
-|   +-- pending.json        # Tasks waiting to be claimed
-|   +-- in-progress.json    # Currently executing tasks
-|   +-- completed.json      # Finished tasks
-|   +-- dead-letter.json    # Failed tasks for review
+| +-- pending.json # Tasks waiting to be claimed
+| +-- in-progress.json # Currently executing tasks
+| +-- completed.json # Finished tasks
+| +-- dead-letter.json # Failed tasks for review
 +-- state/
-|   +-- orchestrator.json   # Master state (phase, metrics)
-|   +-- agents/             # Per-agent state files
-|   +-- circuit-breakers/   # Rate limiting state
+| +-- orchestrator.json # Master state (phase, metrics)
+| +-- agents/ # Per-agent state files
+| +-- circuit-breakers/ # Rate limiting state
 +-- memory/
-|   +-- episodic/           # Specific interaction traces (what happened)
-|   +-- semantic/           # Generalized patterns (how things work)
-|   +-- skills/             # Learned action sequences (how to do X)
-|   +-- ledgers/            # Agent-specific checkpoints
-|   +-- handoffs/           # Agent-to-agent transfers
+| +-- episodic/ # Specific interaction traces (what happened)
+| +-- semantic/ # Generalized patterns (how things work)
+| +-- skills/ # Learned action sequences (how to do X)
+| +-- ledgers/ # Agent-specific checkpoints
+| +-- handoffs/ # Agent-to-agent transfers
 +-- metrics/
-|   +-- efficiency/         # Task efficiency scores (time, agents, retries)
-|   +-- rewards/            # Outcome/efficiency/preference rewards
-|   +-- dashboard.json      # Rolling metrics summary
+| +-- efficiency/ # Task efficiency scores (time, agents, retries)
+| +-- rewards/ # Outcome/efficiency/preference rewards
+| +-- dashboard.json # Rolling metrics summary
 +-- artifacts/
-    +-- reports/            # Generated reports/dashboards
+ +-- reports/ # Generated reports/dashboards
 ```
 
 See `references/architecture.md` for full structure and state schemas.
@@ -679,8 +679,8 @@ See `references/architecture.md` for full structure and state schemas.
 ## Invocation
 
 ```
-Loki Mode                           # Start fresh
-Loki Mode with PRD at path/to/prd   # Start with PRD
+Loki Mode # Start fresh
+Loki Mode with PRD at path/to/prd # Start with PRD
 ```
 
 **Skill Metadata:**

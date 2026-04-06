@@ -22,7 +22,7 @@ print(f"Pages: {len(reader.pages)}")
 # Extract text
 text = ""
 for page in reader.pages:
-    text += page.extract_text()
+ text += page.extract_text()
 ```
 
 ## Python Libraries
@@ -35,22 +35,22 @@ from pypdf import PdfWriter, PdfReader
 
 writer = PdfWriter()
 for pdf_file in ["doc1.pdf", "doc2.pdf", "doc3.pdf"]:
-    reader = PdfReader(pdf_file)
-    for page in reader.pages:
-        writer.add_page(page)
+ reader = PdfReader(pdf_file)
+ for page in reader.pages:
+ writer.add_page(page)
 
 with open("merged.pdf", "wb") as output:
-    writer.write(output)
+ writer.write(output)
 ```
 
 #### Split PDF
 ```python
 reader = PdfReader("input.pdf")
 for i, page in enumerate(reader.pages):
-    writer = PdfWriter()
-    writer.add_page(page)
-    with open(f"page_{i+1}.pdf", "wb") as output:
-        writer.write(output)
+ writer = PdfWriter()
+ writer.add_page(page)
+ with open(f"page_{i+1}.pdf", "wb") as output:
+ writer.write(output)
 ```
 
 #### Extract Metadata
@@ -69,11 +69,11 @@ reader = PdfReader("input.pdf")
 writer = PdfWriter()
 
 page = reader.pages[0]
-page.rotate(90)  # Rotate 90 degrees clockwise
+page.rotate(90) # Rotate 90 degrees clockwise
 writer.add_page(page)
 
 with open("rotated.pdf", "wb") as output:
-    writer.write(output)
+ writer.write(output)
 ```
 
 ### pdfplumber - Text and Table Extraction
@@ -83,20 +83,20 @@ with open("rotated.pdf", "wb") as output:
 import pdfplumber
 
 with pdfplumber.open("document.pdf") as pdf:
-    for page in pdf.pages:
-        text = page.extract_text()
-        print(text)
+ for page in pdf.pages:
+ text = page.extract_text()
+ print(text)
 ```
 
 #### Extract Tables
 ```python
 with pdfplumber.open("document.pdf") as pdf:
-    for i, page in enumerate(pdf.pages):
-        tables = page.extract_tables()
-        for j, table in enumerate(tables):
-            print(f"Table {j+1} on page {i+1}:")
-            for row in table:
-                print(row)
+ for i, page in enumerate(pdf.pages):
+ tables = page.extract_tables()
+ for j, table in enumerate(tables):
+ print(f"Table {j+1} on page {i+1}:")
+ for row in table:
+ print(row)
 ```
 
 #### Advanced Table Extraction
@@ -104,18 +104,18 @@ with pdfplumber.open("document.pdf") as pdf:
 import pandas as pd
 
 with pdfplumber.open("document.pdf") as pdf:
-    all_tables = []
-    for page in pdf.pages:
-        tables = page.extract_tables()
-        for table in tables:
-            if table:  # Check if table is not empty
-                df = pd.DataFrame(table[1:], columns=table[0])
-                all_tables.append(df)
+ all_tables = []
+ for page in pdf.pages:
+ tables = page.extract_tables()
+ for table in tables:
+ if table: # Check if table is not empty
+ df = pd.DataFrame(table[1:], columns=table[0])
+ all_tables.append(df)
 
 # Combine all tables
 if all_tables:
-    combined_df = pd.concat(all_tables, ignore_index=True)
-    combined_df.to_excel("extracted_tables.xlsx", index=False)
+ combined_df = pd.concat(all_tables, ignore_index=True)
+ combined_df.to_excel("extracted_tables.xlsx", index=False)
 ```
 
 ### reportlab - Create PDFs
@@ -177,7 +177,7 @@ pdftotext input.pdf output.txt
 pdftotext -layout input.pdf output.txt
 
 # Extract specific pages
-pdftotext -f 1 -l 5 input.pdf output.txt  # Pages 1-5
+pdftotext -f 1 -l 5 input.pdf output.txt # Pages 1-5
 ```
 
 ### qpdf
@@ -190,7 +190,7 @@ qpdf input.pdf --pages . 1-5 -- pages1-5.pdf
 qpdf input.pdf --pages . 6-10 -- pages6-10.pdf
 
 # Rotate pages
-qpdf input.pdf output.pdf --rotate=+90:1  # Rotate page 1 by 90 degrees
+qpdf input.pdf output.pdf --rotate=+90:1 # Rotate page 1 by 90 degrees
 
 # Remove password
 qpdf --password=mypassword --decrypt encrypted.pdf decrypted.pdf
@@ -222,9 +222,9 @@ images = convert_from_path('scanned.pdf')
 # OCR each page
 text = ""
 for i, image in enumerate(images):
-    text += f"Page {i+1}:\n"
-    text += pytesseract.image_to_string(image)
-    text += "\n\n"
+ text += f"Page {i+1}:\n"
+ text += pytesseract.image_to_string(image)
+ text += "\n\n"
 
 print(text)
 ```
@@ -241,11 +241,11 @@ reader = PdfReader("document.pdf")
 writer = PdfWriter()
 
 for page in reader.pages:
-    page.merge_page(watermark)
-    writer.add_page(page)
+ page.merge_page(watermark)
+ writer.add_page(page)
 
 with open("watermarked.pdf", "wb") as output:
-    writer.write(output)
+ writer.write(output)
 ```
 
 ### Extract Images
@@ -264,13 +264,13 @@ reader = PdfReader("input.pdf")
 writer = PdfWriter()
 
 for page in reader.pages:
-    writer.add_page(page)
+ writer.add_page(page)
 
 # Add password
 writer.encrypt("userpassword", "ownerpassword")
 
 with open("encrypted.pdf", "wb") as output:
-    writer.write(output)
+ writer.write(output)
 ```
 
 ## Quick Reference

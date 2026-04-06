@@ -11,7 +11,7 @@ Essential tools and frameworks for modern product management, from discovery to 
 
 ### For Feature Prioritization
 ```bash
-python scripts/rice_prioritizer.py sample  # Create sample CSV
+python scripts/rice_prioritizer.py sample # Create sample CSV
 python scripts/rice_prioritizer.py sample_features.csv --capacity 15
 ```
 
@@ -31,77 +31,77 @@ python scripts/customer_interview_analyzer.py interview_transcript.txt
 ### Feature Prioritization Process
 
 1. **Gather Feature Requests**
-   - Customer feedback
-   - Sales requests
-   - Technical debt
-   - Strategic initiatives
+ - Customer feedback
+ - Sales requests
+ - Technical debt
+ - Strategic initiatives
 
 2. **Score with RICE**
-   ```bash
-   # Create CSV with: name,reach,impact,confidence,effort
-   python scripts/rice_prioritizer.py features.csv
-   ```
-   - **Reach**: Users affected per quarter
-   - **Impact**: massive/high/medium/low/minimal
-   - **Confidence**: high/medium/low
-   - **Effort**: xl/l/m/s/xs (person-months)
+ ```bash
+ # Create CSV with: name,reach,impact,confidence,effort
+ python scripts/rice_prioritizer.py features.csv
+ ```
+ - **Reach**: Users affected per quarter
+ - **Impact**: massive/high/medium/low/minimal
+ - **Confidence**: high/medium/low
+ - **Effort**: xl/l/m/s/xs (person-months)
 
 3. **Analyze Portfolio**
-   - Review quick wins vs big bets
-   - Check effort distribution
-   - Validate against strategy
+ - Review quick wins vs big bets
+ - Check effort distribution
+ - Validate against strategy
 
 4. **Generate Roadmap**
-   - Quarterly capacity planning
-   - Dependency mapping
-   - Stakeholder alignment
+ - Quarterly capacity planning
+ - Dependency mapping
+ - Stakeholder alignment
 
 ### Customer Discovery Process
 
 1. **Conduct Interviews**
-   - Use semi-structured format
-   - Focus on problems, not solutions
-   - Record with permission
+ - Use semi-structured format
+ - Focus on problems, not solutions
+ - Record with permission
 
 2. **Analyze Insights**
-   ```bash
-   python scripts/customer_interview_analyzer.py transcript.txt
-   ```
-   Extracts:
-   - Pain points with severity
-   - Feature requests with priority
-   - Jobs to be done
-   - Sentiment analysis
-   - Key themes and quotes
+ ```bash
+ python scripts/customer_interview_analyzer.py transcript.txt
+ ```
+ Extracts:
+ - Pain points with severity
+ - Feature requests with priority
+ - Jobs to be done
+ - Sentiment analysis
+ - Key themes and quotes
 
 3. **Synthesize Findings**
-   - Group similar pain points
-   - Identify patterns across interviews
-   - Map to opportunity areas
+ - Group similar pain points
+ - Identify patterns across interviews
+ - Map to opportunity areas
 
 4. **Validate Solutions**
-   - Create solution hypotheses
-   - Test with prototypes
-   - Measure actual vs expected behavior
+ - Create solution hypotheses
+ - Test with prototypes
+ - Measure actual vs expected behavior
 
 ### PRD Development Process
 
 1. **Choose Template**
-   - **Standard PRD**: Complex features (6-8 weeks)
-   - **One-Page PRD**: Simple features (2-4 weeks)
-   - **Feature Brief**: Exploration phase (1 week)
-   - **Agile Epic**: Sprint-based delivery
+ - **Standard PRD**: Complex features (6-8 weeks)
+ - **One-Page PRD**: Simple features (2-4 weeks)
+ - **Feature Brief**: Exploration phase (1 week)
+ - **Agile Epic**: Sprint-based delivery
 
 2. **Structure Content**
-   - Problem → Solution → Success Metrics
-   - Always include out-of-scope
-   - Clear acceptance criteria
+ - Problem → Solution → Success Metrics
+ - Always include out-of-scope
+ - Clear acceptance criteria
 
 3. **Collaborate**
-   - Engineering for feasibility
-   - Design for experience
-   - Sales for market validation
-   - Support for operational impact
+ - Engineering for feasibility
+ - Design for experience
+ - Sales for market validation
+ - Support for operational impact
 
 ## Key Scripts
 
@@ -154,24 +154,24 @@ python scripts/customer_interview_analyzer.py interview.txt json
 Multiple PRD formats for different contexts:
 
 1. **Standard PRD Template**
-   - Comprehensive 11-section format
-   - Best for major features
-   - Includes technical specs
+ - Comprehensive 11-section format
+ - Best for major features
+ - Includes technical specs
 
 2. **One-Page PRD**
-   - Concise format for quick alignment
-   - Focus on problem/solution/metrics
-   - Good for smaller features
+ - Concise format for quick alignment
+ - Focus on problem/solution/metrics
+ - Good for smaller features
 
 3. **Agile Epic Template**
-   - Sprint-based delivery
-   - User story mapping
-   - Acceptance criteria focus
+ - Sprint-based delivery
+ - User story mapping
+ - Acceptance criteria focus
 
 4. **Feature Brief**
-   - Lightweight exploration
-   - Hypothesis-driven
-   - Pre-PRD phase
+ - Lightweight exploration
+ - Hypothesis-driven
+ - Pre-PRD phase
 
 ## Prioritization Frameworks
 
@@ -181,27 +181,27 @@ Score = (Reach × Impact × Confidence) / Effort
 
 Reach: # of users/quarter
 Impact: 
-  - Massive = 3x
-  - High = 2x
-  - Medium = 1x
-  - Low = 0.5x
-  - Minimal = 0.25x
+ - Massive = 3x
+ - High = 2x
+ - Medium = 1x
+ - Low = 0.5x
+ - Minimal = 0.25x
 Confidence:
-  - High = 100%
-  - Medium = 80%
-  - Low = 50%
+ - High = 100%
+ - Medium = 80%
+ - Low = 50%
 Effort: Person-months
 ```
 
 ### Value vs Effort Matrix
 ```
-         Low Effort    High Effort
-         
-High     QUICK WINS    BIG BETS
-Value    [Prioritize]   [Strategic]
-         
-Low      FILL-INS      TIME SINKS
-Value    [Maybe]       [Avoid]
+ Low Effort High Effort
+ 
+High QUICK WINS BIG BETS
+Value [Prioritize] [Strategic]
+ 
+Low FILL-INS TIME SINKS
+Value [Maybe] [Avoid]
 ```
 
 ### MoSCoW Method
@@ -215,24 +215,24 @@ Value    [Maybe]       [Avoid]
 ### Customer Interview Guide
 ```
 1. Context Questions (5 min)
-   - Role and responsibilities
-   - Current workflow
-   - Tools used
+ - Role and responsibilities
+ - Current workflow
+ - Tools used
 
 2. Problem Exploration (15 min)
-   - Pain points
-   - Frequency and impact
-   - Current workarounds
+ - Pain points
+ - Frequency and impact
+ - Current workarounds
 
 3. Solution Validation (10 min)
-   - Reaction to concepts
-   - Value perception
-   - Willingness to pay
+ - Reaction to concepts
+ - Value perception
+ - Willingness to pay
 
 4. Wrap-up (5 min)
-   - Other thoughts
-   - Referrals
-   - Follow-up permission
+ - Other thoughts
+ - Referrals
+ - Follow-up permission
 ```
 
 ### Hypothesis Template
@@ -247,11 +247,11 @@ We'll know we're right when [metric]
 ```
 Outcome
 ├── Opportunity 1
-│   ├── Solution A
-│   └── Solution B
+│ ├── Solution A
+│ └── Solution B
 └── Opportunity 2
-    ├── Solution C
-    └── Solution D
+ ├── Solution C
+ └── Solution D
 ```
 
 ## Metrics & Analytics

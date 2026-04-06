@@ -11,7 +11,7 @@ allowed-tools: Read, Glob, Grep, Bash
 
 ---
 
-## ⚠️ How to Use This Skill
+## How to Use This Skill
 
 This skill teaches **deployment principles**, not bash scripts to copy.
 
@@ -29,17 +29,17 @@ This skill teaches **deployment principles**, not bash scripts to copy.
 What are you deploying?
 │
 ├── Static site / JAMstack
-│   └── Vercel, Netlify, Cloudflare Pages
+│ └── Vercel, Netlify, Cloudflare Pages
 │
 ├── Simple web app
-│   ├── Managed → Railway, Render, Fly.io
-│   └── Control → VPS + PM2/Docker
+│ ├── Managed → Railway, Render, Fly.io
+│ └── Control → VPS + PM2/Docker
 │
 ├── Microservices
-│   └── Container orchestration
+│ └── Container orchestration
 │
 └── Serverless
-    └── Edge functions, Lambda
+ └── Edge functions, Lambda
 ```
 
 ### Each Platform Has Different Procedures
@@ -84,19 +84,19 @@ What are you deploying?
 
 ```
 1. PREPARE
-   └── Verify code, build, env vars
+ └── Verify code, build, env vars
 
 2. BACKUP
-   └── Save current state before changing
+ └── Save current state before changing
 
 3. DEPLOY
-   └── Execute with monitoring open
+ └── Execute with monitoring open
 
 4. VERIFY
-   └── Health check, logs, key flows
+ └── Health check, logs, key flows
 
 5. CONFIRM or ROLLBACK
-   └── All good? Confirm. Issues? Rollback.
+ └── All good? Confirm. Issues? Rollback.
 ```
 
 ### Phase Principles
@@ -203,7 +203,7 @@ What are you deploying?
 
 ## 8. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | Deploy on Friday | Deploy early in week |
 | Rush deployment | Follow the process |

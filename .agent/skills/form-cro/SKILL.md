@@ -12,24 +12,24 @@ You are an expert in form optimization. Your goal is to maximize form completion
 Before providing recommendations, identify:
 
 1. **Form Type**
-   - Lead capture (gated content, newsletter)
-   - Contact form
-   - Demo/sales request
-   - Application form
-   - Survey/feedback
-   - Checkout form
-   - Quote request
+ - Lead capture (gated content, newsletter)
+ - Contact form
+ - Demo/sales request
+ - Application form
+ - Survey/feedback
+ - Checkout form
+ - Quote request
 
 2. **Current State**
-   - How many fields?
-   - What's the current completion rate?
-   - Mobile vs. desktop split?
-   - Where do users abandon?
+ - How many fields?
+ - What's the current completion rate?
+ - Mobile vs. desktop split?
+ - Where do users abandon?
 
 3. **Business Context**
-   - What happens with form submissions?
-   - Which fields are actually used in follow-up?
-   - Are there compliance/legal requirements?
+ - What happens with form submissions?
+ - Which fields are actually used in follow-up?
+ - Are there compliance/legal requirements?
 
 ---
 
@@ -127,7 +127,7 @@ Email
 
 **Bad:**
 ```
-[Enter your email address]  ← Disappears on focus
+[Enter your email address] ← Disappears on focus
 ```
 
 ### Visual Design

@@ -16,22 +16,22 @@ Guide for developing Shopify themes with Liquid templating.
 **Tags (Logic):**
 ```liquid
 {% if product.available %}
-  <button>Add to Cart</button>
+ <button>Add to Cart</button>
 {% else %}
-  <p>Sold Out</p>
+ <p>Sold Out</p>
 {% endif %}
 
 {% for product in collection.products %}
-  {{ product.title }}
+ {{ product.title }}
 {% endfor %}
 
 {% case product.type %}
-  {% when 'Clothing' %}
-    <span>Apparel</span>
-  {% when 'Shoes' %}
-    <span>Footwear</span>
-  {% else %}
-    <span>Other</span>
+ {% when 'Clothing' %}
+ <span>Apparel</span>
+ {% when 'Shoes' %}
+ <span>Footwear</span>
+ {% else %}
+ <span>Other</span>
 {% endcase %}
 ```
 
@@ -139,26 +139,26 @@ Guide for developing Shopify themes with Liquid templating.
 
 ```
 theme/
-├── assets/              # CSS, JS, images
-├── config/              # Theme settings
-│   ├── settings_schema.json
-│   └── settings_data.json
-├── layout/              # Base templates
-│   └── theme.liquid
-├── locales/             # Translations
-│   └── en.default.json
-├── sections/            # Reusable blocks
-│   ├── header.liquid
-│   ├── footer.liquid
-│   └── product-grid.liquid
-├── snippets/            # Small components
-│   ├── product-card.liquid
-│   └── icon.liquid
-└── templates/           # Page templates
-    ├── index.json
-    ├── product.json
-    ├── collection.json
-    └── cart.liquid
+├── assets/ # CSS, JS, images
+├── config/ # Theme settings
+│ ├── settings_schema.json
+│ └── settings_data.json
+├── layout/ # Base templates
+│ └── theme.liquid
+├── locales/ # Translations
+│ └── en.default.json
+├── sections/ # Reusable blocks
+│ ├── header.liquid
+│ ├── footer.liquid
+│ └── product-grid.liquid
+├── snippets/ # Small components
+│ ├── product-card.liquid
+│ └── icon.liquid
+└── templates/ # Page templates
+ ├── index.json
+ ├── product.json
+ ├── collection.json
+ └── cart.liquid
 ```
 
 ### Layout
@@ -169,24 +169,24 @@ Base template wrapping all pages (`layout/theme.liquid`):
 <!DOCTYPE html>
 <html lang="{{ request.locale.iso_code }}">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{{ page_title }}</title>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width,initial-scale=1">
+ <title>{{ page_title }}</title>
 
-  {{ content_for_header }}
+ {{ content_for_header }}
 
-  <link rel="stylesheet" href="{{ 'theme.css' | asset_url }}">
+ <link rel="stylesheet" href="{{ 'theme.css' | asset_url }}">
 </head>
 <body>
-  {% section 'header' %}
+ {% section 'header' %}
 
-  <main>
-    {{ content_for_layout }}
-  </main>
+ <main>
+ {{ content_for_layout }}
+ </main>
 
-  {% section 'footer' %}
+ {% section 'footer' %}
 
-  <script src="{{ 'theme.js' | asset_url }}"></script>
+ <script src="{{ 'theme.js' | asset_url }}"></script>
 </body>
 </html>
 ```
@@ -197,43 +197,43 @@ Page-specific structures (`templates/product.json`):
 
 ```json
 {
-  "sections": {
-    "main": {
-      "type": "product-template",
-      "settings": {
-        "show_vendor": true,
-        "show_quantity_selector": true
-      }
-    },
-    "recommendations": {
-      "type": "product-recommendations"
-    }
-  },
-  "order": ["main", "recommendations"]
+ "sections": {
+ "main": {
+ "type": "product-template",
+ "settings": {
+ "show_vendor": true,
+ "show_quantity_selector": true
+ }
+ },
+ "recommendations": {
+ "type": "product-recommendations"
+ }
+ },
+ "order": ["main", "recommendations"]
 }
 ```
 
 Legacy format (`templates/product.liquid`):
 ```liquid
 <div class="product">
-  <div class="product-images">
-    <img src="{{ product.featured_image | img_url: 'large' }}" alt="{{ product.title }}">
-  </div>
+ <div class="product-images">
+ <img src="{{ product.featured_image | img_url: 'large' }}" alt="{{ product.title }}">
+ </div>
 
-  <div class="product-details">
-    <h1>{{ product.title }}</h1>
-    <p class="price">{{ product.price | money }}</p>
+ <div class="product-details">
+ <h1>{{ product.title }}</h1>
+ <p class="price">{{ product.price | money }}</p>
 
-    {% form 'product', product %}
-      <select name="id">
-        {% for variant in product.variants %}
-          <option value="{{ variant.id }}">{{ variant.title }} - {{ variant.price | money }}</option>
-        {% endfor %}
-      </select>
+ {% form 'product', product %}
+ <select name="id">
+ {% for variant in product.variants %}
+ <option value="{{ variant.id }}">{{ variant.title }} - {{ variant.price | money }}</option>
+ {% endfor %}
+ </select>
 
-      <button type="submit">Add to Cart</button>
-    {% endform %}
-  </div>
+ <button type="submit">Add to Cart</button>
+ {% endform %}
+ </div>
 </div>
 ```
 
@@ -243,41 +243,41 @@ Reusable content blocks (`sections/product-grid.liquid`):
 
 ```liquid
 <div class="product-grid">
-  {% for product in section.settings.collection.products %}
-    <div class="product-card">
-      <a href="{{ product.url }}">
-        <img src="{{ product.featured_image | img_url: 'medium' }}" alt="{{ product.title }}">
-        <h3>{{ product.title }}</h3>
-        <p>{{ product.price | money }}</p>
-      </a>
-    </div>
-  {% endfor %}
+ {% for product in section.settings.collection.products %}
+ <div class="product-card">
+ <a href="{{ product.url }}">
+ <img src="{{ product.featured_image | img_url: 'medium' }}" alt="{{ product.title }}">
+ <h3>{{ product.title }}</h3>
+ <p>{{ product.price | money }}</p>
+ </a>
+ </div>
+ {% endfor %}
 </div>
 
 {% schema %}
 {
-  "name": "Product Grid",
-  "settings": [
-    {
-      "type": "collection",
-      "id": "collection",
-      "label": "Collection"
-    },
-    {
-      "type": "range",
-      "id": "products_per_row",
-      "min": 2,
-      "max": 5,
-      "step": 1,
-      "default": 4,
-      "label": "Products per row"
-    }
-  ],
-  "presets": [
-    {
-      "name": "Product Grid"
-    }
-  ]
+ "name": "Product Grid",
+ "settings": [
+ {
+ "type": "collection",
+ "id": "collection",
+ "label": "Collection"
+ },
+ {
+ "type": "range",
+ "id": "products_per_row",
+ "min": 2,
+ "max": 5,
+ "step": 1,
+ "default": 4,
+ "label": "Products per row"
+ }
+ ],
+ "presets": [
+ {
+ "name": "Product Grid"
+ }
+ ]
 }
 {% endschema %}
 ```
@@ -288,16 +288,16 @@ Small reusable components (`snippets/product-card.liquid`):
 
 ```liquid
 <div class="product-card">
-  <a href="{{ product.url }}">
-    {% if product.featured_image %}
-      <img src="{{ product.featured_image | img_url: 'medium' }}" alt="{{ product.title }}">
-    {% endif %}
-    <h3>{{ product.title }}</h3>
-    <p class="price">{{ product.price | money }}</p>
-    {% if product.compare_at_price > product.price %}
-      <p class="sale-price">{{ product.compare_at_price | money }}</p>
-    {% endif %}
-  </a>
+ <a href="{{ product.url }}">
+ {% if product.featured_image %}
+ <img src="{{ product.featured_image | img_url: 'medium' }}" alt="{{ product.title }}">
+ {% endif %}
+ <h3>{{ product.title }}</h3>
+ <p class="price">{{ product.price | money }}</p>
+ {% if product.compare_at_price > product.price %}
+ <p class="sale-price">{{ product.compare_at_price | money }}</p>
+ {% endif %}
+ </a>
 </div>
 ```
 
@@ -367,25 +367,25 @@ shopify theme check --auto-correct
 
 ```liquid
 {% form 'product', product %}
-  {% unless product.has_only_default_variant %}
-    {% for option in product.options_with_values %}
-      <div class="product-option">
-        <label>{{ option.name }}</label>
-        <select name="options[{{ option.name }}]">
-          {% for value in option.values %}
-            <option value="{{ value }}">{{ value }}</option>
-          {% endfor %}
-        </select>
-      </div>
-    {% endfor %}
-  {% endunless %}
+ {% unless product.has_only_default_variant %}
+ {% for option in product.options_with_values %}
+ <div class="product-option">
+ <label>{{ option.name }}</label>
+ <select name="options[{{ option.name }}]">
+ {% for value in option.values %}
+ <option value="{{ value }}">{{ value }}</option>
+ {% endfor %}
+ </select>
+ </div>
+ {% endfor %}
+ {% endunless %}
 
-  <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}">
-  <input type="number" name="quantity" value="1" min="1">
+ <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}">
+ <input type="number" name="quantity" value="1" min="1">
 
-  <button type="submit" {% unless product.available %}disabled{% endunless %}>
-    {% if product.available %}Add to Cart{% else %}Sold Out{% endif %}
-  </button>
+ <button type="submit" {% unless product.available %}disabled{% endunless %}>
+ {% if product.available %}Add to Cart{% else %}Sold Out{% endif %}
+ </button>
 {% endform %}
 ```
 
@@ -393,29 +393,29 @@ shopify theme check --auto-correct
 
 ```liquid
 {% paginate collection.products by 12 %}
-  {% for product in collection.products %}
-    {% render 'product-card', product: product %}
-  {% endfor %}
+ {% for product in collection.products %}
+ {% render 'product-card', product: product %}
+ {% endfor %}
 
-  {% if paginate.pages > 1 %}
-    <div class="pagination">
-      {% if paginate.previous %}
-        <a href="{{ paginate.previous.url }}">Previous</a>
-      {% endif %}
+ {% if paginate.pages > 1 %}
+ <div class="pagination">
+ {% if paginate.previous %}
+ <a href="{{ paginate.previous.url }}">Previous</a>
+ {% endif %}
 
-      {% for part in paginate.parts %}
-        {% if part.is_link %}
-          <a href="{{ part.url }}">{{ part.title }}</a>
-        {% else %}
-          <span class="current">{{ part.title }}</span>
-        {% endif %}
-      {% endfor %}
+ {% for part in paginate.parts %}
+ {% if part.is_link %}
+ <a href="{{ part.url }}">{{ part.title }}</a>
+ {% else %}
+ <span class="current">{{ part.title }}</span>
+ {% endif %}
+ {% endfor %}
 
-      {% if paginate.next %}
-        <a href="{{ paginate.next.url }}">Next</a>
-      {% endif %}
-    </div>
-  {% endif %}
+ {% if paginate.next %}
+ <a href="{{ paginate.next.url }}">Next</a>
+ {% endif %}
+ </div>
+ {% endif %}
 {% endpaginate %}
 ```
 
@@ -424,29 +424,29 @@ shopify theme check --auto-correct
 ```javascript
 // Add to cart
 fetch('/cart/add.js', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    id: variantId,
-    quantity: 1
-  })
+ method: 'POST',
+ headers: { 'Content-Type': 'application/json' },
+ body: JSON.stringify({
+ id: variantId,
+ quantity: 1
+ })
 })
 .then(res => res.json())
 .then(item => console.log('Added:', item));
 
 // Get cart
 fetch('/cart.js')
-  .then(res => res.json())
-  .then(cart => console.log('Cart:', cart));
+ .then(res => res.json())
+ .then(cart => console.log('Cart:', cart));
 
 // Update cart
 fetch('/cart/change.js', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    id: lineItemKey,
-    quantity: 2
-  })
+ method: 'POST',
+ headers: { 'Content-Type': 'application/json' },
+ body: JSON.stringify({
+ id: lineItemKey,
+ quantity: 2
+ })
 })
 .then(res => res.json());
 ```
@@ -460,7 +460,7 @@ Access custom data:
 {{ product.metafields.custom.material.value }}
 
 {% if product.metafields.custom.featured %}
-  <span class="badge">Featured</span>
+ <span class="badge">Featured</span>
 {% endif %}
 ```
 

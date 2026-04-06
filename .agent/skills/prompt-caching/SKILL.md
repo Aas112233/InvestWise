@@ -42,13 +42,13 @@ Pre-cache documents in prompt instead of RAG retrieval
 
 ## Anti-Patterns
 
-### ❌ Caching with High Temperature
+### Caching with High Temperature
 
-### ❌ No Cache Invalidation
+### No Cache Invalidation
 
-### ❌ Caching Everything
+### Caching Everything
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

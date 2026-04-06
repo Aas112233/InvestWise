@@ -46,11 +46,11 @@ Complex multi-step job processing with parent-child relationships
 
 ## Anti-Patterns
 
-### ❌ Giant Job Payloads
+### Giant Job Payloads
 
-### ❌ No Dead Letter Queue
+### No Dead Letter Queue
 
-### ❌ Infinite Concurrency
+### Infinite Concurrency
 
 ## Related Skills
 

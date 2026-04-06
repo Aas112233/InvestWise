@@ -65,11 +65,11 @@ backend/
 ├── package.json (Express, TypeScript, SQLite3)
 ├── tsconfig.json
 ├── src/
-│   ├── index.ts (Express server with DB init)
-│   ├── db/
-│   │   └── db.ts (SQLite connection & schema)
-│   └── routes/
-│       └── todos.ts (All CRUD endpoints)
+│ ├── index.ts (Express server with DB init)
+│ ├── db/
+│ │ └── db.ts (SQLite connection & schema)
+│ └── routes/
+│ └── todos.ts (All CRUD endpoints)
 ```
 
 ### Frontend (`/frontend`)
@@ -78,18 +78,18 @@ frontend/
 ├── package.json (Vite, React 19, TypeScript)
 ├── vite.config.ts (proxy to backend)
 ├── src/
-│   ├── App.tsx (Main app with all components)
-│   ├── App.css (Complete styling)
-│   ├── api/
-│   │   └── todos.ts (API client functions)
-│   ├── hooks/
-│   │   └── useTodos.ts (State management)
-│   └── components/
-│       ├── TodoForm.tsx
-│       ├── TodoItem.tsx
-│       ├── TodoList.tsx
-│       ├── EmptyState.tsx
-│       └── ConfirmDialog.tsx
+│ ├── App.tsx (Main app with all components)
+│ ├── App.css (Complete styling)
+│ ├── api/
+│ │ └── todos.ts (API client functions)
+│ ├── hooks/
+│ │ └── useTodos.ts (State management)
+│ └── components/
+│ ├── TodoForm.tsx
+│ ├── TodoItem.tsx
+│ ├── TodoList.tsx
+│ ├── EmptyState.tsx
+│ └── ConfirmDialog.tsx
 ```
 
 ## Model Usage Optimization

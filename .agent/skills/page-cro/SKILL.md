@@ -12,30 +12,30 @@ You are a conversion rate optimization expert. Your goal is to analyze marketing
 Before providing recommendations, identify:
 
 1. **Page Type**: What kind of page is this?
-   - Homepage
-   - Landing page (paid traffic, specific campaign)
-   - Pricing page
-   - Feature/product page
-   - Blog post with CTA
-   - About page
-   - Other
+ - Homepage
+ - Landing page (paid traffic, specific campaign)
+ - Pricing page
+ - Feature/product page
+ - Blog post with CTA
+ - About page
+ - Other
 
 2. **Primary Conversion Goal**: What's the one thing this page should get visitors to do?
-   - Sign up / Start trial
-   - Request demo
-   - Purchase
-   - Subscribe to newsletter
-   - Download resource
-   - Contact sales
-   - Other
+ - Sign up / Start trial
+ - Request demo
+ - Purchase
+ - Subscribe to newsletter
+ - Download resource
+ - Contact sales
+ - Other
 
 3. **Traffic Context**: If known, where are visitors coming from?
-   - Organic search (what intent?)
-   - Paid ads (what messaging?)
-   - Social media
-   - Email
-   - Referral
-   - Direct
+ - Organic search (what intent?)
+ - Paid ads (what messaging?)
+ - Social media
+ - Email
+ - Referral
+ - Direct
 
 ## CRO Analysis Framework
 
@@ -75,8 +75,8 @@ Analyze the page across these dimensions, in order of impact:
 - Is there one clear primary action?
 - Is it visible without scrolling (above the fold)?
 - Does the button copy communicate value, not just action?
-  - Weak: "Submit," "Sign Up," "Learn More"
-  - Strong: "Start Free Trial," "Get My Report," "See Pricing"
+ - Weak: "Submit," "Sign Up," "Learn More"
+ - Strong: "Start Free Trial," "Get My Report," "See Pricing"
 - Is there sufficient contrast and visual weight?
 
 **CTA hierarchy:**

@@ -12,19 +12,19 @@ You are an expert in analytics implementation and measurement. Your goal is to h
 Before implementing tracking, understand:
 
 1. **Business Context**
-   - What decisions will this data inform?
-   - What are the key conversion actions?
-   - What questions need answering?
+ - What decisions will this data inform?
+ - What are the key conversion actions?
+ - What questions need answering?
 
 2. **Current State**
-   - What tracking exists?
-   - What tools are in use (GA4, Mixpanel, Amplitude, etc.)?
-   - What's working/not working?
+ - What tracking exists?
+ - What tools are in use (GA4, Mixpanel, Amplitude, etc.)?
+ - What's working/not working?
 
 3. **Technical Context**
-   - What's the tech stack?
-   - Who will implement and maintain?
-   - Any privacy/compliance requirements?
+ - What's the tech stack?
+ - Who will implement and maintain?
+ - Any privacy/compliance requirements?
 
 ---
 
@@ -257,15 +257,15 @@ onboarding_step_completed
 ```javascript
 // gtag.js
 gtag('event', 'signup_completed', {
-  'method': 'email',
-  'plan': 'free'
+ 'method': 'email',
+ 'plan': 'free'
 });
 
 // Google Tag Manager (dataLayer)
 dataLayer.push({
-  'event': 'signup_completed',
-  'method': 'email',
-  'plan': 'free'
+ 'event': 'signup_completed',
+ 'method': 'email',
+ 'plan': 'free'
 });
 ```
 
@@ -324,30 +324,30 @@ dataLayer.push({
 ```javascript
 // Push custom event
 dataLayer.push({
-  'event': 'form_submitted',
-  'form_name': 'contact',
-  'form_location': 'footer'
+ 'event': 'form_submitted',
+ 'form_name': 'contact',
+ 'form_location': 'footer'
 });
 
 // Set user properties
 dataLayer.push({
-  'user_id': '12345',
-  'user_type': 'premium'
+ 'user_id': '12345',
+ 'user_type': 'premium'
 });
 
 // E-commerce event
 dataLayer.push({
-  'event': 'purchase',
-  'ecommerce': {
-    'transaction_id': 'T12345',
-    'value': 99.99,
-    'currency': 'USD',
-    'items': [{
-      'item_id': 'SKU123',
-      'item_name': 'Product Name',
-      'price': 99.99
-    }]
-  }
+ 'event': 'purchase',
+ 'ecommerce': {
+ 'transaction_id': 'T12345',
+ 'value': 99.99,
+ 'currency': 'USD',
+ 'items': [{
+ 'item_id': 'SKU123',
+ 'item_name': 'Product Name',
+ 'price': 99.99
+ }]
+ }
 });
 ```
 

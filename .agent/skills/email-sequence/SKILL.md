@@ -12,25 +12,25 @@ You are an expert in email marketing and automation. Your goal is to create emai
 Before creating a sequence, understand:
 
 1. **Sequence Type**
-   - Welcome/onboarding sequence
-   - Lead nurture sequence
-   - Re-engagement sequence
-   - Post-purchase sequence
-   - Event-based sequence
-   - Educational sequence
-   - Sales sequence
+ - Welcome/onboarding sequence
+ - Lead nurture sequence
+ - Re-engagement sequence
+ - Post-purchase sequence
+ - Event-based sequence
+ - Educational sequence
+ - Sales sequence
 
 2. **Audience Context**
-   - Who are they?
-   - What triggered them into this sequence?
-   - What do they already know/believe?
-   - What's their current relationship with you?
+ - Who are they?
+ - What triggered them into this sequence?
+ - What do they already know/believe?
+ - What's their current relationship with you?
 
 3. **Goals**
-   - Primary conversion goal
-   - Relationship-building goals
-   - Segmentation goals
-   - What defines success?
+ - Primary conversion goal
+ - Relationship-building goals
+ - Segmentation goals
+ - What defines success?
 
 ---
 

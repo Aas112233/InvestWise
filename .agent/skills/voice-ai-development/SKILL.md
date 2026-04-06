@@ -47,58 +47,58 @@ import base64
 OPENAI_API_KEY = "sk-..."
 
 async def voice_session():
-    url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview"
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "OpenAI-Beta": "realtime=v1"
-    }
+ url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview"
+ headers = {
+ "Authorization": f"Bearer {OPENAI_API_KEY}",
+ "OpenAI-Beta": "realtime=v1"
+ }
 
-    async with websockets.connect(url, extra_headers=headers) as ws:
-        # Configure session
-        await ws.send(json.dumps({
-            "type": "session.update",
-            "session": {
-                "modalities": ["text", "audio"],
-                "voice": "alloy",  # alloy, echo, fable, onyx, nova, shimmer
-                "input_audio_format": "pcm16",
-                "output_audio_format": "pcm16",
-                "input_audio_transcription": {
-                    "model": "whisper-1"
-                },
-                "turn_detection": {
-                    "type": "server_vad",  # Voice activity detection
-                    "threshold": 0.5,
-                    "prefix_padding_ms": 300,
-                    "silence_duration_ms": 500
-                },
-                "tools": [
-                    {
-                        "type": "function",
-                        "name": "get_weather",
-                        "description": "Get weather for a location",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "location": {"type": "string"}
-                            }
-                        }
-                    }
-                ]
-            }
-        }))
+ async with websockets.connect(url, extra_headers=headers) as ws:
+ # Configure session
+ await ws.send(json.dumps({
+ "type": "session.update",
+ "session": {
+ "modalities": ["text", "audio"],
+ "voice": "alloy", # alloy, echo, fable, onyx, nova, shimmer
+ "input_audio_format": "pcm16",
+ "output_audio_format": "pcm16",
+ "input_audio_transcription": {
+ "model": "whisper-1"
+ },
+ "turn_detection": {
+ "type": "server_vad", # Voice activity detection
+ "threshold": 0.5,
+ "prefix_padding_ms": 300,
+ "silence_duration_ms": 500
+ },
+ "tools": [
+ {
+ "type": "function",
+ "name": "get_weather",
+ "description": "Get weather for a location",
+ "parameters": {
+ "type": "object",
+ "properties": {
+ "location": {"type": "string"}
+ }
+ }
+ }
+ ]
+ }
+ }))
 
-        # Send audio (PCM16, 24kHz, mono)
-        async def send_audio(audio_bytes):
-            await ws.send(json.dumps({
-                "type": "input_audio_buffer.append",
-                "audio": base64.b64encode(audio_bytes).decode()
-            }))
+ # Send audio (PCM16, 24kHz, mono)
+ async def send_audio(audio_bytes):
+ await ws.send(json.dumps({
+ "type": "input_audio_buffer.append",
+ "audio": base64.b64encode(audio_bytes).decode()
+ }))
 
-        # Receive events
-        async for message in ws:
-            event = json.loads(message)
+ # Receive events
+ async for message in ws:
+ event = json.loads(message)
 
-            if event["type"] == "resp
+ if event["type"] == "resp
 ```
 
 ### Vapi Voice Agent
@@ -118,64 +118,64 @@ client = vapi.Vapi(api_key="...")
 
 # Create an assistant
 assistant = client.assistants.create(
-    name="Support Agent",
-    model={
-        "provider": "openai",
-        "model": "gpt-4o",
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are a helpful support agent..."
-            }
-        ]
-    },
-    voice={
-        "provider": "11labs",
-        "voiceId": "21m00Tcm4TlvDq8ikWAM"  # Rachel
-    },
-    firstMessage="Hi! How can I help you today?",
-    transcriber={
-        "provider": "deepgram",
-        "model": "nova-2"
-    }
+ name="Support Agent",
+ model={
+ "provider": "openai",
+ "model": "gpt-4o",
+ "messages": [
+ {
+ "role": "system",
+ "content": "You are a helpful support agent..."
+ }
+ ]
+ },
+ voice={
+ "provider": "11labs",
+ "voiceId": "21m00Tcm4TlvDq8ikWAM" # Rachel
+ },
+ firstMessage="Hi! How can I help you today?",
+ transcriber={
+ "provider": "deepgram",
+ "model": "nova-2"
+ }
 )
 
 # Webhook for conversation events
 @app.route("/vapi/webhook", methods=["POST"])
 def vapi_webhook():
-    event = request.json
+ event = request.json
 
-    if event["type"] == "function-call":
-        # Handle tool call
-        name = event["functionCall"]["name"]
-        args = event["functionCall"]["parameters"]
+ if event["type"] == "function-call":
+ # Handle tool call
+ name = event["functionCall"]["name"]
+ args = event["functionCall"]["parameters"]
 
-        if name == "check_order":
-            result = check_order(args["order_id"])
-            return jsonify({"result": result})
+ if name == "check_order":
+ result = check_order(args["order_id"])
+ return jsonify({"result": result})
 
-    elif event["type"] == "end-of-call-report":
-        # Call ended - save transcript
-        transcript = event["transcript"]
-        save_transcript(event["call"]["id"], transcript)
+ elif event["type"] == "end-of-call-report":
+ # Call ended - save transcript
+ transcript = event["transcript"]
+ save_transcript(event["call"]["id"], transcript)
 
-    return jsonify({"ok": True})
+ return jsonify({"ok": True})
 
 # Start outbound call
 call = client.calls.create(
-    assistant_id=assistant.id,
-    customer={
-        "number": "+1234567890"
-    },
-    phoneNumber={
-        "twilioPhoneNumber": "+0987654321"
-    }
+ assistant_id=assistant.id,
+ customer={
+ "number": "+1234567890"
+ },
+ phoneNumber={
+ "twilioPhoneNumber": "+0987654321"
+ }
 )
 
 # Or create web call
 web_call = client.calls.create(
-    assistant_id=assistant.id,
-    type="web"
+ assistant_id=assistant.id,
+ type="web"
 )
 # Returns URL for WebRTC connection
 ```
@@ -195,68 +195,68 @@ from elevenlabs import ElevenLabs
 deepgram = DeepgramClient(api_key="...")
 
 async def transcribe_stream(audio_stream):
-    connection = deepgram.listen.live.v("1")
+ connection = deepgram.listen.live.v("1")
 
-    async def on_transcript(result):
-        transcript = result.channel.alternatives[0].transcript
-        if transcript:
-            print(f"Heard: {transcript}")
-            if result.is_final:
-                # Process final transcript
-                await handle_user_input(transcript)
+ async def on_transcript(result):
+ transcript = result.channel.alternatives[0].transcript
+ if transcript:
+ print(f"Heard: {transcript}")
+ if result.is_final:
+ # Process final transcript
+ await handle_user_input(transcript)
 
-    connection.on(LiveTranscriptionEvents.Transcript, on_transcript)
+ connection.on(LiveTranscriptionEvents.Transcript, on_transcript)
 
-    await connection.start({
-        "model": "nova-2",  # Best quality
-        "language": "en",
-        "smart_format": True,
-        "interim_results": True,  # Get partial results
-        "utterance_end_ms": 1000,
-        "vad_events": True,  # Voice activity detection
-        "encoding": "linear16",
-        "sample_rate": 16000
-    })
+ await connection.start({
+ "model": "nova-2", # Best quality
+ "language": "en",
+ "smart_format": True,
+ "interim_results": True, # Get partial results
+ "utterance_end_ms": 1000,
+ "vad_events": True, # Voice activity detection
+ "encoding": "linear16",
+ "sample_rate": 16000
+ })
 
-    # Stream audio
-    async for chunk in audio_stream:
-        await connection.send(chunk)
+ # Stream audio
+ async for chunk in audio_stream:
+ await connection.send(chunk)
 
-    await connection.finish()
+ await connection.finish()
 
 # ElevenLabs streaming synthesis
 eleven = ElevenLabs(api_key="...")
 
 def text_to_speech_stream(text: str):
-    """Stream TTS audio chunks."""
-    audio_stream = eleven.text_to_speech.convert_as_stream(
-        voice_id="21m00Tcm4TlvDq8ikWAM",  # Rachel
-        model_id="eleven_turbo_v2_5",  # Fastest
-        text=text,
-        output_format="pcm_24000"  # Raw PCM for low latency
-    )
+ """Stream TTS audio chunks."""
+ audio_stream = eleven.text_to_speech.convert_as_stream(
+ voice_id="21m00Tcm4TlvDq8ikWAM", # Rachel
+ model_id="eleven_turbo_v2_5", # Fastest
+ text=text,
+ output_format="pcm_24000" # Raw PCM for low latency
+ )
 
-    for chunk in audio_stream:
-        yield chunk
+ for chunk in audio_stream:
+ yield chunk
 
 # Or with WebSocket for lowest latency
 async def tts_websocket(text_stream):
-    async with eleven.text_to_speech.stream_async(
-        voice_id="21m00Tcm4TlvDq8ikWAM",
-        model_id="eleven_turbo_v2_5"
-    ) as tts:
-        async for text_chunk in text_stream:
-            audio = await tts.send(text_chunk)
-            yield audio
+ async with eleven.text_to_speech.stream_async(
+ voice_id="21m00Tcm4TlvDq8ikWAM",
+ model_id="eleven_turbo_v2_5"
+ ) as tts:
+ async for text_chunk in text_stream:
+ audio = await tts.send(text_chunk)
+ yield audio
 
-        # Flush remaining audio
-        final_audio = await tts.flush()
-        yield final_audio
+ # Flush remaining audio
+ final_audio = await tts.flush()
+ yield final_audio
 ```
 
 ## Anti-Patterns
 
-### ❌ Non-streaming Pipeline
+### Non-streaming Pipeline
 
 **Why bad**: Adds seconds of latency.
 User perceives as slow.
@@ -268,7 +268,7 @@ Loses conversation flow.
 - TTS: chunk streaming
 Start TTS before LLM finishes.
 
-### ❌ Ignoring Interruptions
+### Ignoring Interruptions
 
 **Why bad**: Frustrating user experience.
 Feels like talking to a machine.
@@ -279,7 +279,7 @@ Use VAD to detect user speech.
 Stop TTS immediately.
 Clear audio queue.
 
-### ❌ Single Provider Lock-in
+### Single Provider Lock-in
 
 **Why bad**: May not be best quality.
 Single point of failure.

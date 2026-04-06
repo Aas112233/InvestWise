@@ -23,18 +23,18 @@ description: Chrome Extension template principles. Manifest V3, React, TypeScrip
 ```
 project-name/
 ├── src/
-│   ├── popup/           # Extension popup
-│   ├── options/         # Options page
-│   ├── background/      # Service worker
-│   ├── content/         # Content scripts
-│   ├── components/
-│   ├── hooks/
-│   └── lib/
-│       ├── storage.ts   # Chrome storage helpers
-│       └── messaging.ts # Message passing
+│ ├── popup/ # Extension popup
+│ ├── options/ # Options page
+│ ├── background/ # Service worker
+│ ├── content/ # Content scripts
+│ ├── components/
+│ ├── hooks/
+│ └── lib/
+│ ├── storage.ts # Chrome storage helpers
+│ └── messaging.ts # Message passing
 ├── public/
-│   ├── icons/
-│   └── manifest.json
+│ ├── icons/
+│ └── manifest.json
 └── package.json
 ```
 

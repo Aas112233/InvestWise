@@ -28,51 +28,51 @@ const docClient = DynamoDBDocumentClient.from(client);
 
 // Handler function
 exports.handler = async (event, context) => {
-  // Optional: Don't wait for event loop to clear (Node.js)
-  context.callbackWaitsForEmptyEventLoop = false;
+ // Optional: Don't wait for event loop to clear (Node.js)
+ context.callbackWaitsForEmptyEventLoop = false;
 
-  try {
-    // Parse input based on event source
-    const body = typeof event.body === 'string'
-      ? JSON.parse(event.body)
-      : event.body;
+ try {
+ // Parse input based on event source
+ const body = typeof event.body === 'string'
+ ? JSON.parse(event.body)
+ : event.body;
 
-    // Business logic
-    const result = await processRequest(body);
+ // Business logic
+ const result = await processRequest(body);
 
-    // Return API Gateway compatible response
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
-      body: JSON.stringify(result)
-    };
-  } catch (error) {
-    console.error('Error:', JSON.stringify({
-      error: error.message,
-      stack: error.stack,
-      requestId: context.awsRequestId
-    }));
+ // Return API Gateway compatible response
+ return {
+ statusCode: 200,
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Access-Control-Allow-Origin': '*'
+ },
+ body: JSON.stringify(result)
+ };
+ } catch (error) {
+ console.error('Error:', JSON.stringify({
+ error: error.message,
+ stack: error.stack,
+ requestId: context.awsRequestId
+ }));
 
-    return {
-      statusCode: error.statusCode || 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        error: error.message || 'Internal server error'
-      })
-    };
-  }
+ return {
+ statusCode: error.statusCode || 500,
+ headers: { 'Content-Type': 'application/json' },
+ body: JSON.stringify({
+ error: error.message || 'Internal server error'
+ })
+ };
+ }
 };
 
 async function processRequest(data) {
-  // Your business logic here
-  const result = await docClient.send(new GetCommand({
-    TableName: process.env.TABLE_NAME,
-    Key: { id: data.id }
-  }));
-  return result.Item;
+ // Your business logic here
+ const result = await docClient.send(new GetCommand({
+ TableName: process.env.TABLE_NAME,
+ Key: { id: data.id }
+ }));
+ return result.Item;
 }
 ```
 
@@ -94,8 +94,8 @@ dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ['TABLE_NAME'])
 
 def handler(event, context):
-    try:
-        # Parse i
+ try:
+ # Parse i
 ```
 
 ### API Gateway Integration Pattern
@@ -111,76 +111,76 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 
 Globals:
-  Function:
-    Runtime: nodejs20.x
-    Timeout: 30
-    MemorySize: 256
-    Environment:
-      Variables:
-        TABLE_NAME: !Ref ItemsTable
+ Function:
+ Runtime: nodejs20.x
+ Timeout: 30
+ MemorySize: 256
+ Environment:
+ Variables:
+ TABLE_NAME: !Ref ItemsTable
 
 Resources:
-  # HTTP API (recommended for simple use cases)
-  HttpApi:
-    Type: AWS::Serverless::HttpApi
-    Properties:
-      StageName: prod
-      CorsConfiguration:
-        AllowOrigins:
-          - "*"
-        AllowMethods:
-          - GET
-          - POST
-          - DELETE
-        AllowHeaders:
-          - "*"
+ # HTTP API (recommended for simple use cases)
+ HttpApi:
+ Type: AWS::Serverless::HttpApi
+ Properties:
+ StageName: prod
+ CorsConfiguration:
+ AllowOrigins:
+ - "*"
+ AllowMethods:
+ - GET
+ - POST
+ - DELETE
+ AllowHeaders:
+ - "*"
 
-  # Lambda Functions
-  GetItemFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: src/handlers/get.handler
-      Events:
-        GetItem:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /items/{id}
-            Method: GET
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref ItemsTable
+ # Lambda Functions
+ GetItemFunction:
+ Type: AWS::Serverless::Function
+ Properties:
+ Handler: src/handlers/get.handler
+ Events:
+ GetItem:
+ Type: HttpApi
+ Properties:
+ ApiId: !Ref HttpApi
+ Path: /items/{id}
+ Method: GET
+ Policies:
+ - DynamoDBReadPolicy:
+ TableName: !Ref ItemsTable
 
-  CreateItemFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: src/handlers/create.handler
-      Events:
-        CreateItem:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /items
-            Method: POST
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ItemsTable
+ CreateItemFunction:
+ Type: AWS::Serverless::Function
+ Properties:
+ Handler: src/handlers/create.handler
+ Events:
+ CreateItem:
+ Type: HttpApi
+ Properties:
+ ApiId: !Ref HttpApi
+ Path: /items
+ Method: POST
+ Policies:
+ - DynamoDBCrudPolicy:
+ TableName: !Ref ItemsTable
 
-  # DynamoDB Table
-  ItemsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-      BillingMode: PAY_PER_REQUEST
+ # DynamoDB Table
+ ItemsTable:
+ Type: AWS::DynamoDB::Table
+ Properties:
+ AttributeDefinitions:
+ - AttributeName: id
+ AttributeType: S
+ KeySchema:
+ - AttributeName: id
+ KeyType: HASH
+ BillingMode: PAY_PER_REQUEST
 
 Outputs:
-  ApiUrl:
-    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+ ApiUrl:
+ Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
 ```
 
 ```javascript
@@ -188,16 +188,16 @@ Outputs:
 const { getItem } = require('../lib/dynamodb');
 
 exports.handler = async (event) => {
-  const id = event.pathParameters?.id;
+ const id = event.pathParameters?.id;
 
-  if (!id) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: 'Missing id parameter' })
-    };
-  }
+ if (!id) {
+ return {
+ statusCode: 400,
+ body: JSON.stringify({ error: 'Missing id parameter' })
+ };
+ }
 
-  const item =
+ const item =
 ```
 
 ### Event-Driven SQS Pattern
@@ -210,61 +210,61 @@ Lambda triggered by SQS for reliable async processing
 ```yaml
 # template.yaml
 Resources:
-  ProcessorFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: src/handlers/processor.handler
-      Events:
-        SQSEvent:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt ProcessingQueue.Arn
-            BatchSize: 10
-            FunctionResponseTypes:
-              - ReportBatchItemFailures  # Partial batch failure handling
+ ProcessorFunction:
+ Type: AWS::Serverless::Function
+ Properties:
+ Handler: src/handlers/processor.handler
+ Events:
+ SQSEvent:
+ Type: SQS
+ Properties:
+ Queue: !GetAtt ProcessingQueue.Arn
+ BatchSize: 10
+ FunctionResponseTypes:
+ - ReportBatchItemFailures # Partial batch failure handling
 
-  ProcessingQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      VisibilityTimeout: 180  # 6x Lambda timeout
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
-        maxReceiveCount: 3
+ ProcessingQueue:
+ Type: AWS::SQS::Queue
+ Properties:
+ VisibilityTimeout: 180 # 6x Lambda timeout
+ RedrivePolicy:
+ deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+ maxReceiveCount: 3
 
-  DeadLetterQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      MessageRetentionPeriod: 1209600  # 14 days
+ DeadLetterQueue:
+ Type: AWS::SQS::Queue
+ Properties:
+ MessageRetentionPeriod: 1209600 # 14 days
 ```
 
 ```javascript
 // src/handlers/processor.js
 exports.handler = async (event) => {
-  const batchItemFailures = [];
+ const batchItemFailures = [];
 
-  for (const record of event.Records) {
-    try {
-      const body = JSON.parse(record.body);
-      await processMessage(body);
-    } catch (error) {
-      console.error(`Failed to process message ${record.messageId}:`, error);
-      // Report this item as failed (will be retried)
-      batchItemFailures.push({
-        itemIdentifier: record.messageId
-      });
-    }
-  }
+ for (const record of event.Records) {
+ try {
+ const body = JSON.parse(record.body);
+ await processMessage(body);
+ } catch (error) {
+ console.error(`Failed to process message ${record.messageId}:`, error);
+ // Report this item as failed (will be retried)
+ batchItemFailures.push({
+ itemIdentifier: record.messageId
+ });
+ }
+ }
 
-  // Return failed items for retry
-  return { batchItemFailures };
+ // Return failed items for retry
+ return { batchItemFailures };
 };
 
 async function processMessage(message) {
-  // Your processing logic
-  console.log('Processing:', message);
+ // Your processing logic
+ console.log('Processing:', message);
 
-  // Simulate work
-  await saveToDatabase(message);
+ // Simulate work
+ await saveToDatabase(message);
 }
 ```
 
@@ -276,41 +276,41 @@ import logging
 logger = logging.getLogger()
 
 def handler(event, context):
-    batch_item_failures = []
+ batch_item_failures = []
 
-    for record in event['Records']:
-        try:
-            body = json.loads(record['body'])
-            process_message(body)
-        except Exception as e:
-            logger.error(f"Failed to process {record['messageId']}: {e}")
-            batch_item_failures.append({
-                'itemIdentifier': record['messageId']
-            })
+ for record in event['Records']:
+ try:
+ body = json.loads(record['body'])
+ process_message(body)
+ except Exception as e:
+ logger.error(f"Failed to process {record['messageId']}: {e}")
+ batch_item_failures.append({
+ 'itemIdentifier': record['messageId']
+ })
 
-    return {'batchItemFailures': batch_ite
+ return {'batchItemFailures': batch_ite
 ```
 
 ## Anti-Patterns
 
-### ❌ Monolithic Lambda
+### Monolithic Lambda
 
 **Why bad**: Large deployment packages cause slow cold starts.
 Hard to scale individual operations.
 Updates affect entire system.
 
-### ❌ Large Dependencies
+### Large Dependencies
 
 **Why bad**: Increases deployment package size.
 Slows down cold starts significantly.
 Most of SDK/library may be unused.
 
-### ❌ Synchronous Calls in VPC
+### Synchronous Calls in VPC
 
 **Why bad**: VPC-attached Lambdas have ENI setup overhead.
 Blocking DNS lookups or connections worsen cold starts.
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

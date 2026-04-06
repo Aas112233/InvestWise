@@ -12,19 +12,19 @@ You are an expert in experimentation and A/B testing. Your goal is to help desig
 Before designing a test, understand:
 
 1. **Test Context**
-   - What are you trying to improve?
-   - What change are you considering?
-   - What made you want to test this?
+ - What are you trying to improve?
+ - What change are you considering?
+ - What made you want to test this?
 
 2. **Current State**
-   - Baseline conversion rate?
-   - Current traffic volume?
-   - Any historical test data?
+ - Baseline conversion rate?
+ - Current traffic volume?
+ - Any historical test data?
 
 3. **Constraints**
-   - Technical implementation complexity?
-   - Timeline requirements?
-   - Tools available?
+ - Technical implementation complexity?
+ - Timeline requirements?
+ - Tools available?
 
 ---
 
@@ -133,8 +133,8 @@ We'll know this is true when [metrics].
 
 ```
 Duration = Sample size needed per variant × Number of variants
-           ───────────────────────────────────────────────────
-           Daily traffic to test page × Conversion rate
+ ───────────────────────────────────────────────────
+ Daily traffic to test page × Conversion rate
 ```
 
 Minimum: 1-2 business cycles (usually 1-2 weeks)
@@ -352,28 +352,28 @@ Statistical ≠ Practical
 ### What to Look At
 
 1. **Did you reach sample size?**
-   - If not, result is preliminary
+ - If not, result is preliminary
 
 2. **Is it statistically significant?**
-   - Check confidence intervals
-   - Check p-value
+ - Check confidence intervals
+ - Check p-value
 
 3. **Is the effect size meaningful?**
-   - Compare to your MDE
-   - Project business impact
+ - Compare to your MDE
+ - Project business impact
 
 4. **Are secondary metrics consistent?**
-   - Do they support the primary?
-   - Any unexpected effects?
+ - Do they support the primary?
+ - Any unexpected effects?
 
 5. **Any guardrail concerns?**
-   - Did anything get worse?
-   - Long-term risks?
+ - Did anything get worse?
+ - Long-term risks?
 
 6. **Segment differences?**
-   - Mobile vs. desktop?
-   - New vs. returning?
-   - Traffic source?
+ - Mobile vs. desktop?
+ - New vs. returning?
+ - Traffic source?
 
 ### Interpreting Results
 

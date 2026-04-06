@@ -52,7 +52,7 @@ You are working on a game development project. This skill teaches the PRINCIPLES
 Every game, regardless of platform, follows this pattern:
 
 ```
-INPUT  → Read player actions
+INPUT → Read player actions
 UPDATE → Process game logic (fixed timestep)
 RENDER → Draw the frame (interpolated)
 ```
@@ -84,8 +84,8 @@ RENDER → Draw the frame (interpolated)
 Abstract input into ACTIONS, not raw keys:
 
 ```
-"jump"  → Space, Gamepad A, Touch tap
-"move"  → WASD, Left stick, Virtual joystick
+"jump" → Space, Gamepad A, Touch tap
+"move" → WASD, Left stick, Virtual joystick
 ```
 
 **Why:** Enables multi-platform, rebindable controls.

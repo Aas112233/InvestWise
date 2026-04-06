@@ -18,16 +18,16 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 What type of multiplayer?
 │
 ├── Competitive / Real-time
-│   └── Dedicated Server (authoritative)
+│ └── Dedicated Server (authoritative)
 │
 ├── Cooperative / Casual
-│   └── Host-based (one player is server)
+│ └── Host-based (one player is server)
 │
 ├── Turn-based
-│   └── Client-server (simple)
+│ └── Client-server (simple)
 │
 └── Massive (MMO)
-    └── Distributed servers
+ └── Distributed servers
 ```
 
 ### Comparison
@@ -90,8 +90,8 @@ What type of multiplayer?
 ```
 Client: "I hit the enemy"
 Server: Validate → did projectile actually hit?
-         → was player in valid state?
-         → was timing possible?
+ → was player in valid state?
+ → was timing possible?
 ```
 
 ### Anti-Cheat
@@ -120,7 +120,7 @@ Server: Validate → did projectile actually hit?
 
 ## 6. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | Trust the client | Server is authority |
 | Send everything | Send only necessary |

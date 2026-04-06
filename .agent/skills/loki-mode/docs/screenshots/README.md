@@ -12,25 +12,25 @@ This directory contains screenshots for the Loki Mode README.
 
 **How to create:**
 1. Run Loki Mode with a test project:
-   ```bash
-   cd /path/to/test/project
-   ../../autonomy/run.sh examples/simple-todo-app.md
-   ```
+ ```bash
+ cd /path/to/test/project
+ ../../autonomy/run.sh examples/simple-todo-app.md
+ ```
 
 2. Open the dashboard:
-   ```bash
-   open .loki/dashboard/index.html
-   ```
+ ```bash
+ open .loki/dashboard/index.html
+ ```
 
 3. Wait for agents to spawn (should happen within 30-60 seconds)
 
 4. Take a screenshot of the **"Active Agents" section** showing:
-   - Multiple agent cards (ideally 5-8 visible)
-   - Agent IDs and types (e.g., "eng-frontend", "qa-001-testing")
-   - Model badges (Sonnet, Haiku, Opus) with color coding
-   - Current work being performed
-   - Runtime and tasks completed stats
-   - Status indicators (active/completed)
+ - Multiple agent cards (ideally 5-8 visible)
+ - Agent IDs and types (e.g., "eng-frontend", "qa-001-testing")
+ - Model badges (Sonnet, Haiku, Opus) with color coding
+ - Current work being performed
+ - Runtime and tasks completed stats
+ - Status indicators (active/completed)
 
 **Recommended size:** 1200px wide (use browser zoom to fit multiple agents)
 
@@ -48,15 +48,15 @@ This directory contains screenshots for the Loki Mode README.
 2. Scroll down to the **"Task Queue" section**
 
 3. Take a screenshot showing all four columns:
-   - **Pending** (left column, ideally with 3-5 tasks)
-   - **In Progress** (should have at least 1 task)
-   - **Completed** (should show several completed tasks)
-   - **Failed** (can be empty, that's fine)
+ - **Pending** (left column, ideally with 3-5 tasks)
+ - **In Progress** (should have at least 1 task)
+ - **Completed** (should show several completed tasks)
+ - **Failed** (can be empty, that's fine)
 
 4. Ensure the screenshot shows:
-   - Column headers with count badges
-   - Task cards with IDs, types, and descriptions
-   - Clear separation between columns
+ - Column headers with count badges
+ - Task cards with IDs, types, and descriptions
+ - Clear separation between columns
 
 **Recommended size:** 1200px wide
 
@@ -98,7 +98,7 @@ If you don't have live agent data yet, you can use the test data provided in thi
 
 ```bash
 # Create test agent data
-cd /Users/lokesh/git/jobman  # or any test project
+cd /Users/lokesh/git/jobman # or any test project
 mkdir -p .agent/sub-agents .loki/state .loki/queue
 
 # Copy test data from Loki Mode repo

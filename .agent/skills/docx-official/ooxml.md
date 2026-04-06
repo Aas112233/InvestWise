@@ -12,11 +12,11 @@
 - **Element ordering in `<w:pPr>`**: `<w:pStyle>`, `<w:numPr>`, `<w:spacing>`, `<w:ind>`, `<w:jc>`
 - **Whitespace**: Add `xml:space='preserve'` to `<w:t>` elements with leading/trailing spaces
 - **Unicode**: Escape characters in ASCII content: `"` becomes `&#8220;`
-  - **Character encoding reference**: Curly quotes `""` become `&#8220;&#8221;`, apostrophe `'` becomes `&#8217;`, em-dash `—` becomes `&#8212;`
+ - **Character encoding reference**: Curly quotes `""` become `&#8220;&#8221;`, apostrophe `'` becomes `&#8217;`, em-dash `—` becomes `&#8212;`
 - **Tracked changes**: Use `<w:del>` and `<w:ins>` tags with `w:author="Claude"` outside `<w:r>` elements
-  - **Critical**: `<w:ins>` closes with `</w:ins>`, `<w:del>` closes with `</w:del>` - never mix
-  - **RSIDs must be 8-digit hex**: Use values like `00AB1234` (only 0-9, A-F characters)
-  - **trackRevisions placement**: Add `<w:trackRevisions/>` after `<w:proofState>` in settings.xml
+ - **Critical**: `<w:ins>` closes with `</w:ins>`, `<w:del>` closes with `</w:del>` - never mix
+ - **RSIDs must be 8-digit hex**: Use values like `00AB1234` (only 0-9, A-F characters)
+ - **trackRevisions placement**: Add `<w:trackRevisions/>` after `<w:proofState>` in settings.xml
 - **Images**: Add to `word/media/`, reference in `document.xml`, set dimensions to prevent overflow
 
 ## Document Content Patterns
@@ -24,23 +24,23 @@
 ### Basic Structure
 ```xml
 <w:p>
-  <w:r><w:t>Text content</w:t></w:r>
+ <w:r><w:t>Text content</w:t></w:r>
 </w:p>
 ```
 
 ### Headings and Styles
 ```xml
 <w:p>
-  <w:pPr>
-    <w:pStyle w:val="Title"/>
-    <w:jc w:val="center"/>
-  </w:pPr>
-  <w:r><w:t>Document Title</w:t></w:r>
+ <w:pPr>
+ <w:pStyle w:val="Title"/>
+ <w:jc w:val="center"/>
+ </w:pPr>
+ <w:r><w:t>Document Title</w:t></w:r>
 </w:p>
 
 <w:p>
-  <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
-  <w:r><w:t>Section Heading</w:t></w:r>
+ <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+ <w:r><w:t>Section Heading</w:t></w:r>
 </w:p>
 ```
 
@@ -60,56 +60,56 @@
 ```xml
 <!-- Numbered list -->
 <w:p>
-  <w:pPr>
-    <w:pStyle w:val="ListParagraph"/>
-    <w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>
-    <w:spacing w:before="240"/>
-  </w:pPr>
-  <w:r><w:t>First item</w:t></w:r>
+ <w:pPr>
+ <w:pStyle w:val="ListParagraph"/>
+ <w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>
+ <w:spacing w:before="240"/>
+ </w:pPr>
+ <w:r><w:t>First item</w:t></w:r>
 </w:p>
 
 <!-- Restart numbered list at 1 - use different numId -->
 <w:p>
-  <w:pPr>
-    <w:pStyle w:val="ListParagraph"/>
-    <w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr>
-    <w:spacing w:before="240"/>
-  </w:pPr>
-  <w:r><w:t>New list item 1</w:t></w:r>
+ <w:pPr>
+ <w:pStyle w:val="ListParagraph"/>
+ <w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr>
+ <w:spacing w:before="240"/>
+ </w:pPr>
+ <w:r><w:t>New list item 1</w:t></w:r>
 </w:p>
 
 <!-- Bullet list (level 2) -->
 <w:p>
-  <w:pPr>
-    <w:pStyle w:val="ListParagraph"/>
-    <w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr>
-    <w:spacing w:before="240"/>
-    <w:ind w:left="900"/>
-  </w:pPr>
-  <w:r><w:t>Bullet item</w:t></w:r>
+ <w:pPr>
+ <w:pStyle w:val="ListParagraph"/>
+ <w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr>
+ <w:spacing w:before="240"/>
+ <w:ind w:left="900"/>
+ </w:pPr>
+ <w:r><w:t>Bullet item</w:t></w:r>
 </w:p>
 ```
 
 ### Tables
 ```xml
 <w:tbl>
-  <w:tblPr>
-    <w:tblStyle w:val="TableGrid"/>
-    <w:tblW w:w="0" w:type="auto"/>
-  </w:tblPr>
-  <w:tblGrid>
-    <w:gridCol w:w="4675"/><w:gridCol w:w="4675"/>
-  </w:tblGrid>
-  <w:tr>
-    <w:tc>
-      <w:tcPr><w:tcW w:w="4675" w:type="dxa"/></w:tcPr>
-      <w:p><w:r><w:t>Cell 1</w:t></w:r></w:p>
-    </w:tc>
-    <w:tc>
-      <w:tcPr><w:tcW w:w="4675" w:type="dxa"/></w:tcPr>
-      <w:p><w:r><w:t>Cell 2</w:t></w:r></w:p>
-    </w:tc>
-  </w:tr>
+ <w:tblPr>
+ <w:tblStyle w:val="TableGrid"/>
+ <w:tblW w:w="0" w:type="auto"/>
+ </w:tblPr>
+ <w:tblGrid>
+ <w:gridCol w:w="4675"/><w:gridCol w:w="4675"/>
+ </w:tblGrid>
+ <w:tr>
+ <w:tc>
+ <w:tcPr><w:tcW w:w="4675" w:type="dxa"/></w:tcPr>
+ <w:p><w:r><w:t>Cell 1</w:t></w:r></w:p>
+ </w:tc>
+ <w:tc>
+ <w:tcPr><w:tcW w:w="4675" w:type="dxa"/></w:tcPr>
+ <w:p><w:r><w:t>Cell 2</w:t></w:r></w:p>
+ </w:tc>
+ </w:tr>
 </w:tbl>
 ```
 
@@ -117,43 +117,43 @@
 ```xml
 <!-- Page break before new section (common pattern) -->
 <w:p>
-  <w:r>
-    <w:br w:type="page"/>
-  </w:r>
+ <w:r>
+ <w:br w:type="page"/>
+ </w:r>
 </w:p>
 <w:p>
-  <w:pPr>
-    <w:pStyle w:val="Heading1"/>
-  </w:pPr>
-  <w:r>
-    <w:t>New Section Title</w:t>
-  </w:r>
+ <w:pPr>
+ <w:pStyle w:val="Heading1"/>
+ </w:pPr>
+ <w:r>
+ <w:t>New Section Title</w:t>
+ </w:r>
 </w:p>
 
 <!-- Centered paragraph -->
 <w:p>
-  <w:pPr>
-    <w:spacing w:before="240" w:after="0"/>
-    <w:jc w:val="center"/>
-  </w:pPr>
-  <w:r><w:t>Centered text</w:t></w:r>
+ <w:pPr>
+ <w:spacing w:before="240" w:after="0"/>
+ <w:jc w:val="center"/>
+ </w:pPr>
+ <w:r><w:t>Centered text</w:t></w:r>
 </w:p>
 
 <!-- Font change - paragraph level (applies to all runs) -->
 <w:p>
-  <w:pPr>
-    <w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr>
-  </w:pPr>
-  <w:r><w:t>Monospace text</w:t></w:r>
+ <w:pPr>
+ <w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr>
+ </w:pPr>
+ <w:r><w:t>Monospace text</w:t></w:r>
 </w:p>
 
 <!-- Font change - run level (specific to this text) -->
 <w:p>
-  <w:r>
-    <w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr>
-    <w:t>This text is Courier New</w:t>
-  </w:r>
-  <w:r><w:t> and this text uses default font</w:t></w:r>
+ <w:r>
+ <w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr>
+ <w:t>This text is Courier New</w:t>
+ </w:r>
+ <w:r><w:t> and this text uses default font</w:t></w:r>
 </w:p>
 ```
 
@@ -179,37 +179,37 @@ When adding content, update these files:
 ```xml
 <!-- Minimal required structure -->
 <w:p>
-  <w:r>
-    <w:drawing>
-      <wp:inline>
-        <wp:extent cx="2743200" cy="1828800"/>
-        <wp:docPr id="1" name="Picture 1"/>
-        <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
-          <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
-            <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
-              <pic:nvPicPr>
-                <pic:cNvPr id="0" name="image1.png"/>
-                <pic:cNvPicPr/>
-              </pic:nvPicPr>
-              <pic:blipFill>
-                <a:blip r:embed="rId5"/>
-                <!-- Add for stretch fill with aspect ratio preservation -->
-                <a:stretch>
-                  <a:fillRect/>
-                </a:stretch>
-              </pic:blipFill>
-              <pic:spPr>
-                <a:xfrm>
-                  <a:ext cx="2743200" cy="1828800"/>
-                </a:xfrm>
-                <a:prstGeom prst="rect"/>
-              </pic:spPr>
-            </pic:pic>
-          </a:graphicData>
-        </a:graphic>
-      </wp:inline>
-    </w:drawing>
-  </w:r>
+ <w:r>
+ <w:drawing>
+ <wp:inline>
+ <wp:extent cx="2743200" cy="1828800"/>
+ <wp:docPr id="1" name="Picture 1"/>
+ <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+ <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+ <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+ <pic:nvPicPr>
+ <pic:cNvPr id="0" name="image1.png"/>
+ <pic:cNvPicPr/>
+ </pic:nvPicPr>
+ <pic:blipFill>
+ <a:blip r:embed="rId5"/>
+ <!-- Add for stretch fill with aspect ratio preservation -->
+ <a:stretch>
+ <a:fillRect/>
+ </a:stretch>
+ </pic:blipFill>
+ <pic:spPr>
+ <a:xfrm>
+ <a:ext cx="2743200" cy="1828800"/>
+ </a:xfrm>
+ <a:prstGeom prst="rect"/>
+ </pic:spPr>
+ </pic:pic>
+ </a:graphicData>
+ </a:graphic>
+ </wp:inline>
+ </w:drawing>
+ </w:r>
 </w:p>
 ```
 
@@ -221,15 +221,15 @@ When adding content, update these files:
 ```xml
 <!-- In document.xml -->
 <w:hyperlink r:id="rId5">
-  <w:r>
-    <w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>
-    <w:t>Link Text</w:t>
-  </w:r>
+ <w:r>
+ <w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>
+ <w:t>Link Text</w:t>
+ </w:r>
 </w:hyperlink>
 
 <!-- In word/_rels/document.xml.rels -->
 <Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" 
-              Target="https://www.example.com/" TargetMode="External"/>
+ Target="https://www.example.com/" TargetMode="External"/>
 ```
 
 **Internal Links:**
@@ -237,10 +237,10 @@ When adding content, update these files:
 ```xml
 <!-- Link to bookmark -->
 <w:hyperlink w:anchor="myBookmark">
-  <w:r>
-    <w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>
-    <w:t>Link Text</w:t>
-  </w:r>
+ <w:r>
+ <w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>
+ <w:t>Link Text</w:t>
+ </w:r>
 </w:hyperlink>
 
 <!-- Bookmark target -->
@@ -252,14 +252,14 @@ When adding content, update these files:
 **Hyperlink Style (required in styles.xml):**
 ```xml
 <w:style w:type="character" w:styleId="Hyperlink">
-  <w:name w:val="Hyperlink"/>
-  <w:basedOn w:val="DefaultParagraphFont"/>
-  <w:uiPriority w:val="99"/>
-  <w:unhideWhenUsed/>
-  <w:rPr>
-    <w:color w:val="467886" w:themeColor="hyperlink"/>
-    <w:u w:val="single"/>
-  </w:rPr>
+ <w:name w:val="Hyperlink"/>
+ <w:basedOn w:val="DefaultParagraphFont"/>
+ <w:uiPriority w:val="99"/>
+ <w:unhideWhenUsed/>
+ <w:rPr>
+ <w:color w:val="467886" w:themeColor="hyperlink"/>
+ <w:u w:val="single"/>
+ </w:rPr>
 </w:style>
 ```
 
@@ -347,9 +347,9 @@ doc["word/document.xml"].insert_after(node, '<w:ins><w:r><w:t>new text</w:t></w:
 node = doc["word/document.xml"].get_node(tag="w:ins", attrs={"w:id": "5"})
 # IMPORTANT: Preserve w:author="Jane Smith" on the outer <w:ins> to maintain authorship
 replacement = '''<w:ins w:author="Jane Smith" w:date="2025-01-15T10:00:00Z">
-  <w:r><w:t>quarterly </w:t></w:r>
-  <w:del><w:r><w:delText>financial </w:delText></w:r></w:del>
-  <w:r><w:t>report</w:t></w:r>
+ <w:r><w:t>quarterly </w:t></w:r>
+ <w:del><w:r><w:delText>financial </w:delText></w:r></w:del>
+ <w:r><w:t>report</w:t></w:r>
 </w:ins>'''
 doc["word/document.xml"].replace_node(node, replacement)
 
@@ -358,13 +358,13 @@ doc["word/document.xml"].replace_node(node, replacement)
 # Goal: Change "safe and sound" to "soft and unbound"
 node = doc["word/document.xml"].get_node(tag="w:ins", attrs={"w:id": "8"})
 replacement = f'''<w:ins w:author="Jane Smith" w:date="2025-01-15T10:00:00Z">
-  <w:r><w:t>in silence, </w:t></w:r>
+ <w:r><w:t>in silence, </w:t></w:r>
 </w:ins>
 <w:ins>
-  <w:r><w:t>soft and unbound</w:t></w:r>
+ <w:r><w:t>soft and unbound</w:t></w:r>
 </w:ins>
 <w:ins w:author="Jane Smith" w:date="2025-01-15T10:00:00Z">
-  <w:del><w:r><w:delText>safe and sound</w:delText></w:r></w:del>
+ <w:del><w:r><w:delText>safe and sound</w:delText></w:r></w:del>
 </w:ins>'''
 doc["word/document.xml"].replace_node(node, replacement)
 
@@ -404,8 +404,8 @@ doc.add_comment(start=para, end=para, text="Comment on this paragraph")
 # First create the tracked change
 node = doc["word/document.xml"].get_node(tag="w:r", contains="old")
 new_nodes = doc["word/document.xml"].replace_node(
-    node,
-    '<w:del><w:r><w:delText>old</w:delText></w:r></w:del><w:ins><w:r><w:t>new</w:t></w:r></w:ins>'
+ node,
+ '<w:del><w:r><w:delText>old</w:delText></w:r></w:del><w:ins><w:r><w:t>new</w:t></w:r></w:ins>'
 )
 # Then add comment on the newly created elements
 # new_nodes[0] is the <w:del>, new_nodes[1] is the <w:ins>
@@ -423,20 +423,20 @@ doc.reply_to_comment(parent_comment_id=0, text="I agree with this change")
 # Reject insertion (wraps it in deletion)
 # Use this when another author inserted text that you want to delete
 ins = doc["word/document.xml"].get_node(tag="w:ins", attrs={"w:id": "5"})
-nodes = doc["word/document.xml"].revert_insertion(ins)  # Returns [ins]
+nodes = doc["word/document.xml"].revert_insertion(ins) # Returns [ins]
 
 # Reject deletion (creates insertion to restore deleted content)
 # Use this when another author deleted text that you want to restore
 del_elem = doc["word/document.xml"].get_node(tag="w:del", attrs={"w:id": "3"})
-nodes = doc["word/document.xml"].revert_deletion(del_elem)  # Returns [del_elem, new_ins]
+nodes = doc["word/document.xml"].revert_deletion(del_elem) # Returns [del_elem, new_ins]
 
 # Reject all insertions in a paragraph
 para = doc["word/document.xml"].get_node(tag="w:p", contains="paragraph text")
-nodes = doc["word/document.xml"].revert_insertion(para)  # Returns [para]
+nodes = doc["word/document.xml"].revert_insertion(para) # Returns [para]
 
 # Reject all deletions in a paragraph
 para = doc["word/document.xml"].get_node(tag="w:p", contains="paragraph text")
-nodes = doc["word/document.xml"].revert_deletion(para)  # Returns [para]
+nodes = doc["word/document.xml"].revert_deletion(para) # Returns [para]
 ```
 
 ### Inserting Images
@@ -455,37 +455,37 @@ media_dir = os.path.join(doc.unpacked_path, 'word/media')
 os.makedirs(media_dir, exist_ok=True)
 shutil.copy('image.png', os.path.join(media_dir, 'image1.png'))
 img = Image.open(os.path.join(media_dir, 'image1.png'))
-width_emus = int(6.5 * 914400)  # 6.5" usable width, 914400 EMUs/inch
+width_emus = int(6.5 * 914400) # 6.5" usable width, 914400 EMUs/inch
 height_emus = int(width_emus * img.size[1] / img.size[0])
 
 # Add relationship and content type
 rels_editor = doc['word/_rels/document.xml.rels']
 next_rid = rels_editor.get_next_rid()
 rels_editor.append_to(rels_editor.dom.documentElement,
-    f'<Relationship Id="{next_rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>')
+ f'<Relationship Id="{next_rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>')
 doc['[Content_Types].xml'].append_to(doc['[Content_Types].xml'].dom.documentElement,
-    '<Default Extension="png" ContentType="image/png"/>')
+ '<Default Extension="png" ContentType="image/png"/>')
 
 # Insert image
 node = doc["word/document.xml"].get_node(tag="w:p", line_number=100)
 doc["word/document.xml"].insert_after(node, f'''<w:p>
-  <w:r>
-    <w:drawing>
-      <wp:inline distT="0" distB="0" distL="0" distR="0">
-        <wp:extent cx="{width_emus}" cy="{height_emus}"/>
-        <wp:docPr id="1" name="Picture 1"/>
-        <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
-          <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
-            <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
-              <pic:nvPicPr><pic:cNvPr id="1" name="image1.png"/><pic:cNvPicPr/></pic:nvPicPr>
-              <pic:blipFill><a:blip r:embed="{next_rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
-              <pic:spPr><a:xfrm><a:ext cx="{width_emus}" cy="{height_emus}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>
-            </pic:pic>
-          </a:graphicData>
-        </a:graphic>
-      </wp:inline>
-    </w:drawing>
-  </w:r>
+ <w:r>
+ <w:drawing>
+ <wp:inline distT="0" distB="0" distL="0" distR="0">
+ <wp:extent cx="{width_emus}" cy="{height_emus}"/>
+ <wp:docPr id="1" name="Picture 1"/>
+ <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+ <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+ <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+ <pic:nvPicPr><pic:cNvPr id="1" name="image1.png"/><pic:cNvPicPr/></pic:nvPicPr>
+ <pic:blipFill><a:blip r:embed="{next_rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
+ <pic:spPr><a:xfrm><a:ext cx="{width_emus}" cy="{height_emus}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>
+ </pic:pic>
+ </a:graphicData>
+ </a:graphic>
+ </wp:inline>
+ </w:drawing>
+ </w:r>
 </w:p>''')
 ```
 
@@ -515,7 +515,7 @@ node = doc["word/document.xml"].get_node(tag="w:r", contains="Section", line_num
 
 ```python
 # Save with automatic validation (copies back to original directory)
-doc.save()  # Validates by default, raises error if validation fails
+doc.save() # Validates by default, raises error if validation fails
 
 # Save to different location
 doc.save('modified-unpacked')
@@ -537,7 +537,7 @@ editor = doc["word/comments.xml"]
 node = doc["word/document.xml"].get_node(tag="w:p", line_number=5)
 parent = node.parentNode
 parent.removeChild(node)
-parent.appendChild(node)  # Move to end
+parent.appendChild(node) # Move to end
 
 # General document manipulation (without tracked changes)
 old_node = doc["word/document.xml"].get_node(tag="w:p", contains="original text")
@@ -570,18 +570,18 @@ The validator checks that the document text matches the original after reverting
 **Text Insertion:**
 ```xml
 <w:ins w:id="1" w:author="Claude" w:date="2025-07-30T23:05:00Z" w16du:dateUtc="2025-07-31T06:05:00Z">
-  <w:r w:rsidR="00792858">
-    <w:t>inserted text</w:t>
-  </w:r>
+ <w:r w:rsidR="00792858">
+ <w:t>inserted text</w:t>
+ </w:r>
 </w:ins>
 ```
 
 **Text Deletion:**
 ```xml
 <w:del w:id="2" w:author="Claude" w:date="2025-07-30T23:05:00Z" w16du:dateUtc="2025-07-31T06:05:00Z">
-  <w:r w:rsidDel="00792858">
-    <w:delText>deleted text</w:delText>
-  </w:r>
+ <w:r w:rsidDel="00792858">
+ <w:delText>deleted text</w:delText>
+ </w:r>
 </w:del>
 ```
 
@@ -589,12 +589,12 @@ The validator checks that the document text matches the original after reverting
 ```xml
 <!-- Nest deletion inside the original insertion -->
 <w:ins w:author="Jane Smith" w:id="16">
-  <w:del w:author="Claude" w:id="40">
-    <w:r><w:delText>monthly</w:delText></w:r>
-  </w:del>
+ <w:del w:author="Claude" w:id="40">
+ <w:r><w:delText>monthly</w:delText></w:r>
+ </w:del>
 </w:ins>
 <w:ins w:author="Claude" w:id="41">
-  <w:r><w:t>weekly</w:t></w:r>
+ <w:r><w:t>weekly</w:t></w:r>
 </w:ins>
 ```
 
@@ -602,9 +602,9 @@ The validator checks that the document text matches the original after reverting
 ```xml
 <!-- Leave their deletion unchanged, add new insertion after it -->
 <w:del w:author="Jane Smith" w:id="50">
-  <w:r><w:delText>within 30 days</w:delText></w:r>
+ <w:r><w:delText>within 30 days</w:delText></w:r>
 </w:del>
 <w:ins w:author="Claude" w:id="51">
-  <w:r><w:t>within 30 days</w:t></w:r>
+ <w:r><w:t>within 30 days</w:t></w:r>
 </w:ins>
 ```

@@ -8,12 +8,12 @@ All phases with detailed workflows and testing procedures.
 
 ```
 Bootstrap -> Discovery -> Architecture -> Infrastructure
-     |           |            |              |
-  (Setup)   (Analyze PRD)  (Design)    (Cloud/DB Setup)
-                                             |
+ | | | |
+ (Setup) (Analyze PRD) (Design) (Cloud/DB Setup)
+ |
 Development <- QA <- Deployment <- Business Ops <- Growth Loop
-     |         |         |            |            |
- (Build)    (Test)   (Release)    (Monitor)    (Iterate)
+ | | | | |
+ (Build) (Test) (Release) (Monitor) (Iterate)
 ```
 
 ---
@@ -34,14 +34,14 @@ Development <- QA <- Deployment <- Business Ops <- Growth Loop
 .loki/
 +-- CONTINUITY.md
 +-- state/
-|   +-- orchestrator.json
-|   +-- agents/
-|   +-- circuit-breakers/
+| +-- orchestrator.json
+| +-- agents/
+| +-- circuit-breakers/
 +-- queue/
-|   +-- pending.json
-|   +-- in-progress.json
-|   +-- completed.json
-|   +-- dead-letter.json
+| +-- pending.json
+| +-- in-progress.json
+| +-- completed.json
+| +-- dead-letter.json
 +-- specs/
 +-- memory/
 +-- artifacts/
@@ -83,34 +83,34 @@ Development <- QA <- Deployment <- Business Ops <- Growth Loop
 ```yaml
 openapi: 3.1.0
 info:
-  title: Product API
-  version: 1.0.0
+ title: Product API
+ version: 1.0.0
 paths:
-  /auth/login:
-    post:
-      summary: Authenticate user and return JWT
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [email, password]
-              properties:
-                email: { type: string, format: email }
-                password: { type: string, minLength: 8 }
-      responses:
-        200:
-          description: Success
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  token: { type: string }
-                  expiresAt: { type: string, format: date-time }
-        401:
-          description: Invalid credentials
+ /auth/login:
+ post:
+ summary: Authenticate user and return JWT
+ requestBody:
+ required: true
+ content:
+ application/json:
+ schema:
+ type: object
+ required: [email, password]
+ properties:
+ email: { type: string, format: email }
+ password: { type: string, minLength: 8 }
+ responses:
+ 200:
+ description: Success
+ content:
+ application/json:
+ schema:
+ type: object
+ properties:
+ token: { type: string }
+ expiresAt: { type: string, format: date-time }
+ 401:
+ description: Invalid credentials
 ```
 
 **Step 3: Validate Spec**
@@ -127,15 +127,15 @@ npx openapi-typescript .loki/specs/openapi.yaml --output src/types/api.ts
 
 # Client SDK
 npx openapi-generator-cli generate \
-  -i .loki/specs/openapi.yaml \
-  -g typescript-axios \
-  -o src/clients/api
+ -i .loki/specs/openapi.yaml \
+ -g typescript-axios \
+ -o src/clients/api
 
 # Server stubs
 npx openapi-generator-cli generate \
-  -i .loki/specs/openapi.yaml \
-  -g nodejs-express-server \
-  -o backend/generated
+ -i .loki/specs/openapi.yaml \
+ -g nodejs-express-server \
+ -o backend/generated
 
 # Documentation
 npx redoc-cli bundle .loki/specs/openapi.yaml -o docs/api.html
@@ -171,21 +171,21 @@ npx redoc-cli bundle .loki/specs/openapi.yaml -o docs/api.html
 name: CI/CD Pipeline
 on: [push, pull_request]
 jobs:
-  test:
-    - Lint
-    - Type check
-    - Unit tests
-    - Contract tests
-    - Security scan
-  deploy-staging:
-    needs: test
-    - Deploy to staging
-    - Smoke tests
-  deploy-production:
-    needs: deploy-staging
-    - Blue-green deploy
-    - Health checks
-    - Auto-rollback on errors
+ test:
+ - Lint
+ - Type check
+ - Unit tests
+ - Contract tests
+ - Security scan
+ deploy-staging:
+ needs: test
+ - Deploy to staging
+ - Smoke tests
+ deploy-production:
+ needs: deploy-staging
+ - Blue-green deploy
+ - Health checks
+ - Auto-rollback on errors
 ```
 
 ---
@@ -200,14 +200,14 @@ jobs:
 1. Dispatch implementation subagent (Task tool, model: sonnet)
 2. Subagent implements with TDD, commits, reports back
 3. Dispatch 3 reviewers IN PARALLEL (single message, 3 Task calls):
-   - code-reviewer (opus)
-   - business-logic-reviewer (opus)
-   - security-reviewer (opus)
+ - code-reviewer (opus)
+ - business-logic-reviewer (opus)
+ - security-reviewer (opus)
 4. Aggregate findings by severity
 5. IF Critical/High/Medium found:
-   - Dispatch fix subagent
-   - Re-run ALL 3 reviewers
-   - Loop until all PASS
+ - Dispatch fix subagent
+ - Re-run ALL 3 reviewers
+ - Loop until all PASS
 6. Add TODO comments for Low issues
 7. Add FIXME comments for Cosmetic issues
 8. Mark task complete with git checkpoint
@@ -354,11 +354,11 @@ npx axe http://localhost:3000
 ### Cycle:
 ```
 MONITOR -> ANALYZE -> OPTIMIZE -> DEPLOY -> MONITOR
-    |
+ |
 Customer feedback -> Feature requests -> Backlog
-    |
+ |
 A/B tests -> Winner -> Permanent deploy
-    |
+ |
 Incidents -> RCA -> Prevention -> Deploy fix
 ```
 
@@ -377,9 +377,9 @@ Incidents -> RCA -> Prevention -> Deploy fix
 
 ```
 1. Dispatch 3 reviewers reviewing ENTIRE implementation:
-   - code-reviewer: Full codebase quality
-   - business-logic-reviewer: All requirements met
-   - security-reviewer: Full security audit
+ - code-reviewer: Full codebase quality
+ - business-logic-reviewer: All requirements met
+ - security-reviewer: Full security audit
 
 2. Aggregate findings across all files
 3. Fix Critical/High/Medium issues

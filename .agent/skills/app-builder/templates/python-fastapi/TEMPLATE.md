@@ -22,17 +22,17 @@ description: FastAPI REST API template principles. SQLAlchemy, Pydantic, Alembic
 
 ```
 project-name/
-├── alembic/             # Migrations
+├── alembic/ # Migrations
 ├── app/
-│   ├── main.py          # FastAPI app
-│   ├── config.py        # Settings
-│   ├── database.py      # DB connection
-│   ├── models/          # SQLAlchemy models
-│   ├── schemas/         # Pydantic schemas
-│   ├── routers/         # API routes
-│   ├── services/        # Business logic
-│   ├── dependencies/    # DI
-│   └── utils/
+│ ├── main.py # FastAPI app
+│ ├── config.py # Settings
+│ ├── database.py # DB connection
+│ ├── models/ # SQLAlchemy models
+│ ├── schemas/ # Pydantic schemas
+│ ├── routers/ # API routes
+│ ├── services/ # Business logic
+│ ├── dependencies/ # DI
+│ └── utils/
 ├── tests/
 ├── .env.example
 └── requirements.txt

@@ -119,20 +119,20 @@ git diff {BASE_SHA}..{HEAD_SHA}
 
 #### Important
 1. **Missing help text in CLI wrapper**
-   - File: index-conversations:1-31
-   - Issue: No --help flag, users won't discover --concurrency
-   - Fix: Add --help case with usage examples
+ - File: index-conversations:1-31
+ - Issue: No --help flag, users won't discover --concurrency
+ - Fix: Add --help case with usage examples
 
 2. **Date validation missing**
-   - File: search.ts:25-27
-   - Issue: Invalid dates silently return no results
-   - Fix: Validate ISO format, throw error with example
+ - File: search.ts:25-27
+ - Issue: Invalid dates silently return no results
+ - Fix: Validate ISO format, throw error with example
 
 #### Minor
 1. **Progress indicators**
-   - File: indexer.ts:130
-   - Issue: No "X of Y" counter for long operations
-   - Impact: Users don't know how long to wait
+ - File: indexer.ts:130
+ - Issue: No "X of Y" counter for long operations
+ - Impact: Users don't know how long to wait
 
 ### Recommendations
 - Add progress reporting for user experience

@@ -41,20 +41,20 @@ Users who want to save and organize bookmarks.
 ```
 /
 ├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   ├── types/
-│   │   └── App.tsx
-│   ├── package.json
-│   └── vite.config.ts
+│ ├── src/
+│ │ ├── components/
+│ │ ├── hooks/
+│ │ ├── types/
+│ │ └── App.tsx
+│ ├── package.json
+│ └── vite.config.ts
 ├── backend/
-│   ├── src/
-│   │   ├── routes/
-│   │   ├── db/
-│   │   └── index.ts
-│   ├── package.json
-│   └── tsconfig.json
+│ ├── src/
+│ │ ├── routes/
+│ │ ├── db/
+│ │ └── index.ts
+│ ├── package.json
+│ └── tsconfig.json
 └── README.md
 ```
 
@@ -72,22 +72,22 @@ Users who want to save and organize bookmarks.
 ## Database Schema
 ```sql
 CREATE TABLE bookmarks (
-  id INTEGER PRIMARY KEY,
-  url TEXT NOT NULL,
-  title TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+ id INTEGER PRIMARY KEY,
+ url TEXT NOT NULL,
+ title TEXT NOT NULL,
+ created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+ updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE tags (
-  id INTEGER PRIMARY KEY,
-  name TEXT UNIQUE NOT NULL
+ id INTEGER PRIMARY KEY,
+ name TEXT UNIQUE NOT NULL
 );
 
 CREATE TABLE bookmark_tags (
-  bookmark_id INTEGER REFERENCES bookmarks(id),
-  tag_id INTEGER REFERENCES tags(id),
-  PRIMARY KEY (bookmark_id, tag_id)
+ bookmark_id INTEGER REFERENCES bookmarks(id),
+ tag_id INTEGER REFERENCES tags(id),
+ PRIMARY KEY (bookmark_id, tag_id)
 );
 ```
 

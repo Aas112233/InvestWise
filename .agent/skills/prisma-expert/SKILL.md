@@ -66,26 +66,26 @@ npx prisma format
 ```prisma
 // Good: Explicit relations with clear naming
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  posts     Post[]   @relation("UserPosts")
-  profile   Profile? @relation("UserProfile")
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  @@index([email])
-  @@map("users")
+ id String @id @default(cuid())
+ email String @unique
+ posts Post[] @relation("UserPosts")
+ profile Profile? @relation("UserProfile")
+ 
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ 
+ @@index([email])
+ @@map("users")
 }
 
 model Post {
-  id       String @id @default(cuid())
-  title    String
-  author   User   @relation("UserPosts", fields: [authorId], references: [id], onDelete: Cascade)
-  authorId String
-  
-  @@index([authorId])
-  @@map("posts")
+ id String @id @default(cuid())
+ title String
+ author User @relation("UserPosts", fields: [authorId], references: [id], onDelete: Cascade)
+ authorId String
+ 
+ @@index([authorId])
+ @@map("posts")
 }
 ```
 
@@ -152,14 +152,14 @@ npx prisma migrate resolve --rolled-back "migration_name"
 ```typescript
 // Enable query events
 const prisma = new PrismaClient({
-  log: [
-    { emit: 'event', level: 'query' },
-  ],
+ log: [
+ { emit: 'event', level: 'query' },
+ ],
 });
 
 prisma.$on('query', (e) => {
-  console.log('Query: ' + e.query);
-  console.log('Duration: ' + e.duration + 'ms');
+ console.log('Query: ' + e.query);
+ console.log('Duration: ' + e.duration + 'ms');
 });
 ```
 
@@ -173,31 +173,31 @@ prisma.$on('query', (e) => {
 // BAD: N+1 problem
 const users = await prisma.user.findMany();
 for (const user of users) {
-  const posts = await prisma.post.findMany({ where: { authorId: user.id } });
+ const posts = await prisma.post.findMany({ where: { authorId: user.id } });
 }
 
 // GOOD: Include relations
 const users = await prisma.user.findMany({
-  include: { posts: true }
+ include: { posts: true }
 });
 
 // BETTER: Select only needed fields
 const users = await prisma.user.findMany({
-  select: {
-    id: true,
-    email: true,
-    posts: {
-      select: { id: true, title: true }
-    }
-  }
+ select: {
+ id: true,
+ email: true,
+ posts: {
+ select: { id: true, title: true }
+ }
+ }
 });
 
 // BEST for complex queries: Use $queryRaw
 const result = await prisma.$queryRaw`
-  SELECT u.id, u.email, COUNT(p.id) as post_count
-  FROM users u
-  LEFT JOIN posts p ON p.author_id = u.id
-  GROUP BY u.id
+ SELECT u.id, u.email, COUNT(p.id) as post_count
+ FROM users u
+ LEFT JOIN posts p ON p.author_id = u.id
+ GROUP BY u.id
 `;
 ```
 
@@ -231,16 +231,16 @@ import { PrismaClient } from '@prisma/client';
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
 export const prisma =
-  globalForPrisma.prisma ||
-  new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query'] : [],
-  });
+ globalForPrisma.prisma ||
+ new PrismaClient({
+ log: process.env.NODE_ENV === 'development' ? ['query'] : [],
+ });
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 // Graceful shutdown
 process.on('beforeExit', async () => {
-  await prisma.$disconnect();
+ await prisma.$disconnect();
 });
 ```
 
@@ -264,11 +264,11 @@ DATABASE_URL="postgresql://user:pass@host:5432/db?connection_limit=5&pool_timeou
 ```typescript
 // Check for transaction issues
 try {
-  const result = await prisma.$transaction([...]);
+ const result = await prisma.$transaction([...]);
 } catch (e) {
-  if (e.code === 'P2034') {
-    console.log('Transaction conflict detected');
-  }
+ if (e.code === 'P2034') {
+ console.log('Transaction conflict detected');
+ }
 }
 ```
 
@@ -276,40 +276,40 @@ try {
 ```typescript
 // Sequential operations (auto-transaction)
 const [user, profile] = await prisma.$transaction([
-  prisma.user.create({ data: userData }),
-  prisma.profile.create({ data: profileData }),
+ prisma.user.create({ data: userData }),
+ prisma.profile.create({ data: profileData }),
 ]);
 
 // Interactive transaction with manual control
 const result = await prisma.$transaction(async (tx) => {
-  const user = await tx.user.create({ data: userData });
-  
-  // Business logic validation
-  if (user.email.endsWith('@blocked.com')) {
-    throw new Error('Email domain blocked');
-  }
-  
-  const profile = await tx.profile.create({
-    data: { ...profileData, userId: user.id }
-  });
-  
-  return { user, profile };
+ const user = await tx.user.create({ data: userData });
+ 
+ // Business logic validation
+ if (user.email.endsWith('@blocked.com')) {
+ throw new Error('Email domain blocked');
+ }
+ 
+ const profile = await tx.profile.create({
+ data: { ...profileData, userId: user.id }
+ });
+ 
+ return { user, profile };
 }, {
-  maxWait: 5000,  // Wait for transaction slot
-  timeout: 10000, // Transaction timeout
-  isolationLevel: 'Serializable', // Strictest isolation
+ maxWait: 5000, // Wait for transaction slot
+ timeout: 10000, // Transaction timeout
+ isolationLevel: 'Serializable', // Strictest isolation
 });
 
 // Optimistic concurrency control
 const updateWithVersion = await prisma.post.update({
-  where: { 
-    id: postId,
-    version: currentVersion  // Only update if version matches
-  },
-  data: {
-    content: newContent,
-    version: { increment: 1 }
-  }
+ where: { 
+ id: postId,
+ version: currentVersion // Only update if version matches
+ },
+ data: {
+ content: newContent,
+ version: { increment: 1 }
+ }
 });
 ```
 

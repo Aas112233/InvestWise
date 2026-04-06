@@ -10,10 +10,10 @@ pytest-mock>=3.12.0
 
 # Note: This script requires the Shopify CLI tool
 # Install Shopify CLI:
-#   npm install -g @shopify/cli @shopify/theme
-#   or via Homebrew (macOS):
-#   brew tap shopify/shopify
-#   brew install shopify-cli
+# npm install -g @shopify/cli @shopify/theme
+# or via Homebrew (macOS):
+# brew tap shopify/shopify
+# brew install shopify-cli
 #
 # Authenticate with:
-#   shopify auth login
+# shopify auth login

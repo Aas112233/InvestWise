@@ -30,8 +30,8 @@ BEFORE claiming any status or expressing satisfaction:
 2. RUN: Execute the FULL command (fresh, complete)
 3. READ: Full output, check exit code, count failures
 4. VERIFY: Does output confirm the claim?
-   - If NO: State actual status with evidence
-   - If YES: State claim WITH evidence
+ - If NO: State actual status with evidence
+ - If YES: State claim WITH evidence
 5. ONLY THEN: Make the claim
 
 Skip any step = lying, not verifying
@@ -77,32 +77,32 @@ Skip any step = lying, not verifying
 
 **Tests:**
 ```
-✅ [Run test command] [See: 34/34 pass] "All tests pass"
-❌ "Should pass now" / "Looks correct"
+ [Run test command] [See: 34/34 pass] "All tests pass"
+ "Should pass now" / "Looks correct"
 ```
 
 **Regression tests (TDD Red-Green):**
 ```
-✅ Write → Run (pass) → Revert fix → Run (MUST FAIL) → Restore → Run (pass)
-❌ "I've written a regression test" (without red-green verification)
+ Write → Run (pass) → Revert fix → Run (MUST FAIL) → Restore → Run (pass)
+ "I've written a regression test" (without red-green verification)
 ```
 
 **Build:**
 ```
-✅ [Run build] [See: exit 0] "Build passes"
-❌ "Linter passed" (linter doesn't check compilation)
+ [Run build] [See: exit 0] "Build passes"
+ "Linter passed" (linter doesn't check compilation)
 ```
 
 **Requirements:**
 ```
-✅ Re-read plan → Create checklist → Verify each → Report gaps or completion
-❌ "Tests pass, phase complete"
+ Re-read plan → Create checklist → Verify each → Report gaps or completion
+ "Tests pass, phase complete"
 ```
 
 **Agent delegation:**
 ```
-✅ Agent reports success → Check VCS diff → Verify changes → Report actual state
-❌ Trust agent report
+ Agent reports success → Check VCS diff → Verify changes → Report actual state
+ Trust agent report
 ```
 
 ## Why This Matters

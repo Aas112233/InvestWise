@@ -31,15 +31,15 @@ This skill provides end-to-end ASO capabilities across seven key areas:
 
 ### Platform-Specific Metadata Optimization
 - **Apple App Store**:
-  - Title (30 chars)
-  - Subtitle (30 chars)
-  - Promotional Text (170 chars)
-  - Description (4000 chars)
-  - Keywords field (100 chars)
+ - Title (30 chars)
+ - Subtitle (30 chars)
+ - Promotional Text (170 chars)
+ - Description (4000 chars)
+ - Keywords field (100 chars)
 - **Google Play Store**:
-  - Title (50 chars)
-  - Short Description (80 chars)
-  - Full Description (4000 chars)
+ - Title (50 chars)
+ - Short Description (80 chars)
+ - Full Description (4000 chars)
 - Character limit validation
 - Keyword density analysis
 - Multiple optimization strategies

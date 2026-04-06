@@ -2,8 +2,8 @@
 name: Burp Suite Web Application Testing
 description: This skill should be used when the user asks to "intercept HTTP traffic", "modify web requests", "use Burp Suite for testing", "perform web vulnerability scanning", "test with Burp Repeater", "analyze HTTP history", or "configure proxy for web testing". It provides comprehensive guidance for using Burp Suite's core features for web application security testing.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Burp Suite Web Application Testing
@@ -29,11 +29,11 @@ Execute comprehensive web application security testing using Burp Suite's integr
 ### Editions Comparison
 | Feature | Community | Professional |
 |---------|-----------|--------------|
-| Proxy | ✓ | ✓ |
-| Repeater | ✓ | ✓ |
+| Proxy | | |
+| Repeater | | |
 | Intruder | Limited | Full |
-| Scanner | ✗ | ✓ |
-| Extensions | ✓ | ✓ |
+| Scanner | | |
+| Extensions | | |
 
 ## Outputs / Deliverables
 
@@ -166,9 +166,9 @@ Test different inputs efficiently:
 Original Request:
 GET /product?productId=1 HTTP/1.1
 
-Test 1: productId=2    → Valid product response
-Test 2: productId=999  → Not Found response  
-Test 3: productId='    → Error/exception response
+Test 1: productId=2 → Valid product response
+Test 2: productId=999 → Not Found response 
+Test 3: productId=' → Error/exception response
 Test 4: productId=1 OR 1=1 → SQL injection test
 ```
 
@@ -213,9 +213,9 @@ Analyze scan findings:
 1. Select scan task in Dashboard
 2. Go to **Issues** tab
 3. Click issue to view:
-   - **Advisory**: Description and remediation
-   - **Request**: Triggering HTTP request
-   - **Response**: Server response showing vulnerability
+ - **Advisory**: Description and remediation
+ - **Request**: Triggering HTTP request
+ - **Response**: Server response showing vulnerability
 
 ### Phase 6: Intruder Attacks
 

@@ -2,8 +2,8 @@
 name: Ethical Hacking Methodology
 description: This skill should be used when the user asks to "learn ethical hacking", "understand penetration testing lifecycle", "perform reconnaissance", "conduct security scanning", "exploit vulnerabilities", or "write penetration test reports". It provides comprehensive ethical hacking methodology and techniques.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Ethical Hacking Methodology
@@ -314,35 +314,35 @@ Document findings professionally:
 
 **Report Structure**
 1. **Executive Summary**
-   - High-level findings
-   - Business impact
-   - Risk ratings
-   - Remediation priorities
+ - High-level findings
+ - Business impact
+ - Risk ratings
+ - Remediation priorities
 
 2. **Technical Findings**
-   - Vulnerability details
-   - Proof of concept
-   - Screenshots/evidence
-   - Affected systems
+ - Vulnerability details
+ - Proof of concept
+ - Screenshots/evidence
+ - Affected systems
 
 3. **Risk Ratings**
-   - Critical: Immediate action required
-   - High: Address within 24-48 hours
-   - Medium: Address within 1 week
-   - Low: Address within 1 month
-   - Informational: Best practice recommendations
+ - Critical: Immediate action required
+ - High: Address within 24-48 hours
+ - Medium: Address within 1 week
+ - Low: Address within 1 month
+ - Informational: Best practice recommendations
 
 4. **Remediation Recommendations**
-   - Specific fixes for each finding
-   - Short-term mitigations
-   - Long-term solutions
-   - Resource requirements
+ - Specific fixes for each finding
+ - Short-term mitigations
+ - Long-term solutions
+ - Resource requirements
 
 5. **Appendices**
-   - Detailed scan outputs
-   - Tool configurations
-   - Testing timeline
-   - Scope and methodology
+ - Detailed scan outputs
+ - Tool configurations
+ - Testing timeline
+ - Scope and methodology
 
 ### Phase 8: Common Attack Types
 

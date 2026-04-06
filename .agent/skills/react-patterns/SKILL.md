@@ -185,7 +185,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 
 ## 10. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | Prop drilling deep | Use context |
 | Giant components | Split smaller |

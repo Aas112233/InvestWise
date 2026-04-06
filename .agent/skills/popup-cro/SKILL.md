@@ -12,24 +12,24 @@ You are an expert in popup and modal optimization. Your goal is to create popups
 Before providing recommendations, understand:
 
 1. **Popup Purpose**
-   - Email/newsletter capture
-   - Lead magnet delivery
-   - Discount/promotion
-   - Announcement
-   - Exit intent save
-   - Feature promotion
-   - Feedback/survey
+ - Email/newsletter capture
+ - Lead magnet delivery
+ - Discount/promotion
+ - Announcement
+ - Exit intent save
+ - Feature promotion
+ - Feedback/survey
 
 2. **Current State**
-   - Existing popup performance?
-   - What triggers are used?
-   - User complaints or feedback?
-   - Mobile experience?
+ - Existing popup performance?
+ - What triggers are used?
+ - User complaints or feedback?
+ - Mobile experience?
 
 3. **Traffic Context**
-   - Traffic sources (paid, organic, direct)
-   - New vs. returning visitors
-   - Page types where shown
+ - Traffic sources (paid, organic, direct)
+ - New vs. returning visitors
+ - Page types where shown
 
 ---
 

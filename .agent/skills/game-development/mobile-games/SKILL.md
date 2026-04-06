@@ -96,7 +96,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 
 ## 6. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | Desktop controls on mobile | Design for touch |
 | Ignore battery drain | Monitor thermals |

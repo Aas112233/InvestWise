@@ -11,7 +11,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 
 ---
 
-## ⚠️ How to Use This Skill
+## How to Use This Skill
 
 This skill teaches **decision-making principles**, not fixed code to copy.
 
@@ -29,19 +29,19 @@ This skill teaches **decision-making principles**, not fixed code to copy.
 What are you building?
 │
 ├── Edge/Serverless (Cloudflare, Vercel)
-│   └── Hono (zero-dependency, ultra-fast cold starts)
+│ └── Hono (zero-dependency, ultra-fast cold starts)
 │
 ├── High Performance API
-│   └── Fastify (2-3x faster than Express)
+│ └── Fastify (2-3x faster than Express)
 │
 ├── Enterprise/Team familiarity
-│   └── NestJS (structured, DI, decorators)
+│ └── NestJS (structured, DI, decorators)
 │
 ├── Legacy/Stable/Maximum ecosystem
-│   └── Express (mature, most middleware)
+│ └── Express (mature, most middleware)
 │
 └── Full-stack with frontend
-    └── Next.js API Routes or tRPC
+ └── Next.js API Routes or tRPC
 ```
 
 ### Comparison Principles
@@ -106,19 +106,19 @@ CommonJS (require)
 Request Flow:
 │
 ├── Controller/Route Layer
-│   ├── Handles HTTP specifics
-│   ├── Input validation at boundary
-│   └── Calls service layer
+│ ├── Handles HTTP specifics
+│ ├── Input validation at boundary
+│ └── Calls service layer
 │
 ├── Service Layer
-│   ├── Business logic
-│   ├── Framework-agnostic
-│   └── Calls repository layer
+│ ├── Business logic
+│ ├── Framework-agnostic
+│ └── Calls repository layer
 │
 └── Repository Layer
-    ├── Data access only
-    ├── Database queries
-    └── ORM interactions
+ ├── Data access only
+ ├── Database queries
+ └── ORM interactions
 ```
 
 ### Why This Matters:
@@ -298,7 +298,7 @@ node --test src/**/*.test.ts
 
 ## 10. Anti-Patterns to Avoid
 
-### ❌ DON'T:
+### DON'T:
 - Use Express for new edge projects (use Hono)
 - Use sync methods in production code
 - Put business logic in controllers
@@ -307,7 +307,7 @@ node --test src/**/*.test.ts
 - Trust external data without validation
 - Block event loop with CPU work
 
-### ✅ DO:
+### DO:
 - Choose framework based on context
 - Ask user for preferences when unclear
 - Use layered architecture for growing projects

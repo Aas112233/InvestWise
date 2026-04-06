@@ -23,25 +23,25 @@ description: Flutter mobile app template principles. Riverpod, Go Router, clean 
 ```
 project_name/
 ├── lib/
-│   ├── main.dart
-│   ├── app.dart
-│   ├── core/
-│   │   ├── constants/
-│   │   ├── theme/
-│   │   ├── router/
-│   │   └── utils/
-│   ├── features/
-│   │   ├── auth/
-│   │   │   ├── data/
-│   │   │   ├── domain/
-│   │   │   └── presentation/
-│   │   └── home/
-│   ├── shared/
-│   │   ├── widgets/
-│   │   └── providers/
-│   └── services/
-│       ├── api/
-│       └── storage/
+│ ├── main.dart
+│ ├── app.dart
+│ ├── core/
+│ │ ├── constants/
+│ │ ├── theme/
+│ │ ├── router/
+│ │ └── utils/
+│ ├── features/
+│ │ ├── auth/
+│ │ │ ├── data/
+│ │ │ ├── domain/
+│ │ │ └── presentation/
+│ │ └── home/
+│ ├── shared/
+│ │ ├── widgets/
+│ │ └── providers/
+│ └── services/
+│ ├── api/
+│ └── storage/
 ├── test/
 └── pubspec.yaml
 ```

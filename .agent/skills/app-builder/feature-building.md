@@ -9,14 +9,14 @@ Request: "add payment system"
 
 Analysis:
 ├── Required Changes:
-│   ├── Database: orders, payments tables
-│   ├── Backend: /api/checkout, /api/webhooks/stripe
-│   ├── Frontend: CheckoutForm, PaymentSuccess
-│   └── Config: Stripe API keys
+│ ├── Database: orders, payments tables
+│ ├── Backend: /api/checkout, /api/webhooks/stripe
+│ ├── Frontend: CheckoutForm, PaymentSuccess
+│ └── Config: Stripe API keys
 │
 ├── Dependencies:
-│   ├── stripe package
-│   └── Existing user authentication
+│ ├── stripe package
+│ └── Existing user authentication
 │
 └── Estimated Time: 15-20 minutes
 ```

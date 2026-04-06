@@ -29,7 +29,7 @@ Only add context Claude doesn't already have. Challenge each piece of informatio
 
 **Good example: Concise** (approximately 50 tokens):
 
-````markdown  theme={null}
+````markdown theme={null}
 ## Extract PDF text
 
 Use pdfplumber for text extraction:
@@ -38,13 +38,13 @@ Use pdfplumber for text extraction:
 import pdfplumber
 
 with pdfplumber.open("file.pdf") as pdf:
-    text = pdf.pages[0].extract_text()
+ text = pdf.pages[0].extract_text()
 ```
 ````
 
 **Bad example: Too verbose** (approximately 150 tokens):
 
-```markdown  theme={null}
+```markdown theme={null}
 ## Extract PDF text
 
 PDF (Portable Document Format) files are a common file format that contains
@@ -70,7 +70,7 @@ Use when:
 
 Example:
 
-```markdown  theme={null}
+```markdown theme={null}
 ## Code review process
 
 1. Analyze the code structure and organization
@@ -89,16 +89,16 @@ Use when:
 
 Example:
 
-````markdown  theme={null}
+````markdown theme={null}
 ## Generate report
 
 Use this template and customize as needed:
 
 ```python
 def generate_report(data, format="markdown", include_charts=True):
-    # Process data
-    # Generate output in specified format
-    # Optionally include visualizations
+ # Process data
+ # Generate output in specified format
+ # Optionally include visualizations
 ```
 ````
 
@@ -112,7 +112,7 @@ Use when:
 
 Example:
 
-````markdown  theme={null}
+````markdown theme={null}
 ## Database migration
 
 Run exactly this script:
@@ -144,12 +144,12 @@ What works perfectly for Opus might need more detail for Haiku. If you plan to u
 ## Skill structure
 
 <Note>
-  **YAML Frontmatter**: The SKILL.md frontmatter supports two fields:
+ **YAML Frontmatter**: The SKILL.md frontmatter supports two fields:
 
-  * `name` - Human-readable name of the Skill (64 characters maximum)
-  * `description` - One-line description of what the Skill does and when to use it (1024 characters maximum)
+ * `name` - Human-readable name of the Skill (64 characters maximum)
+ * `description` - One-line description of what the Skill does and when to use it (1024 characters maximum)
 
-  For complete Skill structure details, see the [Skills overview](/en/docs/agents-and-tools/agent-skills/overview#skill-structure).
+ For complete Skill structure details, see the [Skills overview](/en/docs/agents-and-tools/agent-skills/overview#skill-structure).
 </Note>
 
 ### Naming conventions
@@ -187,11 +187,11 @@ Consistent naming makes it easier to:
 The `description` field enables Skill discovery and should include both what the Skill does and when to use it.
 
 <Warning>
-  **Always write in third person**. The description is injected into the system prompt, and inconsistent point-of-view can cause discovery problems.
+ **Always write in third person**. The description is injected into the system prompt, and inconsistent point-of-view can cause discovery problems.
 
-  * **Good:** "Processes Excel files and generates reports"
-  * **Avoid:** "I can help you process Excel files"
-  * **Avoid:** "You can use this to process Excel files"
+ * **Good:** "Processes Excel files and generates reports"
+ * **Avoid:** "I can help you process Excel files"
+ * **Avoid:** "You can use this to process Excel files"
 </Warning>
 
 **Be specific and include key terms**. Include both what the Skill does and specific triggers/contexts for when to use it.
@@ -202,33 +202,33 @@ Effective examples:
 
 **PDF Processing skill:**
 
-```yaml  theme={null}
+```yaml theme={null}
 description: Extract text and tables from PDF files, fill forms, merge documents. Use when working with PDF files or when the user mentions PDFs, forms, or document extraction.
 ```
 
 **Excel Analysis skill:**
 
-```yaml  theme={null}
+```yaml theme={null}
 description: Analyze Excel spreadsheets, create pivot tables, generate charts. Use when analyzing Excel files, spreadsheets, tabular data, or .xlsx files.
 ```
 
 **Git Commit Helper skill:**
 
-```yaml  theme={null}
+```yaml theme={null}
 description: Generate descriptive commit messages by analyzing git diffs. Use when the user asks for help writing commit messages or reviewing staged changes.
 ```
 
 Avoid vague descriptions like these:
 
-```yaml  theme={null}
+```yaml theme={null}
 description: Helps with documents
 ```
 
-```yaml  theme={null}
+```yaml theme={null}
 description: Processes data
 ```
 
-```yaml  theme={null}
+```yaml theme={null}
 description: Does stuff with files
 ```
 
@@ -256,19 +256,19 @@ The complete Skill directory structure might look like this:
 
 ```
 pdf/
-├── SKILL.md              # Main instructions (loaded when triggered)
-├── FORMS.md              # Form-filling guide (loaded as needed)
-├── reference.md          # API reference (loaded as needed)
-├── examples.md           # Usage examples (loaded as needed)
+├── SKILL.md # Main instructions (loaded when triggered)
+├── FORMS.md # Form-filling guide (loaded as needed)
+├── reference.md # API reference (loaded as needed)
+├── examples.md # Usage examples (loaded as needed)
 └── scripts/
-    ├── analyze_form.py   # Utility script (executed, not loaded)
-    ├── fill_form.py      # Form filling script
-    └── validate.py       # Validation script
+ ├── analyze_form.py # Utility script (executed, not loaded)
+ ├── fill_form.py # Form filling script
+ └── validate.py # Validation script
 ```
 
 #### Pattern 1: High-level guide with references
 
-````markdown  theme={null}
+````markdown theme={null}
 ---
 name: PDF Processing
 description: Extracts text and tables from PDF files, fills forms, and merges documents. Use when working with PDF files or when the user mentions PDFs, forms, or document extraction.
@@ -282,7 +282,7 @@ Extract text with pdfplumber:
 ```python
 import pdfplumber
 with pdfplumber.open("file.pdf") as pdf:
-    text = pdf.pages[0].extract_text()
+ text = pdf.pages[0].extract_text()
 ```
 
 ## Advanced features
@@ -302,10 +302,10 @@ For Skills with multiple domains, organize content by domain to avoid loading ir
 bigquery-skill/
 ├── SKILL.md (overview and navigation)
 └── reference/
-    ├── finance.md (revenue, billing metrics)
-    ├── sales.md (opportunities, pipeline)
-    ├── product.md (API usage, features)
-    └── marketing.md (campaigns, attribution)
+ ├── finance.md (revenue, billing metrics)
+ ├── sales.md (opportunities, pipeline)
+ ├── product.md (API usage, features)
+ └── marketing.md (campaigns, attribution)
 ```
 
 ````markdown SKILL.md theme={null}
@@ -333,7 +333,7 @@ grep -i "api usage" reference/product.md
 
 Show basic content, link to advanced content:
 
-```markdown  theme={null}
+```markdown theme={null}
 # DOCX Processing
 
 ## Creating documents
@@ -358,7 +358,7 @@ Claude may partially read files when they're referenced from other referenced fi
 
 **Bad example: Too deep**:
 
-```markdown  theme={null}
+```markdown theme={null}
 # SKILL.md
 See [advanced.md](advanced.md)...
 
@@ -371,7 +371,7 @@ Here's the actual information...
 
 **Good example: One level deep**:
 
-```markdown  theme={null}
+```markdown theme={null}
 # SKILL.md
 
 **Basic usage**: [instructions in SKILL.md]
@@ -386,7 +386,7 @@ For reference files longer than 100 lines, include a table of contents at the to
 
 **Example**:
 
-```markdown  theme={null}
+```markdown theme={null}
 # API Reference
 
 ## Contents
@@ -415,7 +415,7 @@ Break complex operations into clear, sequential steps. For particularly complex 
 
 **Example 1: Research synthesis workflow** (for Skills without code):
 
-````markdown  theme={null}
+````markdown theme={null}
 ## Research synthesis workflow
 
 Copy this checklist and track your progress:
@@ -457,7 +457,7 @@ This example shows how workflows apply to analysis tasks that don't require code
 
 **Example 2: PDF form filling workflow** (for Skills with code):
 
-````markdown  theme={null}
+````markdown theme={null}
 ## PDF form filling workflow
 
 Copy this checklist and check off items as you complete them:
@@ -508,18 +508,18 @@ This pattern greatly improves output quality.
 
 **Example 1: Style guide compliance** (for Skills without code):
 
-```markdown  theme={null}
+```markdown theme={null}
 ## Content review process
 
 1. Draft your content following the guidelines in STYLE_GUIDE.md
 2. Review against the checklist:
-   - Check terminology consistency
-   - Verify examples follow the standard format
-   - Confirm all required sections are present
+ - Check terminology consistency
+ - Verify examples follow the standard format
+ - Confirm all required sections are present
 3. If issues found:
-   - Note each issue with specific section reference
-   - Revise the content
-   - Review the checklist again
+ - Note each issue with specific section reference
+ - Revise the content
+ - Review the checklist again
 4. Only proceed when all requirements are met
 5. Finalize and save the document
 ```
@@ -528,15 +528,15 @@ This shows the validation loop pattern using reference documents instead of scri
 
 **Example 2: Document editing process** (for Skills with code):
 
-```markdown  theme={null}
+```markdown theme={null}
 ## Document editing process
 
 1. Make your edits to `word/document.xml`
 2. **Validate immediately**: `python ooxml/scripts/validate.py unpacked_dir/`
 3. If validation fails:
-   - Review the error message carefully
-   - Fix the issues in the XML
-   - Run validation again
+ - Review the error message carefully
+ - Fix the issues in the XML
+ - Run validation again
 4. **Only proceed when validation passes**
 5. Rebuild: `python ooxml/scripts/pack.py unpacked_dir/ output.docx`
 6. Test the output document
@@ -552,14 +552,14 @@ Don't include information that will become outdated:
 
 **Bad example: Time-sensitive** (will become wrong):
 
-```markdown  theme={null}
+```markdown theme={null}
 If you're doing this before August 2025, use the old API.
 After August 2025, use the new API.
 ```
 
 **Good example** (use "old patterns" section):
 
-```markdown  theme={null}
+```markdown theme={null}
 ## Current method
 
 Use the v2 API endpoint: `api.example.com/v2/messages`
@@ -603,7 +603,7 @@ Provide templates for output format. Match the level of strictness to your needs
 
 **For strict requirements** (like API responses or data formats):
 
-````markdown  theme={null}
+````markdown theme={null}
 ## Report structure
 
 ALWAYS use this exact template structure:
@@ -627,7 +627,7 @@ ALWAYS use this exact template structure:
 
 **For flexible guidance** (when adaptation is useful):
 
-````markdown  theme={null}
+````markdown theme={null}
 ## Report structure
 
 Here is a sensible default format, but use your best judgment based on the analysis:
@@ -652,7 +652,7 @@ Adjust sections as needed for the specific analysis type.
 
 For Skills where output quality depends on seeing examples, provide input/output pairs just like in regular prompting:
 
-````markdown  theme={null}
+````markdown theme={null}
 ## Commit message format
 
 Generate commit messages following these examples:
@@ -694,28 +694,28 @@ Examples help Claude understand the desired style and level of detail more clear
 
 Guide Claude through decision points:
 
-```markdown  theme={null}
+```markdown theme={null}
 ## Document modification workflow
 
 1. Determine the modification type:
 
-   **Creating new content?** → Follow "Creation workflow" below
-   **Editing existing content?** → Follow "Editing workflow" below
+ **Creating new content?** → Follow "Creation workflow" below
+ **Editing existing content?** → Follow "Editing workflow" below
 
 2. Creation workflow:
-   - Use docx-js library
-   - Build document from scratch
-   - Export to .docx format
+ - Use docx-js library
+ - Build document from scratch
+ - Export to .docx format
 
 3. Editing workflow:
-   - Unpack existing document
-   - Modify XML directly
-   - Validate after each change
-   - Repack when complete
+ - Unpack existing document
+ - Modify XML directly
+ - Validate after each change
+ - Repack when complete
 ```
 
 <Tip>
-  If workflows become large or complicated with many steps, consider pushing them into separate files and tell Claude to read the appropriate file based on the task at hand.
+ If workflows become large or complicated with many steps, consider pushing them into separate files and tell Claude to read the appropriate file based on the task at hand.
 </Tip>
 
 ## Evaluation and iteration
@@ -736,21 +736,21 @@ This approach ensures you're solving actual problems rather than anticipating re
 
 **Evaluation structure**:
 
-```json  theme={null}
+```json theme={null}
 {
-  "skills": ["pdf-processing"],
-  "query": "Extract all text from this PDF file and save it to output.txt",
-  "files": ["test-files/document.pdf"],
-  "expected_behavior": [
-    "Successfully reads the PDF file using an appropriate PDF processing library or command-line tool",
-    "Extracts text content from all pages in the document without missing any pages",
-    "Saves the extracted text to a file named output.txt in a clear, readable format"
-  ]
+ "skills": ["pdf-processing"],
+ "query": "Extract all text from this PDF file and save it to output.txt",
+ "files": ["test-files/document.pdf"],
+ "expected_behavior": [
+ "Successfully reads the PDF file using an appropriate PDF processing library or command-line tool",
+ "Extracts text content from all pages in the document without missing any pages",
+ "Saves the extracted text to a file named output.txt in a clear, readable format"
+ ]
 }
 ```
 
 <Note>
-  This example demonstrates a data-driven evaluation with a simple testing rubric. We do not currently provide a built-in way to run these evaluations. Users can create their own evaluation system. Evaluations are your source of truth for measuring Skill effectiveness.
+ This example demonstrates a data-driven evaluation with a simple testing rubric. We do not currently provide a built-in way to run these evaluations. Users can create their own evaluation system. Evaluations are your source of truth for measuring Skill effectiveness.
 </Note>
 
 ### Develop Skills iteratively with Claude
@@ -763,13 +763,13 @@ The most effective Skill development process involves Claude itself. Work with o
 
 2. **Identify the reusable pattern**: After completing the task, identify what context you provided that would be useful for similar future tasks.
 
-   **Example**: If you worked through a BigQuery analysis, you might have provided table names, field definitions, filtering rules (like "always exclude test accounts"), and common query patterns.
+ **Example**: If you worked through a BigQuery analysis, you might have provided table names, field definitions, filtering rules (like "always exclude test accounts"), and common query patterns.
 
 3. **Ask Claude A to create a Skill**: "Create a Skill that captures this BigQuery analysis pattern we just used. Include the table schemas, naming conventions, and the rule about filtering test accounts."
 
-   <Tip>
-     Claude models understand the Skill format and structure natively. You don't need special system prompts or a "writing skills" skill to get Claude to help create Skills. Simply ask Claude to create a Skill and it will generate properly structured SKILL.md content with appropriate frontmatter and body content.
-   </Tip>
+ <Tip>
+ Claude models understand the Skill format and structure natively. You don't need special system prompts or a "writing skills" skill to get Claude to help create Skills. Simply ask Claude to create a Skill and it will generate properly structured SKILL.md content with appropriate frontmatter and body content.
+ </Tip>
 
 4. **Review for conciseness**: Check that Claude A hasn't added unnecessary explanations. Ask: "Remove the explanation about what win rate means - Claude already knows that."
 
@@ -791,7 +791,7 @@ The same hierarchical pattern continues when improving Skills. You alternate bet
 
 2. **Observe Claude B's behavior**: Note where it struggles, succeeds, or makes unexpected choices
 
-   **Example observation**: "When I asked Claude B for a regional sales report, it wrote the query but forgot to filter out test accounts, even though the Skill mentions this rule."
+ **Example observation**: "When I asked Claude B for a regional sales report, it wrote the query but forgot to filter out test accounts, even though the Skill mentions this rule."
 
 3. **Return to Claude A for improvements**: Share the current SKILL.md and describe what you observed. Ask: "I noticed Claude B forgot to filter test accounts when I asked for a regional report. The Skill mentions filtering, but maybe it's not prominent enough?"
 
@@ -826,8 +826,8 @@ Iterate based on these observations rather than assumptions. The 'name' and 'des
 
 Always use forward slashes in file paths, even on Windows:
 
-* ✓ **Good**: `scripts/helper.py`, `reference/guide.md`
-* ✗ **Avoid**: `scripts\helper.py`, `reference\guide.md`
+* **Good**: `scripts/helper.py`, `reference/guide.md`
+* **Avoid**: `scripts\helper.py`, `reference\guide.md`
 
 Unix-style paths work across all platforms, while Windows-style paths cause errors on Unix systems.
 
@@ -835,7 +835,7 @@ Unix-style paths work across all platforms, while Windows-style paths cause erro
 
 Don't present multiple approaches unless necessary:
 
-````markdown  theme={null}
+````markdown theme={null}
 **Bad example: Too many choices** (confusing):
 "You can use pypdf, or pdfplumber, or PyMuPDF, or pdf2image, or..."
 
@@ -858,37 +858,37 @@ When writing scripts for Skills, handle error conditions rather than punting to 
 
 **Good example: Handle errors explicitly**:
 
-```python  theme={null}
+```python theme={null}
 def process_file(path):
-    """Process a file, creating it if it doesn't exist."""
-    try:
-        with open(path) as f:
-            return f.read()
-    except FileNotFoundError:
-        # Create file with default content instead of failing
-        print(f"File {path} not found, creating default")
-        with open(path, 'w') as f:
-            f.write('')
-        return ''
-    except PermissionError:
-        # Provide alternative instead of failing
-        print(f"Cannot access {path}, using default")
-        return ''
+ """Process a file, creating it if it doesn't exist."""
+ try:
+ with open(path) as f:
+ return f.read()
+ except FileNotFoundError:
+ # Create file with default content instead of failing
+ print(f"File {path} not found, creating default")
+ with open(path, 'w') as f:
+ f.write('')
+ return ''
+ except PermissionError:
+ # Provide alternative instead of failing
+ print(f"Cannot access {path}, using default")
+ return ''
 ```
 
 **Bad example: Punt to Claude**:
 
-```python  theme={null}
+```python theme={null}
 def process_file(path):
-    # Just fail and let Claude figure it out
-    return open(path).read()
+ # Just fail and let Claude figure it out
+ return open(path).read()
 ```
 
 Configuration parameters should also be justified and documented to avoid "voodoo constants" (Ousterhout's law). If you don't know the right value, how will Claude determine it?
 
 **Good example: Self-documenting**:
 
-```python  theme={null}
+```python theme={null}
 # HTTP requests typically complete within 30 seconds
 # Longer timeout accounts for slow connections
 REQUEST_TIMEOUT = 30
@@ -900,9 +900,9 @@ MAX_RETRIES = 3
 
 **Bad example: Magic numbers**:
 
-```python  theme={null}
-TIMEOUT = 47  # Why 47?
-RETRIES = 5   # Why 5?
+```python theme={null}
+TIMEOUT = 47 # Why 47?
+RETRIES = 5 # Why 5?
 ```
 
 ### Provide utility scripts
@@ -929,7 +929,7 @@ For most utility scripts, execution is preferred because it's more reliable and 
 
 **Example**:
 
-````markdown  theme={null}
+````markdown theme={null}
 ## Utility scripts
 
 **analyze_form.py**: Extract all form fields from PDF
@@ -941,8 +941,8 @@ python scripts/analyze_form.py input.pdf > fields.json
 Output format:
 ```json
 {
-  "field_name": {"type": "text", "x": 100, "y": 200},
-  "signature": {"type": "sig", "x": 150, "y": 500}
+ "field_name": {"type": "text", "x": 100, "y": 200},
+ "signature": {"type": "sig", "x": 150, "y": 500}
 }
 ```
 
@@ -964,20 +964,20 @@ python scripts/fill_form.py input.pdf fields.json output.pdf
 
 When inputs can be rendered as images, have Claude analyze them:
 
-````markdown  theme={null}
+````markdown theme={null}
 ## Form layout analysis
 
 1. Convert PDF to images:
-   ```bash
-   python scripts/pdf_to_images.py form.pdf
-   ```
+ ```bash
+ python scripts/pdf_to_images.py form.pdf
+ ```
 
 2. Analyze each page image to identify form fields
 3. Claude can see field locations and types visually
 ````
 
 <Note>
-  In this example, you'd need to write the `pdf_to_images.py` script.
+ In this example, you'd need to write the `pdf_to_images.py` script.
 </Note>
 
 Claude's vision capabilities help understand layouts and structures.
@@ -1026,13 +1026,13 @@ Skills run in a code execution environment with filesystem access, bash commands
 * **File paths matter**: Claude navigates your skill directory like a filesystem. Use forward slashes (`reference/guide.md`), not backslashes
 * **Name files descriptively**: Use names that indicate content: `form_validation_rules.md`, not `doc2.md`
 * **Organize for discovery**: Structure directories by domain or feature
-  * Good: `reference/finance.md`, `reference/sales.md`
-  * Bad: `docs/file1.md`, `docs/file2.md`
+ * Good: `reference/finance.md`, `reference/sales.md`
+ * Bad: `docs/file1.md`, `docs/file2.md`
 * **Bundle comprehensive resources**: Include complete API docs, extensive examples, large datasets; no context penalty until accessed
 * **Prefer scripts for deterministic operations**: Write `validate_form.py` rather than asking Claude to generate validation code
 * **Make execution intent clear**:
-  * "Run `analyze_form.py` to extract fields" (execute)
-  * "See `analyze_form.py` for the extraction algorithm" (read as reference)
+ * "Run `analyze_form.py` to extract fields" (execute)
+ * "See `analyze_form.py` for the extraction algorithm" (read as reference)
 * **Test file access patterns**: Verify Claude can navigate your directory structure by testing with real requests
 
 **Example:**
@@ -1041,9 +1041,9 @@ Skills run in a code execution environment with filesystem access, bash commands
 bigquery-skill/
 ├── SKILL.md (overview, points to reference files)
 └── reference/
-    ├── finance.md (revenue metrics)
-    ├── sales.md (pipeline data)
-    └── product.md (usage analytics)
+ ├── finance.md (revenue metrics)
+ ├── sales.md (pipeline data)
+ └── product.md (usage analytics)
 ```
 
 When the user asks about revenue, Claude reads SKILL.md, sees the reference to `reference/finance.md`, and invokes bash to read just that file. The sales.md and product.md files remain on the filesystem, consuming zero context tokens until needed. This filesystem-based model is what enables progressive disclosure. Claude can navigate and selectively load exactly what each task requires.
@@ -1058,7 +1058,7 @@ If your Skill uses MCP (Model Context Protocol) tools, always use fully qualifie
 
 **Example**:
 
-```markdown  theme={null}
+```markdown theme={null}
 Use the BigQuery:bigquery_schema tool to retrieve table schemas.
 Use the GitHub:create_issue tool to create issues.
 ```
@@ -1074,7 +1074,7 @@ Without the server prefix, Claude may fail to locate the tool, especially when m
 
 Don't assume packages are available:
 
-````markdown  theme={null}
+````markdown theme={null}
 **Bad example: Assumes installation**:
 "Use the pdf library to process the file."
 
@@ -1136,15 +1136,15 @@ Before sharing a Skill, verify:
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Get started with Agent Skills" icon="rocket" href="/en/docs/agents-and-tools/agent-skills/quickstart">
-    Create your first Skill
-  </Card>
+ <Card title="Get started with Agent Skills" icon="rocket" href="/en/docs/agents-and-tools/agent-skills/quickstart">
+ Create your first Skill
+ </Card>
 
-  <Card title="Use Skills in Claude Code" icon="terminal" href="/en/docs/claude-code/skills">
-    Create and manage Skills in Claude Code
-  </Card>
+ <Card title="Use Skills in Claude Code" icon="terminal" href="/en/docs/claude-code/skills">
+ Create and manage Skills in Claude Code
+ </Card>
 
-  <Card title="Use Skills with the API" icon="code" href="/en/api/skills-guide">
-    Upload and use Skills programmatically
-  </Card>
+ <Card title="Use Skills with the API" icon="code" href="/en/api/skills-guide">
+ Upload and use Skills programmatically
+ </Card>
 </CardGroup>

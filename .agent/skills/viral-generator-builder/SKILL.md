@@ -98,11 +98,11 @@ Building personality quizzes that spread
 const scores = { typeA: 0, typeB: 0, typeC: 0, typeD: 0 };
 
 answers.forEach(answer => {
-  scores[answer.type] += answer.weight;
+ scores[answer.type] += answer.weight;
 });
 
 const result = Object.entries(scores)
-  .sort((a, b) => b[1] - a[1])[0][0];
+ .sort((a, b) => b[1] - a[1])[0][0];
 ```
 
 ### Result Page Elements
@@ -135,11 +135,11 @@ Building name generators that people love
 Same input = same output = shareable!
 ```javascript
 function generateName(input) {
-  const hash = simpleHash(input.toLowerCase());
-  const firstNames = ["Shadow", "Storm", "Crystal"];
-  const lastNames = ["Walker", "Blade", "Heart"];
+ const hash = simpleHash(input.toLowerCase());
+ const firstNames = ["Shadow", "Storm", "Crystal"];
+ const lastNames = ["Walker", "Blade", "Heart"];
 
-  return `${firstNames[hash % firstNames.length]} ${lastNames[(hash >> 8) % lastNames.length]}`;
+ return `${firstNames[hash % firstNames.length]} ${lastNames[(hash >> 8) % lastNames.length]}`;
 }
 ```
 
@@ -158,7 +158,7 @@ function generateName(input) {
 
 ## Anti-Patterns
 
-### ❌ Forgettable Results
+### Forgettable Results
 
 **Why bad**: Generic results don't get shared.
 "You are creative" - so what?
@@ -170,7 +170,7 @@ Nothing to screenshot.
 Add visual flair.
 Make it screenshot-worthy.
 
-### ❌ Too Much Input
+### Too Much Input
 
 **Why bad**: Every field is a dropout point.
 People want instant gratification.
@@ -182,7 +182,7 @@ Start with just name or one question.
 Progressive disclosure if needed.
 Show progress if longer.
 
-### ❌ Boring Share Cards
+### Boring Share Cards
 
 **Why bad**: Social feeds are competitive.
 Bland cards get scrolled past.

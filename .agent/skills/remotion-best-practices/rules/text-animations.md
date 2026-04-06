@@ -2,7 +2,7 @@
 name: text-animations
 description: Typography and text animation patterns for Remotion.
 metadata:
-  tags: typography, text, typewriter, highlighter ken
+ tags: typography, text, typewriter, highlighter ken
 ---
 
 ## Text animations

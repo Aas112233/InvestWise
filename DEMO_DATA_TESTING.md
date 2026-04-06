@@ -2,7 +2,7 @@
 
 > **Global Configuration:**
 > - **Currency:** BDT or USD ($)
-> - **Share Value:** **1 Share = 1,000 (BDT/USD)**
+> - **Share Value:****1 Share = 1,000 (BDT/USD)**
 > - **Rule:** Deposit amount must exactly match the number of shares (e.g., 7 Shares = 7,000).
 
 Use this data to populate the application and verify that calculations (totals, ROI, balances) are working correctly.
@@ -12,11 +12,11 @@ Use this data to populate the application and verify that calculations (totals, 
 
 | Member ID | Name | Role | Total Shares (Expected) | Total Contribution (Expected) | Phone |
 |-----------|------|------|-------------------------|-------------------------------|-------|
-| #135122   | Harvey Specter | Associate Member | 15 | 15,000 | +123456783 |
-| #304751   | John Doe | Associate Member | 7 | 7,000 | +123456789 |
-| #377574   | Jane Smith | Associate Member | 6 | 6,000 | +123456780 |
-| #224809   | Mike Ross | Associate Member | 4 | 4,000 | +123456781 |
-| #137126   | Rachel Zane | Associate Member | 4 | 4,000 | +123456782 |
+| #135122 | Harvey Specter | Associate Member | 15 | 15,000 | +123456783 |
+| #304751 | John Doe | Associate Member | 7 | 7,000 | +123456789 |
+| #377574 | Jane Smith | Associate Member | 6 | 6,000 | +123456780 |
+| #224809 | Mike Ross | Associate Member | 4 | 4,000 | +123456781 |
+| #137126 | Rachel Zane | Associate Member | 4 | 4,000 | +123456782 |
 
 ---
 
@@ -38,10 +38,10 @@ Use this data to populate the application and verify that calculations (totals, 
 - **Budget:** 25,000
 - **Initial Investment:** 15,000 (Deduct from General Reserves)
 - **Stakeholder Equity (1 Share = 1,000):**
-    | Member | Shares Invested | Value | Ownership % |
-    |--------|-----------------|-------|-------------|
-    | Harvey Specter | 10 | 10,000 | 66.7% |
-    | John Doe | 5 | 5,000 | 33.3% |
+ | Member | Shares Invested | Value | Ownership % |
+ |--------|-----------------|-------|-------------|
+ | Harvey Specter | 10 | 10,000 | 66.7% |
+ | John Doe | 5 | 5,000 | 33.3% |
 - **Description:** Expanding solar capacity. Fund: `Solar Fund (F-Solar)`
 
 ### Project 2: Real Estate Development
@@ -49,13 +49,13 @@ Use this data to populate the application and verify that calculations (totals, 
 - **Budget:** 40,000
 - **Initial Investment:** 20,000 (Deduct from General Reserves)
 - **Stakeholder Equity (1 Share = 1,000):**
-    | Member | Shares Invested | Value | Ownership % |
-    |--------|-----------------|-------|-------------|
-    | Jane Smith | 6 | 6,000 | 30.0% |
-    | Harvey Specter | 5 | 5,000 | 25.0% |
-    | Mike Ross | 4 | 4,000 | 20.0% |
-    | Rachel Zane | 4 | 4,000 | 20.0% |
-    | John Doe | 1 | 1,000 | 5.0% |
+ | Member | Shares Invested | Value | Ownership % |
+ |--------|-----------------|-------|-------------|
+ | Jane Smith | 6 | 6,000 | 30.0% |
+ | Harvey Specter | 5 | 5,000 | 25.0% |
+ | Mike Ross | 4 | 4,000 | 20.0% |
+ | Rachel Zane | 4 | 4,000 | 20.0% |
+ | John Doe | 1 | 1,000 | 5.0% |
 - **Description:** Construction of residential building. Fund: `Realty Fund (F-Realty)`
 
 ---
@@ -65,12 +65,12 @@ Use this data to populate the application and verify that calculations (totals, 
 
 | No. | Member Name | Fund Name | Amount | Equivalent | Description |
 |-----|-------------|-----------|--------|------------|-------------|
-| 1   | **Harvey Specter**| General Reserves | 10,000 | **10 Shares**| Primary Buy-in |
-| 2   | **John Doe** | General Reserves | 7,000 | **7 Shares**| Full Buy-in |
-| 3   | **Jane Smith** | General Reserves | 6,000 | **6 Shares**| Full Buy-in |
-| 4   | **Mike Ross** | General Reserves | 4,000 | **4 Shares**| Full Buy-in |
-| 5   | **Rachel Zane** | General Reserves | 4,000 | **4 Shares**| Full Buy-in |
-| 6   | **Harvey Specter**| General Reserves | 5,000 | **5 Shares**| Final Buy-in |
+| 1 | **Harvey Specter**| General Reserves | 10,000 | **10 Shares**| Primary Buy-in |
+| 2 | **John Doe** | General Reserves | 7,000 | **7 Shares**| Full Buy-in |
+| 3 | **Jane Smith** | General Reserves | 6,000 | **6 Shares**| Full Buy-in |
+| 4 | **Mike Ross** | General Reserves | 4,000 | **4 Shares**| Full Buy-in |
+| 5 | **Rachel Zane** | General Reserves | 4,000 | **4 Shares**| Full Buy-in |
+| 6 | **Harvey Specter**| General Reserves | 5,000 | **5 Shares**| Final Buy-in |
 
 
 *Note: For the purpose of strict share matching ($7,000 = 7 Shares), ignore entries 7-10 if your system only counts "Investment" deposits towards shares.*
@@ -82,16 +82,16 @@ Use this data to populate the application and verify that calculations (totals, 
 
 | No. | Description | Category | Fund Name | Project | Amount |
 |-----|-------------|----------|-----------|---------|--------|
-| 1   | Office Rent | Utilities | Emergency Fund | None | 1,500 |
-| 2   | Utility Bill | Utilities | General Reserves | None | 500 |
-| 3   | Solar Panels | Equipment | Solar Fund | Solar Farm | 8,000 |
-| 4   | Land Survey | Professional | Realty Fund | Real Estate | 2,000 |
-| 5   | Software | IT | General Reserves | None | 300 |
-| 6   | Site Security | Services | Solar Fund | Solar Farm | 1,000 |
-| 7   | Architect Fees| Professional | Realty Fund | Real Estate | 5,000 |
-| 8   | Marketing | Advertising | General Reserves | None | 1,200 |
-| 9   | Labor Cost | Services | Solar Fund | Solar Farm | 3,000 |
-| 10  | Stationery | Office | General Reserves | None | 100 |
+| 1 | Office Rent | Utilities | Emergency Fund | None | 1,500 |
+| 2 | Utility Bill | Utilities | General Reserves | None | 500 |
+| 3 | Solar Panels | Equipment | Solar Fund | Solar Farm | 8,000 |
+| 4 | Land Survey | Professional | Realty Fund | Real Estate | 2,000 |
+| 5 | Software | IT | General Reserves | None | 300 |
+| 6 | Site Security | Services | Solar Fund | Solar Farm | 1,000 |
+| 7 | Architect Fees| Professional | Realty Fund | Real Estate | 5,000 |
+| 8 | Marketing | Advertising | General Reserves | None | 1,200 |
+| 9 | Labor Cost | Services | Solar Fund | Solar Farm | 3,000 |
+| 10 | Stationery | Office | General Reserves | None | 100 |
 
 ---
 
@@ -100,16 +100,16 @@ Use this data to populate the application and verify that calculations (totals, 
 
 | No. | Project | Type | Amount | Description |
 |-----|---------|------|--------|-------------|
-| 1   | Solar Farm | **+ Earning** | 2,000 | Energy Sales Revenue |
-| 2   | Solar Farm | *- Expense* | 500 | Battery Maintenance |
-| 3   | Real Estate| **+ Earning** | 5,000 | Pre-sale Deposit |
-| 4   | Real Estate| *- Expense* | 1,000 | Legal Documentation |
-| 5   | Solar Farm | **+ Earning** | 1,500 | Govt Subsidy |
-| 6   | Solar Farm | *- Expense* | 200 | Site Cleaning |
-| 7   | Real Estate| **+ Earning** | 8,000 | Pre-sale Deposit |
-| 8   | Real Estate| *- Expense* | 1,500 | Foundation Materials |
-| 9   | Solar Farm | **+ Earning** | 3,000 | Bulk Energy Sale |
-| 10  | Real Estate| *- Expense* | 500 | Structural Inspection |
+| 1 | Solar Farm | **+ Earning** | 2,000 | Energy Sales Revenue |
+| 2 | Solar Farm | *- Expense* | 500 | Battery Maintenance |
+| 3 | Real Estate| **+ Earning** | 5,000 | Pre-sale Deposit |
+| 4 | Real Estate| *- Expense* | 1,000 | Legal Documentation |
+| 5 | Solar Farm | **+ Earning** | 1,500 | Govt Subsidy |
+| 6 | Solar Farm | *- Expense* | 200 | Site Cleaning |
+| 7 | Real Estate| **+ Earning** | 8,000 | Pre-sale Deposit |
+| 8 | Real Estate| *- Expense* | 1,500 | Foundation Materials |
+| 9 | Solar Farm | **+ Earning** | 3,000 | Bulk Energy Sale |
+| 10 | Real Estate| *- Expense* | 500 | Structural Inspection |
 
 ---
 
@@ -130,7 +130,7 @@ Use this data to populate the application and verify that calculations (totals, 
 - **Project 2 (Real Estate):** Net Balance: +3,000
 
 ### Global Fund Balances (Net Change):
-- **General Reserves:** -1,100  
-  *(Calculation: 36k Deposits - 2.1k Overhead - 35k Project Investments)*
-- **Emergency Fund:** -1,500  
-  *(Calculation: 0k Deposits - 1.5k Overhead)*
+- **General Reserves:** -1,100 
+ *(Calculation: 36k Deposits - 2.1k Overhead - 35k Project Investments)*
+- **Emergency Fund:** -1,500 
+ *(Calculation: 0k Deposits - 1.5k Overhead)*

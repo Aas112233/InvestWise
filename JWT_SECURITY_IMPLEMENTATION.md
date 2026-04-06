@@ -5,7 +5,7 @@ This document describes the comprehensive JWT security enhancements and automati
 
 ---
 
-## 🔐 **JWT Security Enhancements**
+## **JWT Security Enhancements**
 
 ### 1. Token Architecture
 
@@ -25,16 +25,16 @@ This document describes the comprehensive JWT security enhancements and automati
 ```javascript
 // Access Token (15 min)
 {
-  id: "user_id",
-  type: "access",
-  exp: 1234567890  // 15 minutes from issuance
+ id: "user_id",
+ type: "access",
+ exp: 1234567890 // 15 minutes from issuance
 }
 
 // Refresh Token (7 days)
 {
-  id: "user_id",
-  type: "refresh",
-  exp: 1234567890  // 7 days from issuance
+ id: "user_id",
+ type: "refresh",
+ exp: 1234567890 // 7 days from issuance
 }
 ```
 
@@ -87,7 +87,7 @@ This document describes the comprehensive JWT security enhancements and automati
 
 ---
 
-## ⏱️ **Session Timeout Feature**
+## ⏱ **Session Timeout Feature**
 
 ### 1. Inactivity Detection
 
@@ -107,33 +107,33 @@ This document describes the comprehensive JWT security enhancements and automati
 
 ```
 User is active → User stops activity
-       ↓
+ ↓
 [2 minutes pass]
-       ↓
+ ↓
 Show timeout warning dialog
-       ↓
+ ↓
 60-second countdown starts
-       ↓
+ ↓
 ┌──────────────┴──────────────┐
-│                             │
-User clicks           Timer reaches
-"Stay Logged In"          00:00
-│                             │
-↓                             ↓
-Token refreshed         Auto logout
-Dialog closed           Redirect to login
-Session extended        with message
+│ │
+User clicks Timer reaches
+"Stay Logged In" 00:00
+│ │
+↓ ↓
+Token refreshed Auto logout
+Dialog closed Redirect to login
+Session extended with message
 ```
 
 ### 3. Warning Dialog Features
 
 **Visual Elements:**
-- 🔒 Security shield icon
-- ⏱️ Live countdown timer (MM:SS format)
-- 📊 Progress bar (green → yellow → red)
+- Security shield icon
+- ⏱ Live countdown timer (MM:SS format)
+- Progress bar (green → yellow → red)
 - Two action buttons:
-  - "Logout Now" - Immediate logout
-  - "Stay Logged In" - Extend session
+ - "Logout Now" - Immediate logout
+ - "Stay Logged In" - Extend session
 
 **Design:**
 - Modal with backdrop blur
@@ -162,29 +162,29 @@ When timer reaches zero:
 
 ---
 
-## 📋 **Configuration Options**
+## **Configuration Options**
 
 ### Backend (`server/utils/generateToken.js`)
 
 ```javascript
-const ACCESS_TOKEN_EXPIRE = '15m';  // 15 minutes
-const REFRESH_TOKEN_EXPIRE = '7d';   // 7 days
+const ACCESS_TOKEN_EXPIRE = '15m'; // 15 minutes
+const REFRESH_TOKEN_EXPIRE = '7d'; // 7 days
 ```
 
 ### Frontend (`App.tsx`)
 
 ```javascript
 const { showWarning, timeRemaining, extendSession, logout } = useInactivityTimeout({
-  timeoutMs: 2 * 60 * 1000,      // 2 minutes before warning
-  warningDurationMs: 60 * 1000,   // 60 seconds warning
-  onLogout: handleLogout,
-  enabled: !!user,
+ timeoutMs: 2 * 60 * 1000, // 2 minutes before warning
+ warningDurationMs: 60 * 1000, // 60 seconds warning
+ onLogout: handleLogout,
+ enabled: !!user,
 });
 ```
 
 ---
 
-## 🔒 **Security Benefits**
+## **Security Benefits**
 
 ### 1. Reduced Attack Surface
 - Short-lived access tokens limit exposure window
@@ -208,7 +208,7 @@ const { showWarning, timeRemaining, extendSession, logout } = useInactivityTimeo
 
 ---
 
-## 🧪 **Testing Checklist**
+## **Testing Checklist**
 
 ### Token Refresh
 - [ ] Login and verify both tokens received
@@ -244,7 +244,7 @@ const { showWarning, timeRemaining, extendSession, logout } = useInactivityTimeo
 
 ---
 
-## 🚨 **Edge Cases Handled**
+## **Edge Cases Handled**
 
 ### 1. Multiple Concurrent Refresh Requests
 - **Problem**: Multiple 401s trigger multiple refresh requests
@@ -268,21 +268,21 @@ const { showWarning, timeRemaining, extendSession, logout } = useInactivityTimeo
 
 ---
 
-## 📊 **Database Schema**
+## **Database Schema**
 
 ### BlacklistedToken Collection
 
 ```javascript
 {
-  _id: ObjectId,
-  token: String,           // JWT token string
-  type: "access"|"refresh", // Token type
-  userId: ObjectId,        // User who owns token
-  expiresAt: Date,         // When token naturally expires
-  blacklistedAt: Date,     // When blacklisted
-  reason: String,          // logout|password_change|security|user_request
-  createdAt: Date,
-  updatedAt: Date
+ _id: ObjectId,
+ token: String, // JWT token string
+ type: "access"|"refresh", // Token type
+ userId: ObjectId, // User who owns token
+ expiresAt: Date, // When token naturally expires
+ blacklistedAt: Date, // When blacklisted
+ reason: String, // logout|password_change|security|user_request
+ createdAt: Date,
+ updatedAt: Date
 }
 ```
 
@@ -294,7 +294,7 @@ const { showWarning, timeRemaining, extendSession, logout } = useInactivityTimeo
 
 ---
 
-## 🎯 **Production Recommendations**
+## **Production Recommendations**
 
 ### 1. Environment Variables
 ```bash
@@ -326,48 +326,48 @@ SESSION_WARNING_MS=60000
 
 ---
 
-## 📝 **API Response Examples**
+## **API Response Examples**
 
 ### Login Success
 ```json
 {
-  "_id": "user123",
-  "name": "John Doe",
-  "email": "john@example.com",
-  "role": "Admin",
-  "permissions": { "DASHBOARD": "WRITE" },
-  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIs...",
-  "expiresIn": 900
+ "_id": "user123",
+ "name": "John Doe",
+ "email": "john@example.com",
+ "role": "Admin",
+ "permissions": { "DASHBOARD": "WRITE" },
+ "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+ "refreshToken": "eyJhbGciOiJIUzI1NiIs...",
+ "expiresIn": 900
 }
 ```
 
 ### Token Refresh
 ```json
 {
-  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIs...",
-  "expiresIn": 900
+ "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+ "refreshToken": "eyJhbGciOiJIUzI1NiIs...",
+ "expiresIn": 900
 }
 ```
 
 ### Logout Success
 ```json
 {
-  "message": "Logout successful"
+ "message": "Logout successful"
 }
 ```
 
 ### Blacklisted Token Error
 ```json
 {
-  "message": "Token has been revoked, please login again"
+ "message": "Token has been revoked, please login again"
 }
 ```
 
 ---
 
-## 🔧 **Troubleshooting**
+## **Troubleshooting**
 
 ### Issue: Token refresh not working
 **Check:**
@@ -395,16 +395,16 @@ SESSION_WARNING_MS=60000
 
 ---
 
-## ✅ **Summary**
+## **Summary**
 
 This implementation provides enterprise-grade security with:
-- ✅ Short-lived access tokens (15 min)
-- ✅ Refresh token rotation
-- ✅ Token revocation mechanism
-- ✅ Automatic session refresh
-- ✅ Inactivity-based auto logout
-- ✅ User-friendly warning dialog
-- ✅ Comprehensive audit logging
-- ✅ Graceful error handling
+- Short-lived access tokens (15 min)
+- Refresh token rotation
+- Token revocation mechanism
+- Automatic session refresh
+- Inactivity-based auto logout
+- User-friendly warning dialog
+- Comprehensive audit logging
+- Graceful error handling
 
 **Result:** Production-ready authentication system that balances security with user experience.

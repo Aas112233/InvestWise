@@ -13,32 +13,36 @@ import AuditLog from '../models/AuditLog.js';
  * @param {String} params.status - 'SUCCESS', 'FAILURE', or 'WARNING'.
  */
 export const logAudit = async ({
-    req = null,
-    user = null,
-    action,
-    resourceType = 'System',
-    resourceId = null,
-    details = {},
-    status = 'SUCCESS'
+ req = null,
+ user = null,
+ action,
+ resourceType = 'System',
+ resourceId = null,
+ details = {},
+ status = 'SUCCESS'
 }) => {
-    try {
-        const currentUser = user || (req ? req.user : null);
-        const ip = req ? (req.headers['x-forwarded-for'] || req.socket.remoteAddress) : 'SYSTEM';
-        const userAgent = req ? req.get('User-Agent') : 'Internal';
+ try {
+ const currentUser = user || (req ? req.user : null);
+ const ip = req ? (req.headers['x-forwarded-for'] || req.socket.remoteAddress) : 'SYSTEM';
+ const userAgent = req ? req.get('User-Agent') : 'Internal';
+ const correlationId = req ? req.correlationId : null;
 
-        await AuditLog.create({
-            user: currentUser ? currentUser._id : null,
-            userName: currentUser ? currentUser.name : 'System/Guest',
-            action,
-            resourceType,
-            resourceId,
-            details,
-            ipAddress: ip,
-            userAgent,
-            status
-        });
-    } catch (error) {
-        console.error('Audit Logging Failed:', error);
-        // We don't want to crash the app if logging fails, just error to console
-    }
+ await AuditLog.create({
+ user: currentUser ? currentUser._id : null,
+ userName: currentUser ? currentUser.name : 'System/Guest',
+ action,
+ resourceType,
+ resourceId,
+ details: {
+ ...details,
+ correlationId // Include correlation ID in audit trail
+ },
+ ipAddress: ip,
+ userAgent,
+ status
+ });
+ } catch (error) {
+ console.error('Audit Logging Failed:', error);
+ // We don't want to crash the app if logging fails, just error to console
+ }
 };

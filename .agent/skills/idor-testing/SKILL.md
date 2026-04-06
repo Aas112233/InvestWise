@@ -2,8 +2,8 @@
 name: IDOR Vulnerability Testing
 description: This skill should be used when the user asks to "test for insecure direct object references," "find IDOR vulnerabilities," "exploit broken access control," "enumerate user IDs or object references," or "bypass authorization to access other users' data." It provides comprehensive guidance for detecting, exploiting, and remediating IDOR vulnerabilities in web applications.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # IDOR Vulnerability Testing
@@ -138,9 +138,9 @@ PUT /api/admin/users/1000 → 200 OK (Vulnerable!)
 3. Select ID parameter as payload position
 4. Configure attack type: Sniper
 5. Payload settings:
-   - Type: Numbers
-   - Range: 1 to 10000
-   - Step: 1
+ - Type: Numbers
+ - Range: 1 to 10000
+ - Step: 1
 6. Start attack
 7. Analyze responses for 200 status codes
 ```
@@ -270,18 +270,18 @@ Content-Type: application/json
 Cookie: session=attacker_session
 
 {
-  "id": 5,
-  "userId": 1001,
-  "street": "123 Main St",
-  "city": "Test City"
+ "id": 5,
+ "userId": 1001,
+ "street": "123 Main St",
+ "city": "Test City"
 }
 
 # Modify userId to victim's ID
 {
-  "id": 5,
-  "userId": 1000,  # Changed from 1001
-  "street": "Hacked Address",
-  "city": "Exploit City"
+ "id": 5,
+ "userId": 1000, # Changed from 1001
+ "street": "Hacked Address",
+ "city": "Exploit City"
 }
 
 # If 200 OK: Address created under victim's account
@@ -314,8 +314,8 @@ Attack Configuration:
 
 Body Template:
 {
-  "id": §1§,
-  "userId": 3
+ "id": §1§,
+ "userId": 3
 }
 
 # Analyze results:
@@ -405,14 +405,14 @@ Cookie: session=regular_user_session
 ```python
 # Django example - validate ownership
 def update_address(request, address_id):
-    address = Address.objects.get(id=address_id)
-    
-    # Verify ownership before allowing update
-    if address.user != request.user:
-        return HttpResponseForbidden("Unauthorized")
-    
-    # Proceed with update
-    address.update(request.data)
+ address = Address.objects.get(id=address_id)
+ 
+ # Verify ownership before allowing update
+ if address.user != request.user:
+ return HttpResponseForbidden("Unauthorized")
+ 
+ # Proceed with update
+ address.update(request.data)
 ```
 
 ### Use Indirect References
@@ -421,22 +421,22 @@ def update_address(request, address_id):
 # Use: /api/address/current-user/billing
 
 def get_address(request):
-    # Always filter by authenticated user
-    address = Address.objects.filter(user=request.user).first()
-    return address
+ # Always filter by authenticated user
+ address = Address.objects.filter(user=request.user).first()
+ return address
 ```
 
 ### Server-Side Validation
 ```python
 # Always validate on server, never trust client input
 def download_receipt(request, receipt_id):
-    receipt = Receipt.objects.filter(
-        id=receipt_id,
-        user=request.user  # Critical: filter by current user
-    ).first()
-    
-    if not receipt:
-        return HttpResponseNotFound()
-    
-    return FileResponse(receipt.file)
+ receipt = Receipt.objects.filter(
+ id=receipt_id,
+ user=request.user # Critical: filter by current user
+ ).first()
+ 
+ if not receipt:
+ return HttpResponseNotFound()
+ 
+ return FileResponse(receipt.file)
 ```

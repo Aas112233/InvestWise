@@ -102,71 +102,71 @@ Creates a new user account.
 **Request Body:**
 \`\`\`json
 {
-  "email": "user@example.com",      // Required: Valid email address
-  "password": "SecurePass123!",     // Required: Min 8 chars, 1 uppercase, 1 number
-  "name": "John Doe",               // Required: 2-50 characters
-  "role": "user"                    // Optional: "user" or "admin" (default: "user")
+ "email": "user@example.com", // Required: Valid email address
+ "password": "SecurePass123!", // Required: Min 8 chars, 1 uppercase, 1 number
+ "name": "John Doe", // Required: 2-50 characters
+ "role": "user" // Optional: "user" or "admin" (default: "user")
 }
 \`\`\`
 
 **Success Response (201 Created):**
 \`\`\`json
 {
-  "id": "usr_1234567890",
-  "email": "user@example.com",
-  "name": "John Doe",
-  "role": "user",
-  "createdAt": "2026-01-20T10:30:00Z",
-  "emailVerified": false
+ "id": "usr_1234567890",
+ "email": "user@example.com",
+ "name": "John Doe",
+ "role": "user",
+ "createdAt": "2026-01-20T10:30:00Z",
+ "emailVerified": false
 }
 \`\`\`
 
 **Error Responses:**
 
 - `400 Bad Request` - Invalid input data
-  \`\`\`json
-  {
-    "error": "VALIDATION_ERROR",
-    "message": "Invalid email format",
-    "field": "email"
-  }
-  \`\`\`
+ \`\`\`json
+ {
+ "error": "VALIDATION_ERROR",
+ "message": "Invalid email format",
+ "field": "email"
+ }
+ \`\`\`
 
 - `409 Conflict` - Email already exists
-  \`\`\`json
-  {
-    "error": "EMAIL_EXISTS",
-    "message": "An account with this email already exists"
-  }
-  \`\`\`
+ \`\`\`json
+ {
+ "error": "EMAIL_EXISTS",
+ "message": "An account with this email already exists"
+ }
+ \`\`\`
 
 - `401 Unauthorized` - Missing or invalid authentication token
 
 **Example Request (cURL):**
 \`\`\`bash
 curl -X POST https://api.example.com/api/v1/users \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "SecurePass123!",
-    "name": "John Doe"
-  }'
+ -H "Authorization: Bearer YOUR_TOKEN" \
+ -H "Content-Type: application/json" \
+ -d '{
+ "email": "user@example.com",
+ "password": "SecurePass123!",
+ "name": "John Doe"
+ }'
 \`\`\`
 
 **Example Request (JavaScript):**
 \`\`\`javascript
 const response = await fetch('https://api.example.com/api/v1/users', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    email: 'user@example.com',
-    password: 'SecurePass123!',
-    name: 'John Doe'
-  })
+ method: 'POST',
+ headers: {
+ 'Authorization': `Bearer ${token}`,
+ 'Content-Type': 'application/json'
+ },
+ body: JSON.stringify({
+ email: 'user@example.com',
+ password: 'SecurePass123!',
+ name: 'John Doe'
+ })
 });
 
 const user = await response.json();
@@ -178,16 +178,16 @@ console.log(user);
 import requests
 
 response = requests.post(
-    'https://api.example.com/api/v1/users',
-    headers={
-        'Authorization': f'Bearer {token}',
-        'Content-Type': 'application/json'
-    },
-    json={
-        'email': 'user@example.com',
-        'password': 'SecurePass123!',
-        'name': 'John Doe'
-    }
+ 'https://api.example.com/api/v1/users',
+ headers={
+ 'Authorization': f'Bearer {token}',
+ 'Content-Type': 'application/json'
+ },
+ json={
+ 'email': 'user@example.com',
+ 'password': 'SecurePass123!',
+ 'name': 'John Doe'
+ }
 )
 
 user = response.json()
@@ -205,62 +205,62 @@ Fetch user information by ID.
 **Query:**
 \`\`\`graphql
 query GetUser($id: ID!) {
-  user(id: $id) {
-    id
-    email
-    name
-    role
-    createdAt
-    posts {
-      id
-      title
-      publishedAt
-    }
-  }
+ user(id: $id) {
+ id
+ email
+ name
+ role
+ createdAt
+ posts {
+ id
+ title
+ publishedAt
+ }
+ }
 }
 \`\`\`
 
 **Variables:**
 \`\`\`json
 {
-  "id": "usr_1234567890"
+ "id": "usr_1234567890"
 }
 \`\`\`
 
 **Response:**
 \`\`\`json
 {
-  "data": {
-    "user": {
-      "id": "usr_1234567890",
-      "email": "user@example.com",
-      "name": "John Doe",
-      "role": "user",
-      "createdAt": "2026-01-20T10:30:00Z",
-      "posts": [
-        {
-          "id": "post_123",
-          "title": "My First Post",
-          "publishedAt": "2026-01-21T14:00:00Z"
-        }
-      ]
-    }
-  }
+ "data": {
+ "user": {
+ "id": "usr_1234567890",
+ "email": "user@example.com",
+ "name": "John Doe",
+ "role": "user",
+ "createdAt": "2026-01-20T10:30:00Z",
+ "posts": [
+ {
+ "id": "post_123",
+ "title": "My First Post",
+ "publishedAt": "2026-01-21T14:00:00Z"
+ }
+ ]
+ }
+ }
 }
 \`\`\`
 
 **Errors:**
 \`\`\`json
 {
-  "errors": [
-    {
-      "message": "User not found",
-      "extensions": {
-        "code": "USER_NOT_FOUND",
-        "userId": "usr_1234567890"
-      }
-    }
-  ]
+ "errors": [
+ {
+ "message": "User not found",
+ "extensions": {
+ "code": "USER_NOT_FOUND",
+ "userId": "usr_1234567890"
+ }
+ }
+ ]
 }
 \`\`\`
 ```
@@ -279,17 +279,17 @@ All API requests require authentication using Bearer tokens.
 **Request:**
 \`\`\`json
 {
-  "email": "user@example.com",
-  "password": "your-password"
+ "email": "user@example.com",
+ "password": "your-password"
 }
 \`\`\`
 
 **Response:**
 \`\`\`json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "expiresIn": 3600,
-  "refreshToken": "refresh_token_here"
+ "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+ "expiresIn": 3600,
+ "refreshToken": "refresh_token_here"
 }
 \`\`\`
 
@@ -310,14 +310,14 @@ Tokens expire after 1 hour. Use the refresh token to get a new access token:
 **Request:**
 \`\`\`json
 {
-  "refreshToken": "refresh_token_here"
+ "refreshToken": "refresh_token_here"
 }
 \`\`\`
 ```
 
 ## Best Practices
 
-### ✅ Do This
+### Do This
 
 - **Be Consistent** - Use the same format for all endpoints
 - **Include Examples** - Provide working code examples in multiple languages
@@ -330,7 +330,7 @@ Tokens expire after 1 hour. Use the refresh token to get a new access token:
 - **Include Rate Limits** - Document any rate limiting policies
 - **Provide Postman Collection** - Make it easy to test your API
 
-### ❌ Don't Do This
+### Don't Do This
 
 - **Don't Skip Error Cases** - Users need to know what can go wrong
 - **Don't Use Vague Descriptions** - "Gets data" is not helpful
@@ -346,48 +346,48 @@ Tokens expire after 1 hour. Use the refresh token to get a new access token:
 ### Recommended Sections
 
 1. **Introduction**
-   - What the API does
-   - Base URL
-   - API version
-   - Support contact
+ - What the API does
+ - Base URL
+ - API version
+ - Support contact
 
 2. **Authentication**
-   - How to authenticate
-   - Token management
-   - Security best practices
+ - How to authenticate
+ - Token management
+ - Security best practices
 
 3. **Quick Start**
-   - Simple example to get started
-   - Common use case walkthrough
+ - Simple example to get started
+ - Common use case walkthrough
 
 4. **Endpoints**
-   - Organized by resource
-   - Full details for each endpoint
+ - Organized by resource
+ - Full details for each endpoint
 
 5. **Data Models**
-   - Schema definitions
-   - Field descriptions
-   - Validation rules
+ - Schema definitions
+ - Field descriptions
+ - Validation rules
 
 6. **Error Handling**
-   - Error code reference
-   - Error response format
-   - Troubleshooting guide
+ - Error code reference
+ - Error response format
+ - Troubleshooting guide
 
 7. **Rate Limiting**
-   - Limits and quotas
-   - Headers to check
-   - Handling rate limit errors
+ - Limits and quotas
+ - Headers to check
+ - Handling rate limit errors
 
 8. **Changelog**
-   - API version history
-   - Breaking changes
-   - Deprecation notices
+ - API version history
+ - Breaking changes
+ - Deprecation notices
 
 9. **SDKs and Tools**
-   - Official client libraries
-   - Postman collection
-   - OpenAPI specification
+ - Official client libraries
+ - Postman collection
+ - OpenAPI specification
 
 ## Common Pitfalls
 
@@ -430,37 +430,37 @@ Generate interactive documentation:
 ```yaml
 openapi: 3.0.0
 info:
-  title: My API
-  version: 1.0.0
+ title: My API
+ version: 1.0.0
 paths:
-  /users:
-    post:
-      summary: Create a new user
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateUserRequest'
+ /users:
+ post:
+ summary: Create a new user
+ requestBody:
+ required: true
+ content:
+ application/json:
+ schema:
+ $ref: '#/components/schemas/CreateUserRequest'
 ```
 
 ### Postman Collection
 Export collection for easy testing:
 ```json
 {
-  "info": {
-    "name": "My API",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "item": [
-    {
-      "name": "Create User",
-      "request": {
-        "method": "POST",
-        "url": "{{baseUrl}}/api/v1/users"
-      }
-    }
-  ]
+ "info": {
+ "name": "My API",
+ "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+ },
+ "item": [
+ {
+ "name": "Create User",
+ "request": {
+ "method": "POST",
+ "url": "{{baseUrl}}/api/v1/users"
+ }
+ }
+ ]
 }
 ```
 

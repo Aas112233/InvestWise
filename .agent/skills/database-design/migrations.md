@@ -8,16 +8,16 @@
 For zero-downtime changes:
 │
 ├── Adding column
-│   └── Add as nullable → backfill → add NOT NULL
+│ └── Add as nullable → backfill → add NOT NULL
 │
 ├── Removing column
-│   └── Stop using → deploy → remove column
+│ └── Stop using → deploy → remove column
 │
 ├── Adding index
-│   └── CREATE INDEX CONCURRENTLY (non-blocking)
+│ └── CREATE INDEX CONCURRENTLY (non-blocking)
 │
 └── Renaming column
-    └── Add new → migrate data → deploy → drop old
+ └── Add new → migrate data → deploy → drop old
 ```
 
 ## Migration Philosophy

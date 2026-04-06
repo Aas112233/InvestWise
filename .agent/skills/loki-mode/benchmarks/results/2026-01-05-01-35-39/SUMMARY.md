@@ -19,7 +19,7 @@ This directory contains benchmark results for Loki Mode multi-agent system.
 **Next Step:** Run the SWE-bench evaluator to validate patches:
 
 ```bash
-python -m swebench.harness.run_evaluation     --predictions /Users/lokesh/git/loki-mode/benchmarks/results/2026-01-05-01-35-39/swebench-predictions.json     --max_workers 4
+python -m swebench.harness.run_evaluation --predictions /Users/lokesh/git/loki-mode/benchmarks/results/2026-01-05-01-35-39/swebench-predictions.json --max_workers 4
 ```
 
 ## Methodology
@@ -40,8 +40,8 @@ This mirrors real-world software development more accurately than single-agent a
 
 # Execute with Claude
 ./benchmarks/run-benchmarks.sh humaneval --execute
-./benchmarks/run-benchmarks.sh humaneval --execute --limit 10  # First 10 only
-./benchmarks/run-benchmarks.sh swebench --execute --limit 5    # First 5 only
+./benchmarks/run-benchmarks.sh humaneval --execute --limit 10 # First 10 only
+./benchmarks/run-benchmarks.sh swebench --execute --limit 5 # First 5 only
 
 # Use different model
 ./benchmarks/run-benchmarks.sh humaneval --execute --model opus

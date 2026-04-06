@@ -10,12 +10,12 @@
 ### Why Mobile Color is Different
 
 ```
-DESKTOP:                           MOBILE:
-├── LCD screens (backlit)          ├── OLED common (self-emissive)
-├── Controlled lighting            ├── Outdoor, bright sun
-├── Stable power                   ├── Battery matters
-├── Personal preference            ├── System-wide dark mode
-└── Static viewing                 └── Variable angles, motion
+DESKTOP: MOBILE:
+├── LCD screens (backlit) ├── OLED common (self-emissive)
+├── Controlled lighting ├── Outdoor, bright sun
+├── Stable power ├── Battery matters
+├── Personal preference ├── System-wide dark mode
+└── Static viewing └── Variable angles, motion
 ```
 
 ### Mobile Color Priorities
@@ -53,11 +53,11 @@ OLED (Organic LED):
 ```
 Color energy consumption (relative):
 
-#000000 (True Black)  ████░░░░░░  0%
-#1A1A1A (Near Black)  █████░░░░░  ~15%
-#333333 (Dark Gray)   ██████░░░░  ~30%
-#666666 (Medium Gray) ███████░░░  ~50%
-#FFFFFF (White)       ██████████  100%
+#000000 (True Black) ████░░░░░░ 0%
+#1A1A1A (Near Black) █████░░░░░ ~15%
+#333333 (Dark Gray) ██████░░░░ ~30%
+#666666 (Medium Gray) ███████░░░ ~50%
+#FFFFFF (White) ██████████ 100%
 
 Saturated colors also use significant power:
 ├── Blue pixels: Most efficient
@@ -102,21 +102,21 @@ Users enable dark mode for:
 ### Dark Mode Color Strategy
 
 ```
-LIGHT MODE                      DARK MODE
-──────────                      ─────────
-Background: #FFFFFF      →      #000000 or #121212
-Surface:    #F5F5F5      →      #1E1E1E
-Surface 2:  #EEEEEE      →      #2C2C2C
+LIGHT MODE DARK MODE
+────────── ─────────
+Background: #FFFFFF → #000000 or #121212
+Surface: #F5F5F5 → #1E1E1E
+Surface 2: #EEEEEE → #2C2C2C
 
-Primary:    #1976D2      →      #90CAF9 (lighter)
-Text:       #212121      →      #E0E0E0 (not pure white)
-Secondary:  #757575      →      #9E9E9E
+Primary: #1976D2 → #90CAF9 (lighter)
+Text: #212121 → #E0E0E0 (not pure white)
+Secondary: #757575 → #9E9E9E
 
 Elevation in dark mode:
 ├── Higher = slightly lighter surface
-├── 0dp →  0% overlay
-├── 4dp →  9% overlay
-├── 8dp →  12% overlay
+├── 0dp → 0% overlay
+├── 4dp → 9% overlay
+├── 8dp → 12% overlay
 └── Creates depth without shadows
 ```
 
@@ -259,8 +259,8 @@ Your app automatically gets:
 ```kotlin
 // Jetpack Compose
 MaterialTheme(
-    colorScheme = dynamicColorScheme()
-        ?: staticColorScheme() // Fallback for older Android
+ colorScheme = dynamicColorScheme()
+ ?: staticColorScheme() // Fallback for older Android
 )
 
 // React Native
@@ -336,7 +336,7 @@ Mobile recommendation: Meet AA, aim for AAA
 
 ## 8. Color Anti-Patterns
 
-### ❌ Common Mistakes
+### Common Mistakes
 
 | Mistake | Problem | Fix |
 |---------|---------|-----|
@@ -347,7 +347,7 @@ Mobile recommendation: Meet AA, aim for AAA
 | **Semantic colors for brand** | Confusing meaning | Use neutral for brand |
 | **Ignoring system dark mode** | Jarring experience | Support both modes |
 
-### ❌ AI Color Mistakes
+### AI Color Mistakes
 
 ```
 AI tends to:
@@ -392,27 +392,27 @@ Test in bright sunlight, with colorblindness simulation.
 
 ```
 True black (OLED max savings): #000000
-Near black (Material):         #121212
-Surface 1:                     #1E1E1E
-Surface 2:                     #2C2C2C
-Surface 3:                     #3C3C3C
+Near black (Material): #121212
+Surface 1: #1E1E1E
+Surface 2: #2C2C2C
+Surface 3: #3C3C3C
 ```
 
 ### Text on Dark
 
 ```
-Primary:   #E0E0E0 to #ECECEC
+Primary: #E0E0E0 to #ECECEC
 Secondary: #A0A0A0 to #B0B0B0
-Disabled:  #606060 to #707070
+Disabled: #606060 to #707070
 ```
 
 ### Contrast Ratios
 
 ```
-Small text:  4.5:1 (minimum)
-Large text:  3:1 (minimum)
+Small text: 4.5:1 (minimum)
+Large text: 3:1 (minimum)
 UI elements: 3:1 (minimum)
-Ideal:       7:1 (AAA)
+Ideal: 7:1 (AAA)
 ```
 
 ---

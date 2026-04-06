@@ -1,6 +1,6 @@
 ---
 name: stripe-integration
-description: "Get paid from day one. Payments, subscriptions, billing portal, webhooks, metered billing, Stripe Connect. The complete guide to implementing Stripe correctly, including all the edge cases that will bite you at 3am.  This isn't just API calls - it's the full payment system: handling failures, managing subscriptions, dealing with dunning, and keeping revenue flowing. Use when: stripe, payments, subscription, billing, checkout."
+description: "Get paid from day one. Payments, subscriptions, billing portal, webhooks, metered billing, Stripe Connect. The complete guide to implementing Stripe correctly, including all the edge cases that will bite you at 3am. This isn't just API calls - it's the full payment system: handling failures, managing subscriptions, dealing with dunning, and keeping revenue flowing. Use when: stripe, payments, subscription, billing, checkout."
 source: vibeship-spawner-skills (Apache 2.0)
 ---
 
@@ -45,13 +45,13 @@ Use Stripe test mode with real test cards for all development
 
 ## Anti-Patterns
 
-### ❌ Trust the API Response
+### Trust the API Response
 
-### ❌ Webhook Without Signature Verification
+### Webhook Without Signature Verification
 
-### ❌ Subscription Status Checks Without Refresh
+### Subscription Status Checks Without Refresh
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

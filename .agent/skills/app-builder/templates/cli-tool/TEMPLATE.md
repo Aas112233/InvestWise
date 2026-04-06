@@ -23,15 +23,15 @@ description: Node.js CLI tool template principles. Commander.js, interactive pro
 ```
 project-name/
 ├── src/
-│   ├── index.ts         # Entry point
-│   ├── cli.ts           # CLI setup
-│   ├── commands/        # Command handlers
-│   ├── lib/
-│   │   ├── config.ts    # Config loader
-│   │   └── logger.ts    # Styled output
-│   └── types/
+│ ├── index.ts # Entry point
+│ ├── cli.ts # CLI setup
+│ ├── commands/ # Command handlers
+│ ├── lib/
+│ │ ├── config.ts # Config loader
+│ │ └── logger.ts # Styled output
+│ └── types/
 ├── bin/
-│   └── cli.js           # Executable
+│ └── cli.js # Executable
 └── package.json
 ```
 

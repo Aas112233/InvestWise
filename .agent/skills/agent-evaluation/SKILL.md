@@ -44,13 +44,13 @@ Actively try to break agent behavior
 
 ## Anti-Patterns
 
-### ❌ Single-Run Testing
+### Single-Run Testing
 
-### ❌ Only Happy Path Tests
+### Only Happy Path Tests
 
-### ❌ Output String Matching
+### Output String Matching
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

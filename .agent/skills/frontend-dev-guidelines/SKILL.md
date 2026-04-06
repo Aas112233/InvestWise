@@ -99,7 +99,7 @@ import type { Post } from '~types/post';
 
 ## Topic Guides
 
-### 🎨 Component Patterns
+### Component Patterns
 
 **Modern React components use:**
 - `React.FC<Props>` for type safety
@@ -113,11 +113,11 @@ import type { Post } from '~types/post';
 - Use SuspenseLoader component (with fade animation)
 - Component structure: Props → Hooks → Handlers → Render → Export
 
-**[📖 Complete Guide: resources/component-patterns.md](resources/component-patterns.md)**
+**[ Complete Guide: resources/component-patterns.md](resources/component-patterns.md)**
 
 ---
 
-### 📊 Data Fetching
+### Data Fetching
 
 **PRIMARY PATTERN: useSuspenseQuery**
 - Use with Suspense boundaries
@@ -131,11 +131,11 @@ import type { Post } from '~types/post';
 - Centralized methods per feature
 - Route format: `/form/route` (NOT `/api/form/route`)
 
-**[📖 Complete Guide: resources/data-fetching.md](resources/data-fetching.md)**
+**[ Complete Guide: resources/data-fetching.md](resources/data-fetching.md)**
 
 ---
 
-### 📁 File Organization
+### File Organization
 
 **features/ vs components/:**
 - `features/`: Domain-specific (posts, comments, auth)
@@ -144,19 +144,19 @@ import type { Post } from '~types/post';
 **Feature Subdirectories:**
 ```
 features/
-  my-feature/
-    api/          # API service layer
-    components/   # Feature components
-    hooks/        # Custom hooks
-    helpers/      # Utility functions
-    types/        # TypeScript types
+ my-feature/
+ api/ # API service layer
+ components/ # Feature components
+ hooks/ # Custom hooks
+ helpers/ # Utility functions
+ types/ # TypeScript types
 ```
 
-**[📖 Complete Guide: resources/file-organization.md](resources/file-organization.md)**
+**[ Complete Guide: resources/file-organization.md](resources/file-organization.md)**
 
 ---
 
-### 🎨 Styling
+### Styling
 
 **Inline vs Separate:**
 - <100 lines: Inline `const styles: Record<string, SxProps<Theme>>`
@@ -169,15 +169,15 @@ features/
 
 **MUI v7 Grid:**
 ```typescript
-<Grid size={{ xs: 12, md: 6 }}>  // ✅ v7 syntax
-<Grid xs={12} md={6}>             // ❌ Old syntax
+<Grid size={{ xs: 12, md: 6 }}> // v7 syntax
+<Grid xs={12} md={6}> // Old syntax
 ```
 
-**[📖 Complete Guide: resources/styling-guide.md](resources/styling-guide.md)**
+**[ Complete Guide: resources/styling-guide.md](resources/styling-guide.md)**
 
 ---
 
-### 🛣️ Routing
+### Routing
 
 **TanStack Router - Folder-Based:**
 - Directory: `routes/my-route/index.tsx`
@@ -193,12 +193,12 @@ import { lazy } from 'react';
 const MyPage = lazy(() => import('@/features/my-feature/components/MyPage'));
 
 export const Route = createFileRoute('/my-route/')({
-    component: MyPage,
-    loader: () => ({ crumb: 'My Route' }),
+ component: MyPage,
+ loader: () => ({ crumb: 'My Route' }),
 });
 ```
 
-**[📖 Complete Guide: resources/routing-guide.md](resources/routing-guide.md)**
+**[ Complete Guide: resources/routing-guide.md](resources/routing-guide.md)**
 
 ---
 
@@ -207,14 +207,14 @@ export const Route = createFileRoute('/my-route/')({
 **CRITICAL RULE: No Early Returns**
 
 ```typescript
-// ❌ NEVER - Causes layout shift
+// NEVER - Causes layout shift
 if (isLoading) {
-    return <LoadingSpinner />;
+ return <LoadingSpinner />;
 }
 
-// ✅ ALWAYS - Consistent layout
+// ALWAYS - Consistent layout
 <SuspenseLoader>
-    <Content />
+ <Content />
 </SuspenseLoader>
 ```
 
@@ -225,11 +225,11 @@ if (isLoading) {
 - NEVER `react-toastify`
 - TanStack Query `onError` callbacks
 
-**[📖 Complete Guide: resources/loading-and-error-states.md](resources/loading-and-error-states.md)**
+**[ Complete Guide: resources/loading-and-error-states.md](resources/loading-and-error-states.md)**
 
 ---
 
-### ⚡ Performance
+### Performance
 
 **Optimization Patterns:**
 - `useMemo`: Expensive computations (filter, sort, map)
@@ -238,11 +238,11 @@ if (isLoading) {
 - Debounced search (300-500ms)
 - Memory leak prevention (cleanup in useEffect)
 
-**[📖 Complete Guide: resources/performance.md](resources/performance.md)**
+**[ Complete Guide: resources/performance.md](resources/performance.md)**
 
 ---
 
-### 📘 TypeScript
+### TypeScript
 
 **Standards:**
 - Strict mode, no `any` type
@@ -250,11 +250,11 @@ if (isLoading) {
 - Type imports: `import type { User } from '~types/user'`
 - Component prop interfaces with JSDoc
 
-**[📖 Complete Guide: resources/typescript-standards.md](resources/typescript-standards.md)**
+**[ Complete Guide: resources/typescript-standards.md](resources/typescript-standards.md)**
 
 ---
 
-### 🔧 Common Patterns
+### Common Patterns
 
 **Covered Topics:**
 - React Hook Form with Zod validation
@@ -263,11 +263,11 @@ if (isLoading) {
 - `useAuth` hook for current user
 - Mutation patterns with cache invalidation
 
-**[📖 Complete Guide: resources/common-patterns.md](resources/common-patterns.md)**
+**[ Complete Guide: resources/common-patterns.md](resources/common-patterns.md)**
 
 ---
 
-### 📚 Complete Examples
+### Complete Examples
 
 **Full working examples:**
 - Modern component with all patterns
@@ -277,7 +277,7 @@ if (isLoading) {
 - Suspense + useSuspenseQuery
 - Form with validation
 
-**[📖 Complete Guide: resources/complete-examples.md](resources/complete-examples.md)**
+**[ Complete Guide: resources/complete-examples.md](resources/complete-examples.md)**
 
 ---
 
@@ -315,33 +315,33 @@ if (isLoading) {
 
 ```
 src/
-  features/
-    my-feature/
-      api/
-        myFeatureApi.ts       # API service
-      components/
-        MyFeature.tsx         # Main component
-        SubComponent.tsx      # Related components
-      hooks/
-        useMyFeature.ts       # Custom hooks
-        useSuspenseMyFeature.ts  # Suspense hooks
-      helpers/
-        myFeatureHelpers.ts   # Utilities
-      types/
-        index.ts              # TypeScript types
-      index.ts                # Public exports
+ features/
+ my-feature/
+ api/
+ myFeatureApi.ts # API service
+ components/
+ MyFeature.tsx # Main component
+ SubComponent.tsx # Related components
+ hooks/
+ useMyFeature.ts # Custom hooks
+ useSuspenseMyFeature.ts # Suspense hooks
+ helpers/
+ myFeatureHelpers.ts # Utilities
+ types/
+ index.ts # TypeScript types
+ index.ts # Public exports
 
-  components/
-    SuspenseLoader/
-      SuspenseLoader.tsx      # Reusable loader
-    CustomAppBar/
-      CustomAppBar.tsx        # Reusable app bar
+ components/
+ SuspenseLoader/
+ SuspenseLoader.tsx # Reusable loader
+ CustomAppBar/
+ CustomAppBar.tsx # Reusable app bar
 
-  routes/
-    my-route/
-      index.tsx               # Route component
-      create/
-        index.tsx             # Nested route
+ routes/
+ my-route/
+ index.tsx # Route component
+ create/
+ index.tsx # Nested route
 ```
 
 ---
@@ -356,30 +356,30 @@ import { featureApi } from '../api/featureApi';
 import type { FeatureData } from '~types/feature';
 
 interface MyComponentProps {
-    id: number;
-    onAction?: () => void;
+ id: number;
+ onAction?: () => void;
 }
 
 export const MyComponent: React.FC<MyComponentProps> = ({ id, onAction }) => {
-    const [state, setState] = useState<string>('');
+ const [state, setState] = useState<string>('');
 
-    const { data } = useSuspenseQuery({
-        queryKey: ['feature', id],
-        queryFn: () => featureApi.getFeature(id),
-    });
+ const { data } = useSuspenseQuery({
+ queryKey: ['feature', id],
+ queryFn: () => featureApi.getFeature(id),
+ });
 
-    const handleAction = useCallback(() => {
-        setState('updated');
-        onAction?.();
-    }, [onAction]);
+ const handleAction = useCallback(() => {
+ setState('updated');
+ onAction?.();
+ }, [onAction]);
 
-    return (
-        <Box sx={{ p: 2 }}>
-            <Paper sx={{ p: 3 }}>
-                {/* Content */}
-            </Paper>
-        </Box>
-    );
+ return (
+ <Box sx={{ p: 2 }}>
+ <Paper sx={{ p: 3 }}>
+ {/* Content */}
+ </Paper>
+ </Box>
+ );
 };
 
 export default MyComponent;

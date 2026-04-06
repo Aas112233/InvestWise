@@ -2,8 +2,8 @@
 name: Linux Production Shell Scripts
 description: This skill should be used when the user asks to "create bash scripts", "automate Linux tasks", "monitor system resources", "backup files", "manage users", or "write production shell scripts". It provides ready-to-use shell script templates for system administration.
 metadata:
-  author: zebbern
-  version: "1.1"
+ author: zebbern
+ version: "1.1"
 ---
 
 # Linux Production Shell Scripts
@@ -65,9 +65,9 @@ max_backups=5
 
 # Rotate backups by deleting the oldest if more than max_backups
 while [ $(ls -1 "$backup_dir" | wc -l) -gt "$max_backups" ]; do
-    oldest_backup=$(ls -1t "$backup_dir" | tail -n 1)
-    rm -r "$backup_dir/$oldest_backup"
-    echo "Removed old backup: $oldest_backup"
+ oldest_backup=$(ls -1t "$backup_dir" | tail -n 1)
+ rm -r "$backup_dir/$oldest_backup"
+ echo "Removed old backup: $oldest_backup"
 done
 echo "Backup rotation completed."
 ```
@@ -97,9 +97,9 @@ threshold=90
 cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d. -f1)
 
 if [ "$cpu_usage" -gt "$threshold" ]; then
-    echo "ALERT: High CPU usage detected: $cpu_usage%"
-    # Add notification logic (email, slack, etc.)
-    # mail -s "CPU Alert" admin@example.com <<< "CPU usage: $cpu_usage%"
+ echo "ALERT: High CPU usage detected: $cpu_usage%"
+ # Add notification logic (email, slack, etc.)
+ # mail -s "CPU Alert" admin@example.com <<< "CPU usage: $cpu_usage%"
 fi
 ```
 
@@ -113,8 +113,8 @@ partition="/dev/sda1"
 disk_usage=$(df -h | grep "$partition" | awk '{print $5}' | cut -d% -f1)
 
 if [ "$disk_usage" -gt "$threshold" ]; then
-    echo "ALERT: High disk usage detected: $disk_usage%"
-    # Add alert/notification logic here
+ echo "ALERT: High disk usage detected: $disk_usage%"
+ # Add alert/notification logic here
 fi
 ```
 
@@ -137,23 +137,23 @@ output_file="system_health_check.txt"
 
 # Perform system health check and save results to a file
 {
-    echo "System Health Check - $(date)"
-    echo "================================"
-    echo ""
-    echo "Uptime:"
-    uptime
-    echo ""
-    echo "Load Average:"
-    cat /proc/loadavg
-    echo ""
-    echo "Memory Usage:"
-    free -h
-    echo ""
-    echo "Disk Usage:"
-    df -h
-    echo ""
-    echo "Top Processes:"
-    ps aux --sort=-%cpu | head -10
+ echo "System Health Check - $(date)"
+ echo "================================"
+ echo ""
+ echo "Uptime:"
+ uptime
+ echo ""
+ echo "Load Average:"
+ cat /proc/loadavg
+ echo ""
+ echo "Memory Usage:"
+ free -h
+ echo ""
+ echo "Disk Usage:"
+ df -h
+ echo ""
+ echo "Top Processes:"
+ ps aux --sort=-%cpu | head -10
 } > "$output_file"
 
 echo "System health check saved to $output_file"
@@ -168,13 +168,13 @@ username="newuser"
 
 # Check if user exists; if not, create new user
 if id "$username" &>/dev/null; then
-    echo "User $username already exists."
+ echo "User $username already exists."
 else
-    useradd -m -s /bin/bash "$username"
-    echo "User $username created."
-    
-    # Set password interactively
-    passwd "$username"
+ useradd -m -s /bin/bash "$username"
+ echo "User $username created."
+ 
+ # Set password interactively
+ passwd "$username"
 fi
 ```
 
@@ -189,8 +189,8 @@ echo "=================================" >> "$output_file"
 
 IFS=$'\n'
 for user in $(grep "/bin/bash" /etc/passwd | cut -d: -f1); do
-    password_expires=$(chage -l "$user" 2>/dev/null | grep "Password expires" | awk -F: '{print $2}')
-    echo "User: $user - Password Expires: $password_expires" >> "$output_file"
+ password_expires=$(chage -l "$user" 2>/dev/null | grep "Password expires" | awk -F: '{print $2}')
+ echo "User: $user - Password Expires: $password_expires" >> "$output_file"
 done
 unset IFS
 
@@ -216,19 +216,19 @@ file="$1"
 action="${2:-encrypt}"
 
 if [ -z "$file" ]; then
-    echo "Usage: $0 <file> [encrypt|decrypt]"
-    exit 1
+ echo "Usage: $0 <file> [encrypt|decrypt]"
+ exit 1
 fi
 
 if [ "$action" == "encrypt" ]; then
-    # Encrypt file using AES-256-CBC
-    openssl enc -aes-256-cbc -salt -pbkdf2 -in "$file" -out "$file.enc"
-    echo "File encrypted: $file.enc"
+ # Encrypt file using AES-256-CBC
+ openssl enc -aes-256-cbc -salt -pbkdf2 -in "$file" -out "$file.enc"
+ echo "File encrypted: $file.enc"
 elif [ "$action" == "decrypt" ]; then
-    # Decrypt file
-    output_file="${file%.enc}"
-    openssl enc -aes-256-cbc -d -pbkdf2 -in "$file" -out "$output_file"
-    echo "File decrypted: $output_file"
+ # Decrypt file
+ output_file="${file%.enc}"
+ openssl enc -aes-256-cbc -d -pbkdf2 -in "$file" -out "$output_file"
+ echo "File decrypted: $output_file"
 fi
 ```
 
@@ -275,11 +275,11 @@ echo "Network Connectivity Check"
 echo "=========================="
 
 for host in "${hosts[@]}"; do
-    if ping -c 1 -W 2 "$host" &>/dev/null; then
-        echo "[UP] $host is reachable"
-    else
-        echo "[DOWN] $host is unreachable"
-    fi
+ if ping -c 1 -W 2 "$host" &>/dev/null; then
+ echo "[UP] $host is reachable"
+ else
+ echo "[DOWN] $host is unreachable"
+ fi
 done
 ```
 
@@ -292,11 +292,11 @@ log_file="uptime_log.txt"
 echo "Website Uptime Check - $(date)" >> "$log_file"
 
 for website in "${websites[@]}"; do
-    if curl --output /dev/null --silent --head --fail --max-time 10 "$website"; then
-        echo "[UP] $website is accessible" | tee -a "$log_file"
-    else
-        echo "[DOWN] $website is inaccessible" | tee -a "$log_file"
-    fi
+ if curl --output /dev/null --silent --head --fail --max-time 10 "$website"; then
+ echo "[UP] $website is accessible" | tee -a "$log_file"
+ else
+ echo "[DOWN] $website is inaccessible" | tee -a "$log_file"
+ fi
 done
 ```
 
@@ -323,12 +323,12 @@ packages=("vim" "htop" "curl" "wget" "git")
 echo "Installing packages..."
 
 for package in "${packages[@]}"; do
-    if dpkg -l | grep -q "^ii  $package"; then
-        echo "[SKIP] $package is already installed"
-    else
-        sudo apt-get install -y "$package"
-        echo "[INSTALLED] $package"
-    fi
+ if dpkg -l | grep -q "^ii $package"; then
+ echo "[SKIP] $package is already installed"
+ else
+ sudo apt-get install -y "$package"
+ echo "[INSTALLED] $package"
+ fi
 done
 
 echo "Package installation completed."
@@ -338,7 +338,7 @@ echo "Package installation completed."
 ```bash
 #!/bin/bash
 scheduled_task="/path/to/your_script.sh"
-schedule_time="0 2 * * *"  # Run at 2 AM daily
+schedule_time="0 2 * * *" # Run at 2 AM daily
 
 # Add task to crontab
 (crontab -l 2>/dev/null; echo "$schedule_time $scheduled_task") | crontab -
@@ -352,13 +352,13 @@ service_name="${1:-apache2}"
 
 # Restart a specified service
 if systemctl is-active --quiet "$service_name"; then
-    echo "Restarting $service_name..."
-    sudo systemctl restart "$service_name"
-    echo "Service $service_name restarted."
+ echo "Restarting $service_name..."
+ sudo systemctl restart "$service_name"
+ echo "Service $service_name restarted."
 else
-    echo "Service $service_name is not running. Starting..."
-    sudo systemctl start "$service_name"
-    echo "Service $service_name started."
+ echo "Service $service_name is not running. Starting..."
+ sudo systemctl start "$service_name"
+ echo "Service $service_name started."
 fi
 ```
 
@@ -411,27 +411,27 @@ du -sh "$folder_path"
 output_file="system_info_$(hostname)_$(date +%Y%m%d).txt"
 
 {
-    echo "System Information Report"
-    echo "Generated: $(date)"
-    echo "========================="
-    echo ""
-    echo "Hostname: $(hostname)"
-    echo "OS: $(uname -a)"
-    echo ""
-    echo "CPU Info:"
-    lscpu | grep -E "Model name|CPU\(s\)|Thread"
-    echo ""
-    echo "Memory:"
-    free -h
-    echo ""
-    echo "Disk Space:"
-    df -h
-    echo ""
-    echo "Network Interfaces:"
-    ip -br addr
-    echo ""
-    echo "Logged In Users:"
-    who
+ echo "System Information Report"
+ echo "Generated: $(date)"
+ echo "========================="
+ echo ""
+ echo "Hostname: $(hostname)"
+ echo "OS: $(uname -a)"
+ echo ""
+ echo "CPU Info:"
+ lscpu | grep -E "Model name|CPU\(s\)|Thread"
+ echo ""
+ echo "Memory:"
+ free -h
+ echo ""
+ echo "Disk Space:"
+ df -h
+ echo ""
+ echo "Network Interfaces:"
+ ip -br addr
+ echo ""
+ echo "Logged In Users:"
+ who
 } > "$output_file"
 
 echo "System info saved to $output_file"
@@ -445,15 +445,15 @@ echo "System info saved to $output_file"
 git_repos=("/path/to/repo1" "/path/to/repo2")
 
 for repo in "${git_repos[@]}"; do
-    if [ -d "$repo/.git" ]; then
-        echo "Updating repository: $repo"
-        cd "$repo"
-        git fetch --all
-        git pull origin "$(git branch --show-current)"
-        echo "Updated: $repo"
-    else
-        echo "Not a git repository: $repo"
-    fi
+ if [ -d "$repo/.git" ]; then
+ echo "Updating repository: $repo"
+ cd "$repo"
+ git fetch --all
+ git pull origin "$(git branch --show-current)"
+ echo "Updated: $repo"
+ else
+ echo "Not a git repository: $repo"
+ fi
 done
 
 echo "All repositories updated."

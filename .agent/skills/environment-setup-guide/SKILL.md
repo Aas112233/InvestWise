@@ -108,8 +108,8 @@ choco install nodejs
 ### Step 2: Verify Installation
 
 \`\`\`bash
-node --version  # Should show v20.x.x or higher
-npm --version   # Should show 10.x.x or higher
+node --version # Should show v20.x.x or higher
+npm --version # Should show 10.x.x or higher
 \`\`\`
 
 ### Step 3: Install Project Dependencies
@@ -192,8 +192,8 @@ choco install python --version=3.11
 ### Step 2: Verify Installation
 
 \`\`\`bash
-python3 --version  # Should show Python 3.11.x
-pip3 --version     # Should show pip 23.x.x
+python3 --version # Should show Python 3.11.x
+pip3 --version # Should show pip 23.x.x
 \`\`\`
 
 ### Step 3: Create Virtual Environment
@@ -273,7 +273,7 @@ Download Docker Desktop from docker.com
 ### Step 2: Verify Installation
 
 \`\`\`bash
-docker --version        # Should show Docker version 24.x.x
+docker --version # Should show Docker version 24.x.x
 docker-compose --version # Should show Docker Compose version 2.x.x
 \`\`\`
 
@@ -283,32 +283,32 @@ docker-compose --version # Should show Docker Compose version 2.x.x
 version: '3.8'
 
 services:
-  app:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:password@db:5432/mydb
-    volumes:
-      - .:/app
-      - /app/node_modules
-    depends_on:
-      - db
+ app:
+ build: .
+ ports:
+ - "3000:3000"
+ environment:
+ - NODE_ENV=development
+ - DATABASE_URL=postgresql://postgres:password@db:5432/mydb
+ volumes:
+ - .:/app
+ - /app/node_modules
+ depends_on:
+ - db
 
-  db:
-    image: postgres:15
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=mydb
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+ db:
+ image: postgres:15
+ environment:
+ - POSTGRES_USER=postgres
+ - POSTGRES_PASSWORD=password
+ - POSTGRES_DB=mydb
+ ports:
+ - "5432:5432"
+ volumes:
+ - postgres_data:/var/lib/postgresql/data
 
 volumes:
-  postgres_data:
+ postgres_data:
 \`\`\`
 
 ### Step 4: Start Services
@@ -337,7 +337,7 @@ docker-compose exec db psql -U postgres -d mydb
 
 ## Best Practices
 
-### ✅ Do This
+### Do This
 
 - **Document Everything** - Write clear setup instructions
 - **Use Version Managers** - nvm for Node, pyenv for Python
@@ -350,7 +350,7 @@ docker-compose exec db psql -U postgres -d mydb
 - **Check Prerequisites** - List required tools before starting
 - **Provide Verification Steps** - Help users confirm setup works
 
-### ❌ Don't Do This
+### Don't Do This
 
 - **Don't Assume Tools Installed** - Always check and provide install instructions
 - **Don't Skip Environment Variables** - Document all required variables
@@ -427,34 +427,34 @@ Create a `setup.sh` script to automate setup:
 ```bash
 #!/bin/bash
 
-echo "🚀 Setting up development environment..."
+echo " Setting up development environment..."
 
 # Check prerequisites
-command -v node >/dev/null 2>&1 || { echo "❌ Node.js not installed"; exit 1; }
-command -v git >/dev/null 2>&1 || { echo "❌ Git not installed"; exit 1; }
+command -v node >/dev/null 2>&1 || { echo " Node.js not installed"; exit 1; }
+command -v git >/dev/null 2>&1 || { echo " Git not installed"; exit 1; }
 
-echo "✅ Prerequisites check passed"
+echo " Prerequisites check passed"
 
 # Install dependencies
-echo "📦 Installing dependencies..."
+echo " Installing dependencies..."
 npm install
 
 # Copy environment file
 if [ ! -f .env ]; then
-    echo "📝 Creating .env file..."
-    cp .env.example .env
-    echo "⚠️  Please edit .env with your configuration"
+ echo " Creating .env file..."
+ cp .env.example .env
+ echo " Please edit .env with your configuration"
 fi
 
 # Run database migrations
-echo "🗄️  Running database migrations..."
+echo " Running database migrations..."
 npm run migrate
 
 # Verify setup
-echo "🔍 Verifying setup..."
+echo " Verifying setup..."
 npm run test:setup
 
-echo "✅ Setup complete! Run 'npm run dev' to start"
+echo " Setup complete! Run 'npm run dev' to start"
 ```
 
 ## Related Skills

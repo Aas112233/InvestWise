@@ -8,7 +8,7 @@ allowed-tools: Read, Glob, Grep, Bash
 
 > Measure, analyze, optimize - in that order.
 
-## 🔧 Runtime Scripts
+## Runtime Scripts
 
 **Execute these for automated profiling:**
 
@@ -131,7 +131,7 @@ allowed-tools: Read, Glob, Grep, Bash
 
 ## 7. Anti-Patterns
 
-| ❌ Don't | ✅ Do |
+| Don't | Do |
 |----------|-------|
 | Guess at problems | Profile first |
 | Micro-optimize | Fix biggest issue |

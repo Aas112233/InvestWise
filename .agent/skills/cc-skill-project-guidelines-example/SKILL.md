@@ -37,24 +37,24 @@ Reference this skill when working on the specific project it's designed for. Pro
 **Services:**
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         Frontend                            │
-│  Next.js 15 + TypeScript + TailwindCSS                     │
-│  Deployed: Vercel / Cloud Run                              │
+│ Frontend │
+│ Next.js 15 + TypeScript + TailwindCSS │
+│ Deployed: Vercel / Cloud Run │
 └─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
+ │
+ ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                         Backend                             │
-│  FastAPI + Python 3.11 + Pydantic                          │
-│  Deployed: Cloud Run                                       │
+│ Backend │
+│ FastAPI + Python 3.11 + Pydantic │
+│ Deployed: Cloud Run │
 └─────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              ▼               ▼               ▼
-        ┌──────────┐   ┌──────────┐   ┌──────────┐
-        │ Supabase │   │  Claude  │   │  Redis   │
-        │ Database │   │   API    │   │  Cache   │
-        └──────────┘   └──────────┘   └──────────┘
+ │
+ ┌───────────────┼───────────────┐
+ ▼ ▼ ▼
+ ┌──────────┐ ┌──────────┐ ┌──────────┐
+ │ Supabase │ │ Claude │ │ Redis │
+ │ Database │ │ API │ │ Cache │
+ └──────────┘ └──────────┘ └──────────┘
 ```
 
 ---
@@ -64,32 +64,32 @@ Reference this skill when working on the specific project it's designed for. Pro
 ```
 project/
 ├── frontend/
-│   └── src/
-│       ├── app/              # Next.js app router pages
-│       │   ├── api/          # API routes
-│       │   ├── (auth)/       # Auth-protected routes
-│       │   └── workspace/    # Main app workspace
-│       ├── components/       # React components
-│       │   ├── ui/           # Base UI components
-│       │   ├── forms/        # Form components
-│       │   └── layouts/      # Layout components
-│       ├── hooks/            # Custom React hooks
-│       ├── lib/              # Utilities
-│       ├── types/            # TypeScript definitions
-│       └── config/           # Configuration
+│ └── src/
+│ ├── app/ # Next.js app router pages
+│ │ ├── api/ # API routes
+│ │ ├── (auth)/ # Auth-protected routes
+│ │ └── workspace/ # Main app workspace
+│ ├── components/ # React components
+│ │ ├── ui/ # Base UI components
+│ │ ├── forms/ # Form components
+│ │ └── layouts/ # Layout components
+│ ├── hooks/ # Custom React hooks
+│ ├── lib/ # Utilities
+│ ├── types/ # TypeScript definitions
+│ └── config/ # Configuration
 │
 ├── backend/
-│   ├── routers/              # FastAPI route handlers
-│   ├── models.py             # Pydantic models
-│   ├── main.py               # FastAPI app entry
-│   ├── auth_system.py        # Authentication
-│   ├── database.py           # Database operations
-│   ├── services/             # Business logic
-│   └── tests/                # pytest tests
+│ ├── routers/ # FastAPI route handlers
+│ ├── models.py # Pydantic models
+│ ├── main.py # FastAPI app entry
+│ ├── auth_system.py # Authentication
+│ ├── database.py # Database operations
+│ ├── services/ # Business logic
+│ └── tests/ # pytest tests
 │
-├── deploy/                   # Deployment configs
-├── docs/                     # Documentation
-└── scripts/                  # Utility scripts
+├── deploy/ # Deployment configs
+├── docs/ # Documentation
+└── scripts/ # Utility scripts
 ```
 
 ---
@@ -105,49 +105,49 @@ from typing import Generic, TypeVar, Optional
 T = TypeVar('T')
 
 class ApiResponse(BaseModel, Generic[T]):
-    success: bool
-    data: Optional[T] = None
-    error: Optional[str] = None
+ success: bool
+ data: Optional[T] = None
+ error: Optional[str] = None
 
-    @classmethod
-    def ok(cls, data: T) -> "ApiResponse[T]":
-        return cls(success=True, data=data)
+ @classmethod
+ def ok(cls, data: T) -> "ApiResponse[T]":
+ return cls(success=True, data=data)
 
-    @classmethod
-    def fail(cls, error: str) -> "ApiResponse[T]":
-        return cls(success=False, error=error)
+ @classmethod
+ def fail(cls, error: str) -> "ApiResponse[T]":
+ return cls(success=False, error=error)
 ```
 
 ### Frontend API Calls (TypeScript)
 
 ```typescript
 interface ApiResponse<T> {
-  success: boolean
-  data?: T
-  error?: string
+ success: boolean
+ data?: T
+ error?: string
 }
 
 async function fetchApi<T>(
-  endpoint: string,
-  options?: RequestInit
+ endpoint: string,
+ options?: RequestInit
 ): Promise<ApiResponse<T>> {
-  try {
-    const response = await fetch(`/api${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
-    })
+ try {
+ const response = await fetch(`/api${endpoint}`, {
+ ...options,
+ headers: {
+ 'Content-Type': 'application/json',
+ ...options?.headers,
+ },
+ })
 
-    if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status}` }
-    }
+ if (!response.ok) {
+ return { success: false, error: `HTTP ${response.status}` }
+ }
 
-    return await response.json()
-  } catch (error) {
-    return { success: false, error: String(error) }
-  }
+ return await response.json()
+ } catch (error) {
+ return { success: false, error: String(error) }
+ }
 }
 ```
 
@@ -158,32 +158,32 @@ from anthropic import Anthropic
 from pydantic import BaseModel
 
 class AnalysisResult(BaseModel):
-    summary: str
-    key_points: list[str]
-    confidence: float
+ summary: str
+ key_points: list[str]
+ confidence: float
 
 async def analyze_with_claude(content: str) -> AnalysisResult:
-    client = Anthropic()
+ client = Anthropic()
 
-    response = client.messages.create(
-        model="claude-sonnet-4-5-20250514",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": content}],
-        tools=[{
-            "name": "provide_analysis",
-            "description": "Provide structured analysis",
-            "input_schema": AnalysisResult.model_json_schema()
-        }],
-        tool_choice={"type": "tool", "name": "provide_analysis"}
-    )
+ response = client.messages.create(
+ model="claude-sonnet-4-5-20250514",
+ max_tokens=1024,
+ messages=[{"role": "user", "content": content}],
+ tools=[{
+ "name": "provide_analysis",
+ "description": "Provide structured analysis",
+ "input_schema": AnalysisResult.model_json_schema()
+ }],
+ tool_choice={"type": "tool", "name": "provide_analysis"}
+ )
 
-    # Extract tool use result
-    tool_use = next(
-        block for block in response.content
-        if block.type == "tool_use"
-    )
+ # Extract tool use result
+ tool_use = next(
+ block for block in response.content
+ if block.type == "tool_use"
+ )
 
-    return AnalysisResult(**tool_use.input)
+ return AnalysisResult(**tool_use.input)
 ```
 
 ### Custom Hooks (React)
@@ -192,33 +192,33 @@ async def analyze_with_claude(content: str) -> AnalysisResult:
 import { useState, useCallback } from 'react'
 
 interface UseApiState<T> {
-  data: T | null
-  loading: boolean
-  error: string | null
+ data: T | null
+ loading: boolean
+ error: string | null
 }
 
 export function useApi<T>(
-  fetchFn: () => Promise<ApiResponse<T>>
+ fetchFn: () => Promise<ApiResponse<T>>
 ) {
-  const [state, setState] = useState<UseApiState<T>>({
-    data: null,
-    loading: false,
-    error: null,
-  })
+ const [state, setState] = useState<UseApiState<T>>({
+ data: null,
+ loading: false,
+ error: null,
+ })
 
-  const execute = useCallback(async () => {
-    setState(prev => ({ ...prev, loading: true, error: null }))
+ const execute = useCallback(async () => {
+ setState(prev => ({ ...prev, loading: true, error: null }))
 
-    const result = await fetchFn()
+ const result = await fetchFn()
 
-    if (result.success) {
-      setState({ data: result.data!, loading: false, error: null })
-    } else {
-      setState({ data: null, loading: false, error: result.error! })
-    }
-  }, [fetchFn])
+ if (result.success) {
+ setState({ data: result.data!, loading: false, error: null })
+ } else {
+ setState({ data: null, loading: false, error: result.error! })
+ }
+ }, [fetchFn])
 
-  return { ...state, execute }
+ return { ...state, execute }
 }
 ```
 
@@ -247,14 +247,14 @@ from main import app
 
 @pytest.fixture
 async def client():
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        yield ac
+ async with AsyncClient(app=app, base_url="http://test") as ac:
+ yield ac
 
 @pytest.mark.asyncio
 async def test_health_check(client: AsyncClient):
-    response = await client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "healthy"
+ response = await client.get("/health")
+ assert response.status_code == 200
+ assert response.json()["status"] == "healthy"
 ```
 
 ### Frontend (React Testing Library)
@@ -276,16 +276,16 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { WorkspacePanel } from './WorkspacePanel'
 
 describe('WorkspacePanel', () => {
-  it('renders workspace correctly', () => {
-    render(<WorkspacePanel />)
-    expect(screen.getByRole('main')).toBeInTheDocument()
-  })
+ it('renders workspace correctly', () => {
+ render(<WorkspacePanel />)
+ expect(screen.getByRole('main')).toBeInTheDocument()
+ })
 
-  it('handles session creation', async () => {
-    render(<WorkspacePanel />)
-    fireEvent.click(screen.getByText('New Session'))
-    expect(await screen.findByText('Session created')).toBeInTheDocument()
-  })
+ it('handles session creation', async () => {
+ render(<WorkspacePanel />)
+ fireEvent.click(screen.getByText('New Session'))
+ expect(await screen.findByText('Session created')).toBeInTheDocument()
+ })
 })
 ```
 

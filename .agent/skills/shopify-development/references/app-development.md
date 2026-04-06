@@ -10,30 +10,30 @@ Guide for building Shopify apps with OAuth, GraphQL/REST APIs, webhooks, and bil
 
 ```
 https://{shop}.myshopify.com/admin/oauth/authorize?
-  client_id={api_key}&
-  scope={scopes}&
-  redirect_uri={redirect_uri}&
-  state={nonce}
+ client_id={api_key}&
+ scope={scopes}&
+ redirect_uri={redirect_uri}&
+ state={nonce}
 ```
 
 **2. Handle Callback:**
 
 ```javascript
 app.get("/auth/callback", async (req, res) => {
-  const { code, shop, state } = req.query;
+ const { code, shop, state } = req.query;
 
-  // Verify state to prevent CSRF
-  if (state !== storedState) {
-    return res.status(403).send("Invalid state");
-  }
+ // Verify state to prevent CSRF
+ if (state !== storedState) {
+ return res.status(403).send("Invalid state");
+ }
 
-  // Exchange code for access token
-  const accessToken = await exchangeCodeForToken(shop, code);
+ // Exchange code for access token
+ const accessToken = await exchangeCodeForToken(shop, code);
 
-  // Store token securely
-  await storeAccessToken(shop, accessToken);
+ // Store token securely
+ await storeAccessToken(shop, accessToken);
 
-  res.redirect(`https://${shop}/admin/apps/${appHandle}`);
+ res.redirect(`https://${shop}/admin/apps/${appHandle}`);
 });
 ```
 
@@ -41,18 +41,18 @@ app.get("/auth/callback", async (req, res) => {
 
 ```javascript
 async function exchangeCodeForToken(shop, code) {
-  const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: process.env.SHOPIFY_API_KEY,
-      client_secret: process.env.SHOPIFY_API_SECRET,
-      code,
-    }),
-  });
+ const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
+ method: "POST",
+ headers: { "Content-Type": "application/json" },
+ body: JSON.stringify({
+ client_id: process.env.SHOPIFY_API_KEY,
+ client_secret: process.env.SHOPIFY_API_SECRET,
+ code,
+ }),
+ });
 
-  const { access_token } = await response.json();
-  return access_token;
+ const { access_token } = await response.json();
+ return access_token;
 }
 ```
 
@@ -79,16 +79,16 @@ For embedded apps using App Bridge:
 import { getSessionToken } from '@shopify/app-bridge/utilities';
 
 async function authenticatedFetch(url, options = {}) {
-  const app = createApp({ ... });
-  const token = await getSessionToken(app);
+ const app = createApp({ ... });
+ const token = await getSessionToken(app);
 
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      'Authorization': `Bearer ${token}`
-    }
-  });
+ return fetch(url, {
+ ...options,
+ headers: {
+ ...options.headers,
+ 'Authorization': `Bearer ${token}`
+ }
+ });
 }
 ```
 
@@ -98,25 +98,25 @@ async function authenticatedFetch(url, options = {}) {
 
 ```javascript
 async function graphqlRequest(shop, accessToken, query, variables = {}) {
-  const response = await fetch(
-    `https://${shop}/admin/api/2026-01/graphql.json`,
-    {
-      method: "POST",
-      headers: {
-        "X-Shopify-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query, variables }),
-    },
-  );
+ const response = await fetch(
+ `https://${shop}/admin/api/2026-01/graphql.json`,
+ {
+ method: "POST",
+ headers: {
+ "X-Shopify-Access-Token": accessToken,
+ "Content-Type": "application/json",
+ },
+ body: JSON.stringify({ query, variables }),
+ },
+ );
 
-  const data = await response.json();
+ const data = await response.json();
 
-  if (data.errors) {
-    throw new Error(`GraphQL errors: ${JSON.stringify(data.errors)}`);
-  }
+ if (data.errors) {
+ throw new Error(`GraphQL errors: ${JSON.stringify(data.errors)}`);
+ }
 
-  return data.data;
+ return data.data;
 }
 ```
 
@@ -126,17 +126,17 @@ async function graphqlRequest(shop, accessToken, query, variables = {}) {
 
 ```graphql
 mutation CreateProduct($input: ProductInput!) {
-  productCreate(input: $input) {
-    product {
-      id
-      title
-      handle
-    }
-    userErrors {
-      field
-      message
-    }
-  }
+ productCreate(input: $input) {
+ product {
+ id
+ title
+ handle
+ }
+ userErrors {
+ field
+ message
+ }
+ }
 }
 ```
 
@@ -144,15 +144,15 @@ Variables:
 
 ```json
 {
-  "input": {
-    "title": "New Product",
-    "productType": "Apparel",
-    "vendor": "Brand",
-    "status": "ACTIVE",
-    "variants": [
-      { "price": "29.99", "sku": "SKU-001", "inventoryQuantity": 100 }
-    ]
-  }
+ "input": {
+ "title": "New Product",
+ "productType": "Apparel",
+ "vendor": "Brand",
+ "status": "ACTIVE",
+ "variants": [
+ { "price": "29.99", "sku": "SKU-001", "inventoryQuantity": 100 }
+ ]
+ }
 }
 ```
 
@@ -160,16 +160,16 @@ Variables:
 
 ```graphql
 mutation UpdateProduct($input: ProductInput!) {
-  productUpdate(input: $input) {
-    product {
-      id
-      title
-    }
-    userErrors {
-      field
-      message
-    }
-  }
+ productUpdate(input: $input) {
+ product {
+ id
+ title
+ }
+ userErrors {
+ field
+ message
+ }
+ }
 }
 ```
 
@@ -177,28 +177,28 @@ mutation UpdateProduct($input: ProductInput!) {
 
 ```graphql
 query GetProducts($first: Int!, $query: String) {
-  products(first: $first, query: $query) {
-    edges {
-      node {
-        id
-        title
-        status
-        variants(first: 5) {
-          edges {
-            node {
-              id
-              price
-              inventoryQuantity
-            }
-          }
-        }
-      }
-    }
-    pageInfo {
-      hasNextPage
-      endCursor
-    }
-  }
+ products(first: $first, query: $query) {
+ edges {
+ node {
+ id
+ title
+ status
+ variants(first: 5) {
+ edges {
+ node {
+ id
+ price
+ inventoryQuantity
+ }
+ }
+ }
+ }
+ }
+ pageInfo {
+ hasNextPage
+ endCursor
+ }
+ }
 }
 ```
 
@@ -208,27 +208,27 @@ query GetProducts($first: Int!, $query: String) {
 
 ```graphql
 query GetOrders($first: Int!) {
-  orders(first: $first) {
-    edges {
-      node {
-        id
-        name
-        createdAt
-        displayFinancialStatus
-        totalPriceSet {
-          shopMoney {
-            amount
-            currencyCode
-          }
-        }
-        customer {
-          email
-          firstName
-          lastName
-        }
-      }
-    }
-  }
+ orders(first: $first) {
+ edges {
+ node {
+ id
+ name
+ createdAt
+ displayFinancialStatus
+ totalPriceSet {
+ shopMoney {
+ amount
+ currencyCode
+ }
+ }
+ customer {
+ email
+ firstName
+ lastName
+ }
+ }
+ }
+ }
 }
 ```
 
@@ -236,20 +236,20 @@ query GetOrders($first: Int!) {
 
 ```graphql
 mutation FulfillOrder($fulfillment: FulfillmentInput!) {
-  fulfillmentCreate(fulfillment: $fulfillment) {
-    fulfillment {
-      id
-      status
-      trackingInfo {
-        number
-        url
-      }
-    }
-    userErrors {
-      field
-      message
-    }
-  }
+ fulfillmentCreate(fulfillment: $fulfillment) {
+ fulfillment {
+ id
+ status
+ trackingInfo {
+ number
+ url
+ }
+ }
+ userErrors {
+ field
+ message
+ }
+ }
 }
 ```
 
@@ -288,28 +288,28 @@ shop_deletion_url = "/webhooks/gdpr/shop-deletion"
 import crypto from "crypto";
 
 function verifyWebhook(req) {
-  const hmac = req.headers["x-shopify-hmac-sha256"];
-  const body = req.rawBody; // Raw body buffer
+ const hmac = req.headers["x-shopify-hmac-sha256"];
+ const body = req.rawBody; // Raw body buffer
 
-  const hash = crypto
-    .createHmac("sha256", process.env.SHOPIFY_API_SECRET)
-    .update(body, "utf8")
-    .digest("base64");
+ const hash = crypto
+ .createHmac("sha256", process.env.SHOPIFY_API_SECRET)
+ .update(body, "utf8")
+ .digest("base64");
 
-  return hmac === hash;
+ return hmac === hash;
 }
 
 app.post("/webhooks/orders/create", async (req, res) => {
-  if (!verifyWebhook(req)) {
-    return res.status(401).send("Unauthorized");
-  }
+ if (!verifyWebhook(req)) {
+ return res.status(401).send("Unauthorized");
+ }
 
-  const order = req.body;
-  console.log("New order:", order.id, order.name);
+ const order = req.body;
+ console.log("New order:", order.id, order.name);
 
-  // Process order...
+ // Process order...
 
-  res.status(200).send("OK");
+ res.status(200).send("OK");
 });
 ```
 
@@ -344,21 +344,21 @@ app.post("/webhooks/orders/create", async (req, res) => {
 
 ```graphql
 mutation CreateCharge($input: AppPurchaseOneTimeInput!) {
-  appPurchaseOneTimeCreate(input: $input) {
-    appPurchaseOneTime {
-      id
-      name
-      price {
-        amount
-      }
-      status
-      confirmationUrl
-    }
-    userErrors {
-      field
-      message
-    }
-  }
+ appPurchaseOneTimeCreate(input: $input) {
+ appPurchaseOneTime {
+ id
+ name
+ price {
+ amount
+ }
+ status
+ confirmationUrl
+ }
+ userErrors {
+ field
+ message
+ }
+ }
 }
 ```
 
@@ -366,11 +366,11 @@ Variables:
 
 ```json
 {
-  "input": {
-    "name": "Premium Feature",
-    "price": { "amount": 49.99, "currencyCode": "USD" },
-    "returnUrl": "https://your-app.com/billing/callback"
-  }
+ "input": {
+ "name": "Premium Feature",
+ "price": { "amount": 49.99, "currencyCode": "USD" },
+ "returnUrl": "https://your-app.com/billing/callback"
+ }
 }
 ```
 
@@ -378,28 +378,28 @@ Variables:
 
 ```graphql
 mutation CreateSubscription(
-  $name: String!
-  $returnUrl: URL!
-  $lineItems: [AppSubscriptionLineItemInput!]!
-  $trialDays: Int
+ $name: String!
+ $returnUrl: URL!
+ $lineItems: [AppSubscriptionLineItemInput!]!
+ $trialDays: Int
 ) {
-  appSubscriptionCreate(
-    name: $name
-    returnUrl: $returnUrl
-    lineItems: $lineItems
-    trialDays: $trialDays
-  ) {
-    appSubscription {
-      id
-      name
-      status
-    }
-    confirmationUrl
-    userErrors {
-      field
-      message
-    }
-  }
+ appSubscriptionCreate(
+ name: $name
+ returnUrl: $returnUrl
+ lineItems: $lineItems
+ trialDays: $trialDays
+ ) {
+ appSubscription {
+ id
+ name
+ status
+ }
+ confirmationUrl
+ userErrors {
+ field
+ message
+ }
+ }
 }
 ```
 
@@ -407,19 +407,19 @@ Variables:
 
 ```json
 {
-  "name": "Monthly Subscription",
-  "returnUrl": "https://your-app.com/billing/callback",
-  "trialDays": 7,
-  "lineItems": [
-    {
-      "plan": {
-        "appRecurringPricingDetails": {
-          "price": { "amount": 29.99, "currencyCode": "USD" },
-          "interval": "EVERY_30_DAYS"
-        }
-      }
-    }
-  ]
+ "name": "Monthly Subscription",
+ "returnUrl": "https://your-app.com/billing/callback",
+ "trialDays": 7,
+ "lineItems": [
+ {
+ "plan": {
+ "appRecurringPricingDetails": {
+ "price": { "amount": 29.99, "currencyCode": "USD" },
+ "interval": "EVERY_30_DAYS"
+ }
+ }
+ }
+ ]
 }
 ```
 
@@ -427,28 +427,28 @@ Variables:
 
 ```graphql
 mutation CreateUsageCharge(
-  $subscriptionLineItemId: ID!
-  $price: MoneyInput!
-  $description: String!
+ $subscriptionLineItemId: ID!
+ $price: MoneyInput!
+ $description: String!
 ) {
-  appUsageRecordCreate(
-    subscriptionLineItemId: $subscriptionLineItemId
-    price: $price
-    description: $description
-  ) {
-    appUsageRecord {
-      id
-      price {
-        amount
-        currencyCode
-      }
-      description
-    }
-    userErrors {
-      field
-      message
-    }
-  }
+ appUsageRecordCreate(
+ subscriptionLineItemId: $subscriptionLineItemId
+ price: $price
+ description: $description
+ ) {
+ appUsageRecord {
+ id
+ price {
+ amount
+ currencyCode
+ }
+ description
+ }
+ userErrors {
+ field
+ message
+ }
+ }
 }
 ```
 
@@ -456,9 +456,9 @@ Variables:
 
 ```json
 {
-  "subscriptionLineItemId": "gid://shopify/AppSubscriptionLineItem/123",
-  "price": { "amount": "5.00", "currencyCode": "USD" },
-  "description": "100 API calls used"
+ "subscriptionLineItemId": "gid://shopify/AppSubscriptionLineItem/123",
+ "price": { "amount": "5.00", "currencyCode": "USD" },
+ "description": "100 API calls used"
 }
 ```
 
@@ -468,18 +468,18 @@ Variables:
 
 ```graphql
 mutation SetMetafields($metafields: [MetafieldsSetInput!]!) {
-  metafieldsSet(metafields: $metafields) {
-    metafields {
-      id
-      namespace
-      key
-      value
-    }
-    userErrors {
-      field
-      message
-    }
-  }
+ metafieldsSet(metafields: $metafields) {
+ metafields {
+ id
+ namespace
+ key
+ value
+ }
+ userErrors {
+ field
+ message
+ }
+ }
 }
 ```
 
@@ -487,15 +487,15 @@ Variables:
 
 ```json
 {
-  "metafields": [
-    {
-      "ownerId": "gid://shopify/Product/123",
-      "namespace": "custom",
-      "key": "instructions",
-      "value": "Handle with care",
-      "type": "single_line_text_field"
-    }
-  ]
+ "metafields": [
+ {
+ "ownerId": "gid://shopify/Product/123",
+ "namespace": "custom",
+ "key": "instructions",
+ "value": "Handle with care",
+ "type": "single_line_text_field"
+ }
+ ]
 }
 ```
 
@@ -524,7 +524,7 @@ const response = await graphqlRequest(shop, token, query);
 const cost = response.extensions?.cost;
 
 console.log(
-  `Cost: ${cost.actualQueryCost}/${cost.throttleStatus.maximumAvailable}`,
+ `Cost: ${cost.actualQueryCost}/${cost.throttleStatus.maximumAvailable}`,
 );
 ```
 
@@ -532,17 +532,17 @@ console.log(
 
 ```javascript
 async function graphqlWithRetry(shop, token, query, retries = 3) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await graphqlRequest(shop, token, query);
-    } catch (error) {
-      if (error.message.includes("Throttled") && i < retries - 1) {
-        await sleep(Math.pow(2, i) * 1000); // Exponential backoff
-        continue;
-      }
-      throw error;
-    }
-  }
+ for (let i = 0; i < retries; i++) {
+ try {
+ return await graphqlRequest(shop, token, query);
+ } catch (error) {
+ if (error.message.includes("Throttled") && i < retries - 1) {
+ await sleep(Math.pow(2, i) * 1000); // Exponential backoff
+ continue;
+ }
+ throw error;
+ }
+ }
 }
 ```
 

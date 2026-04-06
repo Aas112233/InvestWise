@@ -3,7 +3,7 @@ name: bun-development
 description: "Modern JavaScript/TypeScript development with Bun runtime. Covers package management, bundling, testing, and migration from Node.js. Use when working with Bun, optimizing JS/TS development speed, or migrating from Node.js to Bun."
 ---
 
-# ⚡ Bun Development
+# Bun Development
 
 > Fast, modern JavaScript/TypeScript development with the Bun runtime, inspired by [oven-sh/bun](https://github.com/oven-sh/bun).
 
@@ -43,14 +43,14 @@ bun upgrade
 
 ### 1.2 Why Bun?
 
-| Feature         | Bun            | Node.js                     |
+| Feature | Bun | Node.js |
 | :-------------- | :------------- | :-------------------------- |
-| Startup time    | ~25ms          | ~100ms+                     |
-| Package install | 10-100x faster | Baseline                    |
-| TypeScript      | Native         | Requires transpiler         |
-| JSX             | Native         | Requires transpiler         |
-| Test runner     | Built-in       | External (Jest, Vitest)     |
-| Bundler         | Built-in       | External (Webpack, esbuild) |
+| Startup time | ~25ms | ~100ms+ |
+| Package install | 10-100x faster | Baseline |
+| TypeScript | Native | Requires transpiler |
+| JSX | Native | Requires transpiler |
+| Test runner | Built-in | External (Jest, Vitest) |
+| Bundler | Built-in | External (Webpack, esbuild) |
 
 ---
 
@@ -72,33 +72,33 @@ bun init
 bun create <template> <project-name>
 
 # Examples
-bun create react my-app        # React app
-bun create next my-app         # Next.js app
-bun create vite my-app         # Vite app
-bun create elysia my-api       # Elysia API
+bun create react my-app # React app
+bun create next my-app # Next.js app
+bun create vite my-app # Vite app
+bun create elysia my-api # Elysia API
 ```
 
 ### 2.2 package.json
 
 ```json
 {
-  "name": "my-bun-project",
-  "version": "1.0.0",
-  "module": "index.ts",
-  "type": "module",
-  "scripts": {
-    "dev": "bun run --watch index.ts",
-    "start": "bun run index.ts",
-    "test": "bun test",
-    "build": "bun build ./index.ts --outdir ./dist",
-    "lint": "bunx eslint ."
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
-  }
+ "name": "my-bun-project",
+ "version": "1.0.0",
+ "module": "index.ts",
+ "type": "module",
+ "scripts": {
+ "dev": "bun run --watch index.ts",
+ "start": "bun run index.ts",
+ "test": "bun test",
+ "build": "bun build ./index.ts --outdir ./dist",
+ "lint": "bunx eslint ."
+ },
+ "devDependencies": {
+ "@types/bun": "latest"
+ },
+ "peerDependencies": {
+ "typescript": "^5.0.0"
+ }
 }
 ```
 
@@ -106,24 +106,24 @@ bun create elysia my-api       # Elysia API
 
 ```json
 {
-  "compilerOptions": {
-    "lib": ["ESNext"],
-    "module": "esnext",
-    "target": "esnext",
-    "moduleResolution": "bundler",
-    "moduleDetection": "force",
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "composite": true,
-    "strict": true,
-    "downlevelIteration": true,
-    "skipLibCheck": true,
-    "jsx": "react-jsx",
-    "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true,
-    "allowJs": true,
-    "types": ["bun-types"]
-  }
+ "compilerOptions": {
+ "lib": ["ESNext"],
+ "module": "esnext",
+ "target": "esnext",
+ "moduleResolution": "bundler",
+ "moduleDetection": "force",
+ "allowImportingTsExtensions": true,
+ "noEmit": true,
+ "composite": true,
+ "strict": true,
+ "downlevelIteration": true,
+ "skipLibCheck": true,
+ "jsx": "react-jsx",
+ "allowSyntheticDefaultImports": true,
+ "forceConsistentCasingInFileNames": true,
+ "allowJs": true,
+ "types": ["bun-types"]
+ }
 }
 ```
 
@@ -135,13 +135,13 @@ bun create elysia my-api       # Elysia API
 
 ```bash
 # Install from package.json
-bun install              # or 'bun i'
+bun install # or 'bun i'
 
 # Add dependencies
-bun add express          # Regular dependency
-bun add -d typescript    # Dev dependency
-bun add -D @types/node   # Dev dependency (alias)
-bun add --optional pkg   # Optional dependency
+bun add express # Regular dependency
+bun add -d typescript # Dev dependency
+bun add -D @types/node # Dev dependency (alias)
+bun add --optional pkg # Optional dependency
 
 # From specific registry
 bun add lodash --registry https://registry.npmmirror.com
@@ -163,9 +163,9 @@ bun add git+https://github.com/user/repo.git
 bun remove lodash
 
 # Update packages
-bun update              # Update all
-bun update lodash       # Update specific
-bun update --latest     # Update to latest (ignore ranges)
+bun update # Update all
+bun update lodash # Update specific
+bun update --latest # Update to latest (ignore ranges)
 
 # Check outdated
 bun outdated
@@ -191,7 +191,7 @@ bunx cowsay "Hello from Bun!"
 ```bash
 # bun.lockb is a binary lockfile (faster parsing)
 # To generate text lockfile for debugging:
-bun install --yarn    # Creates yarn.lock
+bun install --yarn # Creates yarn.lock
 
 # Trust existing lockfile
 bun install --frozen-lockfile
@@ -274,7 +274,7 @@ await Bun.write("./data.json", JSON.stringify({ foo: "bar" }));
 // Stream large files
 const reader = file.stream();
 for await (const chunk of reader) {
-  console.log(chunk);
+ console.log(chunk);
 }
 ```
 
@@ -282,28 +282,28 @@ for await (const chunk of reader) {
 
 ```typescript
 const server = Bun.serve({
-  port: 3000,
+ port: 3000,
 
-  fetch(request) {
-    const url = new URL(request.url);
+ fetch(request) {
+ const url = new URL(request.url);
 
-    if (url.pathname === "/") {
-      return new Response("Hello World!");
-    }
+ if (url.pathname === "/") {
+ return new Response("Hello World!");
+ }
 
-    if (url.pathname === "/api/users") {
-      return Response.json([
-        { id: 1, name: "Alice" },
-        { id: 2, name: "Bob" },
-      ]);
-    }
+ if (url.pathname === "/api/users") {
+ return Response.json([
+ { id: 1, name: "Alice" },
+ { id: 2, name: "Bob" },
+ ]);
+ }
 
-    return new Response("Not Found", { status: 404 });
-  },
+ return new Response("Not Found", { status: 404 });
+ },
 
-  error(error) {
-    return new Response(`Error: ${error.message}`, { status: 500 });
-  },
+ error(error) {
+ return new Response(`Error: ${error.message}`, { status: 500 });
+ },
 });
 
 console.log(`Server running at http://localhost:${server.port}`);
@@ -313,31 +313,31 @@ console.log(`Server running at http://localhost:${server.port}`);
 
 ```typescript
 const server = Bun.serve({
-  port: 3000,
+ port: 3000,
 
-  fetch(req, server) {
-    // Upgrade to WebSocket
-    if (server.upgrade(req)) {
-      return; // Upgraded
-    }
-    return new Response("Upgrade failed", { status: 500 });
-  },
+ fetch(req, server) {
+ // Upgrade to WebSocket
+ if (server.upgrade(req)) {
+ return; // Upgraded
+ }
+ return new Response("Upgrade failed", { status: 500 });
+ },
 
-  websocket: {
-    open(ws) {
-      console.log("Client connected");
-      ws.send("Welcome!");
-    },
+ websocket: {
+ open(ws) {
+ console.log("Client connected");
+ ws.send("Welcome!");
+ },
 
-    message(ws, message) {
-      console.log(`Received: ${message}`);
-      ws.send(`Echo: ${message}`);
-    },
+ message(ws, message) {
+ console.log(`Received: ${message}`);
+ ws.send(`Echo: ${message}`);
+ },
 
-    close(ws) {
-      console.log("Client disconnected");
-    },
-  },
+ close(ws) {
+ console.log("Client disconnected");
+ },
+ },
 });
 ```
 
@@ -350,11 +350,11 @@ const db = new Database("mydb.sqlite");
 
 // Create table
 db.run(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT UNIQUE
-  )
+ CREATE TABLE IF NOT EXISTS users (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ name TEXT NOT NULL,
+ email TEXT UNIQUE
+ )
 `);
 
 // Insert
@@ -383,8 +383,8 @@ console.log(isValid); // true
 
 // With algorithm options
 const bcryptHash = await Bun.password.hash(password, {
-  algorithm: "bcrypt",
-  cost: 12,
+ algorithm: "bcrypt",
+ cost: 12,
 });
 ```
 
@@ -399,13 +399,13 @@ const bcryptHash = await Bun.password.hash(password, {
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 
 describe("Math operations", () => {
-  it("adds two numbers", () => {
-    expect(1 + 1).toBe(2);
-  });
+ it("adds two numbers", () => {
+ expect(1 + 1).toBe(2);
+ });
 
-  it("subtracts two numbers", () => {
-    expect(5 - 3).toBe(2);
-  });
+ it("subtracts two numbers", () => {
+ expect(5 - 3).toBe(2);
+ });
 });
 ```
 
@@ -437,35 +437,35 @@ bun test --timeout 5000
 import { expect, test } from "bun:test";
 
 test("matchers", () => {
-  // Equality
-  expect(1).toBe(1);
-  expect({ a: 1 }).toEqual({ a: 1 });
-  expect([1, 2]).toContain(1);
+ // Equality
+ expect(1).toBe(1);
+ expect({ a: 1 }).toEqual({ a: 1 });
+ expect([1, 2]).toContain(1);
 
-  // Comparisons
-  expect(10).toBeGreaterThan(5);
-  expect(5).toBeLessThanOrEqual(5);
+ // Comparisons
+ expect(10).toBeGreaterThan(5);
+ expect(5).toBeLessThanOrEqual(5);
 
-  // Truthiness
-  expect(true).toBeTruthy();
-  expect(null).toBeNull();
-  expect(undefined).toBeUndefined();
+ // Truthiness
+ expect(true).toBeTruthy();
+ expect(null).toBeNull();
+ expect(undefined).toBeUndefined();
 
-  // Strings
-  expect("hello").toMatch(/ell/);
-  expect("hello").toContain("ell");
+ // Strings
+ expect("hello").toMatch(/ell/);
+ expect("hello").toContain("ell");
 
-  // Arrays
-  expect([1, 2, 3]).toHaveLength(3);
+ // Arrays
+ expect([1, 2, 3]).toHaveLength(3);
 
-  // Exceptions
-  expect(() => {
-    throw new Error("fail");
-  }).toThrow("fail");
+ // Exceptions
+ expect(() => {
+ throw new Error("fail");
+ }).toThrow("fail");
 
-  // Async
-  await expect(Promise.resolve(1)).resolves.toBe(1);
-  await expect(Promise.reject("err")).rejects.toBe("err");
+ // Async
+ await expect(Promise.resolve(1)).resolves.toBe(1);
+ await expect(Promise.reject("err")).rejects.toBe("err");
 });
 ```
 
@@ -483,7 +483,7 @@ expect(mockFn.mock.results[0].value).toBe(10);
 
 // Spy on method
 const obj = {
-  method: () => "original",
+ method: () => "original",
 };
 const spy = spyOn(obj, "method").mockReturnValue("mocked");
 expect(obj.method()).toBe("mocked");
@@ -502,42 +502,42 @@ bun build ./src/index.ts --outdir ./dist
 
 # With options
 bun build ./src/index.ts \
-  --outdir ./dist \
-  --target browser \
-  --minify \
-  --sourcemap
+ --outdir ./dist \
+ --target browser \
+ --minify \
+ --sourcemap
 ```
 
 ### 7.2 Build API
 
 ```typescript
 const result = await Bun.build({
-  entrypoints: ["./src/index.ts"],
-  outdir: "./dist",
-  target: "browser", // or "bun", "node"
-  minify: true,
-  sourcemap: "external",
-  splitting: true,
-  format: "esm",
+ entrypoints: ["./src/index.ts"],
+ outdir: "./dist",
+ target: "browser", // or "bun", "node"
+ minify: true,
+ sourcemap: "external",
+ splitting: true,
+ format: "esm",
 
-  // External packages (not bundled)
-  external: ["react", "react-dom"],
+ // External packages (not bundled)
+ external: ["react", "react-dom"],
 
-  // Define globals
-  define: {
-    "process.env.NODE_ENV": JSON.stringify("production"),
-  },
+ // Define globals
+ define: {
+ "process.env.NODE_ENV": JSON.stringify("production"),
+ },
 
-  // Naming
-  naming: {
-    entry: "[name].[hash].js",
-    chunk: "chunks/[name].[hash].js",
-    asset: "assets/[name].[hash][ext]",
-  },
+ // Naming
+ naming: {
+ entry: "[name].[hash].js",
+ chunk: "chunks/[name].[hash].js",
+ asset: "assets/[name].[hash][ext]",
+ },
 });
 
 if (!result.success) {
-  console.error(result.logs);
+ console.error(result.logs);
 }
 ```
 
@@ -600,24 +600,24 @@ bun add -d @types/bun
 ### 8.3 Differences from Node.js
 
 ```typescript
-// ❌ Node.js specific (may not work)
-require("module")             // Use import instead
-require.resolve("pkg")        // Use import.meta.resolve
-__non_webpack_require__       // Not supported
+// Node.js specific (may not work)
+require("module") // Use import instead
+require.resolve("pkg") // Use import.meta.resolve
+__non_webpack_require__ // Not supported
 
-// ✅ Bun equivalents
+// Bun equivalents
 import pkg from "pkg";
 const resolved = import.meta.resolve("pkg");
 Bun.resolveSync("pkg", process.cwd());
 
-// ❌ These globals differ
-process.hrtime()              // Use Bun.nanoseconds()
-setImmediate()                // Use queueMicrotask()
+// These globals differ
+process.hrtime() // Use Bun.nanoseconds()
+setImmediate() // Use queueMicrotask()
 
-// ✅ Bun-specific features
-const file = Bun.file("./data.txt");  // Fast file API
+// Bun-specific features
+const file = Bun.file("./data.txt"); // Fast file API
 Bun.serve({ port: 3000, fetch: ... }); // Fast HTTP server
-Bun.password.hash(password);           // Built-in hashing
+Bun.password.hash(password); // Built-in hashing
 ```
 
 ---
@@ -645,9 +645,9 @@ const app = express();
 
 // Do: Bun.serve (native, 4-10x faster)
 Bun.serve({
-  fetch(req) {
-    return new Response("Hello!");
-  },
+ fetch(req) {
+ return new Response("Hello!");
+ },
 });
 
 // Or use Elysia (Bun-optimized framework)
@@ -669,17 +669,17 @@ bun run ./dist/index.js
 
 ## Quick Reference
 
-| Task         | Command                                    |
+| Task | Command |
 | :----------- | :----------------------------------------- |
-| Init project | `bun init`                                 |
-| Install deps | `bun install`                              |
-| Add package  | `bun add <pkg>`                            |
-| Run script   | `bun run <script>`                         |
-| Run file     | `bun run file.ts`                          |
-| Watch mode   | `bun --watch run file.ts`                  |
-| Run tests    | `bun test`                                 |
-| Build        | `bun build ./src/index.ts --outdir ./dist` |
-| Execute pkg  | `bunx <pkg>`                               |
+| Init project | `bun init` |
+| Install deps | `bun install` |
+| Add package | `bun add <pkg>` |
+| Run script | `bun run <script>` |
+| Run file | `bun run file.ts` |
+| Watch mode | `bun --watch run file.ts` |
+| Run tests | `bun test` |
+| Build | `bun build ./src/index.ts --outdir ./dist` |
+| Execute pkg | `bunx <pkg>` |
 
 ---
 

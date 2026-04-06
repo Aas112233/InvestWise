@@ -23,19 +23,19 @@ description: Express.js REST API template principles. TypeScript, Prisma, JWT.
 ```
 project-name/
 ├── prisma/
-│   └── schema.prisma
+│ └── schema.prisma
 ├── src/
-│   ├── app.ts           # Express setup
-│   ├── config/          # Environment
-│   ├── routes/          # Route handlers
-│   ├── controllers/     # Business logic
-│   ├── services/        # Data access
-│   ├── middleware/
-│   │   ├── auth.ts      # JWT verify
-│   │   ├── error.ts     # Error handler
-│   │   └── validate.ts  # Zod validation
-│   ├── schemas/         # Zod schemas
-│   └── utils/
+│ ├── app.ts # Express setup
+│ ├── config/ # Environment
+│ ├── routes/ # Route handlers
+│ ├── controllers/ # Business logic
+│ ├── services/ # Data access
+│ ├── middleware/
+│ │ ├── auth.ts # JWT verify
+│ │ ├── error.ts # Error handler
+│ │ └── validate.ts # Zod validation
+│ ├── schemas/ # Zod schemas
+│ └── utils/
 └── package.json
 ```
 

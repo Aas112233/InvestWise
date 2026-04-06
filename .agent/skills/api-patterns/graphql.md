@@ -5,14 +5,14 @@
 ## When to Use
 
 ```
-✅ Good fit:
+ Good fit:
 ├── Complex, interconnected data
 ├── Multiple frontend platforms
 ├── Clients need flexible queries
 ├── Evolving data requirements
 └── Reducing over-fetching matters
 
-❌ Poor fit:
+ Poor fit:
 ├── Simple CRUD operations
 ├── File upload heavy
 ├── HTTP caching important

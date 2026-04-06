@@ -26,10 +26,10 @@ Arrange your screen like this before running:
 
 ```
 +------------------+------------------+
-|                  |                  |
-|   TERMINAL       |   BROWSER        |
-|   (run script)   |   (dashboard)    |
-|                  |                  |
+| | |
+| TERMINAL | BROWSER |
+| (run script) | (dashboard) |
+| | |
 +------------------+------------------+
 ```
 

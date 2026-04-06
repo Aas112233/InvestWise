@@ -16,32 +16,32 @@ const app = express();
 
 // Trust Proxy for Render/Heroku (required for correctly logging IP and rate limiting)
 if (process.env.NODE_ENV === 'production') {
-    app.set('trust proxy', 1);
+ app.set('trust proxy', 1);
 }
 
 // Production CORS Configuration
 const allowedOrigins = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
-    : ['http://localhost:5173', 'http://localhost:3000'];
+ ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
+ : ['http://localhost:5173', 'http://localhost:3000'];
 
 const corsOptions = {
-    origin: function (origin, callback) {
-        // Allow requests with no origin (mobile apps, curl, Postman)
-        if (!origin) return callback(null, true);
+ origin: function (origin, callback) {
+ // Allow requests with no origin (mobile apps, curl, Postman)
+ if (!origin) return callback(null, true);
 
-        // Allow any localhost origin for development (Flutter web, etc.)
-        if (allowedOrigins.includes(origin) || allowedOrigins.includes('*') || origin.startsWith('http://localhost')) {
-            callback(null, true);
-        } else {
-            console.warn(`CORS blocked origin: ${origin}`);
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['Content-Range', 'X-Content-Range'],
-    maxAge: 86400 // 24 hours
+ // Allow any localhost origin for development (Flutter web, etc.)
+ if (allowedOrigins.includes(origin) || allowedOrigins.includes('*') || origin.startsWith('http://localhost')) {
+ callback(null, true);
+ } else {
+ console.warn(`CORS blocked origin: ${origin}`);
+ callback(new Error('Not allowed by CORS'));
+ }
+ },
+ credentials: true,
+ methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+ allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+ exposedHeaders: ['Content-Range', 'X-Content-Range'],
+ maxAge: 86400 // 24 hours
 };
 
 // Apply Security Headers (CSP, HSTS, X-Frame-Options, etc.)
@@ -56,7 +56,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(logger);
 
 app.get('/', (req, res) => {
-    res.send('API is running...');
+ res.send('API is running...');
 });
 
 import healthRoutes from './routes/healthRoutes.js';
@@ -95,19 +95,19 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
-    try {
-        // Try to connect to DB, but don't fail completely if it doesn't work
-        await connectDB();
-        console.log('✅ Database connection established');
-    } catch (error) {
-        console.warn('⚠️  Failed to connect to database. Server will start but API calls may fail.');
-        console.warn('⚠️  The database connection will be retried automatically.');
-    }
+ try {
+ // Try to connect to DB, but don't fail completely if it doesn't work
+ await connectDB();
+ console.log(' Database connection established');
+ } catch (error) {
+ console.warn(' Failed to connect to database. Server will start but API calls may fail.');
+ console.warn(' The database connection will be retried automatically.');
+ }
 
-    app.listen(PORT, () => {
-        console.log(`✅ Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-        console.log(`✅ Health check: http://localhost:${PORT}/api/health`);
-    });
+ app.listen(PORT, () => {
+ console.log(` Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+ console.log(` Health check: http://localhost:${PORT}/api/health`);
+ });
 };
 
 startServer();

@@ -10,10 +10,10 @@ If not installed: `npm install -g docx`
 
 ```javascript
 const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun, Media, 
-        Header, Footer, AlignmentType, PageOrientation, LevelFormat, ExternalHyperlink, 
-        InternalHyperlink, TableOfContents, HeadingLevel, BorderStyle, WidthType, TabStopType, 
-        TabStopPosition, UnderlineType, ShadingType, VerticalAlign, SymbolRun, PageNumber,
-        FootnoteReferenceRun, Footnote, PageBreak } = require('docx');
+ Header, Footer, AlignmentType, PageOrientation, LevelFormat, ExternalHyperlink, 
+ InternalHyperlink, TableOfContents, HeadingLevel, BorderStyle, WidthType, TabStopType, 
+ TabStopPosition, UnderlineType, ShadingType, VerticalAlign, SymbolRun, PageNumber,
+ FootnoteReferenceRun, Footnote, PageBreak } = require('docx');
 
 // Create & Save
 const doc = new Document({ sections: [{ children: [/* content */] }] });
@@ -24,27 +24,27 @@ Packer.toBlob(doc).then(blob => { /* download logic */ }); // Browser
 ## Text & Formatting
 ```javascript
 // IMPORTANT: Never use \n for line breaks - always use separate Paragraph elements
-// ❌ WRONG: new TextRun("Line 1\nLine 2")
-// ✅ CORRECT: new Paragraph({ children: [new TextRun("Line 1")] }), new Paragraph({ children: [new TextRun("Line 2")] })
+// WRONG: new TextRun("Line 1\nLine 2")
+// CORRECT: new Paragraph({ children: [new TextRun("Line 1")] }), new Paragraph({ children: [new TextRun("Line 2")] })
 
 // Basic text with all formatting options
 new Paragraph({
-  alignment: AlignmentType.CENTER,
-  spacing: { before: 200, after: 200 },
-  indent: { left: 720, right: 720 },
-  children: [
-    new TextRun({ text: "Bold", bold: true }),
-    new TextRun({ text: "Italic", italics: true }),
-    new TextRun({ text: "Underlined", underline: { type: UnderlineType.DOUBLE, color: "FF0000" } }),
-    new TextRun({ text: "Colored", color: "FF0000", size: 28, font: "Arial" }), // Arial default
-    new TextRun({ text: "Highlighted", highlight: "yellow" }),
-    new TextRun({ text: "Strikethrough", strike: true }),
-    new TextRun({ text: "x2", superScript: true }),
-    new TextRun({ text: "H2O", subScript: true }),
-    new TextRun({ text: "SMALL CAPS", smallCaps: true }),
-    new SymbolRun({ char: "2022", font: "Symbol" }), // Bullet •
-    new SymbolRun({ char: "00A9", font: "Arial" })   // Copyright © - Arial for symbols
-  ]
+ alignment: AlignmentType.CENTER,
+ spacing: { before: 200, after: 200 },
+ indent: { left: 720, right: 720 },
+ children: [
+ new TextRun({ text: "Bold", bold: true }),
+ new TextRun({ text: "Italic", italics: true }),
+ new TextRun({ text: "Underlined", underline: { type: UnderlineType.DOUBLE, color: "FF0000" } }),
+ new TextRun({ text: "Colored", color: "FF0000", size: 28, font: "Arial" }), // Arial default
+ new TextRun({ text: "Highlighted", highlight: "yellow" }),
+ new TextRun({ text: "Strikethrough", strike: true }),
+ new TextRun({ text: "x2", superScript: true }),
+ new TextRun({ text: "H2O", subScript: true }),
+ new TextRun({ text: "SMALL CAPS", smallCaps: true }),
+ new SymbolRun({ char: "2022", font: "Symbol" }), // Bullet •
+ new SymbolRun({ char: "00A9", font: "Arial" }) // Copyright © - Arial for symbols
+ ]
 })
 ```
 
@@ -52,40 +52,40 @@ new Paragraph({
 
 ```javascript
 const doc = new Document({
-  styles: {
-    default: { document: { run: { font: "Arial", size: 24 } } }, // 12pt default
-    paragraphStyles: [
-      // Document title style - override built-in Title style
-      { id: "Title", name: "Title", basedOn: "Normal",
-        run: { size: 56, bold: true, color: "000000", font: "Arial" },
-        paragraph: { spacing: { before: 240, after: 120 }, alignment: AlignmentType.CENTER } },
-      // IMPORTANT: Override built-in heading styles by using their exact IDs
-      { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
-        run: { size: 32, bold: true, color: "000000", font: "Arial" }, // 16pt
-        paragraph: { spacing: { before: 240, after: 240 }, outlineLevel: 0 } }, // Required for TOC
-      { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
-        run: { size: 28, bold: true, color: "000000", font: "Arial" }, // 14pt
-        paragraph: { spacing: { before: 180, after: 180 }, outlineLevel: 1 } },
-      // Custom styles use your own IDs
-      { id: "myStyle", name: "My Style", basedOn: "Normal",
-        run: { size: 28, bold: true, color: "000000" },
-        paragraph: { spacing: { after: 120 }, alignment: AlignmentType.CENTER } }
-    ],
-    characterStyles: [{ id: "myCharStyle", name: "My Char Style",
-      run: { color: "FF0000", bold: true, underline: { type: UnderlineType.SINGLE } } }]
-  },
-  sections: [{
-    properties: { page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
-    children: [
-      new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun("Document Title")] }), // Uses overridden Title style
-      new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("Heading 1")] }), // Uses overridden Heading1 style
-      new Paragraph({ style: "myStyle", children: [new TextRun("Custom paragraph style")] }),
-      new Paragraph({ children: [
-        new TextRun("Normal with "),
-        new TextRun({ text: "custom char style", style: "myCharStyle" })
-      ]})
-    ]
-  }]
+ styles: {
+ default: { document: { run: { font: "Arial", size: 24 } } }, // 12pt default
+ paragraphStyles: [
+ // Document title style - override built-in Title style
+ { id: "Title", name: "Title", basedOn: "Normal",
+ run: { size: 56, bold: true, color: "000000", font: "Arial" },
+ paragraph: { spacing: { before: 240, after: 120 }, alignment: AlignmentType.CENTER } },
+ // IMPORTANT: Override built-in heading styles by using their exact IDs
+ { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
+ run: { size: 32, bold: true, color: "000000", font: "Arial" }, // 16pt
+ paragraph: { spacing: { before: 240, after: 240 }, outlineLevel: 0 } }, // Required for TOC
+ { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
+ run: { size: 28, bold: true, color: "000000", font: "Arial" }, // 14pt
+ paragraph: { spacing: { before: 180, after: 180 }, outlineLevel: 1 } },
+ // Custom styles use your own IDs
+ { id: "myStyle", name: "My Style", basedOn: "Normal",
+ run: { size: 28, bold: true, color: "000000" },
+ paragraph: { spacing: { after: 120 }, alignment: AlignmentType.CENTER } }
+ ],
+ characterStyles: [{ id: "myCharStyle", name: "My Char Style",
+ run: { color: "FF0000", bold: true, underline: { type: UnderlineType.SINGLE } } }]
+ },
+ sections: [{
+ properties: { page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
+ children: [
+ new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun("Document Title")] }), // Uses overridden Title style
+ new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("Heading 1")] }), // Uses overridden Heading1 style
+ new Paragraph({ style: "myStyle", children: [new TextRun("Custom paragraph style")] }),
+ new Paragraph({ children: [
+ new TextRun("Normal with "),
+ new TextRun({ text: "custom char style", style: "myCharStyle" })
+ ]})
+ ]
+ }]
 });
 ```
 
@@ -111,48 +111,48 @@ const doc = new Document({
 // Bullets - ALWAYS use the numbering config, NOT unicode symbols
 // CRITICAL: Use LevelFormat.BULLET constant, NOT the string "bullet"
 const doc = new Document({
-  numbering: {
-    config: [
-      { reference: "bullet-list",
-        levels: [{ level: 0, format: LevelFormat.BULLET, text: "•", alignment: AlignmentType.LEFT,
-          style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] },
-      { reference: "first-numbered-list",
-        levels: [{ level: 0, format: LevelFormat.DECIMAL, text: "%1.", alignment: AlignmentType.LEFT,
-          style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] },
-      { reference: "second-numbered-list", // Different reference = restarts at 1
-        levels: [{ level: 0, format: LevelFormat.DECIMAL, text: "%1.", alignment: AlignmentType.LEFT,
-          style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] }
-    ]
-  },
-  sections: [{
-    children: [
-      // Bullet list items
-      new Paragraph({ numbering: { reference: "bullet-list", level: 0 },
-        children: [new TextRun("First bullet point")] }),
-      new Paragraph({ numbering: { reference: "bullet-list", level: 0 },
-        children: [new TextRun("Second bullet point")] }),
-      // Numbered list items
-      new Paragraph({ numbering: { reference: "first-numbered-list", level: 0 },
-        children: [new TextRun("First numbered item")] }),
-      new Paragraph({ numbering: { reference: "first-numbered-list", level: 0 },
-        children: [new TextRun("Second numbered item")] }),
-      // ⚠️ CRITICAL: Different reference = INDEPENDENT list that restarts at 1
-      // Same reference = CONTINUES previous numbering
-      new Paragraph({ numbering: { reference: "second-numbered-list", level: 0 },
-        children: [new TextRun("Starts at 1 again (because different reference)")] })
-    ]
-  }]
+ numbering: {
+ config: [
+ { reference: "bullet-list",
+ levels: [{ level: 0, format: LevelFormat.BULLET, text: "•", alignment: AlignmentType.LEFT,
+ style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] },
+ { reference: "first-numbered-list",
+ levels: [{ level: 0, format: LevelFormat.DECIMAL, text: "%1.", alignment: AlignmentType.LEFT,
+ style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] },
+ { reference: "second-numbered-list", // Different reference = restarts at 1
+ levels: [{ level: 0, format: LevelFormat.DECIMAL, text: "%1.", alignment: AlignmentType.LEFT,
+ style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] }
+ ]
+ },
+ sections: [{
+ children: [
+ // Bullet list items
+ new Paragraph({ numbering: { reference: "bullet-list", level: 0 },
+ children: [new TextRun("First bullet point")] }),
+ new Paragraph({ numbering: { reference: "bullet-list", level: 0 },
+ children: [new TextRun("Second bullet point")] }),
+ // Numbered list items
+ new Paragraph({ numbering: { reference: "first-numbered-list", level: 0 },
+ children: [new TextRun("First numbered item")] }),
+ new Paragraph({ numbering: { reference: "first-numbered-list", level: 0 },
+ children: [new TextRun("Second numbered item")] }),
+ // CRITICAL: Different reference = INDEPENDENT list that restarts at 1
+ // Same reference = CONTINUES previous numbering
+ new Paragraph({ numbering: { reference: "second-numbered-list", level: 0 },
+ children: [new TextRun("Starts at 1 again (because different reference)")] })
+ ]
+ }]
 });
 
-// ⚠️ CRITICAL NUMBERING RULE: Each reference creates an INDEPENDENT numbered list
+// CRITICAL NUMBERING RULE: Each reference creates an INDEPENDENT numbered list
 // - Same reference = continues numbering (1, 2, 3... then 4, 5, 6...)
 // - Different reference = restarts at 1 (1, 2, 3... then 1, 2, 3...)
 // Use unique reference names for each separate numbered section!
 
-// ⚠️ CRITICAL: NEVER use unicode bullets - they create fake lists that don't work properly
-// new TextRun("• Item")           // WRONG
+// CRITICAL: NEVER use unicode bullets - they create fake lists that don't work properly
+// new TextRun("• Item") // WRONG
 // new SymbolRun({ char: "2022" }) // WRONG
-// ✅ ALWAYS use numbering config with LevelFormat.BULLET for real Word lists
+// ALWAYS use numbering config with LevelFormat.BULLET for real Word lists
 ```
 
 ## Tables
@@ -162,58 +162,58 @@ const tableBorder = { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" };
 const cellBorders = { top: tableBorder, bottom: tableBorder, left: tableBorder, right: tableBorder };
 
 new Table({
-  columnWidths: [4680, 4680], // ⚠️ CRITICAL: Set column widths at table level - values in DXA (twentieths of a point)
-  margins: { top: 100, bottom: 100, left: 180, right: 180 }, // Set once for all cells
-  rows: [
-    new TableRow({
-      tableHeader: true,
-      children: [
-        new TableCell({
-          borders: cellBorders,
-          width: { size: 4680, type: WidthType.DXA }, // ALSO set width on each cell
-          // ⚠️ CRITICAL: Always use ShadingType.CLEAR to prevent black backgrounds in Word.
-          shading: { fill: "D5E8F0", type: ShadingType.CLEAR }, 
-          verticalAlign: VerticalAlign.CENTER,
-          children: [new Paragraph({ 
-            alignment: AlignmentType.CENTER,
-            children: [new TextRun({ text: "Header", bold: true, size: 22 })]
-          })]
-        }),
-        new TableCell({
-          borders: cellBorders,
-          width: { size: 4680, type: WidthType.DXA }, // ALSO set width on each cell
-          shading: { fill: "D5E8F0", type: ShadingType.CLEAR },
-          children: [new Paragraph({ 
-            alignment: AlignmentType.CENTER,
-            children: [new TextRun({ text: "Bullet Points", bold: true, size: 22 })]
-          })]
-        })
-      ]
-    }),
-    new TableRow({
-      children: [
-        new TableCell({
-          borders: cellBorders,
-          width: { size: 4680, type: WidthType.DXA }, // ALSO set width on each cell
-          children: [new Paragraph({ children: [new TextRun("Regular data")] })]
-        }),
-        new TableCell({
-          borders: cellBorders,
-          width: { size: 4680, type: WidthType.DXA }, // ALSO set width on each cell
-          children: [
-            new Paragraph({ 
-              numbering: { reference: "bullet-list", level: 0 },
-              children: [new TextRun("First bullet point")] 
-            }),
-            new Paragraph({ 
-              numbering: { reference: "bullet-list", level: 0 },
-              children: [new TextRun("Second bullet point")] 
-            })
-          ]
-        })
-      ]
-    })
-  ]
+ columnWidths: [4680, 4680], // CRITICAL: Set column widths at table level - values in DXA (twentieths of a point)
+ margins: { top: 100, bottom: 100, left: 180, right: 180 }, // Set once for all cells
+ rows: [
+ new TableRow({
+ tableHeader: true,
+ children: [
+ new TableCell({
+ borders: cellBorders,
+ width: { size: 4680, type: WidthType.DXA }, // ALSO set width on each cell
+ // CRITICAL: Always use ShadingType.CLEAR to prevent black backgrounds in Word.
+ shading: { fill: "D5E8F0", type: ShadingType.CLEAR }, 
+ verticalAlign: VerticalAlign.CENTER,
+ children: [new Paragraph({ 
+ alignment: AlignmentType.CENTER,
+ children: [new TextRun({ text: "Header", bold: true, size: 22 })]
+ })]
+ }),
+ new TableCell({
+ borders: cellBorders,
+ width: { size: 4680, type: WidthType.DXA }, // ALSO set width on each cell
+ shading: { fill: "D5E8F0", type: ShadingType.CLEAR },
+ children: [new Paragraph({ 
+ alignment: AlignmentType.CENTER,
+ children: [new TextRun({ text: "Bullet Points", bold: true, size: 22 })]
+ })]
+ })
+ ]
+ }),
+ new TableRow({
+ children: [
+ new TableCell({
+ borders: cellBorders,
+ width: { size: 4680, type: WidthType.DXA }, // ALSO set width on each cell
+ children: [new Paragraph({ children: [new TextRun("Regular data")] })]
+ }),
+ new TableCell({
+ borders: cellBorders,
+ width: { size: 4680, type: WidthType.DXA }, // ALSO set width on each cell
+ children: [
+ new Paragraph({ 
+ numbering: { reference: "bullet-list", level: 0 },
+ children: [new TextRun("First bullet point")] 
+ }),
+ new Paragraph({ 
+ numbering: { reference: "bullet-list", level: 0 },
+ children: [new TextRun("Second bullet point")] 
+ })
+ ]
+ })
+ ]
+ })
+ ]
 })
 ```
 
@@ -229,28 +229,28 @@ new Table({
 ## Links & Navigation
 ```javascript
 // TOC (requires headings) - CRITICAL: Use HeadingLevel only, NOT custom styles
-// ❌ WRONG: new Paragraph({ heading: HeadingLevel.HEADING_1, style: "customHeader", children: [new TextRun("Title")] })
-// ✅ CORRECT: new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("Title")] })
+// WRONG: new Paragraph({ heading: HeadingLevel.HEADING_1, style: "customHeader", children: [new TextRun("Title")] })
+// CORRECT: new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("Title")] })
 new TableOfContents("Table of Contents", { hyperlink: true, headingStyleRange: "1-3" }),
 
 // External link
 new Paragraph({
-  children: [new ExternalHyperlink({
-    children: [new TextRun({ text: "Google", style: "Hyperlink" })],
-    link: "https://www.google.com"
-  })]
+ children: [new ExternalHyperlink({
+ children: [new TextRun({ text: "Google", style: "Hyperlink" })],
+ link: "https://www.google.com"
+ })]
 }),
 
 // Internal link & bookmark
 new Paragraph({
-  children: [new InternalHyperlink({
-    children: [new TextRun({ text: "Go to Section", style: "Hyperlink" })],
-    anchor: "section1"
-  })]
+ children: [new InternalHyperlink({
+ children: [new TextRun({ text: "Go to Section", style: "Hyperlink" })],
+ anchor: "section1"
+ })]
 }),
 new Paragraph({
-  children: [new TextRun("Section Content")],
-  bookmark: { id: "section1", name: "section1" }
+ children: [new TextRun("Section Content")],
+ bookmark: { id: "section1", name: "section1" }
 }),
 ```
 
@@ -259,13 +259,13 @@ new Paragraph({
 // Basic image with sizing & positioning
 // CRITICAL: Always specify 'type' parameter - it's REQUIRED for ImageRun
 new Paragraph({
-  alignment: AlignmentType.CENTER,
-  children: [new ImageRun({
-    type: "png", // NEW REQUIREMENT: Must specify image type (png, jpg, jpeg, gif, bmp, svg)
-    data: fs.readFileSync("image.png"),
-    transformation: { width: 200, height: 150, rotation: 0 }, // rotation in degrees
-    altText: { title: "Logo", description: "Company logo", name: "Name" } // IMPORTANT: All three fields are required
-  })]
+ alignment: AlignmentType.CENTER,
+ children: [new ImageRun({
+ type: "png", // NEW REQUIREMENT: Must specify image type (png, jpg, jpeg, gif, bmp, svg)
+ data: fs.readFileSync("image.png"),
+ transformation: { width: 200, height: 150, rotation: 0 }, // rotation in degrees
+ altText: { title: "Logo", description: "Company logo", name: "Name" } // IMPORTANT: All three fields are required
+ })]
 })
 ```
 
@@ -276,61 +276,61 @@ new Paragraph({ children: [new PageBreak()] }),
 
 // Page break before paragraph
 new Paragraph({
-  pageBreakBefore: true,
-  children: [new TextRun("This starts on a new page")]
+ pageBreakBefore: true,
+ children: [new TextRun("This starts on a new page")]
 })
 
-// ⚠️ CRITICAL: NEVER use PageBreak standalone - it will create invalid XML that Word cannot open
-// ❌ WRONG: new PageBreak() 
-// ✅ CORRECT: new Paragraph({ children: [new PageBreak()] })
+// CRITICAL: NEVER use PageBreak standalone - it will create invalid XML that Word cannot open
+// WRONG: new PageBreak() 
+// CORRECT: new Paragraph({ children: [new PageBreak()] })
 ```
 
 ## Headers/Footers & Page Setup
 ```javascript
 const doc = new Document({
-  sections: [{
-    properties: {
-      page: {
-        margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }, // 1440 = 1 inch
-        size: { orientation: PageOrientation.LANDSCAPE },
-        pageNumbers: { start: 1, formatType: "decimal" } // "upperRoman", "lowerRoman", "upperLetter", "lowerLetter"
-      }
-    },
-    headers: {
-      default: new Header({ children: [new Paragraph({ 
-        alignment: AlignmentType.RIGHT,
-        children: [new TextRun("Header Text")]
-      })] })
-    },
-    footers: {
-      default: new Footer({ children: [new Paragraph({ 
-        alignment: AlignmentType.CENTER,
-        children: [new TextRun("Page "), new TextRun({ children: [PageNumber.CURRENT] }), new TextRun(" of "), new TextRun({ children: [PageNumber.TOTAL_PAGES] })]
-      })] })
-    },
-    children: [/* content */]
-  }]
+ sections: [{
+ properties: {
+ page: {
+ margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }, // 1440 = 1 inch
+ size: { orientation: PageOrientation.LANDSCAPE },
+ pageNumbers: { start: 1, formatType: "decimal" } // "upperRoman", "lowerRoman", "upperLetter", "lowerLetter"
+ }
+ },
+ headers: {
+ default: new Header({ children: [new Paragraph({ 
+ alignment: AlignmentType.RIGHT,
+ children: [new TextRun("Header Text")]
+ })] })
+ },
+ footers: {
+ default: new Footer({ children: [new Paragraph({ 
+ alignment: AlignmentType.CENTER,
+ children: [new TextRun("Page "), new TextRun({ children: [PageNumber.CURRENT] }), new TextRun(" of "), new TextRun({ children: [PageNumber.TOTAL_PAGES] })]
+ })] })
+ },
+ children: [/* content */]
+ }]
 });
 ```
 
 ## Tabs
 ```javascript
 new Paragraph({
-  tabStops: [
-    { type: TabStopType.LEFT, position: TabStopPosition.MAX / 4 },
-    { type: TabStopType.CENTER, position: TabStopPosition.MAX / 2 },
-    { type: TabStopType.RIGHT, position: TabStopPosition.MAX * 3 / 4 }
-  ],
-  children: [new TextRun("Left\tCenter\tRight")]
+ tabStops: [
+ { type: TabStopType.LEFT, position: TabStopPosition.MAX / 4 },
+ { type: TabStopType.CENTER, position: TabStopPosition.MAX / 2 },
+ { type: TabStopType.RIGHT, position: TabStopPosition.MAX * 3 / 4 }
+ ],
+ children: [new TextRun("Left\tCenter\tRight")]
 })
 ```
 
 ## Constants & Quick Reference
 - **Underlines:** `SINGLE`, `DOUBLE`, `WAVY`, `DASH`
-- **Borders:** `SINGLE`, `DOUBLE`, `DASHED`, `DOTTED`  
+- **Borders:** `SINGLE`, `DOUBLE`, `DASHED`, `DOTTED` 
 - **Numbering:** `DECIMAL` (1,2,3), `UPPER_ROMAN` (I,II,III), `LOWER_LETTER` (a,b,c)
 - **Tabs:** `LEFT`, `CENTER`, `RIGHT`, `DECIMAL`
-- **Symbols:** `"2022"` (•), `"00A9"` (©), `"00AE"` (®), `"2122"` (™), `"00B0"` (°), `"F070"` (✓), `"F0FC"` (✗)
+- **Symbols:** `"2022"` (•), `"00A9"` (©), `"00AE"` (®), `"2122"` (™), `"00B0"` (°), `"F070"` (), `"F0FC"` ()
 
 ## Critical Issues & Common Mistakes
 - **CRITICAL: PageBreak must ALWAYS be inside a Paragraph** - standalone PageBreak creates invalid XML that Word cannot open

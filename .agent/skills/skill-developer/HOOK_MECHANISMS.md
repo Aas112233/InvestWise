@@ -18,25 +18,25 @@ Technical deep dive into how the UserPromptSubmit and PreToolUse hooks work.
 
 ```
 User submits prompt
-    ↓
+ ↓
 .claude/settings.json registers hook
-    ↓
+ ↓
 skill-activation-prompt.sh executes
-    ↓
+ ↓
 npx tsx skill-activation-prompt.ts
-    ↓
+ ↓
 Hook reads stdin (JSON with prompt)
-    ↓
+ ↓
 Loads skill-rules.json
-    ↓
+ ↓
 Matches keywords + intent patterns
-    ↓
+ ↓
 Groups matches by priority (critical → high → medium → low)
-    ↓
+ ↓
 Outputs formatted message to stdout
-    ↓
+ ↓
 stdout becomes context for Claude (injected before prompt)
-    ↓
+ ↓
 Claude sees: [skill suggestion] + user's prompt
 ```
 
@@ -52,12 +52,12 @@ Claude sees: [skill suggestion] + user's prompt
 
 ```json
 {
-  "session_id": "abc-123",
-  "transcript_path": "/path/to/transcript.json",
-  "cwd": "/root/git/your-project",
-  "permission_mode": "normal",
-  "hook_event_name": "UserPromptSubmit",
-  "prompt": "how does the layout system work?"
+ "session_id": "abc-123",
+ "transcript_path": "/path/to/transcript.json",
+ "cwd": "/root/git/your-project",
+ "permission_mode": "normal",
+ "hook_event_name": "UserPromptSubmit",
+ "prompt": "how does the layout system work?"
 }
 ```
 
@@ -65,11 +65,11 @@ Claude sees: [skill suggestion] + user's prompt
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 SKILL ACTIVATION CHECK
+ SKILL ACTIVATION CHECK
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📚 RECOMMENDED SKILLS:
-  → project-catalog-developer
+ RECOMMENDED SKILLS:
+ → project-catalog-developer
 
 ACTION: Use Skill tool BEFORE responding
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -85,38 +85,38 @@ Claude sees this output as additional context before processing the user's promp
 
 ```
 Claude calls Edit/Write tool
-    ↓
+ ↓
 .claude/settings.json registers hook (matcher: Edit|Write)
-    ↓
+ ↓
 skill-verification-guard.sh executes
-    ↓
+ ↓
 npx tsx skill-verification-guard.ts
-    ↓
+ ↓
 Hook reads stdin (JSON with tool_name, tool_input)
-    ↓
+ ↓
 Loads skill-rules.json
-    ↓
+ ↓
 Checks file path patterns (glob matching)
-    ↓
+ ↓
 Reads file for content patterns (if file exists)
-    ↓
+ ↓
 Checks session state (was skill already used?)
-    ↓
+ ↓
 Checks skip conditions (file markers, env vars)
-    ↓
+ ↓
 IF MATCHED AND NOT SKIPPED:
-  Update session state (mark skill as enforced)
-  Output block message to stderr
-  Exit with code 2 (BLOCK)
+ Update session state (mark skill as enforced)
+ Output block message to stderr
+ Exit with code 2 (BLOCK)
 ELSE:
-  Exit with code 0 (ALLOW)
-    ↓
+ Exit with code 0 (ALLOW)
+ ↓
 IF BLOCKED:
-  stderr → Claude sees message
-  Edit/Write tool does NOT execute
-  Claude must use skill and retry
+ stderr → Claude sees message
+ Edit/Write tool does NOT execute
+ Claude must use skill and retry
 IF ALLOWED:
-  Tool executes normally
+ Tool executes normally
 ```
 
 ### Key Points
@@ -132,26 +132,26 @@ IF ALLOWED:
 
 ```json
 {
-  "session_id": "abc-123",
-  "transcript_path": "/path/to/transcript.json",
-  "cwd": "/root/git/your-project",
-  "permission_mode": "normal",
-  "hook_event_name": "PreToolUse",
-  "tool_name": "Edit",
-  "tool_input": {
-    "file_path": "/root/git/your-project/form/src/services/user.ts",
-    "old_string": "...",
-    "new_string": "..."
-  }
+ "session_id": "abc-123",
+ "transcript_path": "/path/to/transcript.json",
+ "cwd": "/root/git/your-project",
+ "permission_mode": "normal",
+ "hook_event_name": "PreToolUse",
+ "tool_name": "Edit",
+ "tool_input": {
+ "file_path": "/root/git/your-project/form/src/services/user.ts",
+ "old_string": "...",
+ "new_string": "..."
+ }
 }
 ```
 
 ### Output Format (to stderr when blocked)
 
 ```
-⚠️ BLOCKED - Database Operation Detected
+ BLOCKED - Database Operation Detected
 
-📋 REQUIRED ACTION:
+ REQUIRED ACTION:
 1. Use Skill tool: 'database-verification'
 2. Verify ALL table and column names against schema
 3. Check database structure with DESCRIBE commands
@@ -160,7 +160,7 @@ IF ALLOWED:
 Reason: Prevent column name errors in Prisma queries
 File: form/src/services/user.ts
 
-💡 TIP: Add '// @skip-validation' comment to skip future checks
+ TIP: Add '// @skip-validation' comment to skip future checks
 ```
 
 Claude receives this message and understands it needs to use the skill before retrying the edit.
@@ -194,16 +194,16 @@ This is THE critical mechanism for enforcement:
 User: "Add a new user service with Prisma"
 
 Claude: "I'll create the user service..."
-    [Attempts to Edit form/src/services/user.ts]
+ [Attempts to Edit form/src/services/user.ts]
 
 PreToolUse Hook: [Exit code 2]
-    stderr: "⚠️ BLOCKED - Use database-verification"
+ stderr: " BLOCKED - Use database-verification"
 
 Claude sees error, responds:
-    "I need to verify the database schema first."
-    [Uses Skill tool: database-verification]
-    [Verifies column names]
-    [Retries Edit - now allowed (session tracking)]
+ "I need to verify the database schema first."
+ [Uses Skill tool: database-verification]
+ [Verifies column names]
+ [Retries Edit - now allowed (session tracking)]
 ```
 
 ---
@@ -222,30 +222,30 @@ Prevent repeated nagging in the same session - once Claude uses a skill, don't b
 
 ```json
 {
-  "skills_used": [
-    "database-verification",
-    "error-tracking"
-  ],
-  "files_verified": []
+ "skills_used": [
+ "database-verification",
+ "error-tracking"
+ ],
+ "files_verified": []
 }
 ```
 
 ### How It Works
 
 1. **First edit** of file with Prisma:
-   - Hook blocks with exit code 2
-   - Updates session state: adds "database-verification" to skills_used
-   - Claude sees message, uses skill
+ - Hook blocks with exit code 2
+ - Updates session state: adds "database-verification" to skills_used
+ - Claude sees message, uses skill
 
 2. **Second edit** (same session):
-   - Hook checks session state
-   - Finds "database-verification" in skills_used
-   - Exits with code 0 (allow)
-   - No message to Claude
+ - Hook checks session state
+ - Finds "database-verification" in skills_used
+ - Exits with code 0 (allow)
+ - No message to Claude
 
 3. **Different session**:
-   - New session ID = new state file
-   - Hook blocks again
+ - New session ID = new state file
+ - Hook blocks again
 
 ### Limitation
 
@@ -267,22 +267,22 @@ The hook cannot detect when the skill is *actually* invoked - it just blocks onc
 ### Performance Bottlenecks
 
 1. **Loading skill-rules.json** (every execution)
-   - Future: Cache in memory
-   - Future: Watch for changes, reload only when needed
+ - Future: Cache in memory
+ - Future: Watch for changes, reload only when needed
 
 2. **Reading file content** (PreToolUse)
-   - Only when contentPatterns configured
-   - Only if file exists
-   - Can be slow for large files
+ - Only when contentPatterns configured
+ - Only if file exists
+ - Can be slow for large files
 
 3. **Glob matching** (PreToolUse)
-   - Regex compilation for each pattern
-   - Future: Compile once, cache
+ - Regex compilation for each pattern
+ - Future: Compile once, cache
 
 4. **Regex matching** (Both hooks)
-   - Intent patterns (UserPromptSubmit)
-   - Content patterns (PreToolUse)
-   - Future: Lazy compile, cache compiled regexes
+ - Intent patterns (UserPromptSubmit)
+ - Content patterns (PreToolUse)
+ - Future: Lazy compile, cache compiled regexes
 
 ### Optimization Strategies
 

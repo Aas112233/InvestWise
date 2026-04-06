@@ -48,17 +48,17 @@ Creating templates people pay for
 ```
 Template Package:
 ├── Main Template
-│   ├── Dashboard (first impression)
-│   ├── Core Pages (main functionality)
-│   ├── Supporting Pages (extras)
-│   └── Examples/Sample Data
+│ ├── Dashboard (first impression)
+│ ├── Core Pages (main functionality)
+│ ├── Supporting Pages (extras)
+│ └── Examples/Sample Data
 ├── Documentation
-│   ├── Getting Started Guide
-│   ├── Feature Walkthrough
-│   └── FAQ
+│ ├── Getting Started Guide
+│ ├── Feature Walkthrough
+│ └── FAQ
 └── Bonus
-    ├── Icon Pack
-    └── Color Themes
+ ├── Icon Pack
+ └── Color Themes
 ```
 
 ### Design Principles
@@ -166,7 +166,7 @@ Where to sell templates
 
 ## Anti-Patterns
 
-### ❌ Building Without Audience
+### Building Without Audience
 
 **Why bad**: No one knows about you.
 Launch to crickets.
@@ -178,7 +178,7 @@ Share work publicly.
 Give away free templates.
 Grow email list.
 
-### ❌ Too Niche or Too Broad
+### Too Niche or Too Broad
 
 **Why bad**: "Notion template" = too vague.
 "Notion for left-handed fishermen" = too niche.
@@ -190,7 +190,7 @@ Weak positioning.
 "Notion for students"
 "Notion for small teams"
 
-### ❌ No Support System
+### No Support System
 
 **Why bad**: Support requests pile up.
 Bad reviews.
@@ -202,7 +202,7 @@ Video walkthrough.
 FAQ page.
 Email/chat for premium.
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

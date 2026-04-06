@@ -12,23 +12,23 @@ You are an expert in creating competitor comparison and alternative pages. Your 
 Before creating competitor pages, understand:
 
 1. **Your Product**
-   - Core value proposition
-   - Key differentiators
-   - Ideal customer profile
-   - Pricing model
-   - Strengths and honest weaknesses
+ - Core value proposition
+ - Key differentiators
+ - Ideal customer profile
+ - Pricing model
+ - Strengths and honest weaknesses
 
 2. **Competitive Landscape**
-   - Direct competitors
-   - Indirect/adjacent competitors
-   - Market positioning of each
-   - Search volume for competitor terms
+ - Direct competitors
+ - Indirect/adjacent competitors
+ - Market positioning of each
+ - Search volume for competitor terms
 
 3. **Goals**
-   - SEO traffic capture
-   - Sales enablement
-   - Conversion from competitor users
-   - Brand positioning
+ - SEO traffic capture
+ - Sales enablement
+ - Conversion from competitor users
+ - Brand positioning
 
 ---
 
@@ -130,11 +130,11 @@ Before creating competitor pages, understand:
 1. TL;DR summary (key differences in 2-3 sentences)
 2. At-a-glance comparison table
 3. Detailed comparison by category:
-   - Features
-   - Pricing
-   - Service & support
-   - Ease of use
-   - Integrations
+ - Features
+ - Pricing
+ - Service & support
+ - Ease of use
+ - Integrations
 4. Who [You] is best for
 5. Who [Competitor] is best for (be honest)
 6. What customers say (testimonials from switchers)
@@ -184,9 +184,9 @@ Each format needs an index page that lists all pages of that type. These hub pag
 1. Headline: "[Your Product] as an Alternative"
 2. Brief intro on why people switch to you
 3. List of all alternative pages with:
-   - Competitor name/logo
-   - One-line summary of key differentiator vs. that competitor
-   - Link to full comparison
+ - Competitor name/logo
+ - One-line summary of key differentiator vs. that competitor
+ - Link to full comparison
 4. Common reasons people switch (aggregated)
 5. CTA
 
@@ -213,9 +213,9 @@ Looking to switch? See how [Your Product] compares to the tools you're evaluatin
 1. Headline: "Software Alternatives & Comparisons"
 2. Brief intro on your comparison methodology
 3. List of all alternatives roundup pages with:
-   - Competitor name
-   - Number of alternatives covered
-   - Link to roundup
+ - Competitor name
+ - Number of alternatives covered
+ - Link to roundup
 4. CTA
 
 **Example**:
@@ -330,56 +330,56 @@ enterprise: custom
 
 # Features (rate 1-5 or describe)
 features:
-  documents: 5
-  databases: 4
-  project_management: 3
-  collaboration: 4
-  integrations: 3
-  mobile_app: 3
-  offline_mode: 2
-  api: 4
+ documents: 5
+ databases: 4
+ project_management: 3
+ collaboration: 4
+ integrations: 3
+ mobile_app: 3
+ offline_mode: 2
+ api: 4
 
 # Strengths (be honest)
 strengths:
-  - Extremely flexible and customizable
-  - Beautiful, modern interface
-  - Strong template ecosystem
-  - Active community
+ - Extremely flexible and customizable
+ - Beautiful, modern interface
+ - Strong template ecosystem
+ - Active community
 
 # Weaknesses (be fair)
 weaknesses:
-  - Can be slow with large databases
-  - Learning curve for advanced features
-  - Limited automations compared to dedicated tools
-  - Offline mode is limited
+ - Can be slow with large databases
+ - Learning curve for advanced features
+ - Limited automations compared to dedicated tools
+ - Offline mode is limited
 
 # Best for
 best_for:
-  - Teams wanting all-in-one workspace
-  - Content-heavy workflows
-  - Documentation-first teams
-  - Startups and small teams
+ - Teams wanting all-in-one workspace
+ - Content-heavy workflows
+ - Documentation-first teams
+ - Startups and small teams
 
 # Not ideal for
 not_ideal_for:
-  - Complex project management needs
-  - Large databases (1000s of rows)
-  - Teams needing robust offline
-  - Enterprise with strict compliance
+ - Complex project management needs
+ - Large databases (1000s of rows)
+ - Teams needing robust offline
+ - Enterprise with strict compliance
 
 # Common complaints (from reviews)
 common_complaints:
-  - "Gets slow with lots of content"
-  - "Hard to find things as workspace grows"
-  - "Mobile app is clunky"
+ - "Gets slow with lots of content"
+ - "Hard to find things as workspace grows"
+ - "Mobile app is clunky"
 
 # Migration notes
 migration_from:
-  difficulty: medium
-  data_export: "Markdown, CSV, HTML"
-  what_transfers: "Pages, databases"
-  what_doesnt: "Automations, integrations setup"
-  time_estimate: "1-3 days for small team"
+ difficulty: medium
+ data_export: "Markdown, CSV, HTML"
+ what_transfers: "Pages, databases"
+ what_doesnt: "Automations, integrations setup"
+ time_estimate: "1-3 days for small team"
 ```
 
 ### Your Product Data
@@ -391,16 +391,16 @@ name: [Your Product]
 # ... same fields
 
 strengths:
-  - [Your real strengths]
+ - [Your real strengths]
 
 weaknesses:
-  - [Your honest weaknesses]
+ - [Your honest weaknesses]
 
 best_for:
-  - [Your ideal customers]
+ - [Your ideal customers]
 
 not_ideal_for:
-  - [Who should use something else]
+ - [Who should use something else]
 ```
 
 ### Page Generation
@@ -592,8 +592,8 @@ Focus on switchers:
 Instead of:
 | Feature | You | Competitor |
 |---------|-----|-----------|
-| Feature A | ✓ | ✓ |
-| Feature B | ✓ | ✗ |
+| Feature A | | |
+| Feature B | | |
 
 Do this:
 | Feature | You | Competitor |
@@ -614,8 +614,8 @@ Group features into meaningful categories:
 
 | Category | You | Competitor | Notes |
 |----------|-----|-----------|-------|
-| Ease of use | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | [Brief note] |
-| Feature depth | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | [Brief note] |
+| Ease of use | | | [Brief note] |
+| Feature depth | | | [Brief note] |
 
 ---
 
@@ -626,33 +626,33 @@ Group features into meaningful categories:
 For each competitor, gather:
 
 1. **Product research**
-   - Sign up for free trial
-   - Use the product yourself
-   - Document features, UX, limitations
-   - Take screenshots
+ - Sign up for free trial
+ - Use the product yourself
+ - Document features, UX, limitations
+ - Take screenshots
 
 2. **Pricing research**
-   - Current pricing (check regularly)
-   - What's included at each tier
-   - Hidden costs, add-ons
-   - Contract terms
+ - Current pricing (check regularly)
+ - What's included at each tier
+ - Hidden costs, add-ons
+ - Contract terms
 
 3. **Review mining**
-   - G2, Capterra, TrustRadius reviews
-   - Common praise themes
-   - Common complaint themes
-   - Ratings by category
+ - G2, Capterra, TrustRadius reviews
+ - Common praise themes
+ - Common complaint themes
+ - Ratings by category
 
 4. **Customer feedback**
-   - Talk to customers who switched
-   - Talk to prospects who chose competitor
-   - Document real quotes
+ - Talk to customers who switched
+ - Talk to prospects who chose competitor
+ - Document real quotes
 
 5. **Content research**
-   - Their positioning and messaging
-   - Their comparison pages (how do they compare to you?)
-   - Their documentation quality
-   - Their changelog (recent development)
+ - Their positioning and messaging
+ - Their comparison pages (how do they compare to you?)
+ - Their documentation quality
+ - Their changelog (recent development)
 
 ### Ongoing Updates
 
@@ -688,17 +688,17 @@ Consider FAQ schema for common questions:
 
 ```json
 {
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "What is the best alternative to [Competitor]?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "[Your answer positioning yourself]"
-      }
-    }
-  ]
+ "@type": "FAQPage",
+ "mainEntity": [
+ {
+ "@type": "Question",
+ "name": "What is the best alternative to [Competitor]?",
+ "acceptedAnswer": {
+ "@type": "Answer",
+ "text": "[Your answer positioning yourself]"
+ }
+ }
+ ]
 }
 ```
 

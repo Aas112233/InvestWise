@@ -20,28 +20,28 @@ import { z } from "zod";
 ### Server Initialization
 ```typescript
 const server = new McpServer({
-  name: "service-mcp-server",
-  version: "1.0.0"
+ name: "service-mcp-server",
+ version: "1.0.0"
 });
 ```
 
 ### Tool Registration Pattern
 ```typescript
 server.registerTool(
-  "tool_name",
-  {
-    title: "Tool Display Name",
-    description: "What the tool does",
-    inputSchema: { param: z.string() },
-    outputSchema: { result: z.string() }
-  },
-  async ({ param }) => {
-    const output = { result: `Processed: ${param}` };
-    return {
-      content: [{ type: "text", text: JSON.stringify(output) }],
-      structuredContent: output // Modern pattern for structured data
-    };
-  }
+ "tool_name",
+ {
+ title: "Tool Display Name",
+ description: "What the tool does",
+ inputSchema: { param: z.string() },
+ outputSchema: { result: z.string() }
+ },
+ async ({ param }) => {
+ const output = { result: `Processed: ${param}` };
+ return {
+ content: [{ type: "text", text: JSON.stringify(output) }],
+ structuredContent: output // Modern pattern for structured data
+ };
+ }
 );
 ```
 
@@ -84,13 +84,13 @@ Create the following structure for Node/TypeScript MCP servers:
 ├── tsconfig.json
 ├── README.md
 ├── src/
-│   ├── index.ts          # Main entry point with McpServer initialization
-│   ├── types.ts          # TypeScript type definitions and interfaces
-│   ├── tools/            # Tool implementations (one file per domain)
-│   ├── services/         # API clients and shared utilities
-│   ├── schemas/          # Zod validation schemas
-│   └── constants.ts      # Shared constants (API_URL, CHARACTER_LIMIT, etc.)
-└── dist/                 # Built JavaScript files (entry point: dist/index.js)
+│ ├── index.ts # Main entry point with McpServer initialization
+│ ├── types.ts # TypeScript type definitions and interfaces
+│ ├── tools/ # Tool implementations (one file per domain)
+│ ├── services/ # API clients and shared utilities
+│ ├── schemas/ # Zod validation schemas
+│ └── constants.ts # Shared constants (API_URL, CHARACTER_LIMIT, etc.)
+└── dist/ # Built JavaScript files (entry point: dist/index.js)
 ```
 
 ## Tool Implementation
@@ -118,158 +118,158 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 const server = new McpServer({
-  name: "example-mcp",
-  version: "1.0.0"
+ name: "example-mcp",
+ version: "1.0.0"
 });
 
 // Zod schema for input validation
 const UserSearchInputSchema = z.object({
-  query: z.string()
-    .min(2, "Query must be at least 2 characters")
-    .max(200, "Query must not exceed 200 characters")
-    .describe("Search string to match against names/emails"),
-  limit: z.number()
-    .int()
-    .min(1)
-    .max(100)
-    .default(20)
-    .describe("Maximum results to return"),
-  offset: z.number()
-    .int()
-    .min(0)
-    .default(0)
-    .describe("Number of results to skip for pagination"),
-  response_format: z.nativeEnum(ResponseFormat)
-    .default(ResponseFormat.MARKDOWN)
-    .describe("Output format: 'markdown' for human-readable or 'json' for machine-readable")
+ query: z.string()
+ .min(2, "Query must be at least 2 characters")
+ .max(200, "Query must not exceed 200 characters")
+ .describe("Search string to match against names/emails"),
+ limit: z.number()
+ .int()
+ .min(1)
+ .max(100)
+ .default(20)
+ .describe("Maximum results to return"),
+ offset: z.number()
+ .int()
+ .min(0)
+ .default(0)
+ .describe("Number of results to skip for pagination"),
+ response_format: z.nativeEnum(ResponseFormat)
+ .default(ResponseFormat.MARKDOWN)
+ .describe("Output format: 'markdown' for human-readable or 'json' for machine-readable")
 }).strict();
 
 // Type definition from Zod schema
 type UserSearchInput = z.infer<typeof UserSearchInputSchema>;
 
 server.registerTool(
-  "example_search_users",
-  {
-    title: "Search Example Users",
-    description: `Search for users in the Example system by name, email, or team.
+ "example_search_users",
+ {
+ title: "Search Example Users",
+ description: `Search for users in the Example system by name, email, or team.
 
 This tool searches across all user profiles in the Example platform, supporting partial matches and various search filters. It does NOT create or modify users, only searches existing ones.
 
 Args:
-  - query (string): Search string to match against names/emails
-  - limit (number): Maximum results to return, between 1-100 (default: 20)
-  - offset (number): Number of results to skip for pagination (default: 0)
-  - response_format ('markdown' | 'json'): Output format (default: 'markdown')
+ - query (string): Search string to match against names/emails
+ - limit (number): Maximum results to return, between 1-100 (default: 20)
+ - offset (number): Number of results to skip for pagination (default: 0)
+ - response_format ('markdown' | 'json'): Output format (default: 'markdown')
 
 Returns:
-  For JSON format: Structured data with schema:
-  {
-    "total": number,           // Total number of matches found
-    "count": number,           // Number of results in this response
-    "offset": number,          // Current pagination offset
-    "users": [
-      {
-        "id": string,          // User ID (e.g., "U123456789")
-        "name": string,        // Full name (e.g., "John Doe")
-        "email": string,       // Email address
-        "team": string,        // Team name (optional)
-        "active": boolean      // Whether user is active
-      }
-    ],
-    "has_more": boolean,       // Whether more results are available
-    "next_offset": number      // Offset for next page (if has_more is true)
-  }
+ For JSON format: Structured data with schema:
+ {
+ "total": number, // Total number of matches found
+ "count": number, // Number of results in this response
+ "offset": number, // Current pagination offset
+ "users": [
+ {
+ "id": string, // User ID (e.g., "U123456789")
+ "name": string, // Full name (e.g., "John Doe")
+ "email": string, // Email address
+ "team": string, // Team name (optional)
+ "active": boolean // Whether user is active
+ }
+ ],
+ "has_more": boolean, // Whether more results are available
+ "next_offset": number // Offset for next page (if has_more is true)
+ }
 
 Examples:
-  - Use when: "Find all marketing team members" -> params with query="team:marketing"
-  - Use when: "Search for John's account" -> params with query="john"
-  - Don't use when: You need to create a user (use example_create_user instead)
+ - Use when: "Find all marketing team members" -> params with query="team:marketing"
+ - Use when: "Search for John's account" -> params with query="john"
+ - Don't use when: You need to create a user (use example_create_user instead)
 
 Error Handling:
-  - Returns "Error: Rate limit exceeded" if too many requests (429 status)
-  - Returns "No users found matching '<query>'" if search returns empty`,
-    inputSchema: UserSearchInputSchema,
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: true
-    }
-  },
-  async (params: UserSearchInput) => {
-    try {
-      // Input validation is handled by Zod schema
-      // Make API request using validated parameters
-      const data = await makeApiRequest<any>(
-        "users/search",
-        "GET",
-        undefined,
-        {
-          q: params.query,
-          limit: params.limit,
-          offset: params.offset
-        }
-      );
+ - Returns "Error: Rate limit exceeded" if too many requests (429 status)
+ - Returns "No users found matching '<query>'" if search returns empty`,
+ inputSchema: UserSearchInputSchema,
+ annotations: {
+ readOnlyHint: true,
+ destructiveHint: false,
+ idempotentHint: true,
+ openWorldHint: true
+ }
+ },
+ async (params: UserSearchInput) => {
+ try {
+ // Input validation is handled by Zod schema
+ // Make API request using validated parameters
+ const data = await makeApiRequest<any>(
+ "users/search",
+ "GET",
+ undefined,
+ {
+ q: params.query,
+ limit: params.limit,
+ offset: params.offset
+ }
+ );
 
-      const users = data.users || [];
-      const total = data.total || 0;
+ const users = data.users || [];
+ const total = data.total || 0;
 
-      if (!users.length) {
-        return {
-          content: [{
-            type: "text",
-            text: `No users found matching '${params.query}'`
-          }]
-        };
-      }
+ if (!users.length) {
+ return {
+ content: [{
+ type: "text",
+ text: `No users found matching '${params.query}'`
+ }]
+ };
+ }
 
-      // Prepare structured output
-      const output = {
-        total,
-        count: users.length,
-        offset: params.offset,
-        users: users.map((user: any) => ({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          ...(user.team ? { team: user.team } : {}),
-          active: user.active ?? true
-        })),
-        has_more: total > params.offset + users.length,
-        ...(total > params.offset + users.length ? {
-          next_offset: params.offset + users.length
-        } : {})
-      };
+ // Prepare structured output
+ const output = {
+ total,
+ count: users.length,
+ offset: params.offset,
+ users: users.map((user: any) => ({
+ id: user.id,
+ name: user.name,
+ email: user.email,
+ ...(user.team ? { team: user.team } : {}),
+ active: user.active ?? true
+ })),
+ has_more: total > params.offset + users.length,
+ ...(total > params.offset + users.length ? {
+ next_offset: params.offset + users.length
+ } : {})
+ };
 
-      // Format text representation based on requested format
-      let textContent: string;
-      if (params.response_format === ResponseFormat.MARKDOWN) {
-        const lines = [`# User Search Results: '${params.query}'`, "",
-          `Found ${total} users (showing ${users.length})`, ""];
-        for (const user of users) {
-          lines.push(`## ${user.name} (${user.id})`);
-          lines.push(`- **Email**: ${user.email}`);
-          if (user.team) lines.push(`- **Team**: ${user.team}`);
-          lines.push("");
-        }
-        textContent = lines.join("\n");
-      } else {
-        textContent = JSON.stringify(output, null, 2);
-      }
+ // Format text representation based on requested format
+ let textContent: string;
+ if (params.response_format === ResponseFormat.MARKDOWN) {
+ const lines = [`# User Search Results: '${params.query}'`, "",
+ `Found ${total} users (showing ${users.length})`, ""];
+ for (const user of users) {
+ lines.push(`## ${user.name} (${user.id})`);
+ lines.push(`- **Email**: ${user.email}`);
+ if (user.team) lines.push(`- **Team**: ${user.team}`);
+ lines.push("");
+ }
+ textContent = lines.join("\n");
+ } else {
+ textContent = JSON.stringify(output, null, 2);
+ }
 
-      return {
-        content: [{ type: "text", text: textContent }],
-        structuredContent: output // Modern pattern for structured data
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: "text",
-          text: handleApiError(error)
-        }]
-      };
-    }
-  }
+ return {
+ content: [{ type: "text", text: textContent }],
+ structuredContent: output // Modern pattern for structured data
+ };
+ } catch (error) {
+ return {
+ content: [{
+ type: "text",
+ text: handleApiError(error)
+ }]
+ };
+ }
+ }
 );
 ```
 
@@ -282,42 +282,42 @@ import { z } from "zod";
 
 // Basic schema with validation
 const CreateUserSchema = z.object({
-  name: z.string()
-    .min(1, "Name is required")
-    .max(100, "Name must not exceed 100 characters"),
-  email: z.string()
-    .email("Invalid email format"),
-  age: z.number()
-    .int("Age must be a whole number")
-    .min(0, "Age cannot be negative")
-    .max(150, "Age cannot be greater than 150")
-}).strict();  // Use .strict() to forbid extra fields
+ name: z.string()
+ .min(1, "Name is required")
+ .max(100, "Name must not exceed 100 characters"),
+ email: z.string()
+ .email("Invalid email format"),
+ age: z.number()
+ .int("Age must be a whole number")
+ .min(0, "Age cannot be negative")
+ .max(150, "Age cannot be greater than 150")
+}).strict(); // Use .strict() to forbid extra fields
 
 // Enums
 enum ResponseFormat {
-  MARKDOWN = "markdown",
-  JSON = "json"
+ MARKDOWN = "markdown",
+ JSON = "json"
 }
 
 const SearchSchema = z.object({
-  response_format: z.nativeEnum(ResponseFormat)
-    .default(ResponseFormat.MARKDOWN)
-    .describe("Output format")
+ response_format: z.nativeEnum(ResponseFormat)
+ .default(ResponseFormat.MARKDOWN)
+ .describe("Output format")
 });
 
 // Optional fields with defaults
 const PaginationSchema = z.object({
-  limit: z.number()
-    .int()
-    .min(1)
-    .max(100)
-    .default(20)
-    .describe("Maximum results to return"),
-  offset: z.number()
-    .int()
-    .min(0)
-    .default(0)
-    .describe("Number of results to skip")
+ limit: z.number()
+ .int()
+ .min(1)
+ .max(100)
+ .default(20)
+ .describe("Maximum results to return"),
+ offset: z.number()
+ .int()
+ .min(0)
+ .default(0)
+ .describe("Number of results to skip")
 });
 ```
 
@@ -327,15 +327,15 @@ Support multiple output formats for flexibility:
 
 ```typescript
 enum ResponseFormat {
-  MARKDOWN = "markdown",
-  JSON = "json"
+ MARKDOWN = "markdown",
+ JSON = "json"
 }
 
 const inputSchema = z.object({
-  query: z.string(),
-  response_format: z.nativeEnum(ResponseFormat)
-    .default(ResponseFormat.MARKDOWN)
-    .describe("Output format: 'markdown' for human-readable or 'json' for machine-readable")
+ query: z.string(),
+ response_format: z.nativeEnum(ResponseFormat)
+ .default(ResponseFormat.MARKDOWN)
+ .describe("Output format: 'markdown' for human-readable or 'json' for machine-readable")
 });
 ```
 
@@ -357,25 +357,25 @@ For tools that list resources:
 
 ```typescript
 const ListSchema = z.object({
-  limit: z.number().int().min(1).max(100).default(20),
-  offset: z.number().int().min(0).default(0)
+ limit: z.number().int().min(1).max(100).default(20),
+ offset: z.number().int().min(0).default(0)
 });
 
 async function listItems(params: z.infer<typeof ListSchema>) {
-  const data = await apiRequest(params.limit, params.offset);
+ const data = await apiRequest(params.limit, params.offset);
 
-  const response = {
-    total: data.total,
-    count: data.items.length,
-    offset: params.offset,
-    items: data.items,
-    has_more: data.total > params.offset + data.items.length,
-    next_offset: data.total > params.offset + data.items.length
-      ? params.offset + data.items.length
-      : undefined
-  };
+ const response = {
+ total: data.total,
+ count: data.items.length,
+ offset: params.offset,
+ items: data.items,
+ has_more: data.total > params.offset + data.items.length,
+ next_offset: data.total > params.offset + data.items.length
+ ? params.offset + data.items.length
+ : undefined
+ };
 
-  return JSON.stringify(response, null, 2);
+ return JSON.stringify(response, null, 2);
 }
 ```
 
@@ -385,23 +385,23 @@ Add a CHARACTER_LIMIT constant to prevent overwhelming responses:
 
 ```typescript
 // At module level in constants.ts
-export const CHARACTER_LIMIT = 25000;  // Maximum response size in characters
+export const CHARACTER_LIMIT = 25000; // Maximum response size in characters
 
 async function searchTool(params: SearchInput) {
-  let result = generateResponse(data);
+ let result = generateResponse(data);
 
-  // Check character limit and truncate if needed
-  if (result.length > CHARACTER_LIMIT) {
-    const truncatedData = data.slice(0, Math.max(1, data.length / 2));
-    response.data = truncatedData;
-    response.truncated = true;
-    response.truncation_message =
-      `Response truncated from ${data.length} to ${truncatedData.length} items. ` +
-      `Use 'offset' parameter or add filters to see more results.`;
-    result = JSON.stringify(response, null, 2);
-  }
+ // Check character limit and truncate if needed
+ if (result.length > CHARACTER_LIMIT) {
+ const truncatedData = data.slice(0, Math.max(1, data.length / 2));
+ response.data = truncatedData;
+ response.truncated = true;
+ response.truncation_message =
+ `Response truncated from ${data.length} to ${truncatedData.length} items. ` +
+ `Use 'offset' parameter or add filters to see more results.`;
+ result = JSON.stringify(response, null, 2);
+ }
 
-  return result;
+ return result;
 }
 ```
 
@@ -413,23 +413,23 @@ Provide clear, actionable error messages:
 import axios, { AxiosError } from "axios";
 
 function handleApiError(error: unknown): string {
-  if (error instanceof AxiosError) {
-    if (error.response) {
-      switch (error.response.status) {
-        case 404:
-          return "Error: Resource not found. Please check the ID is correct.";
-        case 403:
-          return "Error: Permission denied. You don't have access to this resource.";
-        case 429:
-          return "Error: Rate limit exceeded. Please wait before making more requests.";
-        default:
-          return `Error: API request failed with status ${error.response.status}`;
-      }
-    } else if (error.code === "ECONNABORTED") {
-      return "Error: Request timed out. Please try again.";
-    }
-  }
-  return `Error: Unexpected error occurred: ${error instanceof Error ? error.message : String(error)}`;
+ if (error instanceof AxiosError) {
+ if (error.response) {
+ switch (error.response.status) {
+ case 404:
+ return "Error: Resource not found. Please check the ID is correct.";
+ case 403:
+ return "Error: Permission denied. You don't have access to this resource.";
+ case 429:
+ return "Error: Rate limit exceeded. Please wait before making more requests.";
+ default:
+ return `Error: API request failed with status ${error.response.status}`;
+ }
+ } else if (error.code === "ECONNABORTED") {
+ return "Error: Request timed out. Please try again.";
+ }
+ }
+ return `Error: Unexpected error occurred: ${error instanceof Error ? error.message : String(error)}`;
 }
 ```
 
@@ -440,27 +440,27 @@ Extract common functionality into reusable functions:
 ```typescript
 // Shared API request function
 async function makeApiRequest<T>(
-  endpoint: string,
-  method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
-  data?: any,
-  params?: any
+ endpoint: string,
+ method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
+ data?: any,
+ params?: any
 ): Promise<T> {
-  try {
-    const response = await axios({
-      method,
-      url: `${API_BASE_URL}/${endpoint}`,
-      data,
-      params,
-      timeout: 30000,
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-      }
-    });
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
+ try {
+ const response = await axios({
+ method,
+ url: `${API_BASE_URL}/${endpoint}`,
+ data,
+ params,
+ timeout: 30000,
+ headers: {
+ "Content-Type": "application/json",
+ "Accept": "application/json"
+ }
+ });
+ return response.data;
+ } catch (error) {
+ throw error;
+ }
 }
 ```
 
@@ -471,14 +471,14 @@ Always use async/await for network requests and I/O operations:
 ```typescript
 // Good: Async network request
 async function fetchData(resourceId: string): Promise<ResourceData> {
-  const response = await axios.get(`${API_URL}/resource/${resourceId}`);
-  return response.data;
+ const response = await axios.get(`${API_URL}/resource/${resourceId}`);
+ return response.data;
 }
 
 // Bad: Promise chains
 function fetchData(resourceId: string): Promise<ResourceData> {
-  return axios.get(`${API_URL}/resource/${resourceId}`)
-    .then(response => response.data);  // Harder to read and maintain
+ return axios.get(`${API_URL}/resource/${resourceId}`)
+ .then(response => response.data); // Harder to read and maintain
 }
 ```
 
@@ -495,31 +495,31 @@ function fetchData(resourceId: string): Promise<ResourceData> {
 ```typescript
 // Good: Type-safe with Zod and interfaces
 interface UserResponse {
-  id: string;
-  name: string;
-  email: string;
-  team?: string;
-  active: boolean;
+ id: string;
+ name: string;
+ email: string;
+ team?: string;
+ active: boolean;
 }
 
 const UserSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  email: z.string().email(),
-  team: z.string().optional(),
-  active: z.boolean()
+ id: z.string(),
+ name: z.string(),
+ email: z.string().email(),
+ team: z.string().optional(),
+ active: z.boolean()
 });
 
 type User = z.infer<typeof UserSchema>;
 
 async function getUser(id: string): Promise<User> {
-  const data = await apiCall(`/users/${id}`);
-  return UserSchema.parse(data);  // Runtime validation
+ const data = await apiCall(`/users/${id}`);
+ return UserSchema.parse(data); // Runtime validation
 }
 
 // Bad: Using any
 async function getUser(id: string): Promise<any> {
-  return await apiCall(`/users/${id}`);  // No type safety
+ return await apiCall(`/users/${id}`); // No type safety
 }
 ```
 
@@ -529,30 +529,30 @@ async function getUser(id: string): Promise<any> {
 
 ```json
 {
-  "name": "{service}-mcp-server",
-  "version": "1.0.0",
-  "description": "MCP server for {Service} API integration",
-  "type": "module",
-  "main": "dist/index.js",
-  "scripts": {
-    "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "clean": "rm -rf dist"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.6.1",
-    "axios": "^1.7.9",
-    "zod": "^3.23.8"
-  },
-  "devDependencies": {
-    "@types/node": "^22.10.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
-  }
+ "name": "{service}-mcp-server",
+ "version": "1.0.0",
+ "description": "MCP server for {Service} API integration",
+ "type": "module",
+ "main": "dist/index.js",
+ "scripts": {
+ "start": "node dist/index.js",
+ "dev": "tsx watch src/index.ts",
+ "build": "tsc",
+ "clean": "rm -rf dist"
+ },
+ "engines": {
+ "node": ">=18"
+ },
+ "dependencies": {
+ "@modelcontextprotocol/sdk": "^1.6.1",
+ "axios": "^1.7.9",
+ "zod": "^3.23.8"
+ },
+ "devDependencies": {
+ "@types/node": "^22.10.0",
+ "tsx": "^4.19.2",
+ "typescript": "^5.7.2"
+ }
 }
 ```
 
@@ -560,24 +560,24 @@ async function getUser(id: string): Promise<any> {
 
 ```json
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "Node16",
-    "moduleResolution": "Node16",
-    "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "allowSyntheticDefaultImports": true
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+ "compilerOptions": {
+ "target": "ES2022",
+ "module": "Node16",
+ "moduleResolution": "Node16",
+ "lib": ["ES2022"],
+ "outDir": "./dist",
+ "rootDir": "./src",
+ "strict": true,
+ "esModuleInterop": true,
+ "skipLibCheck": true,
+ "forceConsistentCasingInFileNames": true,
+ "declaration": true,
+ "declarationMap": true,
+ "sourceMap": true,
+ "allowSyntheticDefaultImports": true
+ },
+ "include": ["src/**/*"],
+ "exclude": ["node_modules", "dist"]
 }
 ```
 
@@ -603,155 +603,155 @@ const CHARACTER_LIMIT = 25000;
 
 // Enums
 enum ResponseFormat {
-  MARKDOWN = "markdown",
-  JSON = "json"
+ MARKDOWN = "markdown",
+ JSON = "json"
 }
 
 // Zod schemas
 const UserSearchInputSchema = z.object({
-  query: z.string()
-    .min(2, "Query must be at least 2 characters")
-    .max(200, "Query must not exceed 200 characters")
-    .describe("Search string to match against names/emails"),
-  limit: z.number()
-    .int()
-    .min(1)
-    .max(100)
-    .default(20)
-    .describe("Maximum results to return"),
-  offset: z.number()
-    .int()
-    .min(0)
-    .default(0)
-    .describe("Number of results to skip for pagination"),
-  response_format: z.nativeEnum(ResponseFormat)
-    .default(ResponseFormat.MARKDOWN)
-    .describe("Output format: 'markdown' for human-readable or 'json' for machine-readable")
+ query: z.string()
+ .min(2, "Query must be at least 2 characters")
+ .max(200, "Query must not exceed 200 characters")
+ .describe("Search string to match against names/emails"),
+ limit: z.number()
+ .int()
+ .min(1)
+ .max(100)
+ .default(20)
+ .describe("Maximum results to return"),
+ offset: z.number()
+ .int()
+ .min(0)
+ .default(0)
+ .describe("Number of results to skip for pagination"),
+ response_format: z.nativeEnum(ResponseFormat)
+ .default(ResponseFormat.MARKDOWN)
+ .describe("Output format: 'markdown' for human-readable or 'json' for machine-readable")
 }).strict();
 
 type UserSearchInput = z.infer<typeof UserSearchInputSchema>;
 
 // Shared utility functions
 async function makeApiRequest<T>(
-  endpoint: string,
-  method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
-  data?: any,
-  params?: any
+ endpoint: string,
+ method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
+ data?: any,
+ params?: any
 ): Promise<T> {
-  try {
-    const response = await axios({
-      method,
-      url: `${API_BASE_URL}/${endpoint}`,
-      data,
-      params,
-      timeout: 30000,
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-      }
-    });
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
+ try {
+ const response = await axios({
+ method,
+ url: `${API_BASE_URL}/${endpoint}`,
+ data,
+ params,
+ timeout: 30000,
+ headers: {
+ "Content-Type": "application/json",
+ "Accept": "application/json"
+ }
+ });
+ return response.data;
+ } catch (error) {
+ throw error;
+ }
 }
 
 function handleApiError(error: unknown): string {
-  if (error instanceof AxiosError) {
-    if (error.response) {
-      switch (error.response.status) {
-        case 404:
-          return "Error: Resource not found. Please check the ID is correct.";
-        case 403:
-          return "Error: Permission denied. You don't have access to this resource.";
-        case 429:
-          return "Error: Rate limit exceeded. Please wait before making more requests.";
-        default:
-          return `Error: API request failed with status ${error.response.status}`;
-      }
-    } else if (error.code === "ECONNABORTED") {
-      return "Error: Request timed out. Please try again.";
-    }
-  }
-  return `Error: Unexpected error occurred: ${error instanceof Error ? error.message : String(error)}`;
+ if (error instanceof AxiosError) {
+ if (error.response) {
+ switch (error.response.status) {
+ case 404:
+ return "Error: Resource not found. Please check the ID is correct.";
+ case 403:
+ return "Error: Permission denied. You don't have access to this resource.";
+ case 429:
+ return "Error: Rate limit exceeded. Please wait before making more requests.";
+ default:
+ return `Error: API request failed with status ${error.response.status}`;
+ }
+ } else if (error.code === "ECONNABORTED") {
+ return "Error: Request timed out. Please try again.";
+ }
+ }
+ return `Error: Unexpected error occurred: ${error instanceof Error ? error.message : String(error)}`;
 }
 
 // Create MCP server instance
 const server = new McpServer({
-  name: "example-mcp",
-  version: "1.0.0"
+ name: "example-mcp",
+ version: "1.0.0"
 });
 
 // Register tools
 server.registerTool(
-  "example_search_users",
-  {
-    title: "Search Example Users",
-    description: `[Full description as shown above]`,
-    inputSchema: UserSearchInputSchema,
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: true
-    }
-  },
-  async (params: UserSearchInput) => {
-    // Implementation as shown above
-  }
+ "example_search_users",
+ {
+ title: "Search Example Users",
+ description: `[Full description as shown above]`,
+ inputSchema: UserSearchInputSchema,
+ annotations: {
+ readOnlyHint: true,
+ destructiveHint: false,
+ idempotentHint: true,
+ openWorldHint: true
+ }
+ },
+ async (params: UserSearchInput) => {
+ // Implementation as shown above
+ }
 );
 
 // Main function
 // For stdio (local):
 async function runStdio() {
-  if (!process.env.EXAMPLE_API_KEY) {
-    console.error("ERROR: EXAMPLE_API_KEY environment variable is required");
-    process.exit(1);
-  }
+ if (!process.env.EXAMPLE_API_KEY) {
+ console.error("ERROR: EXAMPLE_API_KEY environment variable is required");
+ process.exit(1);
+ }
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("MCP server running via stdio");
+ const transport = new StdioServerTransport();
+ await server.connect(transport);
+ console.error("MCP server running via stdio");
 }
 
 // For streamable HTTP (remote):
 async function runHTTP() {
-  if (!process.env.EXAMPLE_API_KEY) {
-    console.error("ERROR: EXAMPLE_API_KEY environment variable is required");
-    process.exit(1);
-  }
+ if (!process.env.EXAMPLE_API_KEY) {
+ console.error("ERROR: EXAMPLE_API_KEY environment variable is required");
+ process.exit(1);
+ }
 
-  const app = express();
-  app.use(express.json());
+ const app = express();
+ app.use(express.json());
 
-  app.post('/mcp', async (req, res) => {
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true
-    });
-    res.on('close', () => transport.close());
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
-  });
+ app.post('/mcp', async (req, res) => {
+ const transport = new StreamableHTTPServerTransport({
+ sessionIdGenerator: undefined,
+ enableJsonResponse: true
+ });
+ res.on('close', () => transport.close());
+ await server.connect(transport);
+ await transport.handleRequest(req, res, req.body);
+ });
 
-  const port = parseInt(process.env.PORT || '3000');
-  app.listen(port, () => {
-    console.error(`MCP server running on http://localhost:${port}/mcp`);
-  });
+ const port = parseInt(process.env.PORT || '3000');
+ app.listen(port, () => {
+ console.error(`MCP server running on http://localhost:${port}/mcp`);
+ });
 }
 
 // Choose transport based on environment
 const transport = process.env.TRANSPORT || 'stdio';
 if (transport === 'http') {
-  runHTTP().catch(error => {
-    console.error("Server error:", error);
-    process.exit(1);
-  });
+ runHTTP().catch(error => {
+ console.error("Server error:", error);
+ process.exit(1);
+ });
 } else {
-  runStdio().catch(error => {
-    console.error("Server error:", error);
-    process.exit(1);
-  });
+ runStdio().catch(error => {
+ console.error("Server error:", error);
+ process.exit(1);
+ });
 }
 ```
 
@@ -768,43 +768,43 @@ import { ResourceTemplate } from "@modelcontextprotocol/sdk/types.js";
 
 // Register a resource with URI template
 server.registerResource(
-  {
-    uri: "file://documents/{name}",
-    name: "Document Resource",
-    description: "Access documents by name",
-    mimeType: "text/plain"
-  },
-  async (uri: string) => {
-    // Extract parameter from URI
-    const match = uri.match(/^file:\/\/documents\/(.+)$/);
-    if (!match) {
-      throw new Error("Invalid URI format");
-    }
+ {
+ uri: "file://documents/{name}",
+ name: "Document Resource",
+ description: "Access documents by name",
+ mimeType: "text/plain"
+ },
+ async (uri: string) => {
+ // Extract parameter from URI
+ const match = uri.match(/^file:\/\/documents\/(.+)$/);
+ if (!match) {
+ throw new Error("Invalid URI format");
+ }
 
-    const documentName = match[1];
-    const content = await loadDocument(documentName);
+ const documentName = match[1];
+ const content = await loadDocument(documentName);
 
-    return {
-      contents: [{
-        uri,
-        mimeType: "text/plain",
-        text: content
-      }]
-    };
-  }
+ return {
+ contents: [{
+ uri,
+ mimeType: "text/plain",
+ text: content
+ }]
+ };
+ }
 );
 
 // List available resources dynamically
 server.registerResourceList(async () => {
-  const documents = await getAvailableDocuments();
-  return {
-    resources: documents.map(doc => ({
-      uri: `file://documents/${doc.name}`,
-      name: doc.name,
-      mimeType: "text/plain",
-      description: doc.description
-    }))
-  };
+ const documents = await getAvailableDocuments();
+ return {
+ resources: documents.map(doc => ({
+ uri: `file://documents/${doc.name}`,
+ name: doc.name,
+ mimeType: "text/plain",
+ description: doc.description
+ }))
+ };
 });
 ```
 
@@ -828,16 +828,16 @@ const app = express();
 app.use(express.json());
 
 app.post('/mcp', async (req, res) => {
-  // Create new transport for each request (stateless, prevents request ID collisions)
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true
-  });
+ // Create new transport for each request (stateless, prevents request ID collisions)
+ const transport = new StreamableHTTPServerTransport({
+ sessionIdGenerator: undefined,
+ enableJsonResponse: true
+ });
 
-  res.on('close', () => transport.close());
+ res.on('close', () => transport.close());
 
-  await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
+ await server.connect(transport);
+ await transport.handleRequest(req, res, req.body);
 });
 
 app.listen(3000);
@@ -863,12 +863,12 @@ Notify clients when server state changes:
 ```typescript
 // Notify when tools list changes
 server.notification({
-  method: "notifications/tools/list_changed"
+ method: "notifications/tools/list_changed"
 });
 
 // Notify when resources change
 server.notification({
-  method: "notifications/resources/list_changed"
+ method: "notifications/resources/list_changed"
 });
 ```
 
@@ -883,17 +883,17 @@ Use notifications sparingly - only when server capabilities genuinely change.
 Your implementation MUST prioritize composability and code reuse:
 
 1. **Extract Common Functionality**:
-   - Create reusable helper functions for operations used across multiple tools
-   - Build shared API clients for HTTP requests instead of duplicating code
-   - Centralize error handling logic in utility functions
-   - Extract business logic into dedicated functions that can be composed
-   - Extract shared markdown or JSON field selection & formatting functionality
+ - Create reusable helper functions for operations used across multiple tools
+ - Build shared API clients for HTTP requests instead of duplicating code
+ - Centralize error handling logic in utility functions
+ - Extract business logic into dedicated functions that can be composed
+ - Extract shared markdown or JSON field selection & formatting functionality
 
 2. **Avoid Duplication**:
-   - NEVER copy-paste similar code between tools
-   - If you find yourself writing similar logic twice, extract it into a function
-   - Common operations like pagination, filtering, field selection, and formatting should be shared
-   - Authentication/authorization logic should be centralized
+ - NEVER copy-paste similar code between tools
+ - If you find yourself writing similar logic twice, extract it into a function
+ - Common operations like pagination, filtering, field selection, and formatting should be shared
+ - Authentication/authorization logic should be centralized
 
 ## Building and Running
 

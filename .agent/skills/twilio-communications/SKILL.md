@@ -30,70 +30,70 @@ import os
 import re
 
 class TwilioSMS:
-    """
-    SMS sending with proper error handling and validation.
-    """
+ """
+ SMS sending with proper error handling and validation.
+ """
 
-    def __init__(self):
-        self.client = Client(
-            os.environ["TWILIO_ACCOUNT_SID"],
-            os.environ["TWILIO_AUTH_TOKEN"]
-        )
-        self.from_number = os.environ["TWILIO_PHONE_NUMBER"]
+ def __init__(self):
+ self.client = Client(
+ os.environ["TWILIO_ACCOUNT_SID"],
+ os.environ["TWILIO_AUTH_TOKEN"]
+ )
+ self.from_number = os.environ["TWILIO_PHONE_NUMBER"]
 
-    def validate_e164(self, phone: str) -> bool:
-        """Validate phone number is in E.164 format."""
-        pattern = r'^\+[1-9]\d{1,14}$'
-        return bool(re.match(pattern, phone))
+ def validate_e164(self, phone: str) -> bool:
+ """Validate phone number is in E.164 format."""
+ pattern = r'^\+[1-9]\d{1,14}$'
+ return bool(re.match(pattern, phone))
 
-    def send_sms(
-        self,
-        to: str,
-        body: str,
-        status_callback: str = None
-    ) -> dict:
-        """
-        Send an SMS message.
+ def send_sms(
+ self,
+ to: str,
+ body: str,
+ status_callback: str = None
+ ) -> dict:
+ """
+ Send an SMS message.
 
-        Args:
-            to: Recipient phone number in E.164 format
-            body: Message text (160 chars = 1 segment)
-            status_callback: URL for delivery status webhooks
+ Args:
+ to: Recipient phone number in E.164 format
+ body: Message text (160 chars = 1 segment)
+ status_callback: URL for delivery status webhooks
 
-        Returns:
-            Message SID and status
-        """
-        # Validate phone number format
-        if not self.validate_e164(to):
-            return {
-                "success": False,
-                "error": "Phone number must be in E.164 format (+1234567890)"
-            }
+ Returns:
+ Message SID and status
+ """
+ # Validate phone number format
+ if not self.validate_e164(to):
+ return {
+ "success": False,
+ "error": "Phone number must be in E.164 format (+1234567890)"
+ }
 
-        # Check message length (warn about segmentation)
-        segment_count = (len(body) + 159) // 160
-        if segment_count > 1:
-            print(f"Warning: Message will be sent as {segment_count} segments")
+ # Check message length (warn about segmentation)
+ segment_count = (len(body) + 159) // 160
+ if segment_count > 1:
+ print(f"Warning: Message will be sent as {segment_count} segments")
 
-        try:
-            message = self.client.messages.create(
-                to=to,
-                from_=self.from_number,
-                body=body,
-                status_callback=status_callback
-            )
+ try:
+ message = self.client.messages.create(
+ to=to,
+ from_=self.from_number,
+ body=body,
+ status_callback=status_callback
+ )
 
-            return {
-                "success": True,
-                "message_sid": message.sid,
-                "status": message.status,
-                "segments": segment_count
-            }
+ return {
+ "success": True,
+ "message_sid": message.sid,
+ "status": message.status,
+ "segments": segment_count
+ }
 
-        except TwilioRestException as e:
-            return self._handle_error(e)
+ except TwilioRestException as e:
+ return self._handle_error(e)
 
-    def _handle_error(self, error: Twilio
+ def _handle_error(self, error: Twilio
 ```
 
 ### Twilio Verify Pattern (2FA/OTP)
@@ -121,72 +121,72 @@ from enum import Enum
 from typing import Optional
 
 class VerifyChannel(Enum):
-    SMS = "sms"
-    CALL = "call"
-    EMAIL = "email"
-    WHATSAPP = "whatsapp"
+ SMS = "sms"
+ CALL = "call"
+ EMAIL = "email"
+ WHATSAPP = "whatsapp"
 
 class TwilioVerify:
-    """
-    Phone verification with Twilio Verify.
-    Never store OTP codes - Twilio handles it.
-    """
+ """
+ Phone verification with Twilio Verify.
+ Never store OTP codes - Twilio handles it.
+ """
 
-    def __init__(self, verify_service_sid: str = None):
-        self.client = Client(
-            os.environ["TWILIO_ACCOUNT_SID"],
-            os.environ["TWILIO_AUTH_TOKEN"]
-        )
-        # Create a Verify Service in Twilio Console first
-        self.service_sid = verify_service_sid or os.environ["TWILIO_VERIFY_SID"]
+ def __init__(self, verify_service_sid: str = None):
+ self.client = Client(
+ os.environ["TWILIO_ACCOUNT_SID"],
+ os.environ["TWILIO_AUTH_TOKEN"]
+ )
+ # Create a Verify Service in Twilio Console first
+ self.service_sid = verify_service_sid or os.environ["TWILIO_VERIFY_SID"]
 
-    def send_verification(
-        self,
-        to: str,
-        channel: VerifyChannel = VerifyChannel.SMS,
-        locale: str = "en"
-    ) -> dict:
-        """
-        Send verification code to phone/email.
+ def send_verification(
+ self,
+ to: str,
+ channel: VerifyChannel = VerifyChannel.SMS,
+ locale: str = "en"
+ ) -> dict:
+ """
+ Send verification code to phone/email.
 
-        Args:
-            to: Phone number (E.164) or email
-            channel: SMS, call, email, or whatsapp
-            locale: Language code for message
+ Args:
+ to: Phone number (E.164) or email
+ channel: SMS, call, email, or whatsapp
+ locale: Language code for message
 
-        Returns:
-            Verification status
-        """
-        try:
-            verification = self.client.verify \
-                .v2 \
-                .services(self.service_sid) \
-                .verifications \
-                .create(
-                    to=to,
-                    channel=channel.value,
-                    locale=locale
-                )
+ Returns:
+ Verification status
+ """
+ try:
+ verification = self.client.verify \
+ .v2 \
+ .services(self.service_sid) \
+ .verifications \
+ .create(
+ to=to,
+ channel=channel.value,
+ locale=locale
+ )
 
-            return {
-                "success": True,
-                "status": verification.status,  # "pending"
-                "channel": channel.value,
-                "valid": verification.valid
-            }
+ return {
+ "success": True,
+ "status": verification.status, # "pending"
+ "channel": channel.value,
+ "valid": verification.valid
+ }
 
-        except TwilioRestException as e:
-            return self._handle_verify_error(e)
+ except TwilioRestException as e:
+ return self._handle_verify_error(e)
 
-    def check_verification(self, to: str, code: str) -> dict:
-        """
-        Check if verification code is correct.
+ def check_verification(self, to: str, code: str) -> dict:
+ """
+ Check if verification code is correct.
 
-        Args:
-            to: Phone number or email that received code
-            code: The code entered by user
+ Args:
+ to: Phone number or email that received code
+ code: The code entered by user
 
-        R
+ R
 ```
 
 ### TwiML IVR Pattern
@@ -218,71 +218,71 @@ import os
 app = Flask(__name__)
 
 def validate_twilio_request(f):
-    """Decorator to validate requests are from Twilio."""
-    def wrapper(*args, **kwargs):
-        validator = RequestValidator(os.environ["TWILIO_AUTH_TOKEN"])
+ """Decorator to validate requests are from Twilio."""
+ def wrapper(*args, **kwargs):
+ validator = RequestValidator(os.environ["TWILIO_AUTH_TOKEN"])
 
-        # Get request details
-        url = request.url
-        params = request.form.to_dict()
-        signature = request.headers.get("X-Twilio-Signature", "")
+ # Get request details
+ url = request.url
+ params = request.form.to_dict()
+ signature = request.headers.get("X-Twilio-Signature", "")
 
-        if not validator.validate(url, params, signature):
-            return "Invalid request", 403
+ if not validator.validate(url, params, signature):
+ return "Invalid request", 403
 
-        return f(*args, **kwargs)
-    wrapper.__name__ = f.__name__
-    return wrapper
+ return f(*args, **kwargs)
+ wrapper.__name__ = f.__name__
+ return wrapper
 
 @app.route("/voice/incoming", methods=["POST"])
 @validate_twilio_request
 def incoming_call():
-    """Handle incoming call with IVR menu."""
-    response = VoiceResponse()
+ """Handle incoming call with IVR menu."""
+ response = VoiceResponse()
 
-    # Gather digits with timeout
-    gather = Gather(
-        num_digits=1,
-        action="/voice/menu-selection",
-        method="POST",
-        timeout=5
-    )
-    gather.say(
-        "Welcome to Acme Corp. "
-        "Press 1 for sales. "
-        "Press 2 for support. "
-        "Press 3 to leave a message."
-    )
-    response.append(gather)
+ # Gather digits with timeout
+ gather = Gather(
+ num_digits=1,
+ action="/voice/menu-selection",
+ method="POST",
+ timeout=5
+ )
+ gather.say(
+ "Welcome to Acme Corp. "
+ "Press 1 for sales. "
+ "Press 2 for support. "
+ "Press 3 to leave a message."
+ )
+ response.append(gather)
 
-    # If no input, repeat
-    response.redirect("/voice/incoming")
+ # If no input, repeat
+ response.redirect("/voice/incoming")
 
-    return Response(str(response), mimetype="text/xml")
+ return Response(str(response), mimetype="text/xml")
 
 @app.route("/voice/menu-selection", methods=["POST"])
 @validate_twilio_request
 def menu_selection():
-    """Route based on menu selection."""
-    response = VoiceResponse()
-    digit = request.form.get("Digits", "")
+ """Route based on menu selection."""
+ response = VoiceResponse()
+ digit = request.form.get("Digits", "")
 
-    if digit == "1":
-        # Transfer to sales
-        response.say("Connecting you to sales.")
-        response.dial(os.environ["SALES_PHONE"])
+ if digit == "1":
+ # Transfer to sales
+ response.say("Connecting you to sales.")
+ response.dial(os.environ["SALES_PHONE"])
 
-    elif digit == "2":
-        # Transfer to support
-        response.say("Connecting you to support.")
-        response.dial(os.environ["SUPPORT_PHONE"])
+ elif digit == "2":
+ # Transfer to support
+ response.say("Connecting you to support.")
+ response.dial(os.environ["SUPPORT_PHONE"])
 
-    elif digit == "3":
-        # Voicemail
-        response.say("Please leave a message after 
+ elif digit == "3":
+ # Voicemail
+ response.say("Please leave a message after 
 ```
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

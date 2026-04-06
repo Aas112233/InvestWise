@@ -8,7 +8,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 
 > **Learn to THINK, not copy SQL patterns.**
 
-## 🎯 Selective Reading Rule
+## Selective Reading Rule
 
 **Read ONLY files relevant to the request!** Check the content map, find what you need.
 
@@ -23,7 +23,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep
 
 ---
 
-## ⚠️ Core Principle
+## Core Principle
 
 - ASK user for database preferences when unclear
 - Choose database/ORM based on CONTEXT
@@ -45,8 +45,8 @@ Before designing schema:
 
 ## Anti-Patterns
 
-❌ Default to PostgreSQL for simple apps (SQLite may suffice)
-❌ Skip indexing
-❌ Use SELECT * in production
-❌ Store JSON when structured data is better
-❌ Ignore N+1 queries
+ Default to PostgreSQL for simple apps (SQLite may suffice)
+ Skip indexing
+ Use SELECT * in production
+ Store JSON when structured data is better
+ Ignore N+1 queries

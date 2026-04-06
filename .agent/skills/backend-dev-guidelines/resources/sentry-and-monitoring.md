@@ -40,67 +40,67 @@ const sentryConfigPath = path.join(__dirname, '../sentry.ini');
 const sentryConfig = ini.parse(fs.readFileSync(sentryConfigPath, 'utf-8'));
 
 Sentry.init({
-    dsn: sentryConfig.sentry?.dsn,
-    environment: process.env.NODE_ENV || 'development',
-    tracesSampleRate: parseFloat(sentryConfig.sentry?.tracesSampleRate || '0.1'),
-    profilesSampleRate: parseFloat(sentryConfig.sentry?.profilesSampleRate || '0.1'),
+ dsn: sentryConfig.sentry?.dsn,
+ environment: process.env.NODE_ENV || 'development',
+ tracesSampleRate: parseFloat(sentryConfig.sentry?.tracesSampleRate || '0.1'),
+ profilesSampleRate: parseFloat(sentryConfig.sentry?.profilesSampleRate || '0.1'),
 
-    integrations: [
-        ...Sentry.getDefaultIntegrations({}),
-        Sentry.extraErrorDataIntegration({ depth: 5 }),
-        Sentry.localVariablesIntegration(),
-        Sentry.requestDataIntegration({
-            include: {
-                cookies: false,
-                data: true,
-                headers: true,
-                ip: true,
-                query_string: true,
-                url: true,
-                user: { id: true, email: true, username: true },
-            },
-        }),
-        Sentry.consoleIntegration(),
-        Sentry.contextLinesIntegration(),
-        Sentry.prismaIntegration(),
-    ],
+ integrations: [
+ ...Sentry.getDefaultIntegrations({}),
+ Sentry.extraErrorDataIntegration({ depth: 5 }),
+ Sentry.localVariablesIntegration(),
+ Sentry.requestDataIntegration({
+ include: {
+ cookies: false,
+ data: true,
+ headers: true,
+ ip: true,
+ query_string: true,
+ url: true,
+ user: { id: true, email: true, username: true },
+ },
+ }),
+ Sentry.consoleIntegration(),
+ Sentry.contextLinesIntegration(),
+ Sentry.prismaIntegration(),
+ ],
 
-    beforeSend(event, hint) {
-        // Filter health checks
-        if (event.request?.url?.includes('/healthcheck')) {
-            return null;
-        }
+ beforeSend(event, hint) {
+ // Filter health checks
+ if (event.request?.url?.includes('/healthcheck')) {
+ return null;
+ }
 
-        // Scrub sensitive headers
-        if (event.request?.headers) {
-            delete event.request.headers['authorization'];
-            delete event.request.headers['cookie'];
-        }
+ // Scrub sensitive headers
+ if (event.request?.headers) {
+ delete event.request.headers['authorization'];
+ delete event.request.headers['cookie'];
+ }
 
-        // Mask emails for PII
-        if (event.user?.email) {
-            event.user.email = event.user.email.replace(/^(.{2}).*(@.*)$/, '$1***$2');
-        }
+ // Mask emails for PII
+ if (event.user?.email) {
+ event.user.email = event.user.email.replace(/^(.{2}).*(@.*)$/, '$1***$2');
+ }
 
-        return event;
-    },
+ return event;
+ },
 
-    ignoreErrors: [
-        /^Invalid JWT/,
-        /^JWT expired/,
-        'NetworkError',
-    ],
+ ignoreErrors: [
+ /^Invalid JWT/,
+ /^JWT expired/,
+ 'NetworkError',
+ ],
 });
 
 // Set service context
 Sentry.setTags({
-    service: 'form',
-    version: '1.0.1',
+ service: 'form',
+ version: '1.0.1',
 });
 
 Sentry.setContext('runtime', {
-    node_version: process.version,
-    platform: process.platform,
+ node_version: process.version,
+ platform: process.platform,
 });
 ```
 
@@ -120,17 +120,17 @@ Sentry.setContext('runtime', {
 ```typescript
 // Use BaseController.handleError
 protected handleError(error: unknown, res: Response, context: string, statusCode = 500): void {
-    Sentry.withScope((scope) => {
-        scope.setTag('controller', this.constructor.name);
-        scope.setTag('operation', context);
-        scope.setUser({ id: res.locals?.claims?.userId });
-        Sentry.captureException(error);
-    });
+ Sentry.withScope((scope) => {
+ scope.setTag('controller', this.constructor.name);
+ scope.setTag('operation', context);
+ scope.setUser({ id: res.locals?.claims?.userId });
+ Sentry.captureException(error);
+ });
 
-    res.status(statusCode).json({
-        success: false,
-        error: { message: error instanceof Error ? error.message : 'Error occurred' }
-    });
+ res.status(statusCode).json({
+ success: false,
+ error: { message: error instanceof Error ? error.message : 'Error occurred' }
+ });
 }
 ```
 
@@ -140,15 +140,15 @@ protected handleError(error: unknown, res: Response, context: string, statusCode
 import { SentryHelper } from '../utils/sentryHelper';
 
 try {
-    await businessOperation();
+ await businessOperation();
 } catch (error) {
-    SentryHelper.captureOperationError(error, {
-        operationType: 'POST_CREATION',
-        entityId: 123,
-        userId: 'user-123',
-        operation: 'createPost',
-    });
-    throw error;
+ SentryHelper.captureOperationError(error, {
+ operationType: 'POST_CREATION',
+ entityId: 123,
+ userId: 'user-123',
+ operation: 'createPost',
+ });
+ throw error;
 }
 ```
 
@@ -156,19 +156,19 @@ try {
 
 ```typescript
 try {
-    await someOperation();
+ await someOperation();
 } catch (error) {
-    Sentry.captureException(error, {
-        tags: {
-            service: 'form',
-            operation: 'someOperation'
-        },
-        extra: {
-            userId: currentUser.id,
-            entityId: 123
-        }
-    });
-    throw error;
+ Sentry.captureException(error, {
+ tags: {
+ service: 'form',
+ operation: 'someOperation'
+ },
+ extra: {
+ userId: currentUser.id,
+ entityId: 123
+ }
+ });
+ throw error;
 }
 ```
 
@@ -182,11 +182,11 @@ try {
 import { DatabasePerformanceMonitor } from '../utils/databasePerformance';
 
 const result = await DatabasePerformanceMonitor.withPerformanceTracking(
-    'findMany',
-    'UserProfile',
-    async () => {
-        return await PrismaService.main.userProfile.findMany({ take: 5 });
-    }
+ 'findMany',
+ 'UserProfile',
+ async () => {
+ return await PrismaService.main.userProfile.findMany({ take: 5 });
+ }
 );
 ```
 
@@ -194,17 +194,17 @@ const result = await DatabasePerformanceMonitor.withPerformanceTracking(
 
 ```typescript
 router.post('/operation', async (req, res) => {
-    return await Sentry.startSpan({
-        name: 'operation.execute',
-        op: 'http.server',
-        attributes: {
-            'http.method': 'POST',
-            'http.route': '/operation'
-        }
-    }, async () => {
-        const result = await performOperation();
-        res.json(result);
-    });
+ return await Sentry.startSpan({
+ name: 'operation.execute',
+ op: 'http.server',
+ attributes: {
+ 'http.method': 'POST',
+ 'http.route': '/operation'
+ }
+ }, async () => {
+ const result = await performOperation();
+ res.json(result);
+ });
 });
 ```
 
@@ -220,35 +220,35 @@ import '../instrument'; // FIRST LINE after shebang
 import * as Sentry from '@sentry/node';
 
 async function main() {
-    return await Sentry.startSpan({
-        name: 'cron.job-name',
-        op: 'cron',
-        attributes: {
-            'cron.job': 'job-name',
-            'cron.startTime': new Date().toISOString(),
-        }
-    }, async () => {
-        try {
-            // Cron job logic here
-        } catch (error) {
-            Sentry.captureException(error, {
-                tags: {
-                    'cron.job': 'job-name',
-                    'error.type': 'execution_error'
-                }
-            });
-            console.error('[Cron] Error:', error);
-            process.exit(1);
-        }
-    });
+ return await Sentry.startSpan({
+ name: 'cron.job-name',
+ op: 'cron',
+ attributes: {
+ 'cron.job': 'job-name',
+ 'cron.startTime': new Date().toISOString(),
+ }
+ }, async () => {
+ try {
+ // Cron job logic here
+ } catch (error) {
+ Sentry.captureException(error, {
+ tags: {
+ 'cron.job': 'job-name',
+ 'error.type': 'execution_error'
+ }
+ });
+ console.error('[Cron] Error:', error);
+ process.exit(1);
+ }
+ });
 }
 
 main().then(() => {
-    console.log('[Cron] Completed successfully');
-    process.exit(0);
+ console.log('[Cron] Completed successfully');
+ process.exit(0);
 }).catch((error) => {
-    console.error('[Cron] Fatal error:', error);
-    process.exit(1);
+ console.error('[Cron] Fatal error:', error);
+ process.exit(1);
 });
 ```
 
@@ -260,34 +260,34 @@ main().then(() => {
 
 ```typescript
 Sentry.withScope((scope) => {
-    // User context
-    scope.setUser({
-        id: user.id,
-        email: user.email,
-        username: user.username
-    });
+ // User context
+ scope.setUser({
+ id: user.id,
+ email: user.email,
+ username: user.username
+ });
 
-    // Tags for filtering
-    scope.setTag('service', 'form');
-    scope.setTag('endpoint', req.path);
-    scope.setTag('method', req.method);
+ // Tags for filtering
+ scope.setTag('service', 'form');
+ scope.setTag('endpoint', req.path);
+ scope.setTag('method', req.method);
 
-    // Structured context
-    scope.setContext('operation', {
-        type: 'workflow.complete',
-        workflowId: 123,
-        stepId: 456
-    });
+ // Structured context
+ scope.setContext('operation', {
+ type: 'workflow.complete',
+ workflowId: 123,
+ stepId: 456
+ });
 
-    // Breadcrumbs for timeline
-    scope.addBreadcrumb({
-        category: 'workflow',
-        message: 'Starting step completion',
-        level: 'info',
-        data: { stepId: 456 }
-    });
+ // Breadcrumbs for timeline
+ scope.addBreadcrumb({
+ category: 'workflow',
+ message: 'Starting step completion',
+ level: 'info',
+ data: { stepId: 456 }
+ });
 
-    Sentry.captureException(error);
+ Sentry.captureException(error);
 });
 ```
 
@@ -296,35 +296,35 @@ Sentry.withScope((scope) => {
 ## Common Mistakes
 
 ```typescript
-// ❌ Swallowing errors
+// Swallowing errors
 try {
-    await riskyOperation();
+ await riskyOperation();
 } catch (error) {
-    // Silent failure
+ // Silent failure
 }
 
-// ❌ Generic error messages
+// Generic error messages
 throw new Error('Error occurred');
 
-// ❌ Exposing sensitive data
+// Exposing sensitive data
 Sentry.captureException(error, {
-    extra: { password: user.password } // NEVER
+ extra: { password: user.password } // NEVER
 });
 
-// ❌ Missing async error handling
+// Missing async error handling
 async function bad() {
-    fetchData().then(data => processResult(data)); // Unhandled
+ fetchData().then(data => processResult(data)); // Unhandled
 }
 
-// ✅ Proper async handling
+// Proper async handling
 async function good() {
-    try {
-        const data = await fetchData();
-        processResult(data);
-    } catch (error) {
-        Sentry.captureException(error);
-        throw error;
-    }
+ try {
+ const data = await fetchData();
+ processResult(data);
+ } catch (error) {
+ Sentry.captureException(error);
+ throw error;
+ }
 }
 ```
 

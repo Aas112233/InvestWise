@@ -4,33 +4,33 @@ version: "2.1.2"
 description: Implements Manus-style file-based planning for complex tasks. Creates task_plan.md, findings.md, and progress.md. Use when starting complex multi-step tasks, research projects, or any task requiring >5 tool calls.
 user-invocable: true
 allowed-tools:
-  - Read
-  - Write
-  - Edit
-  - Bash
-  - Glob
-  - Grep
-  - WebFetch
-  - WebSearch
+ - Read
+ - Write
+ - Edit
+ - Bash
+ - Glob
+ - Grep
+ - WebFetch
+ - WebSearch
 hooks:
-  SessionStart:
-    - hooks:
-        - type: command
-          command: "echo '[planning-with-files] Ready. Auto-activates for complex tasks, or invoke manually with /planning-with-files'"
-  PreToolUse:
-    - matcher: "Write|Edit|Bash"
-      hooks:
-        - type: command
-          command: "cat task_plan.md 2>/dev/null | head -30 || true"
-  PostToolUse:
-    - matcher: "Write|Edit"
-      hooks:
-        - type: command
-          command: "echo '[planning-with-files] File updated. If this completes a phase, update task_plan.md status.'"
-  Stop:
-    - hooks:
-        - type: command
-          command: "${CLAUDE_PLUGIN_ROOT}/scripts/check-complete.sh"
+ SessionStart:
+ - hooks:
+ - type: command
+ command: "echo '[planning-with-files] Ready. Auto-activates for complex tasks, or invoke manually with /planning-with-files'"
+ PreToolUse:
+ - matcher: "Write|Edit|Bash"
+ hooks:
+ - type: command
+ command: "cat task_plan.md 2>/dev/null | head -30 || true"
+ PostToolUse:
+ - matcher: "Write|Edit"
+ hooks:
+ - type: command
+ command: "echo '[planning-with-files] File updated. If this completes a phase, update task_plan.md status.'"
+ Stop:
+ - hooks:
+ - type: command
+ command: "${CLAUDE_PLUGIN_ROOT}/scripts/check-complete.sh"
 ---
 
 # Planning with Files
@@ -113,7 +113,7 @@ Every error goes in the plan file. This builds knowledge and prevents repetition
 ### 6. Never Repeat Failures
 ```
 if action_failed:
-    next_action != same_action
+ next_action != same_action
 ```
 Track what you tried. Mutate the approach.
 
@@ -121,24 +121,24 @@ Track what you tried. Mutate the approach.
 
 ```
 ATTEMPT 1: Diagnose & Fix
-  → Read error carefully
-  → Identify root cause
-  → Apply targeted fix
+ → Read error carefully
+ → Identify root cause
+ → Apply targeted fix
 
 ATTEMPT 2: Alternative Approach
-  → Same error? Try different method
-  → Different tool? Different library?
-  → NEVER repeat exact same failing action
+ → Same error? Try different method
+ → Different tool? Different library?
+ → NEVER repeat exact same failing action
 
 ATTEMPT 3: Broader Rethink
-  → Question assumptions
-  → Search for solutions
-  → Consider updating the plan
+ → Question assumptions
+ → Search for solutions
+ → Consider updating the plan
 
 AFTER 3 FAILURES: Escalate to User
-  → Explain what you tried
-  → Share the specific error
-  → Ask for guidance
+ → Explain what you tried
+ → Share the specific error
+ → Ask for guidance
 ```
 
 ## Read vs Write Decision Matrix

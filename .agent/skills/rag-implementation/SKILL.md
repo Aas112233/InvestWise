@@ -43,13 +43,13 @@ Rerank retrieved docs with LLM for relevance
 
 ## Anti-Patterns
 
-### ❌ Fixed-Size Chunking
+### Fixed-Size Chunking
 
-### ❌ No Overlap
+### No Overlap
 
-### ❌ Single Retrieval Strategy
+### Single Retrieval Strategy
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

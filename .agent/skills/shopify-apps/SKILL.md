@@ -22,13 +22,13 @@ Secure webhook processing with HMAC verification
 
 ## Anti-Patterns
 
-### ❌ REST API for New Apps
+### REST API for New Apps
 
-### ❌ Webhook Processing Before Response
+### Webhook Processing Before Response
 
-### ❌ Polling Instead of Webhooks
+### Polling Instead of Webhooks
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

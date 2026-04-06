@@ -51,14 +51,14 @@ Every skill consists of a required SKILL.md file and optional bundled resources:
 ```
 skill-name/
 ├── SKILL.md (required)
-│   ├── YAML frontmatter metadata (required)
-│   │   ├── name: (required)
-│   │   └── description: (required)
-│   └── Markdown instructions (required)
+│ ├── YAML frontmatter metadata (required)
+│ │ ├── name: (required)
+│ │ └── description: (required)
+│ └── Markdown instructions (required)
 └── Bundled Resources (optional)
-    ├── scripts/          - Executable code (Python/Bash/etc.)
-    ├── references/       - Documentation intended to be loaded into context as needed
-    └── assets/           - Files used in output (templates, icons, fonts, etc.)
+ ├── scripts/ - Executable code (Python/Bash/etc.)
+ ├── references/ - Documentation intended to be loaded into context as needed
+ └── assets/ - Files used in output (templates, icons, fonts, etc.)
 ```
 
 #### SKILL.md (required)
@@ -152,10 +152,10 @@ For Skills with multiple domains, organize content by domain to avoid loading ir
 bigquery-skill/
 ├── SKILL.md (overview and navigation)
 └── reference/
-    ├── finance.md (revenue, billing metrics)
-    ├── sales.md (opportunities, pipeline)
-    ├── product.md (API usage, features)
-    └── marketing.md (campaigns, attribution)
+ ├── finance.md (revenue, billing metrics)
+ ├── sales.md (opportunities, pipeline)
+ ├── product.md (API usage, features)
+ └── marketing.md (campaigns, attribution)
 ```
 
 When a user asks about sales metrics, Claude only reads sales.md.
@@ -166,9 +166,9 @@ Similarly, for skills supporting multiple frameworks or variants, organize by va
 cloud-deploy/
 ├── SKILL.md (workflow + provider selection)
 └── references/
-    ├── aws.md (AWS deployment patterns)
-    ├── gcp.md (GCP deployment patterns)
-    └── azure.md (Azure deployment patterns)
+ ├── aws.md (AWS deployment patterns)
+ ├── gcp.md (GCP deployment patterns)
+ └── azure.md (Azure deployment patterns)
 ```
 
 When the user chooses AWS, Claude only reads aws.md.
@@ -307,9 +307,9 @@ Write the YAML frontmatter with `name` and `description`:
 
 - `name`: The skill name
 - `description`: This is the primary triggering mechanism for your skill, and helps Claude understand when to use the skill.
-  - Include both what the Skill does and specific triggers/contexts for when to use it.
-  - Include all "when to use" information here - Not in the body. The body is only loaded after triggering, so "When to Use This Skill" sections in the body are not helpful to Claude.
-  - Example description for a `docx` skill: "Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. Use when Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks"
+ - Include both what the Skill does and specific triggers/contexts for when to use it.
+ - Include all "when to use" information here - Not in the body. The body is only loaded after triggering, so "When to Use This Skill" sections in the body are not helpful to Claude.
+ - Example description for a `docx` skill: "Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. Use when Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks"
 
 Do not include any other fields in YAML frontmatter.
 
@@ -335,10 +335,10 @@ The packaging script will:
 
 1. **Validate** the skill automatically, checking:
 
-   - YAML frontmatter format and required fields
-   - Skill naming conventions and directory structure
-   - Description completeness and quality
-   - File organization and resource references
+ - YAML frontmatter format and required fields
+ - Skill naming conventions and directory structure
+ - Description completeness and quality
+ - File organization and resource references
 
 2. **Package** the skill if validation passes, creating a .skill file named after the skill (e.g., `my-skill.skill`) that includes all files and maintains the proper directory structure for distribution. The .skill file is a zip file with a .skill extension.
 

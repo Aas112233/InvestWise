@@ -18,19 +18,19 @@ allowed-tools: Read, Glob, Grep
 What feeling should the game evoke?
 │
 ├── Nostalgic / Retro
-│   ├── Limited palette? → Pixel Art
-│   └── Hand-drawn feel? → Vector / Flash style
+│ ├── Limited palette? → Pixel Art
+│ └── Hand-drawn feel? → Vector / Flash style
 │
 ├── Realistic / Immersive
-│   ├── High budget? → PBR 3D
-│   └── Stylized realism? → Hand-painted textures
+│ ├── High budget? → PBR 3D
+│ └── Stylized realism? → Hand-painted textures
 │
 ├── Approachable / Casual
-│   ├── Clean shapes? → Flat / Minimalist
-│   └── Soft feel? → Gradient / Soft shadows
+│ ├── Clean shapes? → Flat / Minimalist
+│ └── Soft feel? → Gradient / Soft shadows
 │
 └── Unique / Experimental
-    └── Define custom style guide
+ └── Define custom style guide
 ```
 
 ### Style Comparison Matrix
@@ -158,11 +158,11 @@ mesh_tree_oak_lod2.fbx
 ```
 assets/
 ├── characters/
-│   ├── player/
-│   └── enemies/
+│ ├── player/
+│ └── enemies/
 ├── environment/
-│   ├── props/
-│   └── tiles/
+│ ├── props/
+│ └── tiles/
 ├── ui/
 ├── effects/
 └── audio/

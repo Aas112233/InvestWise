@@ -2,7 +2,7 @@
 name: measuring-text
 description: Measuring text dimensions, fitting text to containers, and checking overflow
 metadata:
-  tags: measure, text, layout, dimensions, fitText, fillTextBox
+ tags: measure, text, layout, dimensions, fitText, fillTextBox
 ---
 
 # Measuring text in Remotion
@@ -26,10 +26,10 @@ Use `measureText()` to calculate the width and height of text:
 import { measureText } from "@remotion/layout-utils";
 
 const { width, height } = measureText({
-  text: "Hello World",
-  fontFamily: "Arial",
-  fontSize: 32,
-  fontWeight: "bold",
+ text: "Hello World",
+ fontFamily: "Arial",
+ fontSize: 32,
+ fontWeight: "bold",
 });
 ```
 
@@ -43,22 +43,22 @@ Use `fitText()` to find the optimal font size for a container:
 import { fitText } from "@remotion/layout-utils";
 
 const { fontSize } = fitText({
-  text: "Hello World",
-  withinWidth: 600,
-  fontFamily: "Inter",
-  fontWeight: "bold",
+ text: "Hello World",
+ withinWidth: 600,
+ fontFamily: "Inter",
+ fontWeight: "bold",
 });
 
 return (
-  <div
-    style={{
-      fontSize: Math.min(fontSize, 80), // Cap at 80px
-      fontFamily: "Inter",
-      fontWeight: "bold",
-    }}
-  >
-    Hello World
-  </div>
+ <div
+ style={{
+ fontSize: Math.min(fontSize, 80), // Cap at 80px
+ fontFamily: "Inter",
+ fontWeight: "bold",
+ }}
+ >
+ Hello World
+ </div>
 );
 ```
 
@@ -73,15 +73,15 @@ const box = fillTextBox({ maxBoxWidth: 400, maxLines: 3 });
 
 const words = ["Hello", "World", "This", "is", "a", "test"];
 for (const word of words) {
-  const { exceedsBox } = box.add({
-    text: word + " ",
-    fontFamily: "Arial",
-    fontSize: 24,
-  });
-  if (exceedsBox) {
-    // Text would overflow, handle accordingly
-    break;
-  }
+ const { exceedsBox } = box.add({
+ text: word + " ",
+ fontFamily: "Arial",
+ fontSize: 24,
+ });
+ if (exceedsBox) {
+ // Text would overflow, handle accordingly
+ break;
+ }
 }
 ```
 
@@ -93,17 +93,17 @@ for (const word of words) {
 import { loadFont } from "@remotion/google-fonts/Inter";
 
 const { fontFamily, waitUntilDone } = loadFont("normal", {
-  weights: ["400"],
-  subsets: ["latin"],
+ weights: ["400"],
+ subsets: ["latin"],
 });
 
 waitUntilDone().then(() => {
-  // Now safe to measure
-  const { width } = measureText({
-    text: "Hello",
-    fontFamily,
-    fontSize: 32,
-  });
+ // Now safe to measure
+ const { width } = measureText({
+ text: "Hello",
+ fontFamily,
+ fontSize: 32,
+ });
 })
 ```
 
@@ -111,10 +111,10 @@ waitUntilDone().then(() => {
 
 ```tsx
 measureText({
-  text: "Hello",
-  fontFamily: "MyCustomFont",
-  fontSize: 32,
-  validateFontIsLoaded: true, // Throws if font not loaded
+ text: "Hello",
+ fontFamily: "MyCustomFont",
+ fontSize: 32,
+ validateFontIsLoaded: true, // Throws if font not loaded
 });
 ```
 
@@ -122,15 +122,15 @@ measureText({
 
 ```tsx
 const fontStyle = {
-  fontFamily: "Inter",
-  fontSize: 32,
-  fontWeight: "bold" as const,
-  letterSpacing: "0.5px",
+ fontFamily: "Inter",
+ fontSize: 32,
+ fontWeight: "bold" as const,
+ letterSpacing: "0.5px",
 };
 
 const { width } = measureText({
-  text: "Hello",
-  ...fontStyle,
+ text: "Hello",
+ ...fontStyle,
 });
 
 return <div style={fontStyle}>Hello</div>;

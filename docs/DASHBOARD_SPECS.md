@@ -8,11 +8,11 @@ The Dashboard serves as the strategic nerve center of InvestWise. It requires hi
 ### 1. `GET /api/v1/dashboard/summary`
 Calculates high-level metrics for StatCards.
 - **Logic**: 
-    - `totalDeposits`: SUM(amount) from `deposits` where status = 'Completed'.
-    - `investedCapital`: SUM(initialInvestment) from `projects`.
-    - `totalMembers`: COUNT(*) from `members`.
-    - `totalShares`: SUM(shares) from `members`.
-    - `yieldIndex`: Complex calculation based on (SUM(project_earnings) - SUM(project_expenses)) / total_investment.
+ - `totalDeposits`: SUM(amount) from `deposits` where status = 'Completed'.
+ - `investedCapital`: SUM(initialInvestment) from `projects`.
+ - `totalMembers`: COUNT(*) from `members`.
+ - `totalShares`: SUM(shares) from `members`.
+ - `yieldIndex`: Complex calculation based on (SUM(project_earnings) - SUM(project_expenses)) / total_investment.
 
 ### 2. `GET /api/v1/dashboard/charts/capital-trends`
 Provides timeseries data for the Area Chart.

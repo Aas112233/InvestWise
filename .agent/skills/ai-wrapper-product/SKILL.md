@@ -38,15 +38,15 @@ Building products around AI APIs
 ### The Wrapper Stack
 ```
 User Input
-    ↓
+ ↓
 Input Validation + Sanitization
-    ↓
+ ↓
 Prompt Template + Context
-    ↓
+ ↓
 AI API (OpenAI/Anthropic/etc.)
-    ↓
+ ↓
 Output Parsing + Validation
-    ↓
+ ↓
 User-Friendly Response
 ```
 
@@ -57,30 +57,30 @@ import Anthropic from '@anthropic-ai/sdk';
 const anthropic = new Anthropic();
 
 async function generateContent(userInput, context) {
-  // 1. Validate input
-  if (!userInput || userInput.length > 5000) {
-    throw new Error('Invalid input');
-  }
+ // 1. Validate input
+ if (!userInput || userInput.length > 5000) {
+ throw new Error('Invalid input');
+ }
 
-  // 2. Build prompt
-  const systemPrompt = `You are a ${context.role}.
-    Always respond in ${context.format}.
-    Tone: ${context.tone}`;
+ // 2. Build prompt
+ const systemPrompt = `You are a ${context.role}.
+ Always respond in ${context.format}.
+ Tone: ${context.tone}`;
 
-  // 3. Call API
-  const response = await anthropic.messages.create({
-    model: 'claude-3-haiku-20240307',
-    max_tokens: 1000,
-    system: systemPrompt,
-    messages: [{
-      role: 'user',
-      content: userInput
-    }]
-  });
+ // 3. Call API
+ const response = await anthropic.messages.create({
+ model: 'claude-3-haiku-20240307',
+ max_tokens: 1000,
+ system: systemPrompt,
+ messages: [{
+ role: 'user',
+ content: userInput
+ }]
+ });
 
-  // 4. Parse and validate output
-  const output = response.content[0].text;
-  return parseOutput(output);
+ // 4. Parse and validate output
+ const output = response.content[0].text;
+ return parseOutput(output);
 }
 ```
 
@@ -105,18 +105,18 @@ Production-grade prompt design
 ### Prompt Template Pattern
 ```javascript
 const promptTemplates = {
-  emailWriter: {
-    system: `You are an expert email writer.
-      Write professional, concise emails.
-      Match the requested tone.
-      Never include placeholder text.`,
-    user: (input) => `Write an email:
-      Purpose: ${input.purpose}
-      Recipient: ${input.recipient}
-      Tone: ${input.tone}
-      Key points: ${input.points.join(', ')}
-      Length: ${input.length} sentences`,
-  },
+ emailWriter: {
+ system: `You are an expert email writer.
+ Write professional, concise emails.
+ Match the requested tone.
+ Never include placeholder text.`,
+ user: (input) => `Write an email:
+ Purpose: ${input.purpose}
+ Recipient: ${input.recipient}
+ Tone: ${input.tone}
+ Key points: ${input.points.join(', ')}
+ Length: ${input.length} sentences`,
+ },
 };
 ```
 
@@ -124,25 +124,25 @@ const promptTemplates = {
 ```javascript
 // Force structured output
 const systemPrompt = `
-  Always respond with valid JSON in this format:
-  {
-    "title": "string",
-    "content": "string",
-    "suggestions": ["string"]
-  }
-  Never include any text outside the JSON.
+ Always respond with valid JSON in this format:
+ {
+ "title": "string",
+ "content": "string",
+ "suggestions": ["string"]
+ }
+ Never include any text outside the JSON.
 `;
 
 // Parse with fallback
 function parseAIOutput(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    // Fallback: extract JSON from response
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error('Invalid AI output');
-  }
+ try {
+ return JSON.parse(text);
+ } catch {
+ // Fallback: extract JSON from response
+ const match = text.match(/\{[\s\S]*\}/);
+ if (match) return JSON.parse(match[0]);
+ throw new Error('Invalid AI output');
+ }
 }
 ```
 
@@ -169,27 +169,27 @@ Controlling AI API costs
 ```javascript
 // Track usage
 async function callWithCostTracking(userId, prompt) {
-  const response = await anthropic.messages.create({...});
+ const response = await anthropic.messages.create({...});
 
-  // Log usage
-  await db.usage.create({
-    userId,
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
-    cost: calculateCost(response.usage),
-    model: 'claude-3-haiku',
-  });
+ // Log usage
+ await db.usage.create({
+ userId,
+ inputTokens: response.usage.input_tokens,
+ outputTokens: response.usage.output_tokens,
+ cost: calculateCost(response.usage),
+ model: 'claude-3-haiku',
+ });
 
-  return response;
+ return response;
 }
 
 function calculateCost(usage) {
-  const rates = {
-    'claude-3-haiku': { input: 0.25, output: 1.25 }, // per 1M tokens
-  };
-  const rate = rates['claude-3-haiku'];
-  return (usage.input_tokens * rate.input +
-          usage.output_tokens * rate.output) / 1_000_000;
+ const rates = {
+ 'claude-3-haiku': { input: 0.25, output: 1.25 }, // per 1M tokens
+ };
+ const rate = rates['claude-3-haiku'];
+ return (usage.input_tokens * rate.input +
+ usage.output_tokens * rate.output) / 1_000_000;
 }
 ```
 
@@ -205,25 +205,25 @@ function calculateCost(usage) {
 ### Usage Limits
 ```javascript
 async function checkUsageLimits(userId) {
-  const usage = await db.usage.sum({
-    where: {
-      userId,
-      createdAt: { gte: startOfMonth() }
-    }
-  });
+ const usage = await db.usage.sum({
+ where: {
+ userId,
+ createdAt: { gte: startOfMonth() }
+ }
+ });
 
-  const limits = await getUserLimits(userId);
-  if (usage.cost >= limits.monthlyCost) {
-    throw new Error('Monthly limit reached');
-  }
-  return true;
+ const limits = await getUserLimits(userId);
+ if (usage.cost >= limits.monthlyCost) {
+ throw new Error('Monthly limit reached');
+ }
+ return true;
 }
 ```
 ```
 
 ## Anti-Patterns
 
-### ❌ Thin Wrapper Syndrome
+### Thin Wrapper Syndrome
 
 **Why bad**: No differentiation.
 Users just use ChatGPT.
@@ -235,7 +235,7 @@ Perfect the UX for specific task.
 Integrate into workflows.
 Post-process outputs.
 
-### ❌ Ignoring Costs Until Scale
+### Ignoring Costs Until Scale
 
 **Why bad**: Surprise bills.
 Negative unit economics.
@@ -247,7 +247,7 @@ Know your cost per user.
 Set usage limits.
 Price with margin.
 
-### ❌ No Output Validation
+### No Output Validation
 
 **Why bad**: AI hallucinates.
 Inconsistent formatting.
@@ -259,7 +259,7 @@ Parse structured responses.
 Have fallback handling.
 Post-process for consistency.
 
-## ⚠️ Sharp Edges
+## Sharp Edges
 
 | Issue | Severity | Solution |
 |-------|----------|----------|

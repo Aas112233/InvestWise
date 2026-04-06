@@ -60,25 +60,25 @@ Price should be based on value delivered, not cost to serve:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                                                         │
-│  Customer's perceived value of your solution            │
-│  ────────────────────────────────────────────── $1000   │
-│                                                         │
-│  ↑ Value captured (your opportunity)                    │
-│                                                         │
-│  Your price                                             │
-│  ────────────────────────────────────────────── $500    │
-│                                                         │
-│  ↑ Consumer surplus (value customer keeps)              │
-│                                                         │
-│  Next best alternative                                  │
-│  ────────────────────────────────────────────── $300    │
-│                                                         │
-│  ↑ Differentiation value                                │
-│                                                         │
-│  Your cost to serve                                     │
-│  ────────────────────────────────────────────── $50     │
-│                                                         │
+│ │
+│ Customer's perceived value of your solution │
+│ ────────────────────────────────────────────── $1000 │
+│ │
+│ ↑ Value captured (your opportunity) │
+│ │
+│ Your price │
+│ ────────────────────────────────────────────── $500 │
+│ │
+│ ↑ Consumer surplus (value customer keeps) │
+│ │
+│ Next best alternative │
+│ ────────────────────────────────────────────── $300 │
+│ │
+│ ↑ Differentiation value │
+│ │
+│ Your cost to serve │
+│ ────────────────────────────────────────────── $50 │
+│ │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -104,10 +104,10 @@ Ask each respondent:
 
 1. Plot cumulative distributions for each question
 2. Find the intersections:
-   - **Point of Marginal Cheapness (PMC):** "Too cheap" crosses "Expensive"
-   - **Point of Marginal Expensiveness (PME):** "Too expensive" crosses "Cheap"
-   - **Optimal Price Point (OPP):** "Too cheap" crosses "Too expensive"
-   - **Indifference Price Point (IDP):** "Expensive" crosses "Cheap"
+ - **Point of Marginal Cheapness (PMC):** "Too cheap" crosses "Expensive"
+ - **Point of Marginal Expensiveness (PME):** "Too expensive" crosses "Cheap"
+ - **Optimal Price Point (OPP):** "Too cheap" crosses "Too expensive"
+ - **Indifference Price Point (IDP):** "Expensive" crosses "Cheap"
 
 **The acceptable price range:** PMC to PME
 **Optimal pricing zone:** Between OPP and IDP
@@ -123,9 +123,9 @@ Ask each respondent:
 ```
 Price Sensitivity Analysis Results:
 ─────────────────────────────────
-Point of Marginal Cheapness:  $29/mo
-Optimal Price Point:          $49/mo
-Indifference Price Point:     $59/mo
+Point of Marginal Cheapness: $29/mo
+Optimal Price Point: $49/mo
+Indifference Price Point: $59/mo
 Point of Marginal Expensiveness: $79/mo
 
 Recommended range: $49-59/mo
@@ -270,7 +270,7 @@ Average projects: 2
 Average integrations: 0
 
 Insight: Value correlates with team adoption (users)
-        and depth of use (integrations)
+ and depth of use (integrations)
 
 Recommendation: Price per user, gate integrations to higher tiers
 ```
@@ -338,18 +338,18 @@ Recommendation: Price per user, gate integrations to higher tiers
 
 ```
 ┌────────────────┬─────────────────┬─────────────────┬─────────────────┐
-│                │ Starter         │ Pro             │ Business        │
-│                │ $29/mo          │ $79/mo          │ $199/mo         │
+│ │ Starter │ Pro │ Business │
+│ │ $29/mo │ $79/mo │ $199/mo │
 ├────────────────┼─────────────────┼─────────────────┼─────────────────┤
-│ Users          │ Up to 5         │ Up to 20        │ Unlimited       │
-│ Projects       │ 10              │ Unlimited       │ Unlimited       │
-│ Storage        │ 5 GB            │ 50 GB           │ 500 GB          │
-│ Integrations   │ 3               │ 10              │ Unlimited       │
-│ Analytics      │ Basic           │ Advanced        │ Custom          │
-│ Support        │ Email           │ Priority        │ Dedicated       │
-│ API Access     │ ✗               │ ✓               │ ✓               │
-│ SSO            │ ✗               │ ✗               │ ✓               │
-│ Audit logs     │ ✗               │ ✗               │ ✓               │
+│ Users │ Up to 5 │ Up to 20 │ Unlimited │
+│ Projects │ 10 │ Unlimited │ Unlimited │
+│ Storage │ 5 GB │ 50 GB │ 500 GB │
+│ Integrations │ 3 │ 10 │ Unlimited │
+│ Analytics │ Basic │ Advanced │ Custom │
+│ Support │ Email │ Priority │ Dedicated │
+│ API Access │ │ │ │
+│ SSO │ │ │ │
+│ Audit logs │ │ │ │
 └────────────────┴─────────────────┴─────────────────┴─────────────────┘
 ```
 
@@ -386,13 +386,13 @@ Different customers have different:
 
 | Feature | Freelancer | Small Team | Growing | Enterprise |
 |---------|------------|------------|---------|------------|
-| Core features | ✓ | ✓ | ✓ | ✓ |
-| Collaboration | — | ✓ | ✓ | ✓ |
+| Core features | | | | |
+| Collaboration | — | | | |
 | Integrations | — | Limited | Full | Full |
-| API access | — | — | ✓ | ✓ |
-| SSO/SAML | — | — | — | ✓ |
-| Audit logs | — | — | — | ✓ |
-| Custom contract | — | — | — | ✓ |
+| API access | — | — | | |
+| SSO/SAML | — | — | — | |
+| Audit logs | — | — | — | |
+| Custom contract | — | — | — | |
 
 **Step 3: Price to value for each persona**
 - Research willingness to pay per segment
