@@ -63,6 +63,25 @@ server/logs/
 .settings/
 .agent/
 # =====================================
+# Binary Files (DO NOT TRACK IN GIT)
+# =====================================
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.exe
+*.msi
+*.dmg
+*.pkg
+
+# =====================================
+# Duplicate/Nested Directories
+# =====================================
+# Prevent nested server directories
+**/server/server/
+**/node_modules/server/
+
+# =====================================
 # Operating System
 # =====================================
 .DS_Store
