@@ -172,18 +172,24 @@ const deleteMember = asyncHandler(async (req, res) => {
  }
 
  // Enterprise Grade: Check for ANY related data before hard delete
- const hasHistory = await Transaction.exists({ memberId: req.params.id });
- if (hasHistory) {
+ const transactionCount = await Transaction.countDocuments({ memberId: req.params.id });
+ if (transactionCount > 0) {
  res.status(400);
- throw new Error('Cannot delete member with financial history. Deactivate them instead.');
+ throw new Error(`Cannot delete ${member.name}. This member has ${transactionCount} financial record${transactionCount > 1 ? 's' : ''}. Set the member to inactive instead.`);
  }
 
- const involvedInProjects = await Project.exists({
+ const projectCount = await Project.countDocuments({
  'involvedMembers.memberId': req.params.id
  });
- if (involvedInProjects) {
+ if (projectCount > 0) {
  res.status(400);
- throw new Error('Cannot delete member involved in projects.');
+ throw new Error(`Cannot delete ${member.name}. This member is linked to ${projectCount} project${projectCount > 1 ? 's' : ''}. Remove the member from those projects first.`);
+ }
+
+ const linkedUser = await User.findOne({ $or: [{ _id: member.userId }, { memberId: member.memberId }] });
+ if (linkedUser) {
+ res.status(400);
+ throw new Error(`Cannot delete ${member.name}. This member still has system access. Remove the linked user account first.`);
  }
 
  await member.deleteOne();

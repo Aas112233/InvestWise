@@ -39,7 +39,7 @@ const getFundById = asyncHandler(async (req, res) => {
 // @route POST /api/funds
 // @access Private/Admin
 const createFund = asyncHandler(async (req, res) => {
- const { name, type, description, initialBalance, handlingOfficer } = req.body;
+ const { name, type, description, initialBalance, handlingOfficer, accountNumber } = req.body;
 
  if (type === 'PROJECT') {
  res.status(400);
@@ -53,6 +53,7 @@ const createFund = asyncHandler(async (req, res) => {
  balance: 0, // Balance is 0 initially. Use Opening Balance transaction if needed.
  description,
  handlingOfficer,
+ accountNumber
  });
 
  if (initialBalance && initialBalance > 0) {
@@ -91,6 +92,7 @@ const updateFund = asyncHandler(async (req, res) => {
  fund.description = req.body.description || fund.description;
  fund.status = req.body.status || fund.status;
  fund.handlingOfficer = req.body.handlingOfficer || fund.handlingOfficer;
+ fund.accountNumber = req.body.accountNumber || fund.accountNumber;
 
  // Remove direct balance edit based on requirements
  // if (req.body.balance) ... NO

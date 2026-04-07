@@ -8,6 +8,18 @@
 
 A modern, full-stack enterprise investment management platform with AI-powered financial advisory.
 
+## Project Structure
+
+```
+investwise_web_app/
+├── client/          # React frontend (Vite + TypeScript)
+├── server/          # Express.js backend (Node.js + MongoDB)
+├── docs/            # Documentation & feature specs
+├── run-dev.bat      # Start both servers (Windows)
+├── setup.bat        # First-time setup script
+└── start-dev.ps1    # PowerShell dev launcher
+```
+
 ## What's New
 
 - **Enhanced Security** - Helmet, rate limiting, input validation
@@ -28,53 +40,57 @@ setup.bat
 
 1. **Install dependencies:**
  ```bash
- npm install
+ cd client && npm install && cd ..
  cd server && npm install && cd ..
  ```
 
 2. **Configure environment:**
- - Copy `.env.example` to `.env.local`
- - Set `GEMINI_API_KEY` in `.env.local`
+ - Copy `client/.env.example` to `client/.env.local`
+ - Set `GEMINI_API_KEY` in `client/.env.local`
  - Copy `server/.env.example` to `server/.env`
  - Set `MONGO_URI` and `JWT_SECRET` in `server/.env`
 
 3. **Run the app:**
  ```bash
+ # Option 1: Use the launcher script
+ run-dev.bat
+
+ # Option 2: Manual (two terminals)
  # Terminal 1 - Backend
- cd server && npm run dev
- 
+ cd server && node index.js
+
  # Terminal 2 - Frontend
- npm run dev
+ cd client && npm run dev
  ```
 
-4. **Visit:** http://localhost:3000
+4. **Visit:** http://localhost:3004
 
 ## Documentation
 
-- **[SETUP.md](SETUP.md)** - Comprehensive setup guide
-- **[ENHANCEMENTS.md](ENHANCEMENTS.md)** - All applied enhancements
+- **[docs/SETUP.md](docs/SETUP.md)** - Comprehensive setup guide
+- **[docs/ENHANCEMENTS.md](docs/ENHANCEMENTS.md)** - All applied enhancements
 - **[docs/](docs/)** - Feature specifications
 
 ## Links
 
 - **AI Studio:** https://ai.studio/apps/drive/1Xe3FcuNJbr7mr-4rzNMYcx1bYgeUoZRn
-- **Health Check:** http://localhost:5000/api/health
+- **Health Check:** http://localhost:5004/api/health
 
 ## Security Features
 
- Helmet security headers 
- Rate limiting (DDoS protection) 
- Input validation & sanitization 
- JWT authentication 
- Password hashing (bcrypt) 
- Environment variable protection 
+ Helmet security headers
+ Rate limiting (DDoS protection)
+ Input validation & sanitization
+ JWT authentication
+ Password hashing (bcrypt)
+ Environment variable protection
 
 ## Performance Features
 
- Gzip compression (~70% bandwidth reduction) 
- In-memory caching 
- Request timeouts 
- Response optimization 
+ Gzip compression (~70% bandwidth reduction)
+ In-memory caching
+ Request timeouts
+ Response optimization
 
 ---
 
