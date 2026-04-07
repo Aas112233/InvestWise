@@ -26,21 +26,21 @@ function Kill-Port($port) {
 }
 
 # 1. Kill potentially stuck processes
-Write-Host "Cleaning up ports 3000 (Frontend) and 5000 (Backend)..." -ForegroundColor Magenta
-Kill-Port 3000
-Kill-Port 5000
+Write-Host "Cleaning up ports 3004 (Frontend) and 5004 (Backend)..." -ForegroundColor Magenta
+Kill-Port 3004
+Kill-Port 5004
 
 # Wait a moment for ports to clear
 Start-Sleep -Seconds 1
 
 # 2. Start Backend Server
-Write-Host "Starting Backend Server on Port 5000..." -ForegroundColor Cyan
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "& {cd server; Write-Host 'Starting Backend...'; npm.cmd run dev}"
+Write-Host "Starting Backend Server on Port 5004..." -ForegroundColor Cyan
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "& {cd server; Write-Host 'Starting Backend...'; `$env:PORT='5004'; node index.js}"
 
 # 3. Start Frontend Server
-Write-Host "Starting Frontend Server on Port 3000..." -ForegroundColor Cyan
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "& {Write-Host 'Starting Frontend...'; npm.cmd run dev}"
+Write-Host "Starting Frontend Server on Port 3004..." -ForegroundColor Cyan
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "& {cd client; Write-Host 'Starting Frontend...'; npm.cmd run dev -- --port 3004}"
 
 Write-Host "Development environment started!" -ForegroundColor Green
-Write-Host "Backend: http://localhost:5000"
-Write-Host "Frontend: http://localhost:3000"
+Write-Host "Backend: http://localhost:5004"
+Write-Host "Frontend: http://localhost:3004"

@@ -3,6 +3,13 @@ import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 import BlacklistedToken from '../models/BlacklistedToken.js';
 
+const createAuthError = (message, code, name = 'Error') => {
+ const error = new Error(message);
+ error.code = code;
+ error.name = name;
+ return error;
+};
+
 const protect = asyncHandler(async (req, res, next) => {
  let token;
 
@@ -26,7 +33,13 @@ const protect = asyncHandler(async (req, res, next) => {
  decoded = jwt.verify(token, process.env.JWT_SECRET);
  } catch (err) {
  res.status(401);
- throw new Error('Not authorized, token failed');
+ if (err.name === 'TokenExpiredError') {
+ throw createAuthError('Access token expired', 'TOKEN_EXPIRED', 'TokenExpiredError');
+ }
+ if (err.name === 'JsonWebTokenError') {
+ throw createAuthError('Invalid access token', 'INVALID_TOKEN', 'JsonWebTokenError');
+ }
+ throw createAuthError('Not authorized, token failed', 'TOKEN_INVALID');
  }
 
  // Verify it's an access token
@@ -57,7 +70,7 @@ const protect = asyncHandler(async (req, res, next) => {
  // Fallback for unexpected errors
  console.error(error);
  res.status(401);
- throw new Error('Not authorized, token failed');
+ throw createAuthError('Not authorized, token failed', 'TOKEN_INVALID');
  }
  }
 
@@ -83,6 +96,22 @@ const managerOrAdmin = (req, res, next) => {
  res.status(403);
  throw new Error('Not authorized. Management access required.');
  }
+};
+
+const requireRole = (...roles) => {
+ return (req, res, next) => {
+ if (!req.user) {
+ res.status(401);
+ throw new Error('Not authorized, no user found');
+ }
+
+ if (!roles.includes(req.user.role)) {
+ res.status(403);
+ throw new Error(`Not authorized. Required role: ${roles.join(' or ')}.`);
+ }
+
+ next();
+ };
 };
 
 /**
@@ -118,4 +147,4 @@ const requirePermission = (screen, requiredLevel = 'WRITE') => {
  };
 };
 
-export { protect, admin, managerOrAdmin, requirePermission };
+export { protect, admin, managerOrAdmin, requireRole, requirePermission };

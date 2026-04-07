@@ -17,7 +17,16 @@ const errorTypeMap = {
 };
 
 // Extract safe error information
-const getSafeError = (err) => {
+const getSafeError = (err, statusCode) => {
+ // Preserve explicit client-facing validation/business rule messages for 4xx responses.
+ if (statusCode >= 400 && statusCode < 500 && err.message) {
+ return {
+ message: err.message,
+ code: err.code || 'CLIENT_ERROR',
+ name: err.name || 'ClientError',
+ };
+ }
+
  // Check for known error types
  const errorName = err.name || 'UnknownError';
 
@@ -33,8 +42,18 @@ const getSafeError = (err) => {
 
 const errorHandler = (err, req, res, next) => {
  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+ const isExpectedAuthRefresh =
+ statusCode === 401 &&
+ (err.code === 'TOKEN_EXPIRED' || err.name === 'TokenExpiredError');
 
  // Log full error details server-side (never exposed to client)
+ if (isExpectedAuthRefresh) {
+ console.warn(`[Auth Refresh] ${req.method} ${req.url}:`, {
+ message: err.message,
+ name: err.name,
+ code: err.code
+ });
+ } else {
  console.error(`[Error] ${req.method} ${req.url}:`, {
  message: err.message,
  name: err.name,
@@ -42,22 +61,25 @@ const errorHandler = (err, req, res, next) => {
  stack: err.stack,
  details: err.details,
  });
+ }
 
  // Append to secure log file
  const logPath = path.join(__dirname, '../logs/server_errors.log');
  const logEntry = `[${new Date().toISOString()}] ${req.method} ${req.url} - ${err.name}: ${err.message}\nCode: ${err.code}\nStack: ${err.stack}\nHeaders: ${JSON.stringify(req.headers)}\n\n`;
 
  try {
+ if (!isExpectedAuthRefresh) {
  if (!fs.existsSync(path.dirname(logPath))) {
  fs.mkdirSync(path.dirname(logPath), { recursive: true });
  }
  fs.appendFileSync(logPath, logEntry);
+ }
  } catch (e) {
  console.error('Failed to write to error log:', e);
  }
 
  // Get safe error information for client
- const safeError = getSafeError(err);
+ const safeError = getSafeError(err, statusCode);
 
  // NEVER expose stack traces - even in development
  // Stack traces reveal internal code structure to attackers

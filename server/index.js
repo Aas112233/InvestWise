@@ -141,6 +141,10 @@ import settingsRoutes from './routes/settingsRoutes.js';
 app.use('/api/settings', apiLimiter, checkDbConnection, settingsRoutes);
 app.use('/api/v1/settings', apiLimiter, checkDbConnection, settingsRoutes);
 
+import backupRoutes from './routes/backupRoutes.js';
+app.use('/api/backup', checkDbConnection, backupRoutes);
+app.use('/api/v1/backup', checkDbConnection, backupRoutes);
+
 // AI Routes (must be after other routes to avoid conflicts)
 import aiRoutes from './routes/aiRoutes.js';
 app.use('/api/ai', apiLimiter, checkDbConnection, aiRoutes);
