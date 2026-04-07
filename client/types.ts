@@ -46,6 +46,7 @@ export interface Member {
  email: string;
  shares: number;
  totalContributed: number;
+ successfulDepositTotal?: number;
  lastActive: string;
  avatar: string;
  status: 'active' | 'pending' | 'inactive';

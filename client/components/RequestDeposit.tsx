@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, X, User, CheckSquare, Square, Edit2, Trash2, CheckCircle, RefreshCw, Loader2, CreditCard, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Search, Filter, X, User, CheckSquare, Square, Edit2, Trash2, CheckCircle, RefreshCw, Loader2, CreditCard, ArrowUpDown, ArrowUp, ArrowDown, Calendar } from 'lucide-react';
 import Pagination from './Pagination';
 import { Deposit, AccessLevel, AppScreen } from '../types';
 import Toast, { ToastType } from './Toast';
@@ -15,15 +15,17 @@ import { Download, Upload } from 'lucide-react';
 import SummaryMetricCard from './SummaryMetricCard';
 import MonthPickerField from './ui/MonthPickerField';
 import { getCurrentMonthYearLabel, localizeMonthYearLabel, monthYearLabelToDateInput } from '../utils/months';
+import { resolveMemberIdentity } from '../utils/memberLookup';
 
-const SHARE_WORTH = 1000;
+
 
 interface RequestDepositProps {
  lang: Language;
 }
 
 const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
- const { members: globalMembers, deposits: globalDeposits, funds, refreshTransactions, currentUser } = useGlobalState();
+ const { members: globalMembers, deposits: globalDeposits, funds, refreshTransactions, currentUser, settings } = useGlobalState();
+ const SHARE_WORTH = settings?.financial?.shareValueBdt || 1000;
  const [requests, setRequests] = useState<Deposit[]>([]);
  const [currentPage, setCurrentPage] = useState(1);
  const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -53,12 +55,16 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  status: 'Pending' // Explicitly fetch only pending/processing
  });
 
- const mapped = response.data.map((t: any) => ({
+ const mapped = response.data.map((t: any) => {
+ const memberIdentity = resolveMemberIdentity(t.memberId, globalMembers);
+ const fallbackMember = globalMembers.find(m => m.id === t.memberMongoId || m.memberId === t.memberDisplayId);
+
+ return {
  id: t._id || t.id,
- memberId: t.memberId?.memberId || 'N/A',
- memberMongoId: t.memberId?._id || t.memberId,
- memberName: t.memberId?.name || 'Unknown',
- memberDisplayId: t.memberId?.memberId || '',
+ memberId: t.memberDisplayId || fallbackMember?.memberId || memberIdentity.memberDisplayId,
+ memberMongoId: t.memberMongoId || fallbackMember?.id || memberIdentity.memberMongoId,
+ memberName: t.memberName || fallbackMember?.name || memberIdentity.memberName,
+ memberDisplayId: (t.memberDisplayId || fallbackMember?.memberId || memberIdentity.memberDisplayId) === 'N/A' ? '' : (t.memberDisplayId || fallbackMember?.memberId || memberIdentity.memberDisplayId),
  amount: t.amount,
  date: new Date(t.date).toLocaleDateString(),
  status: t.status,
@@ -68,7 +74,8 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  depositMethod: t.depositMethod || 'Bank',
  createdAt: t.createdAt ? new Date(t.createdAt).toLocaleDateString() : new Date(t.date).toLocaleDateString(),
  updatedAt: t.updatedAt && t.updatedAt !== t.createdAt ? new Date(t.updatedAt).toLocaleDateString() : undefined
- }));
+ };
+ });
 
  setRequests(mapped);
  setPaginatedData({
@@ -93,7 +100,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
 
  useEffect(() => {
  fetchPaginatedRequests(currentPage, rowsPerPage, searchQuery, sortBy, sortOrder);
- }, [currentPage, rowsPerPage, searchQuery, sortBy, sortOrder, globalDeposits, lang]);
+ }, [currentPage, rowsPerPage, searchQuery, sortBy, sortOrder, globalDeposits, globalMembers, lang]);
 
  const handleSort = (field: string) => {
  if (sortBy === field) {

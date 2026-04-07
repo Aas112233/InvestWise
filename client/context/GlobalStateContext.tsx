@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Member, Project, Deposit, Expense, Fund, User, AccessLevel, AppScreen, Transaction } from '../types';
 import api, { memberService, projectService, fundService, financeService, authService, analyticsService, auditService, isNetworkError, isDatabaseError, settingsService } from '../services/api';
+import { resolveMemberIdentity } from '../utils/memberLookup';
 
 // ... imports
 export type ConnectionStatus = 'online' | 'offline' | 'degraded';
@@ -234,18 +235,25 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  try {
  const response = await financeService.getTransactions({ limit: 1000 });
  const allTransactions = response.data || [];
- const normalized = allTransactions.map((t: any) => ({
+ const normalized = allTransactions.map((t: any) => {
+ const memberIdentity = resolveMemberIdentity(t.memberId, members);
+ const fallbackMember = members.find(member => member.id === t.memberMongoId || member.memberId === t.memberDisplayId);
+
+ return {
  ...t,
  id: t._id || t.id,
- memberDisplayId: t.memberId?.memberId || 'N/A'
- }));
+ memberDisplayId: t.memberDisplayId || fallbackMember?.memberId || memberIdentity.memberDisplayId,
+ memberMongoId: t.memberMongoId || fallbackMember?.id || memberIdentity.memberMongoId,
+ memberName: t.memberName || fallbackMember?.name || memberIdentity.memberName
+ };
+ });
  setTransactions(normalized);
 
  const depositsList = normalized.filter((t: any) => t.type === 'Deposit').map((t: any) => ({
  id: t.id,
- memberId: t.memberId?._id || t.memberId, // Use Mongo ID for backend operations
- memberDisplayId: t.memberId?.memberId || 'N/A', // Custom ID for display
- memberName: t.memberId?.name || 'Unknown',
+ memberId: t.memberMongoId || t.memberId, // Use Mongo ID for backend operations
+ memberDisplayId: t.memberDisplayId || 'N/A', // Custom ID for display
+ memberName: t.memberName || 'Unknown',
  shareNumber: Math.floor(t.amount / 1000),
  amount: t.amount,
  depositMonth: new Date(t.date).toLocaleString('default', { month: 'long' }) + ' ' + new Date(t.date).getFullYear(),
@@ -259,9 +267,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
 
  const expensesList = normalized.filter((t: any) => t.type === 'Expense').map((t: any) => ({
  id: t.id,
- memberId: t.memberId?._id || t.memberId,
- memberDisplayId: t.memberId?.memberId || 'N/A',
- memberName: t.memberId?.name || 'Unknown',
+ memberId: t.memberMongoId || t.memberId,
+ memberDisplayId: t.memberDisplayId || 'N/A',
+ memberName: t.memberName || 'Unknown',
  projectId: t.projectId?._id || t.projectId,
  projectName: t.projectId?.title || '',
  amount: t.amount,

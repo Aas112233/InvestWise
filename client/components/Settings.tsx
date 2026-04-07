@@ -5,7 +5,7 @@ import {
     Moon, Sun, Eye, EyeOff, CheckCircle2, AlertTriangle,
     Terminal, Database, Lock, Sliders, Info, Users, Trash2, Key,
     Check, X, ShieldCheck, ChevronRight, RefreshCw, Activity,
-    Download, Upload, HardDrive
+    Download, Upload, HardDrive, Cloud, List, Calendar, Clock
 } from 'lucide-react';
 import { User as UserType, AccessLevel, AppScreen } from '../types';
 import { useGlobalState } from '../context/GlobalStateContext';
@@ -17,6 +17,16 @@ import AuditLogs from './Settings/AuditLogs.tsx';
 import api from '../services/api';
 
 import { Member } from '../types';
+
+interface BackupEntry {
+    key: string;
+    filename: string;
+    size: number;
+    sizeKB: string;
+    lastModified: string;
+    age: string;
+    type: 'daily' | 'monthly' | 'manual';
+}
 
 interface SettingsProps {
     currentUser: UserType | null;
@@ -90,6 +100,11 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
     const [isBackingUp, setIsBackingUp] = useState(false);
     const [isRestoring, setIsRestoring] = useState(false);
     const [backupFile, setBackupFile] = useState<File | null>(null);
+    const [cloudBackups, setCloudBackups] = useState<BackupEntry[]>([]);
+    const [isLoadingCloudBackups, setIsLoadingCloudBackups] = useState(false);
+    const [selectedCloudBackup, setSelectedCloudBackup] = useState<string | null>(null);
+    const [isCloudRestoring, setIsCloudRestoring] = useState(false);
+    const [backupType, setBackupType] = useState<'daily' | 'monthly'>('daily');
 
     const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
         isVisible: false,
@@ -106,7 +121,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
         setIsBackingUp(true);
         try {
             const response = await api.get('/backup/download', { responseType: 'blob' });
-            
+
             // Create download link
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
@@ -117,7 +132,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
-            
+
             showNotification('Backup downloaded successfully', 'success');
         } catch (error: any) {
             console.error('Backup failed:', error);
@@ -160,7 +175,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
 
             showNotification('Backup restored successfully! Refreshing...', 'success');
             setBackupFile(null);
-            
+
             // Reload page to refresh all data
             setTimeout(() => window.location.reload(), 2000);
         } catch (error: any) {
@@ -170,6 +185,76 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
             setIsRestoring(false);
         }
     };
+
+    // Cloudflare R2 Backup Functions
+    const loadCloudBackups = async () => {
+        setIsLoadingCloudBackups(true);
+        try {
+            const response = await api.get('/backup/list');
+            if (response.data.success) {
+                setCloudBackups(response.data.backups);
+            }
+        } catch (error: any) {
+            console.error('Failed to load cloud backups:', error);
+            showNotification('Failed to load cloud backups', 'error');
+        } finally {
+            setIsLoadingCloudBackups(false);
+        }
+    };
+
+    const handleCloudBackup = async (type: 'daily' | 'monthly' = 'daily') => {
+        setIsBackingUp(true);
+        try {
+            const response = await api.post('/backup/manual', { type });
+
+            if (response.data.status === 'success') {
+                showNotification(`Cloud backup created successfully (${response.data.duration}s)`, 'success');
+                await loadCloudBackups(); // Refresh the list
+            } else {
+                showNotification('Cloud backup failed', 'error');
+            }
+        } catch (error: any) {
+            console.error('Cloud backup failed:', error);
+            showNotification(error.response?.data?.error || 'Cloud backup failed', 'error');
+        } finally {
+            setIsBackingUp(false);
+        }
+    };
+
+    const handleCloudRestore = async (backupKey: string) => {
+        if (!window.confirm('WARNING: This will overwrite ALL existing data with the cloud backup. Are you sure?')) {
+            return;
+        }
+
+        setIsCloudRestoring(true);
+        setSelectedCloudBackup(backupKey);
+        try {
+            const response = await api.post('/backup/restore', {
+                backupKey,
+                confirm: true
+            });
+
+            if (response.data.status === 'success') {
+                showNotification(`Cloud backup restored successfully (${response.data.duration}s). Refreshing...`, 'success');
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                showNotification('Cloud restore failed', 'error');
+            }
+        } catch (error: any) {
+            console.error('Cloud restore failed:', error);
+            showNotification(error.response?.data?.error || 'Cloud restore failed', 'error');
+        } finally {
+            setIsCloudRestoring(false);
+            setSelectedCloudBackup(null);
+        }
+    };
+
+    // Load cloud backups when tab is opened
+    useEffect(() => {
+        if (activeTab === 'Backup' && cloudBackups.length === 0) {
+            loadCloudBackups();
+        }
+    }, [activeTab]);
 
     const handleUpdateMemberProfile = async () => {
         if (!selectedMemberProfile || !selectedMemberProfile.id) return;
@@ -912,113 +997,268 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                     )}
 
                     {activeTab === 'Backup' && (
-                        <div className="bg-white dark:bg-[#1A221D] p-6 rounded-3xl card-shadow border border-gray-100 dark:border-white/5 animate-in slide-in-from-bottom-4 duration-500">
-                            <div className="flex items-center gap-4 mb-6">
-                                <div className="w-12 h-12 bg-brand/10 dark:bg-brand rounded-2xl flex items-center justify-center text-brand dark:text-dark shadow-inner">
-                                    <HardDrive size={24} />
-                                </div>
-                                <div>
-                                    <h3 className="text-xl font-black dark:text-white">Backup & Restore</h3>
-                                    <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-1">Data Management & Recovery</p>
+                        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+                            {/* Header */}
+                            <div className="bg-white dark:bg-[#1A221D] p-6 rounded-3xl card-shadow border border-gray-100 dark:border-white/5">
+                                <div className="flex items-center gap-4 mb-2">
+                                    <div className="w-12 h-12 bg-brand/10 dark:bg-brand rounded-2xl flex items-center justify-center text-brand dark:text-dark shadow-inner">
+                                        <Cloud size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black dark:text-white">Cloud Backup & Restore</h3>
+                                        <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-1">Cloudflare R2 Storage • Automated Daily at 2 AM</p>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Download Backup */}
-                                <div className="space-y-4">
+                            {/* Manual Cloud Backup */}
+                            <div className="bg-white dark:bg-[#1A221D] p-6 rounded-3xl card-shadow border border-gray-100 dark:border-white/5">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <Cloud className="text-brand" size={20} />
+                                    <h4 className="font-black dark:text-white uppercase tracking-wide">Create Manual Cloud Backup</h4>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                                     <div className="bg-gray-50 dark:bg-white/5 p-6 rounded-2xl border border-gray-100 dark:border-white/5">
                                         <div className="flex items-center gap-3 mb-4">
-                                            <Download className="text-brand" size={20} />
-                                            <h4 className="font-black dark:text-white">Download Backup</h4>
+                                            <Calendar className="text-brand" size={18} />
+                                            <h5 className="font-black dark:text-white text-sm">Daily Backup</h5>
                                         </div>
-                                        <p className="text-xs font-bold text-gray-400 mb-6 leading-relaxed">
-                                            Export all system data including members, transactions, projects, and settings to a secure JSON file.
+                                        <p className="text-xs font-bold text-gray-400 mb-4">
+                                            Create a daily-type backup. Auto-deleted after 30 days.
                                         </p>
                                         <button
-                                            onClick={handleDownloadBackup}
+                                            onClick={() => handleCloudBackup('daily')}
                                             disabled={isBackingUp}
-                                            className="w-full bg-dark dark:bg-brand text-white dark:text-dark py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                            className="w-full bg-dark dark:bg-brand text-white dark:text-dark py-3 rounded-xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                                         >
                                             {isBackingUp ? (
                                                 <>
-                                                    <RefreshCw className="animate-spin" size={18} />
-                                                    Creating Backup...
+                                                    <RefreshCw className="animate-spin" size={16} />
+                                                    Creating...
                                                 </>
                                             ) : (
                                                 <>
-                                                    <Download size={18} />
-                                                    Download Latest Backup
+                                                    <Cloud size={16} />
+                                                    Create Daily Backup
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-gray-50 dark:bg-white/5 p-6 rounded-2xl border border-gray-100 dark:border-white/5">
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <Calendar className="text-brand" size={18} />
+                                            <h5 className="font-black dark:text-white text-sm">Monthly Backup</h5>
+                                        </div>
+                                        <p className="text-xs font-bold text-gray-400 mb-4">
+                                            Create a monthly-type backup. Kept permanently unless manually deleted.
+                                        </p>
+                                        <button
+                                            onClick={() => handleCloudBackup('monthly')}
+                                            disabled={isBackingUp}
+                                            className="w-full bg-dark dark:bg-brand text-white dark:text-dark py-3 rounded-xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            {isBackingUp ? (
+                                                <>
+                                                    <RefreshCw className="animate-spin" size={16} />
+                                                    Creating...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Cloud size={16} />
+                                                    Create Monthly Backup
                                                 </>
                                             )}
                                         </button>
                                     </div>
                                 </div>
 
-                                {/* Restore Backup */}
-                                <div className="space-y-4">
-                                    <div className="bg-gray-50 dark:bg-white/5 p-6 rounded-2xl border border-gray-100 dark:border-white/5">
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <Upload className="text-brand" size={20} />
-                                            <h4 className="font-black dark:text-white">Restore Backup</h4>
-                                        </div>
-                                        <p className="text-xs font-bold text-gray-400 mb-6 leading-relaxed">
-                                            Import data from a previous backup file. This will replace all current data.
-                                        </p>
-
-                                        <div className="space-y-4">
-                                            <label className="block">
-                                                <input
-                                                    type="file"
-                                                    accept=".json"
-                                                    onChange={handleFileSelect}
-                                                    className="block w-full text-xs text-gray-400 file:mr-4 file:py-3 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-brand file:text-dark hover:file:bg-brand/90 file:uppercase file:tracking-widest cursor-pointer"
-                                                />
-                                            </label>
-
-                                            {backupFile && (
-                                                <div className="bg-brand/10 border border-brand/20 p-4 rounded-xl">
-                                                    <p className="text-xs font-black text-brand">Selected: {backupFile.name}</p>
-                                                    <p className="text-[10px] font-bold text-gray-400 mt-1">
-                                                        Size: {(backupFile.size / 1024).toFixed(2)} KB
-                                                    </p>
-                                                </div>
+                                {/* Local Backup Section */}
+                                <div className="border-t border-gray-200 dark:border-white/10 pt-6">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <Download className="text-brand" size={18} />
+                                        <h5 className="font-black dark:text-white text-sm">Local Backup & Restore</h5>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <button
+                                            onClick={handleDownloadBackup}
+                                            disabled={isBackingUp}
+                                            className="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 py-3 rounded-xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-dark dark:text-white"
+                                        >
+                                            {isBackingUp ? (
+                                                <>
+                                                    <RefreshCw className="animate-spin" size={16} />
+                                                    Creating...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Download size={16} />
+                                                    Download Local Backup
+                                                </>
                                             )}
+                                        </button>
 
+                                        <label className="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 py-3 rounded-xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer text-dark dark:text-white">
+                                            <Upload size={16} />
+                                            Upload Local Restore
+                                            <input
+                                                type="file"
+                                                accept=".json"
+                                                onChange={handleFileSelect}
+                                                className="hidden"
+                                            />
+                                        </label>
+                                    </div>
+
+                                    {backupFile && (
+                                        <div className="mt-4 bg-brand/10 border border-brand/20 p-4 rounded-xl flex items-center justify-between">
+                                            <div>
+                                                <p className="text-xs font-black text-brand">Selected: {backupFile.name}</p>
+                                                <p className="text-[10px] font-bold text-gray-400 mt-1">
+                                                    Size: {(backupFile.size / 1024).toFixed(2)} KB
+                                                </p>
+                                            </div>
                                             <button
                                                 onClick={handleRestoreBackup}
-                                                disabled={!backupFile || isRestoring}
-                                                className="w-full bg-dark dark:bg-brand text-white dark:text-dark py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                                disabled={isRestoring}
+                                                className="bg-brand dark:bg-dark text-dark dark:text-brand px-6 py-2 rounded-lg font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
                                             >
                                                 {isRestoring ? (
                                                     <>
-                                                        <RefreshCw className="animate-spin" size={18} />
-                                                        Restoring Data...
+                                                        <RefreshCw className="animate-spin inline mr-2" size={14} />
+                                                        Restoring...
                                                     </>
                                                 ) : (
-                                                    <>
-                                                        <Upload size={18} />
-                                                        Restore Selected Backup
-                                                    </>
+                                                    'Restore Now'
                                                 )}
                                             </button>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* Warning Box */}
-                            <div className="mt-6 bg-amber-500/10 border border-amber-500/20 p-6 rounded-2xl">
+                            {/* Cloud Backup List */}
+                            <div className="bg-white dark:bg-[#1A221D] p-6 rounded-3xl card-shadow border border-gray-100 dark:border-white/5">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div className="flex items-center gap-3">
+                                        <List className="text-brand" size={20} />
+                                        <h4 className="font-black dark:text-white uppercase tracking-wide">Cloud Backup History</h4>
+                                        <span className="bg-brand/10 text-brand px-3 py-1 rounded-full text-xs font-black">
+                                            {cloudBackups.length} backups
+                                        </span>
+                                    </div>
+                                    <button
+                                        onClick={loadCloudBackups}
+                                        disabled={isLoadingCloudBackups}
+                                        className="text-gray-400 hover:text-brand transition-colors disabled:opacity-50"
+                                    >
+                                        <RefreshCw size={18} className={isLoadingCloudBackups ? 'animate-spin' : ''} />
+                                    </button>
+                                </div>
+
+                                {isLoadingCloudBackups ? (
+                                    <div className="flex items-center justify-center py-12">
+                                        <RefreshCw className="animate-spin text-brand" size={32} />
+                                        <p className="ml-4 text-sm font-bold text-gray-400">Loading backups...</p>
+                                    </div>
+                                ) : cloudBackups.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <Cloud className="mx-auto mb-4 text-gray-300 dark:text-gray-600" size={48} />
+                                        <p className="text-sm font-bold text-gray-400">No cloud backups found</p>
+                                        <p className="text-xs text-gray-400 mt-2">Create your first backup above</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
+                                        {cloudBackups.map((backup, index) => (
+                                            <div
+                                                key={index}
+                                                className={`p-4 rounded-xl border transition-all ${selectedCloudBackup === backup.key
+                                                        ? 'bg-brand/10 border-brand/30'
+                                                        : 'bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/5 hover:border-brand/20'
+                                                    }`}
+                                            >
+                                                <div className="flex items-start justify-between">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-3 mb-2">
+                                                            <div className={`w-2 h-2 rounded-full ${backup.type === 'monthly' ? 'bg-purple-500' : 'bg-brand'
+                                                                }`}></div>
+                                                            <p className="text-sm font-black text-dark dark:text-white">
+                                                                {backup.filename}
+                                                            </p>
+                                                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${backup.type === 'monthly'
+                                                                    ? 'bg-purple-500/10 text-purple-500'
+                                                                    : 'bg-brand/10 text-brand'
+                                                                }`}>
+                                                                {backup.type}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-4 ml-5">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <HardDrive size={12} className="text-gray-400" />
+                                                                <span className="text-xs font-bold text-gray-400">{backup.sizeKB} KB</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Clock size={12} className="text-gray-400" />
+                                                                <span className="text-xs font-bold text-gray-400">{backup.age}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleCloudRestore(backup.key)}
+                                                        disabled={isCloudRestoring}
+                                                        className={`px-4 py-2 rounded-lg font-black uppercase tracking-widest text-xs transition-all disabled:opacity-50 ${selectedCloudBackup === backup.key
+                                                                ? 'bg-brand text-dark hover:bg-brand/90'
+                                                                : 'bg-dark dark:bg-white/10 text-white dark:text-white hover:bg-dark/90'
+                                                            }`}
+                                                    >
+                                                        {isCloudRestoring && selectedCloudBackup === backup.key ? (
+                                                            <>
+                                                                <RefreshCw className="animate-spin inline mr-1" size={12} />
+                                                                Restoring
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Upload size={12} className="inline mr-1" />
+                                                                Restore
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Important Notes */}
+                            <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-2xl">
                                 <div className="flex items-start gap-4">
                                     <AlertTriangle className="text-amber-500 flex-shrink-0 mt-1" size={20} />
                                     <div>
-                                        <h5 className="font-black text-amber-500 mb-2">Important Notes</h5>
-                                        <ul className="text-xs font-bold text-gray-400 space-y-2 list-disc list-inside">
-                                            <li>Backups include all data: members, transactions, projects, funds, and settings</li>
-                                            <li>Store backup files in a secure location</li>
-                                            <li>Restoring a backup will permanently replace all current data</li>
-                                            <li>Always download a backup before performing major operations</li>
-                                            <li>Backup files are in JSON format and can be inspected before restoring</li>
-                                        </ul>
+                                        <h5 className="font-black text-amber-500 mb-3">Important Information</h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <h6 className="text-xs font-black text-gray-400 uppercase tracking-wide mb-2">Cloud Backups</h6>
+                                                <ul className="text-xs font-bold text-gray-400 space-y-1.5 list-disc list-inside">
+                                                    <li>Stored securely on Cloudflare R2</li>
+                                                    <li>Daily backups auto-delete after 30 days</li>
+                                                    <li>Monthly backups kept permanently</li>
+                                                    <li>Compressed with gzip (~90% smaller)</li>
+                                                    <li>MD5 checksum verification</li>
+                                                </ul>
+                                            </div>
+                                            <div>
+                                                <h6 className="text-xs font-black text-gray-400 uppercase tracking-wide mb-2">Restore Warnings</h6>
+                                                <ul className="text-xs font-bold text-gray-400 space-y-1.5 list-disc list-inside">
+                                                    <li>Restoring replaces ALL current data</li>
+                                                    <li>Cannot be undone - download backup first</li>
+                                                    <li>Includes: members, transactions, projects, funds, settings</li>
+                                                    <li>Page reloads automatically after restore</li>
+                                                    <li>Always verify backup before restoring</li>
+                                                </ul>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

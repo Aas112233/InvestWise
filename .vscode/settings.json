@@ -1,8 +1,26 @@
 {
- "mdb.presetConnections": [
- {
- "name": "Preset Connection",
- "connectionString": "mongodb://localhost:27017"
- }
- ]
+  "mdb.presetConnections": [
+    {
+      "name": "Preset Connection",
+      "connectionString": "mongodb://localhost:27017"
+    }
+  ],
+  "cSpell.words": [
+    "mobilebanking",
+    "বিবেচনাধীন",
+    "জানুয়",
+    "ফেব্রুয়",
+    "মার্চ",
+    "এপ্রিল",
+    "জুলাই",
+    "আগস্ট",
+    "সেপ্টেম্বর",
+    "অক্টোবর",
+    "নভেম্বর",
+    "ডিসেম্বর",
+    "Bangla",
+    "uuidv",
+    "financials",
+    "Financials"
+  ]
 }
