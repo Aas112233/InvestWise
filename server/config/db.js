@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
 // Load backend environment variables
-dotenv.config({ path: '../.env' });
+dotenv.config({ path: '.env' });
 
 // Connection retry configuration
 const MAX_RETRIES = 5;
@@ -11,9 +11,11 @@ const MAX_RETRY_DELAY = 30000; // 30 seconds
 
 let isConnecting = false;
 let reconnectTimeout = null;
+const isServerlessRuntime = Boolean(process.env.VERCEL);
 
 const connectDB = async (retryCount = 0) => {
- if (isConnecting) return;
+ if (mongoose.connection.readyState === 1) return mongoose.connection;
+ if (mongoose.connection.readyState === 2 || isConnecting) return mongoose.connection;
 
  isConnecting = true;
 
@@ -50,6 +52,11 @@ const connectDB = async (retryCount = 0) => {
 
  // Calculate retry delay with exponential backoff
  const retryDelay = Math.min(INITIAL_RETRY_DELAY * Math.pow(2, retryCount), MAX_RETRY_DELAY);
+
+ if (isServerlessRuntime) {
+ console.warn(' Serverless runtime detected. Skipping background retry scheduling.');
+ throw error;
+ }
 
  // Don't exit process in development to allow server to stay up
  if (process.env.NODE_ENV === 'production' && retryCount >= MAX_RETRIES - 1) {
