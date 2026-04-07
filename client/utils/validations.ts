@@ -118,12 +118,6 @@ export const depositSchema = z.object({
  required_error: 'Please select a deposit method'
  }),
  txnDate: pastDateSchema
-}).refine((data) => {
- const expectedAmount = data.shareNumber * 1000;
- return Math.abs(data.amount - expectedAmount) < 0.01;
-}, {
- message: 'Amount must equal shares × ৳1,000',
- path: ['amount']
 });
 
 // ==========================================
