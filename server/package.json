@@ -8,7 +8,11 @@
     "start": "node index.js",
     "seed": "node seedAdmin.js",
     "seed-data": "node seedData.js",
-    "seed-all": "node seed-everything.js"
+    "seed-all": "node seed-everything.js",
+    "backup": "node scripts/backup.js daily",
+    "backup:monthly": "node scripts/backup.js monthly",
+    "backup:manual": "node scripts/backup.js manual",
+    "cleanup:deleted": "node scripts/cleanup-soft-deleted.js"
   },
   "dependencies": {
     "archiver": "^6.0.0",
@@ -30,6 +34,7 @@
     "multer": "^2.1.1",
     "pdfkit": "^0.15.0",
     "request-ip": "^3.3.0",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "@aws-sdk/client-s3": "^3.500.0"
   }
 }

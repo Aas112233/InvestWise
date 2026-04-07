@@ -9,6 +9,7 @@ import AuditLog from '../models/AuditLog.js';
 import { logAudit } from '../utils/auditLogger.js';
 import { getPaginationParams, formatPaginatedResponse } from '../utils/paginationHelper.js';
 import { recalculateAllStats } from './analyticsController.js';
+import SystemSettings from '../models/SystemSettings.js';
 
 const DEPOSIT_MONTH_INDEX = {
     january: 0,
@@ -39,6 +40,20 @@ const DEPOSIT_MONTH_INDEX = {
 
 const normalizeBanglaDigits = (value = '') =>
     value.replace(/[০-৯]/g, (digit) => String('০১২৩৪৫৬৭৮৯'.indexOf(digit)));
+
+const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildFlexibleMemberIdRegex = (value = '') => {
+    const compactValue = value.replace(/[\s\-_]+/g, '').trim();
+    if (!compactValue) return null;
+
+    const pattern = compactValue
+        .split('')
+        .map((char) => escapeRegex(char))
+        .join('[-_\\s]*');
+
+    return new RegExp(pattern, 'i');
+};
 
 const parseDepositMonthLabel = (depositMonth) => {
     if (!depositMonth || typeof depositMonth !== 'string') return null;
@@ -77,6 +92,23 @@ const resolveDepositDate = ({ date, depositMonth }) => {
     return new Date();
 };
 
+const mapTransactionPresentation = (transaction) => {
+    const member = transaction?.memberId && typeof transaction.memberId === 'object' ? transaction.memberId : null;
+    const fund = transaction?.fundId && typeof transaction.fundId === 'object' ? transaction.fundId : null;
+    const project = transaction?.projectId && typeof transaction.projectId === 'object' ? transaction.projectId : null;
+
+    return {
+        ...transaction,
+        memberMongoId: member?._id || transaction.memberId || null,
+        memberDisplayId: member?.memberId || transaction.memberDisplayId || 'N/A',
+        memberName: member?.name || transaction.memberName || 'Unknown',
+        fundMongoId: fund?._id || transaction.fundId || null,
+        fundName: fund?.name || transaction.fundName || 'N/A',
+        projectMongoId: project?._id || transaction.projectId || null,
+        projectName: project?.title || transaction.projectName || ''
+    };
+};
+
 // @desc    Get all transactions
 // @route   GET /api/finance/transactions
 // @access  Private
@@ -85,7 +117,7 @@ const getTransactions = asyncHandler(async (req, res) => {
         sortBy: 'date',
         sortOrder: 'desc'
     });
-    const search = req.query.search || '';
+    const search = String(req.query.search || '').trim();
     const searchField = req.query.searchField || 'all';
 
     let query = {};
@@ -104,7 +136,13 @@ const getTransactions = asyncHandler(async (req, res) => {
                 ];
             }
         } else if (searchField === 'memberId') {
-            const members = await Member.find({ memberId: { $regex: search, $options: 'i' } }).select('_id').lean();
+            const flexibleMemberIdRegex = buildFlexibleMemberIdRegex(search);
+            const members = await Member.find({
+                $or: [
+                    { memberId: { $regex: search, $options: 'i' } },
+                    ...(flexibleMemberIdRegex ? [{ memberId: flexibleMemberIdRegex }] : [])
+                ]
+            }).select('_id').lean();
             query.memberId = { $in: members.map(m => m._id) };
         } else if (searchField === 'memberName') {
             const members = await Member.find({ name: { $regex: search, $options: 'i' } }).select('_id').lean();
@@ -114,9 +152,14 @@ const getTransactions = asyncHandler(async (req, res) => {
             query.fundId = { $in: funds.map(f => f._id) };
         } else {
             // 'all' - optimized parallel search
+            const flexibleMemberIdRegex = buildFlexibleMemberIdRegex(search);
             const [memberMatches, fundMatches] = await Promise.all([
                 Member.find({
-                    $or: [{ name: { $regex: search, $options: 'i' } }, { memberId: { $regex: search, $options: 'i' } }]
+                    $or: [
+                        { name: { $regex: search, $options: 'i' } },
+                        { memberId: { $regex: search, $options: 'i' } },
+                        ...(flexibleMemberIdRegex ? [{ memberId: flexibleMemberIdRegex }] : [])
+                    ]
                 }).select('_id').lean(),
                 Fund.find({ name: { $regex: search, $options: 'i' } }).select('_id').lean()
             ]);
@@ -163,22 +206,19 @@ const getTransactions = asyncHandler(async (req, res) => {
     const [totalCount, transactions] = await Promise.all([
         Transaction.countDocuments(query),
         Transaction.find(query)
-            .lean()
             .select('-__v')
             .sort(sortOptions)
             .skip(skip)
             .limit(limit)
+            .populate([
+                { path: 'memberId', select: 'memberId name email' },
+                { path: 'projectId', select: 'title' },
+                { path: 'fundId', select: 'name' }
+            ])
+            .lean()
     ]);
 
-    // Populate only if there are results (saves queries on empty results)
-    let populatedTransactions = transactions;
-    if (transactions.length > 0) {
-        populatedTransactions = await Transaction.populate(transactions, [
-            { path: 'memberId', select: 'memberId name email' },
-            { path: 'projectId', select: 'title' },
-            { path: 'fundId', select: 'name' }
-        ]);
-    }
+    const formattedTransactions = transactions.map(mapTransactionPresentation);
 
     // Calculate totals for inflow and outflow (agnostic of pagination)
     const startOfMonth = new Date();
@@ -189,7 +229,8 @@ const getTransactions = asyncHandler(async (req, res) => {
         {
             $match: {
                 ...query,
-                status: { $in: ['Success', 'Completed', 'Processing'] }
+                status: { $in: ['Success', 'Completed', 'Processing'] },
+                isDeleted: { $ne: true } // Exclude soft-deleted transactions from totals
             }
         },
         {
@@ -234,7 +275,7 @@ const getTransactions = asyncHandler(async (req, res) => {
     const stats = totals[0] || { totalInflow: 0, totalOutflow: 0, totalMonthly: 0 };
 
     res.json({
-        ...formatPaginatedResponse(populatedTransactions, page, limit, totalCount),
+        ...formatPaginatedResponse(formattedTransactions, page, limit, totalCount),
         totalInflow: stats.totalInflow,
         totalOutflow: stats.totalOutflow,
         totalMonthly: stats.totalMonthly
@@ -297,9 +338,9 @@ const addDeposit = asyncHandler(async (req, res) => {
             fund.balance += Number(amount);
             await fund.save({ session });
 
-            // Update Member
+            // Update Member - ONLY totalContributed, NEVER shares
             member.totalContributed += Number(amount);
-            // member.shares is a static property, DO NOT increment it via deposits
+            // SHARES ARE MANAGED ONLY IN MEMBERS SCREEN - Do not modify here
             await member.save({ session });
         }
 
@@ -344,8 +385,20 @@ const editDeposit = asyncHandler(async (req, res) => {
         const oldStatus = transaction.status;
         const isCompleted = oldStatus === 'Success' || oldStatus === 'Completed';
 
-        // 1. Revert Old Impact (Only if it was previously applied)
-        if (isCompleted) {
+        // FIXED: Validate status changes to prevent double counting
+        const newStatus = req.body.status || oldStatus;
+        const isNowCompleted = newStatus === 'Success' || newStatus === 'Completed';
+        const wasPending = oldStatus === 'Pending' || oldStatus === 'Processing';
+
+        // If changing from Pending to Completed, apply impact
+        // If changing from Completed to Pending, revert impact
+        const shouldApplyImpact = isNowCompleted && wasPending;
+        const shouldRevertImpact = !isNowCompleted && isCompleted;
+        const shouldMaintainImpact = isNowCompleted && isCompleted && !wasPending;
+        const shouldNoImpact = !isNowCompleted && !wasPending;
+
+        // 1. Revert Old Impact (Only if changing from Completed to Pending/Failed)
+        if (shouldRevertImpact) {
             // Revert Fund
             const oldFund = await Fund.findById(oldFundId).session(session);
             if (oldFund) {
@@ -357,64 +410,76 @@ const editDeposit = asyncHandler(async (req, res) => {
             const oldMember = await Member.findById(oldMemberId).session(session);
             if (oldMember) {
                 oldMember.totalContributed -= oldAmount;
-                // member.shares is static, do not revert
                 await oldMember.save({ session });
             }
-        }
+        } else if (shouldMaintainImpact || shouldApplyImpact) {
+            // FIXED: When editing a completed deposit, recalculate instead of simple add/subtract
+            // This prevents drift from multiple edits
 
-        // 2. Apply New Impact (We assume edit maintains 'Completed' status or use existing)
-        const newAmount = parseInt(amount);
-        const newShareImpact = parseInt(shareNumber);
+            // Revert old impact first
+            const oldFund = await Fund.findById(oldFundId).session(session);
+            if (oldFund) {
+                oldFund.balance -= oldAmount;
+                await oldFund.save({ session });
+            }
 
-        // Find New Fund (even if it's the same as oldFund)
-        const newFund = await Fund.findById(fundId).session(session);
-        if (!newFund) throw new Error(`Target fund not found: ${fundId}`);
+            const oldMember = await Member.findById(oldMemberId).session(session);
+            if (oldMember) {
+                oldMember.totalContributed -= oldAmount;
+                await oldMember.save({ session });
+            }
 
-        // Only apply impact if the transaction is (still) in a completed state
-        // If it was pending, we update the record but don't touch the fund yet
-        if (isCompleted) {
+            // Then apply new impact
+            const nextMemberId = memberId && memberId !== 'N/A' ? memberId : oldMemberId;
+            const newAmount = parseInt(amount);
+
+            const newFund = await Fund.findById(fundId).session(session);
+            if (!newFund) throw new Error(`Target fund not found: ${fundId}`);
+
             newFund.balance += newAmount;
             await newFund.save({ session });
-        }
 
-        // Find New Member (even if it's the same as oldMember)
-        const newMember = await Member.findById(memberId).session(session);
-        if (!newMember) throw new Error(`Target partner not found: ${memberId}`);
+            const newMember = await Member.findById(nextMemberId).session(session);
+            if (!newMember) throw new Error(`Target partner not found: ${nextMemberId}`);
 
-        if (isCompleted) {
             newMember.totalContributed += newAmount;
-            // member.shares is a static property, DO NOT modify it via deposit edits
             await newMember.save({ session });
+
+            // Update transaction
+            const depositDate = resolveDepositDate({ date, depositMonth: description || transaction.description });
+            transaction.amount = newAmount;
+            transaction.fundId = fundId;
+            transaction.memberId = nextMemberId;
+            transaction.description = description;
+            transaction.date = depositDate;
+            transaction.handlingOfficer = req.user.name;
+            transaction.depositMethod = depositMethod;
+            transaction.referenceNumber = req.body.referenceNumber;
+            transaction.status = newStatus;
+            transaction.updatedBy = req.user._id;
+            await transaction.save({ session });
+
+            // Audit Log
+            await AuditLog.create([{
+                user: req.user._id,
+                userName: req.user.name,
+                action: 'EDIT_DEPOSIT',
+                resourceType: 'Transaction',
+                resourceId: transaction._id,
+                details: {
+                    message: `Edited deposit #${transaction._id}`,
+                    previous: { amount: oldAmount, fundId: oldFundId, memberId: oldMemberId, status: oldStatus },
+                    current: { amount: parseInt(amount), fundId, memberId: nextMemberId, status: newStatus }
+                },
+                ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+                userAgent: req.headers['user-agent']
+            }], { session });
+
+            await session.commitTransaction();
+            await recalculateAllStats();
+            res.json(transaction);
+            return; // Early exit - we handled the complete edit
         }
-
-        // 3. Update Transaction Record
-        const depositDate = resolveDepositDate({ date, depositMonth: description || transaction.description });
-        transaction.amount = newAmount;
-        transaction.fundId = fundId;
-        transaction.memberId = memberId;
-        transaction.description = description;
-        transaction.date = depositDate;
-        transaction.handlingOfficer = req.user.name;
-        transaction.depositMethod = depositMethod;
-        transaction.referenceNumber = req.body.referenceNumber;
-        transaction.updatedBy = req.user._id;
-        await transaction.save({ session });
-
-        // 4. Audit Log (System Activity)
-        await AuditLog.create([{
-            user: req.user._id,
-            userName: req.user.name,
-            action: 'EDIT_DEPOSIT',
-            resourceType: 'Transaction',
-            resourceId: transaction._id,
-            details: {
-                message: `Edited deposit #${transaction._id}`,
-                previous: { amount: oldAmount, fundId: oldFundId, memberId: oldMemberId },
-                current: { amount: newAmount, fundId, memberId }
-            },
-            ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
-            userAgent: req.headers['user-agent']
-        }], { session });
 
         await session.commitTransaction();
         await recalculateAllStats();
@@ -677,13 +742,13 @@ const deleteTransaction = asyncHandler(async (req, res) => {
             throw new Error('Transaction not found');
         }
 
+        const amount = transaction.amount;
+        const fundId = transaction.fundId;
+        const projectId = transaction.projectId;
+        const memberId = transaction.memberId;
+
         // Only reverse impact if it was actually applied (Success/Completed)
         if (transaction.status === 'Success' || transaction.status === 'Completed') {
-            const amount = transaction.amount;
-            const fundId = transaction.fundId;
-            const projectId = transaction.projectId;
-            const memberId = transaction.memberId;
-
             // 1. Revert Fund Balance
             if (fundId) {
                 const fund = await Fund.findById(fundId).session(session);
@@ -697,14 +762,30 @@ const deleteTransaction = asyncHandler(async (req, res) => {
                 }
             }
 
-            // 2. Revert Member Contributions/Shares
+            // 2. Revert Member Contributions (NEVER modify shares here)
             if (memberId && transaction.type === 'Deposit') {
                 const member = await Member.findById(memberId).session(session);
                 if (member) {
-                    member.totalContributed -= amount;
-                    // Revert shares estimate (1000 per share as seen in current code)
-                    const estimatedShares = Math.floor(amount / 1000);
-                    member.shares = Math.max(0, member.shares - estimatedShares);
+                    // Recalculate totalContributed from ALL remaining deposits
+                    const allDeposits = await Transaction.aggregate([
+                        {
+                            $match: {
+                                memberId: member._id,
+                                type: 'Deposit',
+                                status: { $in: ['Success', 'Completed'] }
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: null,
+                                total: { $sum: '$amount' }
+                            }
+                        }
+                    ]);
+
+                    member.totalContributed = allDeposits.length > 0 ? allDeposits[0].total : 0;
+
+                    // SHARES ARE MANAGED ONLY IN MEMBERS SCREEN - Never modify here
                     await member.save({ session });
                 }
             }
@@ -729,15 +810,18 @@ const deleteTransaction = asyncHandler(async (req, res) => {
             }
         }
 
-        // Archive the deleted record
+        // HARD DELETE: Move to archive, then permanently remove from transactions
+        // 1. Archive to DeletedRecord collection FIRST
         await DeletedRecord.create([{
             originalId: transaction._id,
             collectionName: 'Transaction',
             data: transaction.toObject(),
             deletedBy: req.user._id,
-            reason: req.body.reason || 'Manual Deletion'
+            reason: req.body.reason || 'Manual Deletion',
+            deletedAt: new Date()
         }], { session });
 
+        // 2. Permanently delete from transactions collection
         await transaction.deleteOne({ session });
 
         await session.commitTransaction();
@@ -753,11 +837,10 @@ const deleteTransaction = asyncHandler(async (req, res) => {
             details: { originalAmount: transaction.amount, reason: req.body.reason || 'Manual Deletion' }
         });
 
-        res.json({ message: 'Transaction removed' });
+        res.json({ message: 'Transaction deleted permanently and archived to deleted records' });
     } catch (error) {
         await session.abortTransaction();
-        res.status(400);
-        throw new Error('Delete failed: ' + error.message);
+        throw error;
     } finally {
         session.endSession();
     }
@@ -1305,6 +1388,7 @@ const bulkAddDeposits = asyncHandler(async (req, res) => {
         // Track entries to prevent exact duplicates (Same Member + Same Month)
         const seenEntries = new Set();
 
+        // FIXED: Check for cross-batch duplicates by querying existing transactions
         for (const dep of deposits) {
             const { memberId, amount, shareNumber, depositMonth, date } = dep;
             const month = depositMonth || commonMonth;
@@ -1323,13 +1407,30 @@ const bulkAddDeposits = asyncHandler(async (req, res) => {
                 throw new Error(`Invalid amount for member ${member.name}`);
             }
 
-            // Update Member
+            // FIXED: Check for existing deposit with same member, amount, and month
+            const depositDate = resolveDepositDate({ date, depositMonth: month });
+            const startOfMonth = new Date(depositDate.getFullYear(), depositDate.getMonth(), 1);
+            const endOfMonth = new Date(depositDate.getFullYear(), depositDate.getMonth() + 1, 0, 23, 59, 59);
+
+            const existingDeposit = await Transaction.findOne({
+                type: 'Deposit',
+                memberId: member._id,
+                fundId: fund._id,
+                amount: depositAmount,
+                date: { $gte: startOfMonth, $lte: endOfMonth },
+                status: { $in: ['Success', 'Completed'] }
+            }).session(session);
+
+            if (existingDeposit) {
+                throw new Error(`Duplicate deposit detected: Member ${member.name} already has a deposit of ${depositAmount} in ${month} (Transaction ID: ${existingDeposit._id})`);
+            }
+
+            // Update Member - ONLY totalContributed, NEVER shares
             member.totalContributed += depositAmount;
-            // member.shares is a static property, DO NOT increment it via bulk deposits
+            // SHARES ARE MANAGED ONLY IN MEMBERS SCREEN - Do not modify here
             await member.save({ session });
 
             // Create Transaction
-            const depositDate = resolveDepositDate({ date, depositMonth: month });
             const transaction = await Transaction.create([{
                 type: 'Deposit',
                 amount: depositAmount,

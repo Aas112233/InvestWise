@@ -1,231 +1,263 @@
+/**
+ * Backup API Routes (Express)
+ * Cloudflare R2 backup/restore endpoints
+ */
 import express from 'express';
 import mongoose from 'mongoose';
-import multer from 'multer';
-import { EJSON } from 'bson';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { protect, requireRole } from '../middleware/authMiddleware.js';
+import zlib from 'zlib';
+import { promisify } from 'util';
+import { protect, requirePermission } from '../middleware/authMiddleware.js';
+import r2Storage from '../utils/cloudflareR2.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const gunzip = promisify(zlib.gunzip);
 
 const router = express.Router();
 
-const OBJECT_ID_LIKE_KEYS = new Set([
-    '_id',
-    'userId',
-    'memberId',
-    'fundId',
-    'projectId',
-    'createdBy',
-    'updatedBy',
-    'authorizedBy',
-    'linkedFundId',
-    'resourceId'
-]);
+// Import models dynamically to handle missing models gracefully
+let Member, Transaction, Project, Fund, User, SystemSettings;
 
-const DATE_LIKE_KEYS = new Set([
-    'date',
-    'createdAt',
-    'updatedAt',
-    'lastLogin',
-    'lastActive',
-    'timestamp',
-    'expiresAt',
-    'blacklistedAt'
-]);
-
-const isObjectIdString = (value) =>
-    typeof value === 'string' && /^[a-f\d]{24}$/i.test(value);
-
-const isIsoDateString = (value) =>
-    typeof value === 'string' &&
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value) &&
-    !Number.isNaN(new Date(value).getTime());
-
-const restoreBsonTypes = (value, key = '') => {
-    if (Array.isArray(value)) {
-        return value.map((item) => restoreBsonTypes(item, key));
+async function loadModels() {
+    try {
+        Member = (await import('../models/Member.js')).default;
+        Transaction = (await import('../models/Transaction.js')).default;
+        Project = (await import('../models/Project.js')).default;
+        Fund = (await import('../models/Fund.js')).default;
+        User = (await import('../models/User.js')).default;
+        SystemSettings = (await import('../models/SystemSettings.js')).default;
+    } catch (error) {
+        console.warn('⚠️  Some models not found');
     }
+}
 
-    if (value && typeof value === 'object' && !(value instanceof Date) && !(value instanceof mongoose.Types.ObjectId)) {
-        return Object.fromEntries(
-            Object.entries(value).map(([childKey, childValue]) => [childKey, restoreBsonTypes(childValue, childKey)])
-        );
-    }
-
-    if (isObjectIdString(value) && OBJECT_ID_LIKE_KEYS.has(key)) {
-        return new mongoose.Types.ObjectId(value);
-    }
-
-    if (isIsoDateString(value) && DATE_LIKE_KEYS.has(key)) {
-        return new Date(value);
-    }
-
-    return value;
-};
-
-// Configure multer for file uploads
-const storage = multer.memoryStorage();
-const upload = multer({ 
-    storage,
-    limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
-});
-
-// All backup routes require Admin role
-router.use(protect);
-router.use(requireRole('Admin', 'Administrator'));
+const BACKUP_COLLECTIONS = [
+    { name: 'members', model: null },
+    { name: 'transactions', model: null },
+    { name: 'projects', model: null },
+    { name: 'funds', model: null },
+    { name: 'users', model: null },
+    { name: 'systemSettings', model: null },
+];
 
 /**
- * GET /api/backup/download
- * Download complete database backup as JSON
+ * Manual Backup Trigger
+ * POST /api/backup/manual
  */
-router.get('/download', async (req, res) => {
+router.post('/manual', protect, requirePermission('REPORTS', 'READ'), async (req, res) => {
     try {
-        console.log('[Backup] Starting backup creation...');
-        
-        // Get all collections
-        const collections = await mongoose.connection.db.collections();
-        
-        const backup = {
+        const backupType = req.body.type || 'daily';
+        const startTime = Date.now();
+
+        console.log(`🚀 Manual Backup Triggered: ${backupType}`);
+
+        // Load models
+        await loadModels();
+
+        // Export data
+        const backupData = {
             metadata: {
-                version: '2.0',
+                version: '1.0',
                 timestamp: new Date().toISOString(),
                 database: mongoose.connection.name,
-                createdBy: req.user?.email || 'Unknown',
-                format: 'EJSON'
             },
-            data: {}
+            collections: {},
+            statistics: {
+                totalCollections: 0,
+                totalDocuments: 0,
+            },
         };
 
-        // Export each collection
-        for (const collection of collections) {
-            const collectionName = collection.collectionName;
-            
-            // Skip internal MongoDB collections
-            if (collectionName.startsWith('system.')) continue;
-            
-            const documents = await collection.find({}).toArray();
-            backup.data[collectionName] = documents;
-            
-            console.log(`[Backup] Exported ${collectionName}: ${documents.length} documents`);
+        for (const collection of BACKUP_COLLECTIONS) {
+            if (!collection.model) {
+                try {
+                    collection.model = (await import(`../models/${capitalizeFirst(collection.name)}.js`)).default;
+                } catch {
+                    continue;
+                }
+            }
+
+            const documents = await collection.model.find({}).lean();
+            backupData.collections[collection.name] = {
+                name: collection.name,
+                count: documents.length,
+                data: documents,
+            };
+            backupData.statistics.totalCollections++;
+            backupData.statistics.totalDocuments += documents.length;
         }
 
-        // Preserve ObjectIds/Dates so restore does not break references.
-        const jsonData = EJSON.stringify(backup, null, 2);
-        
-        // Set headers for download
-        res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Content-Disposition', `attachment; filename=investwise-backup-${Date.now()}.json`);
-        res.setHeader('Content-Length', Buffer.byteLength(jsonData));
-        
-        console.log('[Backup] Backup created successfully');
-        res.send(jsonData);
-        
+        // Compress
+        const jsonString = JSON.stringify(backupData, null, 2);
+        const compressed = await gzip(jsonString);
+
+        // Upload to R2
+        const timestamp = new Date().toISOString().split('T')[0];
+        const filename = `backup-${timestamp}.json.gz`;
+        const key = `${backupType}/${filename}`;
+
+        await r2Storage.upload(key, compressed, {
+            'backup-type': backupType,
+            'backup-date': timestamp,
+        });
+
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+
+        console.log(`✅ Backup completed in ${duration}s`);
+
+        return res.status(200).json({
+            status: 'success',
+            type: backupType,
+            duration,
+            filename,
+            key,
+            collections: backupData.statistics.totalCollections,
+            documents: backupData.statistics.totalDocuments,
+        });
+
     } catch (error) {
-        console.error('[Backup] Backup failed:', error);
-        res.status(500).json({ 
-            success: false,
-            message: 'Backup creation failed',
-            error: error.message 
+        console.error('Manual backup failed:', error);
+        return res.status(500).json({
+            status: 'failed',
+            error: error.message
         });
     }
 });
 
 /**
- * POST /api/backup/restore
- * Restore database from uploaded JSON backup file
+ * List All Backups
+ * GET /api/backup/list
  */
-router.post('/restore', upload.single('backup'), async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    
+router.get('/list', protect, requirePermission('REPORTS', 'READ'), async (req, res) => {
     try {
-        console.log('[Restore] Starting restore process...');
-        
-        if (!req.file) {
-            throw new Error('No backup file provided');
+        const { prefix = '' } = req.query;
+        const backups = await r2Storage.listBackups(prefix);
+
+        // Format for display (add sizeKB and age, filename/type already provided)
+        const formattedBackups = backups.map(backup => ({
+            ...backup,
+            sizeKB: (backup.size / 1024).toFixed(2),
+            age: getAge(backup.lastModified),
+        }));
+
+        return res.status(200).json({
+            success: true,
+            count: formattedBackups.length,
+            backups: formattedBackups
+        });
+
+    } catch (error) {
+        console.error('Failed to list backups:', error);
+        return res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * Restore from Cloud Backup
+ * POST /api/backup/restore
+ */
+router.post('/restore', protect, requirePermission('REPORTS', 'READ'), async (req, res) => {
+    try {
+        const { backupKey, confirm } = req.body;
+
+        if (!backupKey) {
+            return res.status(400).json({ error: 'backupKey is required' });
         }
 
-        // Parse backup file while preserving BSON types such as ObjectId and Date.
-        const backupData = EJSON.parse(req.file.buffer.toString());
-        
-        if (!backupData.data || typeof backupData.data !== 'object') {
-            throw new Error('Invalid backup file format');
+        if (!confirm) {
+            return res.status(400).json({
+                error: 'Restore requires confirmation. Set confirm: true',
+                warning: 'This will overwrite existing data!'
+            });
         }
 
-        console.log('[Restore] Backup metadata:', backupData.metadata);
-        
-        // Clear existing data and restore
-        const collections = Object.keys(backupData.data);
-        let totalRestored = 0;
+        console.log(`🔄 Cloud Restore initiated: ${backupKey}`);
 
-        for (const collectionName of collections) {
-            const documents = backupData.data[collectionName];
-            
-            // Get the collection
-            const collection = mongoose.connection.collection(collectionName);
-            
-            // Clear existing data
-            await collection.deleteMany({}, { session });
-            console.log(`[Restore] Cleared collection: ${collectionName}`);
-            
-            // Insert backup data
-            if (Array.isArray(documents) && documents.length > 0) {
-                const normalizedDocuments = documents.map((doc) => restoreBsonTypes(doc));
-                await collection.insertMany(normalizedDocuments, { session });
-                totalRestored += documents.length;
-                console.log(`[Restore] Restored ${collectionName}: ${documents.length} documents`);
-            } else {
-                console.log(`[Restore] Restored empty collection: ${collectionName}`);
+        // Download backup
+        const backupBuffer = await r2Storage.download(backupKey);
+
+        // Decompress
+        const decompressed = await gunzip(backupBuffer);
+        const backupData = JSON.parse(decompressed.toString());
+
+        // Load models
+        await loadModels();
+
+        // Restore collections
+        const results = {};
+        for (const [collectionName, collectionData] of Object.entries(backupData.collections)) {
+            try {
+                let Model;
+                try {
+                    Model = (await import(`../models/${capitalizeFirst(collectionName)}.js`)).default;
+                } catch {
+                    results[collectionName] = { status: 'skipped', reason: 'Model not found' };
+                    continue;
+                }
+
+                // Clear existing data
+                await Model.deleteMany({});
+
+                // Insert backup data
+                if (collectionData.data.length > 0) {
+                    await Model.insertMany(collectionData.data);
+                }
+
+                results[collectionName] = {
+                    status: 'success',
+                    documentsRestored: collectionData.count,
+                };
+            } catch (error) {
+                results[collectionName] = {
+                    status: 'failed',
+                    error: error.message,
+                };
             }
         }
 
-        await session.commitTransaction();
-        console.log(`[Restore] Restore completed successfully. Total documents: ${totalRestored}`);
-        
-        res.json({
+        return res.status(200).json({
             success: true,
             message: 'Backup restored successfully',
-            documentsRestored: totalRestored,
-            timestamp: new Date().toISOString()
+            results
         });
-        
+
     } catch (error) {
-        await session.abortTransaction();
-        console.error('[Restore] Restore failed:', error);
-        
-        res.status(500).json({ 
+        console.error('Failed to restore backup:', error);
+        return res.status(500).json({
             success: false,
-            message: 'Restore failed: ' + error.message,
-            error: error.message 
+            error: error.message
         });
-    } finally {
-        session.endSession();
     }
 });
 
 /**
- * GET /api/backup/list
- * List available backup files (if storing on server)
+ * Helper: Gzip compress
  */
-router.get('/list', async (req, res) => {
-    try {
-        // This endpoint can be used if you store backups on the server
-        // For now, we're doing direct download/upload
-        res.json({
-            success: true,
-            message: 'Use download endpoint to create backups',
-            backups: []
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            success: false,
-            message: 'Failed to list backups',
-            error: error.message 
-        });
-    }
-});
+const gzip = promisify(zlib.gzip);
+
+/**
+ * Helper: Format backup age
+ */
+function getAge(date) {
+    const now = new Date();
+    const then = new Date(date);
+    const diffMs = now - then;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+    if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffHours > 0) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
+}
+
+/**
+ * Helper: Capitalize first letter and remove 's' for model name
+ */
+function capitalizeFirst(str) {
+    const singular = str.replace(/s$/, '');
+    return singular.charAt(0).toUpperCase() + singular.slice(1);
+}
 
 export default router;
