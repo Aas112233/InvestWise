@@ -1,13 +1,7 @@
+import { formatMoney } from './currency';
 
-export const formatCurrency = (amount: number, includeSymbol: boolean = true): string => {
- const formatted = new Intl.NumberFormat('en-BD', {
- style: includeSymbol ? 'currency' : 'decimal',
- currency: 'BDT',
- minimumFractionDigits: 0,
- maximumFractionDigits: 0,
- }).format(amount);
-
- return formatted;
+export const formatCurrency = (amount: number, includeSymbol: boolean = true, currencyCode?: string): string => {
+ return formatMoney(amount, includeSymbol, currencyCode);
 };
 
 export const formatCompactNumber = (number: number): string => {

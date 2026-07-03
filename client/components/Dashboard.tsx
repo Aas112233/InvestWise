@@ -22,7 +22,7 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ isDarkMode, lang }) => {
- const { globalStats, refreshAnalytics, members, projects } = useGlobalState();
+ const { globalStats, refreshAnalytics, members, projects, currencyCode } = useGlobalState();
  
  // Auto-refresh analytics data when screen opens
  useScreenDataRefresh(refreshAnalytics);
@@ -164,7 +164,7 @@ const trendData = rawTrendData.map((item: any) => ({
  value: formatCompactNumber(totalDeposits),
  change: depositChange,
  variant: "brand" as const,
- currency: t('common.bdt', lang),
+ currency: currencyCode,
  rawValue: totalDeposits
  },
  {
@@ -172,7 +172,7 @@ const trendData = rawTrendData.map((item: any) => ({
  value: formatCompactNumber(investedCapital),
  change: capitalChange,
  variant: "dark" as const,
- currency: t('common.bdt', lang),
+ currency: currencyCode,
  rawValue: investedCapital
  },
  {
@@ -310,20 +310,20 @@ const trendData = rawTrendData.map((item: any) => ({
  <div className="w-3 h-3 rounded-full bg-brand"></div>
  <span className="text-xs font-bold text-gray-600 dark:text-gray-400">Inflow:</span>
  </div>
- <span className="text-sm font-black text-dark dark:text-white">{formatCompactNumber(inflow)} {t('common.bdt', lang)}</span>
+ <span className="text-sm font-black text-dark dark:text-white">{formatCompactNumber(inflow)} {currencyCode}</span>
  </div>
  <div className="flex items-center justify-between gap-8">
  <div className="flex items-center gap-2">
  <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
  <span className="text-xs font-bold text-gray-600 dark:text-gray-400">Outflow:</span>
  </div>
- <span className="text-sm font-black text-dark dark:text-white">{formatCompactNumber(outflow)} {t('common.bdt', lang)}</span>
+ <span className="text-sm font-black text-dark dark:text-white">{formatCompactNumber(outflow)} {currencyCode}</span>
  </div>
  <div className="pt-3 border-t-2 border-gray-100 dark:border-white/10">
  <div className="flex items-center justify-between gap-8">
  <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Net Profit:</span>
  <span className={`text-lg font-black ${netProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
- {netProfit >= 0 ? '+ ' : '- '}{formatCompactNumber(Math.abs(netProfit))} {t('common.bdt', lang)}
+ {netProfit >= 0 ? '+ ' : '- '}{formatCompactNumber(Math.abs(netProfit))} {currencyCode}
  </span>
  </div>
  </div>
@@ -360,7 +360,7 @@ const trendData = rawTrendData.map((item: any) => ({
  <span className="text-4xl font-black text-dark dark:text-white tracking-tighter leading-none">
  {formatCompactNumber(pieData.reduce((sum: number, item: any) => sum + item.value, 0))}
  </span>
- <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] mt-2">{t('common.bdt', lang)}</span>
+ <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em] mt-2">{currencyCode}</span>
  <span className="text-[11px] font-black text-brand uppercase tracking-[0.3em] mt-1">{t('dashboard.allocated', lang)}</span>
  </div>
  <ResponsiveContainer width="100%" height="100%">
@@ -397,7 +397,7 @@ const trendData = rawTrendData.map((item: any) => ({
  <div className="space-y-2">
  <div className="flex items-center justify-between gap-6">
  <span className="text-xs font-bold text-gray-600 dark:text-gray-400">Amount:</span>
- <span className="text-lg font-black text-dark dark:text-white">{formatCompactNumber(data.value)} {t('common.bdt', lang)}</span>
+ <span className="text-lg font-black text-dark dark:text-white">{formatCompactNumber(data.value)} {currencyCode}</span>
  </div>
  <div className="flex items-center justify-between gap-6 pt-2 border-t border-gray-100 dark:border-white/10">
  <span className="text-xs font-bold text-gray-600 dark:text-gray-400">Share:</span>
@@ -599,7 +599,7 @@ const trendData = rawTrendData.map((item: any) => ({
  <div className="group-hover:translate-x-2 transition-transform duration-500">
  <p className="text-[12px] font-black text-white/30 uppercase tracking-widest mb-3">Highest Profit Month</p>
  <p className="text-5xl font-black text-brand tracking-tighter leading-none drop-shadow-[0_10px_20px_rgba(191,243,0,0.3)]">
- {formatCompactNumber(Math.max(...topMonths.map(m => (m.inflow - m.outflow) || 0)) || 0)} <span className="text-sm opacity-30">{t('common.bdt', lang)}</span>
+ {formatCompactNumber(Math.max(...topMonths.map(m => (m.inflow - m.outflow) || 0)) || 0)} <span className="text-sm opacity-30">{currencyCode}</span>
  </p>
  </div>
  <div className="w-24 h-24 rounded-[3rem] bg-brand text-dark flex items-center justify-center hover:rotate-12 transition-all cursor-pointer shadow-[0_25px_50px_rgba(191,243,0,0.4)] ring-8 ring-white/5 active:scale-90">
@@ -705,7 +705,7 @@ const trendData = rawTrendData.map((item: any) => ({
  <div className="grid grid-cols-2 gap-12 border-t-2 border-dark/10 pt-12 relative z-10 text-center">
  <div className="group-hover:translate-y-[-5px] transition-transform">
  <p className="text-4xl font-black tracking-tighter leading-none mb-3 drop-shadow-sm">
- BDT {formatCompactNumber(totalDeposits)}
+ {currencyCode} {formatCompactNumber(totalDeposits)}
  </p>
  <p className="text-[11px] font-black opacity-40 uppercase tracking-widest">{t('dashboard.managedAssets', lang)}</p>
  </div>

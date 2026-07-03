@@ -9,39 +9,13 @@ const securityHeaders = helmet({
  contentSecurityPolicy: {
  directives: {
  defaultSrc: ["'self'"],
- scriptSrc: [
- "'self'",
- "'unsafe-inline'", // Required for some React apps - consider nonce in production
- "'unsafe-eval'", // Required for some libraries - remove if possible
- 'https://cdn.jsdelivr.net', // If using external scripts
- ],
- styleSrc: [
- "'self'",
- "'unsafe-inline'", // Required for inline styles
- 'https://fonts.googleapis.com',
- 'https://cdn.jsdelivr.net',
- ],
- fontSrc: [
- "'self'",
- 'https://fonts.gstatic.com',
- 'https://cdn.jsdelivr.net',
- ],
- imgSrc: [
- "'self'",
- 'data:',
- 'blob:',
- 'https:',
- 'http:',
- ],
- connectSrc: [
- "'self'",
- 'https://api.ipify.org', // If using IP geolocation
- ],
- frameSrc: [
- "'self'",
- 'https://www.youtube.com',
- 'https://www.youtube-nocookie.com',
- ],
+ scriptSrc: ["'self'"],
+ styleSrc: ["'self'"],
+ fontSrc: ["'self'"],
+ imgSrc: ["'self'", 'data:', 'blob:'],
+ connectSrc: ["'self'"],
+ frameSrc: ["'none'"],
+ objectSrc: ["'none'"],
  frameAncestors: ["'self'"],
  baseUri: ["'self'"],
  formAction: ["'self'"],
@@ -142,11 +116,12 @@ const getSecurityConfig = () => {
  contentSecurityPolicy: {
  directives: {
  defaultSrc: ["'self'"],
- scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
- styleSrc: ["'self'", "'unsafe-inline'"],
- imgSrc: ["'self'", 'data:', 'blob:', 'https:', 'http:'],
+ scriptSrc: ["'self'"],
+ styleSrc: ["'self'"],
+ imgSrc: ["'self'", 'data:', 'blob:'],
  connectSrc: ["'self'", 'http://localhost:*', 'https://localhost:*'],
  frameAncestors: ["'self'"],
+ objectSrc: ["'none'"],
  },
  },
  hsts: false, // Disable HSTS in development

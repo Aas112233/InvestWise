@@ -1,136 +1,175 @@
 import asyncHandler from 'express-async-handler';
-import Fund from '../models/Fund.js';
-import Transaction from '../models/Transaction.js';
+import cache from '../utils/cache.js';
+import { normalizeCurrencyCode } from '../utils/currency.js';
+import { getDb } from '../db/connection.js';
+import { funds, transactions, systemSettings } from '../db/schema/index.js';
+import { eq, and, desc, count } from 'drizzle-orm';
 
-// @desc Get all funds
-// @route GET /api/funds
-// @access Private
 // @desc Get all funds
 // @route GET /api/funds
 // @access Private
 const getFunds = asyncHandler(async (req, res) => {
- const { type, status } = req.query;
- const filter = {};
- if (type) filter.type = type;
- if (status) filter.status = status;
+  const { type, status } = req.query;
 
- // Default: if no status param, maybe show all? Or just Active?
- // User requested "Dropdown shows only ACTIVE funds". So UI will filter or ask for ?status=ACTIVE.
- // Let's just return what is asked.
+  const conditions = [];
+  if (type) conditions.push(eq(funds.type, type));
+  if (status) conditions.push(eq(funds.status, status));
 
- const funds = await Fund.find(filter).sort({ createdAt: -1 });
- res.json(funds);
+  const db = getDb();
+  const result = await db.select()
+    .from(funds)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(funds.createdAt));
+
+  res.json(result);
 });
 
 // @desc Get fund by ID
 // @route GET /api/funds/:id
 // @access Private
 const getFundById = asyncHandler(async (req, res) => {
- const fund = await Fund.findById(req.params.id);
- if (fund) {
- res.json(fund);
- } else {
- res.status(404);
- throw new Error('Fund not found');
- }
+  const db = getDb();
+  const [fund] = await db.select()
+    .from(funds)
+    .where(eq(funds.id, req.params.id))
+    .limit(1);
+
+  if (fund) {
+    res.json(fund);
+  } else {
+    res.status(404);
+    throw new Error('Fund not found');
+  }
 });
 
 // @desc Create a fund
 // @route POST /api/funds
 // @access Private/Admin
 const createFund = asyncHandler(async (req, res) => {
- const { name, type, description, initialBalance, handlingOfficer, accountNumber } = req.body;
+  const { name, type, description, initialBalance, handlingOfficer, accountNumber } = req.body;
 
- if (type === 'PROJECT') {
- res.status(400);
- throw new Error('PROJECT funds are automatically created when a Project is initialized.');
- }
+  if (type === 'PROJECT') {
+    res.status(400);
+    throw new Error('PROJECT funds are automatically created when a Project is initialized.');
+  }
 
- const fund = await Fund.create({
- name,
- type: type || 'OTHER',
- status: 'ACTIVE',
- balance: 0, // Balance is 0 initially. Use Opening Balance transaction if needed.
- description,
- handlingOfficer,
- accountNumber
- });
+  const db = getDb();
 
- if (initialBalance && initialBalance > 0) {
- // Option 1: Create an "Opening Balance" transaction
- // user requirement: "optional openingBalance (but should be handled via ledger transaction)"
- await Transaction.create({
- type: 'Deposit',
- amount: initialBalance,
- description: `Opening Balance for ${name}`,
- fundId: fund._id,
- authorizedBy: req.user._id,
- date: Date.now()
- });
+  try {
+    const [setting] = await db.select().from(systemSettings).limit(1);
+    const currencyCode = normalizeCurrencyCode(setting?.baseCurrency);
 
- fund.balance = initialBalance;
- await fund.save();
- }
+    const result = await db.transaction(async (tx) => {
+      const [fund] = await tx.insert(funds).values({
+        name,
+        type: type || 'OTHER',
+        status: 'ACTIVE',
+        balance: '0',
+        currency: currencyCode,
+        description,
+        handlingOfficer,
+        accountNumber,
+      }).returning();
 
- if (fund) {
- res.status(201).json(fund);
- } else {
- res.status(400);
- throw new Error('Invalid fund data');
- }
+      if (initialBalance && Number(initialBalance) > 0) {
+        await tx.insert(transactions).values({
+          type: 'Deposit',
+          amount: String(initialBalance),
+          description: `Opening Balance for ${name}`,
+          fundId: fund.id,
+          authorizedBy: req.user.id,
+          date: new Date(),
+        });
+
+        await tx.update(funds)
+          .set({ balance: String(initialBalance) })
+          .where(eq(funds.id, fund.id));
+      }
+
+      return fund;
+    });
+
+    // Invalidate funds list cache
+    cache.invalidateByPrefix('funds:list');
+
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message || 'Invalid fund data');
+  }
 });
 
 // @desc Update fund (metadata only)
 // @route PUT /api/funds/:id
 // @access Private/Admin
 const updateFund = asyncHandler(async (req, res) => {
- const fund = await Fund.findById(req.params.id);
+  const db = getDb();
+  const [fund] = await db.select()
+    .from(funds)
+    .where(eq(funds.id, req.params.id))
+    .limit(1);
 
- if (fund) {
- fund.name = req.body.name || fund.name;
- fund.type = req.body.type || fund.type;
- fund.description = req.body.description || fund.description;
- fund.status = req.body.status || fund.status;
- fund.handlingOfficer = req.body.handlingOfficer || fund.handlingOfficer;
- fund.accountNumber = req.body.accountNumber || fund.accountNumber;
+  if (fund) {
+    const [updatedFund] = await db.update(funds)
+      .set({
+        name: req.body.name || fund.name,
+        type: req.body.type || fund.type,
+        description: req.body.description || fund.description,
+        status: req.body.status || fund.status,
+        handlingOfficer: req.body.handlingOfficer || fund.handlingOfficer,
+        accountNumber: req.body.accountNumber || fund.accountNumber,
+        updatedAt: new Date(),
+      })
+      .where(eq(funds.id, req.params.id))
+      .returning();
 
- // Remove direct balance edit based on requirements
- // if (req.body.balance) ... NO
+    // Invalidate funds list cache
+    cache.invalidateByPrefix('funds:list');
 
- const updatedFund = await fund.save();
- res.json(updatedFund);
- } else {
- res.status(404);
- throw new Error('Fund not found');
- }
+    res.json(updatedFund);
+  } else {
+    res.status(404);
+    throw new Error('Fund not found');
+  }
 });
 
 // @desc Delete fund
 // @route DELETE /api/funds/:id
 // @access Private/Admin
 const deleteFund = asyncHandler(async (req, res) => {
- const fund = await Fund.findById(req.params.id);
+  const db = getDb();
+  const [fund] = await db.select()
+    .from(funds)
+    .where(eq(funds.id, req.params.id))
+    .limit(1);
 
- if (!fund) {
- res.status(404);
- throw new Error('Fund not found');
- }
+  if (!fund) {
+    res.status(404);
+    throw new Error('Fund not found');
+  }
 
- // 1. Check Balance
- if (fund.balance > 0) {
- res.status(400);
- throw new Error('Cannot delete fund with non-zero balance. Transfer funds first.');
- }
+  // 1. Check Balance
+  if (Number(fund.balance) > 0) {
+    res.status(400);
+    throw new Error('Cannot delete fund with non-zero balance. Transfer funds first.');
+  }
 
- // 2. Check Transactions
- const transactionCount = await Transaction.countDocuments({ fundId: req.params.id });
- if (transactionCount > 0) {
- res.status(400);
- throw new Error(`Cannot delete fund. It has ${transactionCount} linked transactions. Archive them first.`);
- }
+  // 2. Check Transactions
+  const [{ count: txCount }] = await db.select({ count: count() })
+    .from(transactions)
+    .where(eq(transactions.fundId, req.params.id));
 
- await fund.deleteOne();
- res.json({ message: 'Fund removed' });
+  if (Number(txCount) > 0) {
+    res.status(400);
+    throw new Error(`Cannot delete fund. It has ${txCount} linked transactions. Archive them first.`);
+  }
+
+  await db.delete(funds).where(eq(funds.id, req.params.id));
+
+  // Invalidate funds list cache
+  cache.invalidateByPrefix('funds:list');
+
+  res.json({ message: 'Fund removed' });
 });
 
 export { getFunds, getFundById, createFund, updateFund, deleteFund };

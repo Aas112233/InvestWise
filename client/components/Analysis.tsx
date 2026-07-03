@@ -18,6 +18,7 @@ import ExportMenu from './ExportMenu';
 import { Language, t } from '../i18n/translations';
 import SummaryMetricCard from './SummaryMetricCard';
 import MonthSelect from './ui/MonthSelect';
+import { Table, TableColumn } from './ui/Table';
 import { ALL_MONTHS_VALUE, MONTH_KEYS, getMonthName, getShortMonthName } from '../utils/months';
 
 interface AnalysisProps {
@@ -25,7 +26,7 @@ interface AnalysisProps {
 }
 
 const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
- const { members, deposits, projects } = useGlobalState();
+ const { members, deposits, projects, currencyCode } = useGlobalState();
  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
  const [selectedMonth, setSelectedMonth] = useState<string>(MONTH_KEYS[new Date().getMonth()]);
  const [activeTab, setActiveTab] = useState<'Portfolio' | 'Dashboard' | 'Regularity' | 'Leaderboard'>('Dashboard');
@@ -250,6 +251,73 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
  return members.length > 0 ? ((activeMembers / members.length) * 100).toFixed(1) : '0.0';
  }, [members]);
 
+ const projectsColumns: TableColumn<Project>[] = [
+ {
+ key: 'projectIdentifier',
+ header: t('projects.projectIdentifier', lang),
+ render: (project) => <span className="font-black text-dark dark:text-white uppercase text-xs tracking-tight">{project.title}</span>
+ },
+ {
+ key: 'initialInvestment',
+ header: t('projects.initialInvestment', lang),
+ align: 'center',
+ render: (project) => <span className="font-black text-gray-500 uppercase text-[10px]">{formatCurrency(project.initialInvestment)}</span>
+ },
+ {
+ key: 'roiProjection',
+ header: t('projects.roiProjection', lang),
+ align: 'center',
+ render: (project) => <span className="font-black text-brand uppercase text-[10px]">{project.expectedRoi}%</span>
+ },
+ {
+ key: 'healthIndex',
+ header: t('analysis.healthIndex', lang),
+ align: 'center',
+ render: (project) => (
+ <span className={`px-4 py-1.5 rounded-full ${project.health === 'Stable' ? 'bg-emerald-500/10 text-emerald-500' : project.health === 'At Risk' ? 'bg-amber-500/10 text-amber-500' : 'bg-red-500/10 text-red-500'}`}>
+ {t(`common.${project.health.toLowerCase().replace(' ', '')}`, lang)}
+ </span>
+ )
+ },
+ {
+ key: 'currentAllocation',
+ header: t('projects.currentAllocation', lang),
+ align: 'right',
+ render: (project) => <span className="font-black text-dark dark:text-white uppercase text-xs tracking-tight">{formatCurrency(project.currentFundBalance)}</span>
+ }
+ ];
+
+ const regularityColumns: TableColumn<any>[] = [
+ {
+ key: 'partnerEntity',
+ header: t('analysis.partnerEntity', lang),
+ className: 'sticky left-0 bg-white dark:bg-[#1A221D] z-10 border-r border-gray-100 dark:border-white/5 shadow-xl',
+ cellClassName: 'sticky left-0 bg-white dark:bg-[#1A221D] z-10 border-r border-gray-100 dark:border-white/5 shadow-xl',
+ render: (row) => (
+ <div className="flex items-center gap-4">
+ <div className="w-8 h-8 rounded-full bg-brand/10 text-brand flex items-center justify-center text-[10px] font-black">{row.memberName[0]}</div>
+ <p className="text-xs font-black text-dark dark:text-white uppercase leading-none">{row.memberName}</p>
+ </div>
+ )
+ },
+ ...MONTH_KEYS.map((monthKey, i) => ({
+ key: monthKey,
+ header: getShortMonthName(i, lang),
+ align: 'center' as const,
+ render: (row: any) => {
+ const amount = (row.payments as any)[`${monthKey}-${selectedYear}`] || 0;
+ return (
+ <div className={`w-8 h-8 rounded-xl mx-auto flex items-center justify-center transition-all ${amount > 0
+ ? 'bg-brand text-dark shadow-lg shadow-brand/20 scale-110'
+ : 'bg-gray-50 dark:bg-white/5 text-gray-300 dark:text-gray-800'
+ }`}>
+ {amount > 0 ? <CheckCircle2 size={16} strokeWidth={3} /> : <div className="w-1.5 h-1.5 rounded-full bg-current"></div>}
+ </div>
+ );
+ }
+ }))
+ ];
+
  return (
  <div className="compact-screen space-y-10 animate-in fade-in duration-500">
  <div className="flex items-end justify-between px-2">
@@ -271,7 +339,7 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
  { header: t('analysis.partnerEntity', lang), key: 'memberName' },
  { header: t('members.memberId', lang), key: 'memberId' },
  ...MONTH_KEYS.map((monthKey, i) => ({
- header: `${getMonthName(i, lang)} (BDT)`,
+ header: `${getMonthName(i, lang)} (${currencyCode})`,
  key: `${monthKey}-${selectedYear}`,
  format: (item: any) => (item[`${monthKey}-${selectedYear}`] || 0).toLocaleString()
  }))
@@ -423,34 +491,12 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{projects.length} {t('analysis.activeMembers', lang)}</span>
  </div>
  </div>
- <div className="overflow-x-auto">
- <table className="w-full border-collapse">
- <thead>
- <tr className="bg-gray-50/50 dark:bg-white/5">
- <th className="px-10 py-6 text-left text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('projects.projectIdentifier', lang)}</th>
- <th className="px-6 py-6 text-center text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('projects.initialInvestment', lang)}</th>
- <th className="px-6 py-6 text-center text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('projects.roiProjection', lang)}</th>
- <th className="px-6 py-6 text-center text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('analysis.healthIndex', lang)}</th>
- <th className="px-10 py-6 text-right text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('projects.currentAllocation', lang)}</th>
- </tr>
- </thead>
- <tbody className="divide-y divide-gray-50 dark:divide-white/5">
- {projects.map((project) => (
- <tr key={project.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
- <td className="px-10 py-6 font-black text-dark dark:text-white uppercase text-xs tracking-tight">{project.title}</td>
- <td className="px-6 py-6 text-center font-black text-gray-500 uppercase text-[10px]">{formatCurrency(project.initialInvestment)}</td>
- <td className="px-6 py-6 text-center font-black text-brand uppercase text-[10px]">{project.expectedRoi}%</td>
- <td className="px-6 py-6 text-center font-black uppercase text-[10px]">
- <span className={`px-4 py-1.5 rounded-full ${project.health === 'Stable' ? 'bg-emerald-500/10 text-emerald-500' : project.health === 'At Risk' ? 'bg-amber-500/10 text-amber-500' : 'bg-red-500/10 text-red-500'}`}>
- {t(`common.${project.health.toLowerCase().replace(' ', '')}`, lang)}
- </span>
- </td>
- <td className="px-10 py-6 text-right font-black text-dark dark:text-white uppercase text-xs tracking-tight">{formatCurrency(project.currentFundBalance)}</td>
- </tr>
- ))}
- </tbody>
- </table>
- </div>
+ <Table
+ data={projects}
+ columns={projectsColumns}
+ rowKey={(p) => p.id}
+ emptyMessage={<div className="text-gray-400 font-bold uppercase tracking-widest text-xs px-10 py-8">No active projects</div>}
+ />
  </div>
  </div>
  )}
@@ -492,7 +538,7 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
  <div className="space-y-4 pt-6 border-t border-white/10">
  <div className="flex items-center justify-between">
  <p className="text-[10px] font-black opacity-40 uppercase tracking-widest">{t('analysis.invested', lang)}</p>
- <p className="font-black text-brand">BDT {topContributorOfMonth.totalContributed.toLocaleString()}</p>
+ <p className="font-black text-brand">{currencyCode} {topContributorOfMonth.totalContributed.toLocaleString()}</p>
  </div>
  <div className="flex items-center justify-between">
  <p className="text-[10px] font-black opacity-40 uppercase tracking-widest">{t('members.shares', lang)}</p>
@@ -578,43 +624,12 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-2">{t('analysis.visualAudit', lang).replace('{year}', selectedYear.toString())}</p>
  </div>
  </div>
- <div className="overflow-x-auto">
- <table className="w-full border-collapse">
- <thead>
- <tr className="bg-gray-50/50 dark:bg-white/5">
- <th className="sticky left-0 bg-white dark:bg-[#1A221D] z-10 px-10 py-6 text-left text-[11px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-100 dark:border-white/5 shadow-xl">{t('analysis.partnerEntity', lang)}</th>
- {MONTH_KEYS.map((monthKey, i) => (
- <th key={monthKey} className="px-6 py-6 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">{getShortMonthName(i, lang)}</th>
- ))}
- </tr>
- </thead>
- <tbody className="divide-y divide-gray-50 dark:divide-white/5">
- {paymentMatrixData.map((row) => (
- <tr key={row.memberId} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
- <td className="sticky left-0 bg-white dark:bg-[#1A221D] z-10 px-10 py-6 border-r border-gray-100 dark:border-white/5 shadow-xl">
- <div className="flex items-center gap-4">
- <div className="w-8 h-8 rounded-full bg-brand/10 text-brand flex items-center justify-center text-[10px] font-black">{row.memberName[0]}</div>
- <p className="text-xs font-black text-dark dark:text-white uppercase leading-none">{row.memberName}</p>
- </div>
- </td>
- {MONTH_KEYS.map(monthKey => {
- const amount = (row.payments as any)[`${monthKey}-${selectedYear}`] || 0;
- return (
- <td key={monthKey} className="px-4 py-6 text-center">
- <div className={`w-8 h-8 rounded-xl mx-auto flex items-center justify-center transition-all ${amount > 0
- ? 'bg-brand text-dark shadow-lg shadow-brand/20 scale-110'
- : 'bg-gray-50 dark:bg-white/5 text-gray-300 dark:text-gray-800'
- }`}>
- {amount > 0 ? <CheckCircle2 size={16} strokeWidth={3} /> : <div className="w-1.5 h-1.5 rounded-full bg-current"></div>}
- </div>
- </td>
- );
- })}
- </tr>
- ))}
- </tbody>
- </table>
- </div>
+ <Table
+ data={paymentMatrixData}
+ columns={regularityColumns}
+ rowKey={(row) => row.memberId}
+ emptyMessage={<div className="text-gray-400 font-bold uppercase tracking-widest text-xs px-10 py-8">No data available</div>}
+ />
  </div>
  )}
 
@@ -638,7 +653,7 @@ const Analysis: React.FC<AnalysisProps> = ({ lang }) => {
  </div>
  <div className="text-right">
  <p className="text-2xl font-black text-brand tracking-tighter leading-none">{formatCurrency(m.totalContributed)}</p>
- <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">{t('analysis.totalBDT', lang)}</p>
+ <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">{currencyCode}</p>
  </div>
  </div>
  ))}

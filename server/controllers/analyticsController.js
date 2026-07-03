@@ -1,186 +1,256 @@
 import asyncHandler from 'express-async-handler';
-import GlobalStats from '../models/GlobalStats.js';
-import Member from '../models/Member.js';
-import Project from '../models/Project.js';
-import Transaction from '../models/Transaction.js';
 import cache from '../utils/cache.js';
+import { getDb, getSql } from '../db/connection.js';
+import { members, projects, transactions, globalStats, globalStatsTrends, globalStatsSectors } from '../db/schema/index.js';
+import { eq, count, sum, sql, gte } from 'drizzle-orm';
+
+let recalculationTimeout = null;
+
+/**
+ * Fire-and-forget debounced wrapper for recalculateAllStats.
+ * Use this in controllers to avoid blocking the response and ensure fault tolerance.
+ */
+const queueStatsRecalculation = () => {
+  if (recalculationTimeout) {
+    clearTimeout(recalculationTimeout);
+  }
+  recalculationTimeout = setTimeout(() => {
+    recalculateAllStats().catch(err => {
+      console.error('Background stats recalculation failed:', err);
+    });
+  }, 5000); // 5 seconds debounce
+};
 
 // @desc Get global statistics for dashboard
 // @route GET /api/analytics/stats
 // @access Private
 const getStats = asyncHandler(async (req, res) => {
- let stats = await GlobalStats.findOne();
+  const db = getDb();
+  const [stats] = await db.select().from(globalStats).limit(1);
 
- // If no stats exist yet, create initial one
- if (!stats) {
- stats = await recalculateAllStats();
- }
+  // If no stats exist yet, create initial one
+  if (!stats) {
+    const newStats = await recalculateAllStats();
+    return res.json(newStats);
+  }
 
- res.json(stats);
+  // Fetch child data (trends and sectors)
+  const trends = await db.select().from(globalStatsTrends)
+    .where(eq(globalStatsTrends.globalStatsId, stats.id))
+    .orderBy(globalStatsTrends.createdAt);
+  const sectors = await db.select().from(globalStatsSectors)
+    .where(eq(globalStatsSectors.globalStatsId, stats.id));
+
+  res.json({
+    ...stats,
+    trendData: trends.map(t => ({ month: t.month, inflow: Number(t.inflow), outflow: Number(t.outflow) })),
+    sectorDiversification: sectors.map(s => ({ category: s.category, value: Number(s.value) })),
+  });
 });
 
 // @desc Manually trigger stats recalculation
 // @route POST /api/analytics/recalculate
 // @access Private (Admin)
 const triggerRecalculate = asyncHandler(async (req, res) => {
- // Clear cached stats
- cache.del('analytics:stats');
+  // Clear cached stats
+  cache.del('analytics:stats');
 
- const stats = await recalculateAllStats();
- res.json({ message: 'Stats recalculated successfully', stats });
+  const stats = await recalculateAllStats();
+  res.json({ message: 'Stats recalculated successfully', stats });
 });
 
 /**
- * Utility function to perform heavy aggregations and update the GlobalStats document
- * This can be called from controllers when data changes
+ * Utility function to perform heavy aggregations and update stats
  */
 const recalculateAllStats = async () => {
- // Calculate date range for trend data
- const now = new Date();
- const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  const db = getDb();
+  const pg = getSql();
+  const now = new Date();
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
- // Run all aggregations in parallel for better performance
- const [
- totalMembers,
- projectAggregation,
- memberAggregation,
- transactionAggregation,
- trendAggregation,
- sectorDiversification,
- topPartners,
- topProjects,
- cashFlowParams
- ] = await Promise.all([
- Member.countDocuments({ status: 'active' }),
- Project.aggregate([
- {
- $group: {
- _id: null,
- investedCapital: { $sum: '$initialInvestment' },
- avgYield: { $avg: { $toDouble: '$projectedReturn' } }
- }
- }
- ]),
- Member.aggregate([
- { $match: { status: 'active' } },
- { $group: { _id: null, totalShares: { $sum: '$shares' } } }
- ]),
- Transaction.aggregate([
- { $match: { status: { $in: ['Success', 'Completed'] } } },
- {
- $group: {
- _id: null,
- totalDeposits: {
- $sum: {
- $cond: [{ $in: ['$type', ['Deposit', 'Earning']] }, '$amount', 0]
- }
- }
- }
- }
- ]),
- Transaction.aggregate([
- {
- $match: {
- date: { $gte: sixMonthsAgo },
- status: { $in: ['Success', 'Completed'] }
- }
- },
- {
- $group: {
- _id: {
- year: { $year: '$date' },
- month: { $month: '$date' }
- },
- inflow: { $sum: { $cond: [{ $in: ['$type', ['Deposit', 'Earning', 'Investment']] }, '$amount', 0] } },
- outflow: { $sum: { $cond: [{ $in: ['$type', ['Expense', 'Withdrawal', 'Dividend']] }, '$amount', 0] } }
- }
- },
- { $sort: { '_id.year': 1, '_id.month': 1 } }
- ]),
- Project.aggregate([
- {
- $group: {
- _id: '$category',
- value: { $sum: '$initialInvestment' }
- }
- },
- { $project: { _id: 0, category: '$_id', value: 1 } }
- ]),
- Member.find({ status: 'active' }).lean().sort({ shares: -1 }).limit(6).select('name shares'),
- Project.find({}).lean().sort({ projectedReturn: -1 }).limit(4).select('title projectedReturn'),
- Transaction.aggregate([
- { $match: { status: { $in: ['Success', 'Completed'] } } },
- {
- $group: {
- _id: null,
- totalInflow: { $sum: { $cond: [{ $in: ['$type', ['Deposit', 'Earning', 'Investment', 'Dividend']] }, '$amount', 0] } },
- totalOutflow: { $sum: { $cond: [{ $in: ['$type', ['Withdrawal', 'Expense']] }, '$amount', 0] } }
- }
- }
- ])
- ]);
+  // Run all aggregations in parallel
+  const [
+    totalMembersResult,
+    projectAggregation,
+    memberAggregation,
+    transactionAggregation,
+    trendAggregation,
+    sectorDiversification,
+    topPartners,
+    topProjects,
+    cashFlowParams,
+  ] = await Promise.all([
+    // Total active members
+    db.select({ count: count() }).from(members).where(eq(members.status, 'active')),
 
- // Convert aggregation result to trend data format
- const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
- const trendDataMap = new Map();
- trendAggregation.forEach(item => {
- const key = `${item._id.year}-${item._id.month}`;
- trendDataMap.set(key, { inflow: item.inflow, outflow: item.outflow });
- });
+    // Project aggregation
+    pg`
+      SELECT
+        COALESCE(SUM(initial_investment), 0) as invested_capital,
+        COALESCE(AVG(expected_roi), 0) as avg_yield
+      FROM projects
+    `,
 
- // Use 'now' from earlier declaration
- const trendData = [];
- for (let i = 5; i >= 0; i--) {
- const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
- const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
- const data = trendDataMap.get(key) || { inflow: 0, outflow: 0 };
- trendData.push({
- month: monthNames[d.getMonth()],
- inflow: data.inflow,
- outflow: data.outflow
- });
- }
+    // Member aggregation (active members total shares)
+    pg`
+      SELECT COALESCE(SUM(shares), 0) as total_shares
+      FROM members WHERE status = 'active'
+    `,
 
- // Process results from parallel queries
- const maxShares = topPartners.length > 0 ? topPartners[0].shares : 100;
+    // Transaction aggregation (completed deposits + earnings)
+    pg`
+      SELECT COALESCE(SUM(
+        CASE WHEN type IN ('Deposit', 'Earning') THEN amount ELSE 0 END
+      ), 0) as total_deposits
+      FROM transactions WHERE status = 'Completed'
+    `,
 
- const formattedTopProjects = topProjects.map(p => ({
- title: p.title,
- roi: parseFloat(p.projectedReturn) || 0
- }));
+    // Trend data (last 6 months)
+    pg`
+      SELECT
+        EXTRACT(YEAR FROM date)::int as year,
+        EXTRACT(MONTH FROM date)::int as month,
+        COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment') THEN amount ELSE 0 END), 0) as inflow,
+        COALESCE(SUM(CASE WHEN type IN ('Expense', 'Withdrawal', 'Dividend') THEN amount ELSE 0 END), 0) as outflow
+      FROM transactions
+      WHERE date >= ${sixMonthsAgo.toISOString()} AND status = 'Completed'
+      GROUP BY year, month
+      ORDER BY year, month
+    `,
 
- // Top Investor for the summary card
- const topInvestor = topPartners.length > 0
- ? { name: topPartners[0].name, role: 'Principal Partner' }
- : { name: 'N/A', role: 'N/A' };
+    // Sector diversification
+    pg`
+      SELECT category, COALESCE(SUM(initial_investment), 0) as value
+      FROM projects
+      GROUP BY category
+    `,
 
- // Calculate Fund Stability (NAV Ratio)
- const totalDepositsVal = transactionAggregation[0]?.totalDeposits || 1;
- const totalInflow = cashFlowParams[0]?.totalInflow || 0;
- const totalOutflow = cashFlowParams[0]?.totalOutflow || 0;
- const investedCapital = projectAggregation[0]?.investedCapital || 0;
- const cashBalance = totalInflow - totalOutflow - investedCapital;
+    // Top partners (by shares)
+    db.select({ name: members.name, shares: members.shares })
+      .from(members)
+      .where(eq(members.status, 'active'))
+      .orderBy(sql`shares DESC`)
+      .limit(6),
 
- const totalAssets = investedCapital + Math.max(0, cashBalance);
- const fundStability = Math.min(100, (totalAssets / totalDepositsVal) * 100).toFixed(1);
+    // Top projects
+    db.select({ title: projects.title, projectedReturn: projects.expectedRoi })
+      .from(projects)
+      .orderBy(sql`expected_roi DESC`)
+      .limit(4),
 
- const statsData = {
- totalMembers,
- investedCapital: projectAggregation[0]?.investedCapital || 0,
- totalShares: memberAggregation[0]?.totalShares || 0,
- totalDeposits: transactionAggregation[0]?.totalDeposits || 0,
- yieldIndex: projectAggregation[0]?.avgYield || 0,
- trendData,
- sectorDiversification,
- topPartners,
- maxShares,
- topProjects: formattedTopProjects,
- topInvestor,
- fundStability,
- lastUpdated: new Date()
- };
+    // Cash flow params
+    pg`
+      SELECT
+        COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment', 'Dividend') THEN amount ELSE 0 END), 0) as total_inflow,
+        COALESCE(SUM(CASE WHEN type IN ('Withdrawal', 'Expense') THEN amount ELSE 0 END), 0) as total_outflow
+      FROM transactions WHERE status = 'Completed'
+    `,
+  ]);
 
- return await GlobalStats.findOneAndUpdate({}, statsData, { upsert: true, new: true });
+  // Process trend data
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const trendDataMap = new Map();
+  for (const item of trendAggregation) {
+    trendDataMap.set(`${item.year}-${item.month}`, { inflow: Number(item.inflow), outflow: Number(item.outflow) });
+  }
+
+  const trendData = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+    const data = trendDataMap.get(key) || { inflow: 0, outflow: 0 };
+    trendData.push({
+      month: monthNames[d.getMonth()],
+      inflow: data.inflow,
+      outflow: data.outflow,
+    });
+  }
+
+  // Process results
+  const totalMembers = Number(totalMembersResult[0]?.count || 0);
+  const investedCapital = Number(projectAggregation[0]?.invested_capital || 0);
+  const totalShares = Number(memberAggregation[0]?.total_shares || 0);
+  const totalDeposits = Number(transactionAggregation[0]?.total_deposits || 1);
+  const avgYield = Number(projectAggregation[0]?.avg_yield || 0);
+  const totalInflow = Number(cashFlowParams[0]?.total_inflow || 0);
+  const totalOutflow = Number(cashFlowParams[0]?.total_outflow || 0);
+  const cashBalance = totalInflow - totalOutflow - investedCapital;
+  const totalAssets = investedCapital + Math.max(0, cashBalance);
+  const fundStability = Math.min(100, (totalAssets / totalDeposits) * 100).toFixed(1);
+
+  const formattedTopProjects = topProjects.map(p => ({
+    title: p.title,
+    roi: parseFloat(p.projectedReturn) || 0,
+  }));
+
+  const topInvestor = topPartners.length > 0
+    ? { name: topPartners[0].name, role: 'Principal Partner' }
+    : { name: 'N/A', role: 'N/A' };
+
+  const maxShares = topPartners.length > 0 ? topPartners[0].shares : 100;
+
+  // Upsert global stats (delete old + insert new within a transaction)
+  const result = await db.transaction(async (tx) => {
+    // Delete existing stats and children
+    const [existing] = await tx.select({ id: globalStats.id }).from(globalStats).limit(1);
+    if (existing) {
+      await tx.delete(globalStatsTrends).where(eq(globalStatsTrends.globalStatsId, existing.id));
+      await tx.delete(globalStatsSectors).where(eq(globalStatsSectors.globalStatsId, existing.id));
+      await tx.delete(globalStats).where(eq(globalStats.id, existing.id));
+    }
+
+    // Insert new stats
+    const [newStats] = await tx.insert(globalStats).values({
+      totalDeposits: String(totalDeposits),
+      investedCapital: String(investedCapital),
+      totalMembers,
+      totalShares,
+      yieldIndex: String(avgYield),
+      fundStability: String(fundStability),
+      lastUpdated: new Date(),
+    }).returning();
+
+    // Insert trends
+    if (trendData.length > 0) {
+      await tx.insert(globalStatsTrends).values(
+        trendData.map(t => ({
+          globalStatsId: newStats.id,
+          month: t.month,
+          inflow: String(t.inflow),
+          outflow: String(t.outflow),
+        }))
+      );
+    }
+
+    // Insert sectors
+    if (sectorDiversification.length > 0) {
+      await tx.insert(globalStatsSectors).values(
+        sectorDiversification.map(s => ({
+          globalStatsId: newStats.id,
+          category: s.category,
+          value: String(s.value),
+        }))
+      );
+    }
+
+    return {
+      totalMembers,
+      investedCapital,
+      totalShares,
+      totalDeposits,
+      yieldIndex: avgYield,
+      fundStability,
+      trendData,
+      sectorDiversification: sectorDiversification.map(s => ({ category: s.category, value: Number(s.value) })),
+      topPartners,
+      maxShares,
+      topProjects: formattedTopProjects,
+      topInvestor,
+      lastUpdated: new Date(),
+    };
+  });
+
+  return result;
 };
 
-export { getStats, triggerRecalculate, recalculateAllStats };
+export { getStats, triggerRecalculate, recalculateAllStats, queueStatsRecalculation };

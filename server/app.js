@@ -4,8 +4,9 @@ import cors from 'cors';
 import compression from 'compression';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { logger } from './middleware/logger.js';
-import { apiLimiter } from './middleware/rateLimiter.js';
+import { apiLimiter, authLimiter } from './middleware/rateLimiter.js';
 import { checkDbConnection } from './middleware/dbConnectionMiddleware.js';
+import rlsContext from './middleware/rlsContextMiddleware.js';
 import { getSecurityConfig } from './middleware/securityHeaders.js';
 import { apiVersioning, API_VERSION, SUPPORTED_VERSIONS } from './middleware/apiVersioning.js';
 import correlationId from './middleware/correlationId.js';
@@ -14,7 +15,7 @@ import correlationId from './middleware/correlationId.js';
 dotenv.config({ path: '.env' });
 
 // Validate required environment variables at startup.
-const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
+const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET'];
 const missing = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missing.length > 0) {
@@ -84,54 +85,47 @@ app.get('/', (req, res) => {
 app.use('/api', apiVersioning);
 
 import healthRoutes from './routes/healthRoutes.js';
-app.use('/api', healthRoutes);
-
 import authRoutes from './routes/authRoutes.js';
-app.use('/api/auth', apiLimiter, checkDbConnection, authRoutes);
-app.use('/api/v1/auth', apiLimiter, checkDbConnection, authRoutes);
-
 import memberRoutes from './routes/memberRoutes.js';
-app.use('/api/members', apiLimiter, checkDbConnection, memberRoutes);
-app.use('/api/v1/members', apiLimiter, checkDbConnection, memberRoutes);
-
 import projectRoutes from './routes/projectRoutes.js';
 import fundRoutes from './routes/fundRoutes.js';
-app.use('/api/projects', apiLimiter, checkDbConnection, projectRoutes);
-app.use('/api/v1/projects', apiLimiter, checkDbConnection, projectRoutes);
-app.use('/api/funds', apiLimiter, checkDbConnection, fundRoutes);
-app.use('/api/v1/funds', apiLimiter, checkDbConnection, fundRoutes);
-
 import financeRoutes from './routes/financeRoutes.js';
-app.use('/api/finance', apiLimiter, checkDbConnection, financeRoutes);
-app.use('/api/v1/finance', apiLimiter, checkDbConnection, financeRoutes);
-
 import reportRoutes from './routes/reportRoutes.js';
-app.use('/api/reports', apiLimiter, checkDbConnection, reportRoutes);
-app.use('/api/v1/reports', apiLimiter, checkDbConnection, reportRoutes);
-
 import analyticsRoutes from './routes/analyticsRoutes.js';
-app.use('/api/analytics', apiLimiter, checkDbConnection, analyticsRoutes);
-app.use('/api/v1/analytics', apiLimiter, checkDbConnection, analyticsRoutes);
-
 import goalRoutes from './routes/goalRoutes.js';
-app.use('/api/goals', apiLimiter, checkDbConnection, goalRoutes);
-app.use('/api/v1/goals', apiLimiter, checkDbConnection, goalRoutes);
-
 import auditRoutes from './routes/auditRoutes.js';
-app.use('/api/audit', apiLimiter, checkDbConnection, auditRoutes);
-app.use('/api/v1/audit', apiLimiter, checkDbConnection, auditRoutes);
-
 import settingsRoutes from './routes/settingsRoutes.js';
-app.use('/api/settings', apiLimiter, checkDbConnection, settingsRoutes);
-app.use('/api/v1/settings', apiLimiter, checkDbConnection, settingsRoutes);
-
 import backupRoutes from './routes/backupRoutes.js';
-app.use('/api/backup', checkDbConnection, backupRoutes);
-app.use('/api/v1/backup', checkDbConnection, backupRoutes);
-
 import aiRoutes from './routes/aiRoutes.js';
-app.use('/api/ai', apiLimiter, checkDbConnection, aiRoutes);
-app.use('/api/v1/ai', apiLimiter, checkDbConnection, aiRoutes);
+
+const apiRouter = express.Router();
+
+// Health check doesn't need DB check or strict rate limits
+apiRouter.use('/', healthRoutes);
+
+// Apply common middleware to all API routes
+apiRouter.use(apiLimiter);
+apiRouter.use(checkDbConnection);
+apiRouter.use(rlsContext);
+
+// Register domain routes
+apiRouter.use('/auth', authRoutes);
+apiRouter.use('/members', memberRoutes);
+apiRouter.use('/projects', projectRoutes);
+apiRouter.use('/funds', fundRoutes);
+apiRouter.use('/finance', financeRoutes);
+apiRouter.use('/reports', reportRoutes);
+apiRouter.use('/analytics', analyticsRoutes);
+apiRouter.use('/goals', goalRoutes);
+apiRouter.use('/audit', auditRoutes);
+apiRouter.use('/settings', settingsRoutes);
+apiRouter.use('/backup', backupRoutes);
+apiRouter.use('/ai', aiRoutes);
+
+// Mount the consolidated router at both paths for backward compatibility,
+// but with versioning middleware determining the actual active version
+app.use('/api/v1', apiVersioning, apiRouter);
+app.use('/api', apiVersioning, apiRouter);
 
 app.use(notFound);
 app.use(errorHandler);

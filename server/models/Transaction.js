@@ -32,29 +32,24 @@ const transactionSchema = mongoose.Schema(
         date: {
             type: Date,
             default: Date.now,
-            index: true,
         },
         status: {
             type: String,
-            enum: ['Success', 'Processing', 'Failed', 'Pending', 'Flagged', 'Completed'],
-            default: 'Success',
-            index: true,
+            enum: ['Completed', 'Processing', 'Failed', 'Pending', 'Flagged'],
+            default: 'Completed',
         },
         // Optional links to other entities
         memberId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Member',
-            index: true,
         },
         projectId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Project',
-            index: true,
         },
         fundId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Fund',
-            index: true,
         },
         handlingOfficer: {
             type: String,
@@ -117,29 +112,24 @@ const transactionSchema = mongoose.Schema(
 
 // Indexes for common queries - OPTIMIZED FOR PERFORMANCE
 
-// Basic field indexes
-transactionSchema.index({ memberId: 1 });
-transactionSchema.index({ fundId: 1 });
-transactionSchema.index({ projectId: 1 });
+// Basic field indexes (removed duplicates as they are defined inline)
 
 // CRITICAL: Compound indexes for common query patterns
-// 1. List transactions by type (e.g., deposits list) - MOST COMMON QUERY
-transactionSchema.index({ type: 1, date: -1 });
 
-// 2. Member transactions with type and date
-transactionSchema.index({ memberId: 1, type: 1, date: -1 });
+// 1. Member Payments & Totals Calculation (highly optimized for memberController)
+transactionSchema.index({ memberId: 1, type: 1, status: 1, isDeleted: 1, date: -1 });
 
-// 3. Fund transactions with date
-transactionSchema.index({ fundId: 1, date: -1 });
+// 2. Fund Ledger queries
+transactionSchema.index({ fundId: 1, type: 1, status: 1, isDeleted: 1, date: -1 });
 
-// 4. Project transactions with date
-transactionSchema.index({ projectId: 1, date: -1 });
+// 3. Project Ledger queries
+transactionSchema.index({ projectId: 1, type: 1, status: 1, isDeleted: 1, date: -1 });
 
-// 5. Status filtering (used in totals aggregation)
-transactionSchema.index({ status: 1, type: 1 });
+// 4. Global Transactions List
+transactionSchema.index({ type: 1, status: 1, isDeleted: 1, date: -1 });
 
-// 6. Date and type compound
-transactionSchema.index({ date: -1, type: 1 });
+// 5. Bulk Deposit Duplicate Protection (financeController)
+transactionSchema.index({ memberId: 1, fundId: 1, type: 1, date: 1 });
 
 // Comprehensive text search index
 transactionSchema.index({ description: 'text', type: 'text', referenceNumber: 'text' });

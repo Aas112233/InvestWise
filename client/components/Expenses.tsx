@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Filter, X, Calendar, User, Briefcase, CreditCard, ChevronUp, ChevronDown, Download, Layers, Trash2, Loader2, RefreshCw, Edit2 } from 'lucide-react';
+import { Plus, Search, Filter, X, Calendar, User, Briefcase, CreditCard, Download, Layers, Trash2, Loader2, RefreshCw, Edit2 } from 'lucide-react';
 import { Expense, Member, Project, AccessLevel, AppScreen } from '../types';
+import { Table, TableColumn } from './ui/Table';
 import Toast, { ToastType } from './Toast';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { financeService } from '../services/api';
@@ -20,7 +21,7 @@ interface ExpensesProps {
 }
 
 const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
- const { expenses: globalExpenses, members: globalMembers, projects: globalProjects, funds: globalFunds, addExpense, refreshTransactions, currentUser } = useGlobalState();
+ const { expenses: globalExpenses, members: globalMembers, projects: globalProjects, funds: globalFunds, addExpense, refreshTransactions, currentUser, currencyCode } = useGlobalState();
  const [expenses, setExpenses] = useState<Expense[]>([]);
 
  useEffect(() => {
@@ -243,10 +244,91 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
 
  const totalExpenses = expenses.reduce((acc, curr) => acc + curr.amount, 0);
 
- const SortIcon = ({ column }: { column: SortKey }) => {
- if (sortKey !== column) return null;
- return sortOrder === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
- };
+ const tableColumns: TableColumn<Expense>[] = [
+ {
+ key: 'id',
+ header: t('expenses.expRef', lang),
+ sortable: true,
+ render: (exp) => <span className="text-[10px] font-black text-brand uppercase tracking-tighter">#{exp.id.substring(0, 8)}...</span>
+ },
+ {
+ key: 'date',
+ header: t('transactions.date', lang),
+ sortable: true,
+ render: (exp) => <span className="text-xs font-bold text-gray-400">{new Date(exp.date).toLocaleDateString()}</span>
+ },
+ {
+ key: 'category',
+ header: t('expenses.category', lang),
+ sortable: true,
+ render: (exp) => (
+ <span className="inline-block px-3 py-1 rounded-lg bg-gray-50 dark:bg-white/5 text-[10px] font-black uppercase text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-white/5">
+ {t(`expenses.categories.${(exp.category || 'operational').toLowerCase()}`, lang)}
+ </span>
+ )
+ },
+ {
+ key: 'reason',
+ header: t('expenses.reasonEntity', lang),
+ render: (exp) => (
+ <div className="flex flex-col">
+ <p className="font-black text-dark dark:text-white text-sm leading-none mb-1">{exp.reason}</p>
+ <div className="flex items-center gap-2">
+ {exp.memberName && (
+ <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1">
+ <User size={10} className="text-brand" /> {exp.memberName}
+ </p>
+ )}
+ {exp.projectName && (
+ <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1">
+ <Briefcase size={10} /> {exp.projectName}
+ </p>
+ )}
+ </div>
+ </div>
+ )
+ },
+ {
+ key: 'amount',
+ header: t('transactions.valuation', lang),
+ sortable: true,
+ align: 'right',
+ cellClassName: 'font-black text-dark dark:text-white text-lg tracking-tighter',
+ render: (exp) => `${currencyCode} ${exp.amount.toLocaleString()}`
+ },
+ {
+ key: 'actions',
+ header: t('transactions.actions', lang),
+ align: 'right',
+ render: (exp) => (
+ <PermissionGuard screen={AppScreen.EXPENSES} requiredLevel={AccessLevel.WRITE}>
+ <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
+ <button
+ onClick={() => handleOpenModal(exp)}
+ className="p-3 bg-white dark:bg-[#111814] rounded-2xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-brand hover:border-brand/30 transition-all shadow-sm"
+ >
+ <Edit2 size={16} />
+ </button>
+ <button
+ onClick={(e) => {
+ e.preventDefault();
+ e.stopPropagation();
+ handleDeleteClick(exp.id, exp.reason);
+ }}
+ disabled={!!processingId}
+ className={`p-3 rounded-2xl border transition-all ${processingId === exp.id
+ ? 'bg-rose-50 border-rose-100 cursor-wait'
+ : 'bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-rose-500 hover:border-rose-500/30 shadow-sm'
+ }`}
+ title="Archive Expense"
+ >
+ {processingId === exp.id ? <Loader2 size={16} className="animate-spin text-rose-500" /> : <Trash2 size={16} />}
+ </button>
+ </div>
+ </PermissionGuard>
+ )
+ }
+ ];
 
  return (
  <div className="compact-screen space-y-10 animate-in fade-in duration-500">
@@ -291,7 +373,7 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
  { header: t('transactions.description', lang), key: 'reason' },
  { header: t('nav.members', lang), key: 'memberName' },
  { header: t('projects.project', lang), key: 'projectName', format: (e: any) => e.projectName || 'N/A' },
- { header: `${t('transactions.valuation', lang)} (BDT)`, key: 'amount', format: (e: any) => e.amount.toLocaleString() },
+ { header: `${t('transactions.valuation', lang)} (${currencyCode})`, key: 'amount', format: (e: any) => e.amount.toLocaleString() },
  { header: t('deposits.targetFund', lang), key: 'sourceFund' }
  ]}
  fileName={`expenses_${new Date().toISOString().split('T')[0]}`}
@@ -343,100 +425,16 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
  </button>
  </div>
 
- <div className="overflow-x-auto">
- <table className="w-full border-collapse">
- <thead>
- <tr className="bg-gray-50/30 dark:bg-white/5">
- <th onClick={() => handleSort('id')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
- <div className="flex items-center gap-2">{t('expenses.expRef', lang)} <SortIcon column="id" /></div>
- </th>
- <th onClick={() => handleSort('date')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
- <div className="flex items-center gap-2">{t('transactions.date', lang)} <SortIcon column="date" /></div>
- </th>
- <th onClick={() => handleSort('category')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
- <div className="flex items-center gap-2">{t('expenses.category', lang)} <SortIcon column="category" /></div>
- </th>
- <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">{t('expenses.reasonEntity', lang)}</th>
- <th onClick={() => handleSort('amount')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
- <div className="flex items-center justify-end gap-2">{t('transactions.valuation', lang)} <SortIcon column="amount" /></div>
- </th>
- <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
- {t('transactions.actions', lang)}
- </th>
- </tr>
- </thead>
- <tbody className="divide-y divide-gray-50 dark:divide-white/5">
- {filteredAndSortedExpenses.map((exp) => (
- <tr key={exp.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
- <td className="px-10 py-6">
- <span className="text-[10px] font-black text-brand uppercase tracking-tighter">#{exp.id.substring(0, 8)}...</span>
- </td>
- <td className="px-10 py-6">
- <span className="text-xs font-bold text-gray-400">{new Date(exp.date).toLocaleDateString()}</span>
- </td>
- <td className="px-10 py-6">
- <span className="inline-block px-3 py-1 rounded-lg bg-gray-50 dark:bg-white/5 text-[10px] font-black uppercase text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-white/5">
- {t(`expenses.categories.${(exp.category || 'operational').toLowerCase()}`, lang)}
- </span>
- </td>
- <td className="px-10 py-6">
- <div className="flex flex-col">
- <p className="font-black text-dark dark:text-white text-sm leading-none mb-1">{exp.reason}</p>
- <div className="flex items-center gap-2">
- {exp.memberName && (
- <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1">
- <User size={10} className="text-brand" /> {exp.memberName}
- </p>
- )}
- {exp.projectName && (
- <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1">
- <Briefcase size={10} /> {exp.projectName}
- </p>
- )}
- </div>
- </div>
- </td>
- <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-lg tracking-tighter">
- BDT {exp.amount.toLocaleString()}
- </td>
- <td className="px-10 py-6 text-right">
- <PermissionGuard screen={AppScreen.EXPENSES} requiredLevel={AccessLevel.WRITE}>
- <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
- <button
- onClick={() => handleOpenModal(exp)}
- className="p-3 bg-white dark:bg-[#111814] rounded-2xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-brand hover:border-brand/30 transition-all shadow-sm"
- >
- <Edit2 size={16} />
- </button>
- <button
- onClick={(e) => {
- e.preventDefault();
- e.stopPropagation();
- handleDeleteClick(exp.id, exp.reason);
- }}
- disabled={!!processingId}
- className={`p-3 rounded-2xl border transition-all ${processingId === exp.id
- ? 'bg-rose-50 border-rose-100 cursor-wait'
- : 'bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-rose-500 hover:border-rose-500/30 shadow-sm'
- }`}
- title="Archive Expense"
- >
- {processingId === exp.id ? <Loader2 size={16} className="animate-spin text-rose-500" /> : <Trash2 size={16} />}
- </button>
- </div>
- </PermissionGuard>
- </td>
- </tr>
- ))}
- {filteredAndSortedExpenses.length === 0 && (
- <tr>
- <td colSpan={7} className="px-10 py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-xs">
- {t('expenses.noExpenses', lang)}
- </td>
- </tr>
- )}
- </tbody>
- </table>
+ <div className="px-2 pb-4">
+ <Table
+ data={filteredAndSortedExpenses}
+ columns={tableColumns}
+ emptyMessage={<div className="text-gray-400 font-bold uppercase tracking-widest text-xs">{t('expenses.noExpenses', lang)}</div>}
+ sortBy={sortKey}
+ sortOrder={sortOrder}
+ onSort={handleSort as any}
+ rowKey={(exp) => exp.id}
+ />
  </div>
  </div>
  </div>
@@ -482,7 +480,7 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
 
  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
  <FormInput
- label={t('deposits.amountBDT', lang)}
+ label={`${t('deposits.amountCurrency', lang)} (${currencyCode})`}
  type="number"
  value={formData.amount}
  onChange={e => setFormData({ ...formData, amount: e.target.value })}
@@ -521,7 +519,7 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
  <div>
  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">{t('expenses.fundImpact', lang)}</p>
  <p className="text-3xl font-black text-rose-500 tracking-tighter leading-none">
- - {(parseFloat(formData.amount || '0')).toLocaleString()} <span className="text-sm opacity-40">BDT</span>
+ - {(parseFloat(formData.amount || '0')).toLocaleString()} <span className="text-sm opacity-40">{currencyCode}</span>
  </p>
  </div>
  </div>

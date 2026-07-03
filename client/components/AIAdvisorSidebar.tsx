@@ -94,7 +94,7 @@ const AIResponseRenderer: React.FC<{ content: string }> = ({ content }) => {
 };
 
 const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, lang }) => {
- const state = useGlobalState();
+ const { currencyCode, ...state } = useGlobalState();
 
  // Load persisted state from localStorage
  const [advice, setAdvice] = useState<string>(() => {
@@ -551,10 +551,10 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
  <div className="space-y-4">
  {/* Overview Metrics */}
  {selectedType === 'overview' && [
- { label: "Total Funds", val: `BDT ${(state.funds.reduce((acc: number, f: any) => acc + f.balance, 0) / 1000000).toFixed(1)}M`, fill: "75%" },
+ { label: "Total Funds", val: `${currencyCode} ${(state.funds.reduce((acc: number, f: any) => acc + f.balance, 0) / 1000000).toFixed(1)}M`, fill: "75%" },
  { label: "Active Projects", val: state.projects.filter((p: any) => p.status === 'In Progress').length.toString(), fill: "60%" },
  { label: "Total Members", val: state.members.length.toString(), fill: "80%" },
- { label: "Net Position", val: `BDT ${(state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0) - state.expenses.reduce((acc: number, e: any) => acc + e.amount, 0)) / 1000000}M`, fill: "50%" }
+ { label: "Net Position", val: `${currencyCode} ${(state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0) - state.expenses.reduce((acc: number, e: any) => acc + e.amount, 0)) / 1000000}M`, fill: "50%" }
  ].map((m, i) => (
  <div key={i}>
  <div className="flex justify-between text-[8px] font-black uppercase text-white/30 mb-1.5">
@@ -570,7 +570,7 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
  {/* Member Metrics */}
  {selectedType === 'member' && [
  { label: "Selected Member", val: selectedMember ? state.members.find((m: any) => m.id === selectedMember)?.name?.split(' ')[0] || 'N/A' : 'None', fill: "100%" },
- { label: "Total Contribution", val: `BDT ${(state.deposits.filter((d: any) => d.memberId === selectedMember).reduce((acc: number, d: any) => acc + d.amount, 0) / 1000).toFixed(0)}K`, fill: "85%" },
+ { label: "Total Contribution", val: `${currencyCode} ${(state.deposits.filter((d: any) => d.memberId === selectedMember).reduce((acc: number, d: any) => acc + d.amount, 0) / 1000).toFixed(0)}K`, fill: "85%" },
  { label: "Total Deposits", val: state.deposits.filter((d: any) => d.memberId === selectedMember).length.toString(), fill: "70%" },
  { label: "Shares Held", val: (state.members.find((m: any) => m.id === selectedMember)?.shares || 0).toString(), fill: "60%" }
  ].map((m, i) => (
@@ -593,7 +593,7 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
  const spent = state.expenses.filter((e: any) => e.projectId === selectedProject).reduce((acc: number, e: any) => acc + e.amount, 0);
  return project?.budget ? `${((spent / project.budget) * 100).toFixed(0)}%` : 'N/A';
  })(), fill: "65%" },
- { label: "Total Spent", val: `BDT ${(state.expenses.filter((e: any) => e.projectId === selectedProject).reduce((acc: number, e: any) => acc + e.amount, 0) / 1000).toFixed(0)}K`, fill: "75%" },
+ { label: "Total Spent", val: `${currencyCode} ${(state.expenses.filter((e: any) => e.projectId === selectedProject).reduce((acc: number, e: any) => acc + e.amount, 0) / 1000).toFixed(0)}K`, fill: "75%" },
  { label: "Transactions", val: state.expenses.filter((e: any) => e.projectId === selectedProject).length.toString(), fill: "50%" }
  ].map((m, i) => (
  <div key={i}>
@@ -610,9 +610,9 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
  {/* Fund Metrics */}
  {selectedType === 'fund' && [
  { label: "Selected Fund", val: selectedFund ? state.funds.find((f: any) => f.id === selectedFund)?.name?.substring(0, 15) || 'N/A' : 'None', fill: "100%" },
- { label: "Current Balance", val: `BDT ${(state.funds.find((f: any) => f.id === selectedFund)?.balance || 0) / 1000}K`, fill: "80%" },
+ { label: "Current Balance", val: `${currencyCode} ${(state.funds.find((f: any) => f.id === selectedFund)?.balance || 0) / 1000}K`, fill: "80%" },
  { label: "Fund Type", val: state.funds.find((f: any) => f.id === selectedFund)?.type || 'N/A', fill: "50%" },
- { label: "Initial Balance", val: `BDT ${(state.funds.find((f: any) => f.id === selectedFund)?.initialBalance || 0) / 1000}K`, fill: "60%" }
+ { label: "Initial Balance", val: `${currencyCode} ${(state.funds.find((f: any) => f.id === selectedFund)?.initialBalance || 0) / 1000}K`, fill: "60%" }
  ].map((m, i) => (
  <div key={i}>
  <div className="flex justify-between text-[8px] font-black uppercase text-white/30 mb-1.5">
@@ -627,9 +627,9 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
 
  {/* Deposit Metrics */}
  {selectedType === 'deposits' && [
- { label: "Total Deposits", val: `BDT ${(state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0) / 1000000).toFixed(1)}M`, fill: "90%" },
+ { label: "Total Deposits", val: `${currencyCode} ${(state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0) / 1000000).toFixed(1)}M`, fill: "90%" },
  { label: "Deposit Count", val: state.deposits.length.toString(), fill: "70%" },
- { label: "Avg per Deposit", val: `BDT ${(state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0) / (state.deposits.length || 1)).toFixed(0)}`, fill: "60%" },
+ { label: "Avg per Deposit", val: `${currencyCode} ${(state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0) / (state.deposits.length || 1)).toFixed(0)}`, fill: "60%" },
  { label: "Active Contributors", val: [...new Set(state.deposits.map((d: any) => d.memberId))].length.toString(), fill: "75%" }
  ].map((m, i) => (
  <div key={i}>
@@ -645,9 +645,9 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
 
  {/* Expense Metrics */}
  {selectedType === 'expenses' && [
- { label: "Total Expenses", val: `BDT ${(state.expenses.reduce((acc: number, e: any) => acc + e.amount, 0) / 1000000).toFixed(1)}M`, fill: "85%" },
+ { label: "Total Expenses", val: `${currencyCode} ${(state.expenses.reduce((acc: number, e: any) => acc + e.amount, 0) / 1000000).toFixed(1)}M`, fill: "85%" },
  { label: "Expense Count", val: state.expenses.length.toString(), fill: "65%" },
- { label: "Avg per Expense", val: `BDT ${(state.expenses.reduce((acc: number, e: any) => acc + e.amount, 0) / (state.expenses.length || 1)).toFixed(0)}`, fill: "55%" },
+ { label: "Avg per Expense", val: `${currencyCode} ${(state.expenses.reduce((acc: number, e: any) => acc + e.amount, 0) / (state.expenses.length || 1)).toFixed(0)}`, fill: "55%" },
  { label: "Categories Used", val: [...new Set(state.expenses.map((e: any) => e.category))].length.toString(), fill: "70%" }
  ].map((m, i) => (
  <div key={i}>
@@ -684,7 +684,7 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
 
  {/* Trend Metrics */}
  {selectedType === 'trends' && [
- { label: "Net Cash Flow", val: `BDT ${(state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0) - state.expenses.reduce((acc: number, e: any) => acc + e.amount, 0)) / 1000}K`, fill: "70%" },
+ { label: "Net Cash Flow", val: `${currencyCode} ${(state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0) - state.expenses.reduce((acc: number, e: any) => acc + e.amount, 0)) / 1000}K`, fill: "70%" },
  { label: "Savings Rate", val: `${state.deposits.length > 0 ? (((state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0) - state.expenses.reduce((acc: number, e: any) => acc + e.amount, 0)) / state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0)) * 100).toFixed(1) : 0}%`, fill: "60%" },
  { label: "Deposit Velocity", val: `+${state.deposits.length} txns`, fill: "75%" },
  { label: "Expense Ratio", val: `${state.deposits.length > 0 ? ((state.expenses.reduce((acc: number, e: any) => acc + e.amount, 0) / state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0)) * 100).toFixed(0) : 0}%`, fill: "50%" }

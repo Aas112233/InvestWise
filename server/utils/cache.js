@@ -4,7 +4,7 @@ const cache = new Map();
 const CACHE_TTL = {
  SHORT: 30 * 1000, // 30 seconds
  MEDIUM: 5 * 60 * 1000, // 5 minutes
- LONG: 15 * 60 * 1000, // 15 minutes
+ LONG: 15 * 60 * 1000, // 15 minutes,
 };
 
 /**
@@ -43,6 +43,18 @@ const set = (key, data, ttl = CACHE_TTL.MEDIUM) => {
  */
 const del = (key) => {
  cache.delete(key);
+};
+
+/**
+ * Invalidate cache keys by prefix
+ * @param {string} prefix - Key prefix to invalidate
+ */
+const invalidateByPrefix = (prefix) => {
+ for (const key of cache.keys()) {
+ if (key.startsWith(prefix)) {
+ cache.delete(key);
+ }
+ }
 };
 
 /**
@@ -104,6 +116,7 @@ export default {
  set,
  del,
  clear,
+ invalidateByPrefix,
  middleware: cacheMiddleware,
  CACHE_TTL
 };

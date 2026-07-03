@@ -81,11 +81,11 @@ export const memberSchema = z.object({
  shares: positiveIntegerSchema.or(z.literal(0)),
  memberId: z.string().optional(),
  password: z.string().optional(),
- userRole: z.enum(['Admin', 'Manager', 'Investor', 'Member', 'Audit'], {
- required_error: 'Please select a user role'
- }),
- createUserAccess: z.boolean().default(false)
-}).refine((data) => {
+        userRole: z.enum(['Admin', 'Administrator', 'Manager', 'Investor', 'Member', 'Audit'], {
+            required_error: 'Please select a user role'
+        }),
+        createUserAccess: z.boolean().optional().default(false)
+    }).refine((data) => {
  if (data.createUserAccess && !data.password) {
  return false;
  }

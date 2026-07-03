@@ -26,13 +26,14 @@ import { Language, t } from '../i18n/translations';
 import { financeService } from '../services/api';
 import Pagination from './Pagination';
 import SearchBar from './SearchBar';
+import { Table, TableColumn } from './ui/Table';
 
 interface DividendManagementProps {
  lang: Language;
 }
 
 const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
- const { members, projects, funds, refreshData, distributeDividends, transferEquity, currentUser } = useGlobalState();
+ const { members, projects, funds, refreshData, distributeDividends, transferEquity, currentUser, currencyCode } = useGlobalState();
  const [searchParams] = useSearchParams();
  const [activeTab, setActiveTab] = useState<'distribution' | 'transfer'>('distribution');
  const [distributionType, setDistributionType] = useState<'Project' | 'Global'>('Project');
@@ -262,6 +263,52 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
  }
  };
 
+ const dividendHistoryColumns: TableColumn<any>[] = [
+ {
+ key: 'date',
+ header: t('transactions.date', lang),
+ render: (tx) => <span className="text-xs font-bold text-gray-400">{new Date(tx.date).toLocaleDateString()}</span>
+ },
+ {
+ key: 'description',
+ header: t('transactions.description', lang),
+ render: (tx) => (
+ <div>
+ <p className="text-sm font-black dark:text-white leading-tight">{tx.description}</p>
+ {tx.projectId && (
+ <p className="text-[9px] font-black text-brand uppercase mt-1 tracking-widest">Project Settlement</p>
+ )}
+ </div>
+ )
+ },
+ {
+ key: 'recipient',
+ header: t('dividends.recipient', lang),
+ render: (tx) => (
+ <div className="flex flex-col">
+ <span className="text-xs font-black dark:text-white uppercase">{tx.memberId?.name || 'N/A'}</span>
+ <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">ID: {tx.memberId?.memberId || 'UNKNOWN'}</span>
+ </div>
+ )
+ },
+ {
+ key: 'payout',
+ header: t('dividends.payout', lang),
+ align: 'right',
+ render: (tx) => <span className="font-black text-brand text-sm">{formatCurrency(tx.amount)}</span>
+ },
+ {
+ key: 'status',
+ header: t('transactions.status', lang),
+ align: 'right',
+ render: () => (
+ <span className="inline-block px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-widest">
+ Distributed
+ </span>
+ )
+ }
+ ];
+
  return (
  <div className="compact-screen space-y-6 animate-in fade-in duration-700">
  <Toast
@@ -412,7 +459,7 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
  )}
  </div>
  <div className="relative group mb-6">
- <div className="absolute left-8 top-1/2 -translate-y-1/2 text-brand font-black text-xl italic group-focus-within:scale-125 transition-all">BDT</div>
+ <div className="absolute left-8 top-1/2 -translate-y-1/2 text-brand font-black text-xl italic group-focus-within:scale-125 transition-all">{currencyCode}</div>
  <input
  type="number"
  value={payoutAmount || ''}
@@ -700,65 +747,13 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
  </button>
  </div>
 
- <div className="overflow-x-auto">
- <table className="w-full border-collapse">
- <thead>
- <tr className="bg-gray-50/30 dark:bg-white/5">
- <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('transactions.date', lang)}</th>
- <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('transactions.description', lang)}</th>
- <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('dividends.recipient', lang)}</th>
- <th className="px-6 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('dividends.payout', lang)}</th>
- <th className="px-6 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('transactions.status', lang)}</th>
- </tr>
- </thead>
- <tbody className="divide-y divide-gray-50 dark:divide-white/5">
- {historyLoading ? (
- <tr>
- <td colSpan={5} className="py-20 text-center">
- <div className="flex flex-col items-center gap-3">
- <RefreshCw className="animate-spin text-brand" size={32} />
- <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Rebuilding Audit Trail...</p>
- </div>
- </td>
- </tr>
- ) : history.length === 0 ? (
- <tr>
- <td colSpan={5} className="py-20 text-center text-gray-400 font-black uppercase text-[10px] tracking-widest">
- No historical distributions found
- </td>
- </tr>
- ) : (
- history.map((tx: any) => (
- <tr key={tx._id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
- <td className="px-6 py-6 text-xs font-bold text-gray-400">
- {new Date(tx.date).toLocaleDateString()}
- </td>
- <td className="px-6 py-6">
- <p className="text-sm font-black dark:text-white leading-tight">{tx.description}</p>
- {tx.projectId && (
- <p className="text-[9px] font-black text-brand uppercase mt-1 tracking-widest">Project Settlement</p>
- )}
- </td>
- <td className="px-6 py-6">
- <div className="flex flex-col">
- <span className="text-xs font-black dark:text-white uppercase">{tx.memberId?.name || 'N/A'}</span>
- <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">ID: {tx.memberId?.memberId || 'UNKNOWN'}</span>
- </div>
- </td>
- <td className="px-6 py-6 text-right font-black text-brand text-sm">
- {formatCurrency(tx.amount)}
- </td>
- <td className="px-6 py-6 text-right">
- <span className="inline-block px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-widest">
- Distributed
- </span>
- </td>
- </tr>
- ))
- )}
- </tbody>
- </table>
- </div>
+ <Table
+ data={history}
+ columns={dividendHistoryColumns}
+ loading={historyLoading}
+ rowKey={(tx) => tx._id}
+ emptyMessage={<div className="text-gray-400 font-black uppercase text-[10px] tracking-widest py-8 text-center">No historical distributions found</div>}
+ />
 
  <div className="px-6 py-6 border-t border-gray-50 dark:border-white/5 flex flex-col md:flex-row items-center justify-between gap-3">
  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">

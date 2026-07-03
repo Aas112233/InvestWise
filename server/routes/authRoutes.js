@@ -18,9 +18,10 @@ import {
 } from '../controllers/authController.js';
 import { protect, admin, managerOrAdmin } from '../middleware/authMiddleware.js';
 import { loginValidation, registerValidation } from '../middleware/validator.js';
+import { authLimiter } from '../middleware/rateLimiter.js';
 
-router.post('/login', loginValidation, authUser);
-router.post('/register', registerValidation, registerUser);
+router.post('/login', authLimiter, loginValidation, authUser);
+router.post('/register', protect, admin, registerValidation, registerUser);
 router.post('/refresh', refreshToken);
 router.post('/logout', protect, logoutUser);
 router.post('/logout-all', protect, logoutAllDevices);

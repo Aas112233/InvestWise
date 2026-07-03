@@ -19,7 +19,7 @@ const fundSchema = mongoose.Schema(
  },
  currency: {
  type: String,
- default: 'BDT',
+ default: '',
  },
  linkedProjectId: {
  type: mongoose.Schema.Types.ObjectId,
@@ -36,6 +36,7 @@ const fundSchema = mongoose.Schema(
  type: Number,
  required: true,
  default: 0,
+ min: [0, 'Fund balance cannot be negative'],
  },
  lastReconciledAt: {
  type: Date,

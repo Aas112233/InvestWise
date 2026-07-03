@@ -1,8 +1,9 @@
-import AuditLog from '../models/AuditLog.js';
+import { getDb } from '../db/connection.js';
+import { auditLogs } from '../db/schema/index.js';
 
 /**
  * Logs a system action to the database.
- * 
+ *
  * @param {Object} params - The log parameters.
  * @param {Object} params.req - Express request object (optional, for IP/User extraction).
  * @param {Object} params.user - User object (if req not provided or to override).
@@ -13,32 +14,33 @@ import AuditLog from '../models/AuditLog.js';
  * @param {String} params.status - 'SUCCESS', 'FAILURE', or 'WARNING'.
  */
 export const logAudit = async ({
- req = null,
- user = null,
- action,
- resourceType = 'System',
- resourceId = null,
- details = {},
- status = 'SUCCESS'
+  req = null,
+  user = null,
+  action,
+  resourceType = 'System',
+  resourceId = null,
+  details = {},
+  status = 'SUCCESS'
 }) => {
- try {
- const currentUser = user || (req ? req.user : null);
- const ip = req ? (req.headers['x-forwarded-for'] || req.socket.remoteAddress) : 'SYSTEM';
- const userAgent = req ? req.get('User-Agent') : 'Internal';
+  try {
+    const currentUser = user || (req ? req.user : null);
+    const ip = req ? (req.headers['x-forwarded-for'] || req.socket.remoteAddress) : 'SYSTEM';
+    const userAgent = req ? req.get('User-Agent') : 'Internal';
 
- await AuditLog.create({
- user: currentUser ? currentUser._id : null,
- userName: currentUser ? currentUser.name : 'System/Guest',
- action,
- resourceType,
- resourceId,
- details,
- ipAddress: ip,
- userAgent,
- status
- });
- } catch (error) {
- console.error('Audit Logging Failed:', error);
- // We don't want to crash the app if logging fails, just error to console
- }
+    const db = getDb();
+    await db.insert(auditLogs).values({
+      userId: currentUser ? (currentUser.id || currentUser._id) : null,
+      userName: currentUser ? currentUser.name : 'System/Guest',
+      action,
+      resourceType,
+      resourceId: resourceId ? String(resourceId) : null,
+      details: typeof details === 'string' ? { message: details } : details,
+      ipAddress: ip,
+      userAgent,
+      status
+    });
+  } catch (error) {
+    console.error('Audit Logging Failed:', error);
+    // We don't want to crash the app if logging fails, just error to console
+  }
 };

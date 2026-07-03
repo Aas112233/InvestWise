@@ -45,7 +45,7 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr :%BACKEND_PORT% ^| findstr LI
 timeout /t 2 /nobreak >nul
 
 echo [+] Starting Backend Server (Port %BACKEND_PORT%)...
-start "Backend Server" cmd /k "cd /d ""%BACKEND_DIR%"" && set PORT=%BACKEND_PORT% && set CORS_ORIGINS=http://localhost:%FRONTEND_PORT%,http://localhost:3000,http://localhost:5173,http://localhost:%BACKEND_PORT% && node index.js"
+start "Backend Server" cmd /k "cd /d ""%BACKEND_DIR%"" && set PORT=%BACKEND_PORT% && set CORS_ORIGINS=http://localhost:%FRONTEND_PORT%,http://localhost:3000,http://localhost:5173,http://localhost:%BACKEND_PORT% && npx tsx index.js"
 
 echo [+] Starting Frontend Server (Port %FRONTEND_PORT%)...
 start "Frontend Server" cmd /k "cd /d ""%FRONTEND_DIR%"" && set VITE_API_URL=%FRONTEND_API_URL% && npm run dev -- --port %FRONTEND_PORT%"

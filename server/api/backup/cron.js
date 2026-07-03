@@ -2,7 +2,6 @@
  * Vercel Cron Job - Daily Automated Backup
  * Triggered daily at 2:00 AM by Vercel Cron
  */
-import mongoose from 'mongoose';
 import r2Storage from '../../utils/cloudflareR2.js';
 
 // Backup function logic (imported to avoid duplication)
