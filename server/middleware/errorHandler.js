@@ -4,6 +4,22 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const SENSITIVE_HEADER_KEYS = new Set([
+ 'authorization',
+ 'cookie',
+ 'set-cookie',
+ 'x-api-key',
+ 'x-auth-token',
+ 'x-refresh-token',
+]);
+
+const sanitizeHeaders = (headers = {}) =>
+ Object.fromEntries(
+ Object.entries(headers).map(([key, value]) => [
+ key,
+ SENSITIVE_HEADER_KEYS.has(key.toLowerCase()) ? '[REDACTED]' : value,
+ ])
+ );
 
 // Error types and their safe messages
 const errorTypeMap = {
@@ -63,16 +79,23 @@ const errorHandler = (err, req, res, next) => {
  });
  }
 
- // Append to secure log file
+// Append to secure log file
  const logPath = path.join(__dirname, '../logs/server_errors.log');
- const logEntry = `[${new Date().toISOString()}] ${req.method} ${req.url} - ${err.name}: ${err.message}\nCode: ${err.code}\nStack: ${err.stack}\nHeaders: ${JSON.stringify(req.headers)}\n\n`;
+ const logEntry = [
+ `[${new Date().toISOString()}] ${req.method} ${req.url} - ${err.name}: ${err.message}`,
+ `Code: ${err.code}`,
+ `Stack: ${err.stack}`,
+ `Headers: ${JSON.stringify(sanitizeHeaders(req.headers))}`,
+ '',
+ ].join('\n');
 
  try {
  if (!isExpectedAuthRefresh) {
- if (!fs.existsSync(path.dirname(logPath))) {
- fs.mkdirSync(path.dirname(logPath), { recursive: true });
- }
- fs.appendFileSync(logPath, logEntry);
+ fs.promises.mkdir(path.dirname(logPath), { recursive: true })
+ .then(() => fs.promises.appendFile(logPath, `${logEntry}\n`))
+ .catch((writeError) => {
+ console.error('Failed to write to error log:', writeError);
+ });
  }
  } catch (e) {
  console.error('Failed to write to error log:', e);

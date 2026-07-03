@@ -176,7 +176,7 @@ async function testDataIntegrity() {
  
  // Check transaction status consistency
  const pendingTransactions = await Transaction.find({ 
- status: { $in: ['Success', 'Completed'] },
+ status: 'Completed',
  amount: { $exists: true }
  }).countDocuments();
  

@@ -12,9 +12,10 @@ import {
 } from '../controllers/projectController.js';
 import { protect, requirePermission } from '../middleware/authMiddleware.js';
 import { projectValidation } from '../middleware/businessValidator.js';
+import cache from '../utils/cache.js';
 
 // Allow READ access to view projects, WRITE to create/modify
-router.route('/').get(protect, requirePermission('PROJECT_MANAGEMENT', 'READ'), getProjects).post(protect, requirePermission('PROJECT_MANAGEMENT', 'WRITE'), projectValidation, createProject);
+router.route('/').get(protect, requirePermission('PROJECT_MANAGEMENT', 'READ'), cache.middleware('projects:list', cache.CACHE_TTL.SHORT), getProjects).post(protect, requirePermission('PROJECT_MANAGEMENT', 'WRITE'), projectValidation, createProject);
 router
  .route('/:id')
  .get(protect, requirePermission('PROJECT_MANAGEMENT', 'READ'), getProjectById)

@@ -15,7 +15,7 @@ interface FundsManagementProps {
 }
 
 const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
- const { funds, addFund, updateFund, refreshFunds, currentUser, transferFunds, reconcileFund } = useGlobalState();
+ const { funds, addFund, updateFund, refreshFunds, currentUser, transferFunds, reconcileFund, currencyCode } = useGlobalState();
  const [refreshing, setRefreshing] = useState(false);
  const [isSubmitting, setIsSubmitting] = useState(false);
  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -118,7 +118,7 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
  description: formData.description,
  status: 'ACTIVE',
  balance: 0,
- currency: 'BDT',
+ currency: currencyCode,
  handlingOfficer: formData.handlingOfficer,
  accountNumber: formData.accountNumber
  };
@@ -223,7 +223,7 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
  { header: t('funds.fundName', lang) || 'Funding Name', key: 'name' },
  { header: t('funds.fundType', lang) || 'Type', key: 'type' },
  { header: t('funds.handlingOfficer', lang) || 'Officer', key: 'handlingOfficer' },
- { header: `${t('funds.currentBalance', lang) || 'Balance'} (BDT)`, key: 'balance', format: (f: any) => f.balance.toLocaleString() },
+ { header: `${t('funds.currentBalance', lang) || 'Balance'} (${currencyCode})`, key: 'balance', format: (f: any) => f.balance.toLocaleString() },
  { header: t('funds.description', lang) || 'Description', key: 'description' }
  ]}
  fileName={`funds_${new Date().toISOString().split('T')[0]}`}
@@ -327,7 +327,7 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
  <span className="text-3xl font-black text-dark dark:text-white tracking-tighter leading-none">
  {formatCurrency(fund.balance)}
  </span>
- <span className="text-[10px] font-black text-brand uppercase tracking-widest">BDT</span>
+ <span className="text-[10px] font-black text-brand uppercase tracking-widest">{currencyCode}</span>
  </div>
  </div>
 
@@ -551,7 +551,7 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
  </div>
 
  <FormInput
- label="Magnitude (BDT)"
+ label={`Magnitude (${currencyCode})`}
  type="number"
  value={transferData.amount}
  onChange={e => setTransferData({ ...transferData, amount: e.target.value })}

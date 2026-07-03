@@ -12,7 +12,6 @@ const memberSchema = mongoose.Schema(
  type: String,
  required: [true, 'Name is required'],
  trim: true,
- index: true,
  },
  email: {
  type: String,
@@ -21,7 +20,6 @@ const memberSchema = mongoose.Schema(
  match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Please fill a valid email address'],
  lowercase: true,
  trim: true,
- index: true,
  },
  phone: {
  type: String,
@@ -86,6 +84,7 @@ const memberSchema = mongoose.Schema(
 memberSchema.index({ status: 1, name: 1 });
 memberSchema.index({ email: 1, status: 1 });
 memberSchema.index({ createdAt: -1 });
+memberSchema.index({ name: 1 });
 memberSchema.index({ name: 'text', email: 'text', memberId: 'text' });
 
 const Member = mongoose.model('Member', memberSchema);

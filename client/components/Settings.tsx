@@ -45,7 +45,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
     // Local state for settings forms
     const [financialConfig, setFinancialConfig] = useState({
         fiscalYearStart: 'July',
-        baseCurrency: 'BDT',
+        baseCurrency: '',
         taxRate: 15.0,
         accountingMethod: 'Cash',
         shareValueBdt: 1000,
@@ -111,6 +111,17 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
         message: '',
         type: 'success',
     });
+
+    const currencyOptions = [
+        'BDT',
+        'USD',
+        'EUR',
+        'GBP',
+        'INR',
+        'PKR',
+        'SAR',
+        'AED',
+    ].map(code => ({ value: code, label: code }));
 
     const showNotification = (message: string, type: ToastType = 'success') => {
         setToast({ isVisible: true, message, type });
@@ -767,11 +778,11 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                                         valueMode="english-name"
                                         onChange={(value) => setFinancialConfig({ ...financialConfig, fiscalYearStart: value })}
                                     />
-                                    <FormInput
+                                    <FormSelect
                                         label="Base Currency"
                                         value={financialConfig.baseCurrency}
-                                        readOnly
-                                        className="opacity-60 cursor-not-allowed"
+                                        onChange={(e) => setFinancialConfig({ ...financialConfig, baseCurrency: e.target.value })}
+                                        options={currencyOptions}
                                     />
                                     <FormInput
                                         label="Default Tax/VAT Rate (%)"
@@ -788,7 +799,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                                     <div className="md:col-span-2">
                                         <div className="relative">
                                             <FormInput
-                                                label="Share Value (BDT per Share)"
+                                                label={`Share Value (${financialConfig.baseCurrency || 'Currency'} per Share)`}
                                                 value={financialConfig.shareValueBdt.toString()}
                                                 onChange={(e) => setFinancialConfig({ ...financialConfig, shareValueBdt: parseInt(e.target.value) || 1000 })}
                                                 type="number"

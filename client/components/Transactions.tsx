@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, ArrowUpRight, ArrowDownLeft, Briefcase, CreditCard, ChevronUp, ChevronDown, Download, Trash2, Loader2, RefreshCw } from 'lucide-react';
+import { Search, Filter, ArrowUpRight, ArrowDownLeft, Briefcase, CreditCard, Download, Trash2, Loader2, RefreshCw } from 'lucide-react';
 import { Transaction } from '../types';
+import { Table, TableColumn } from './ui/Table';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { financeService } from '../services/api';
 import Toast, { ToastType } from './Toast';
@@ -21,7 +22,7 @@ interface TransactionsProps {
 }
 
 const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
- const { transactions, refreshTransactions } = useGlobalState();
+ const { transactions, refreshTransactions, currencyCode } = useGlobalState();
  const [searchQuery, setSearchQuery] = useState('');
  const [filterType, setFilterType] = useState<string>('All');
  const [sortBy, setSortBy] = useState('date');
@@ -159,11 +160,6 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
 
  // Removed client-side filteredAndSortedTransactions as we use server-side logic now
 
- const SortIcon = ({ column }: { column: string }) => {
- if (sortBy !== column) return <ChevronUp className="opacity-0 group-hover:opacity-30 transition-opacity" size={14} />;
- return sortOrder === 'asc' ? <ChevronUp size={14} className="text-brand" /> : <ChevronDown size={14} className="text-brand" />;
- };
-
  const totals = useMemo(() => ({
  inflow: paginatedData.totalInflow,
  outflow: paginatedData.totalOutflow
@@ -187,9 +183,110 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
  { header: t('transactions.date', lang), key: 'date', format: (t: any) => formatDate(t.date) },
  { header: t('transactions.type', lang), key: 'type' },
  { header: t('transactions.description', lang), key: 'description' },
- { header: `${t('transactions.valuation', lang)} (BDT)`, key: 'amount', format: (t: any) => t.amount.toLocaleString() },
+ { header: `${t('transactions.valuation', lang)} (${currencyCode})`, key: 'amount', format: (t: any) => t.amount.toLocaleString() },
  { header: t('transactions.status', lang), key: 'status' },
  { header: t('analysis.partnerEntity', lang), key: 'member', format: (t: any) => (t as any).memberId?.name || t.member || 'N/A' }
+ ];
+
+ const tableColumns: TableColumn<Transaction>[] = [
+ {
+ key: 'id',
+ header: t('transactions.txRef', lang),
+ sortable: true,
+ render: (tx) => (
+ <span className="text-[10px] font-black text-brand uppercase tracking-tighter" title={tx.id}>
+ #{tx.id.substring(0, 8)}...
+ </span>
+ )
+ },
+ {
+ key: 'date',
+ header: t('transactions.date', lang),
+ sortable: true,
+ render: (tx) => <span className="text-xs font-bold text-gray-400 whitespace-nowrap">{formatDate(tx.date)}</span>
+ },
+ {
+ key: 'type',
+ header: t('transactions.type', lang),
+ sortable: true,
+ render: (tx) => (
+ <div className="flex items-center gap-3">
+ <div className="p-2.5 rounded-xl bg-gray-50 dark:bg-white/5">
+ {getTypeIcon(tx.type)}
+ </div>
+ <span className="text-xs font-black dark:text-white uppercase tracking-wider">{t(`common.${txTypeKeyMap[tx.type] || 'deposit'}`, lang)}</span>
+ </div>
+ )
+ },
+ {
+ key: 'description',
+ header: t('transactions.description', lang),
+ render: (tx) => (
+ <div className="flex flex-col">
+ <p className="font-black text-dark dark:text-white text-sm leading-none mb-1">{tx.description}</p>
+ {((tx as any).memberId || tx.member) && (
+ <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">
+ {t('transactions.partner', lang)} {(tx as any).memberId?.name || tx.member}
+ {((tx as any).memberId?.memberId) && (
+ <span className="ml-1 opacity-60">(#{(tx as any).memberId.memberId})</span>
+ )}
+ </p>
+ )}
+ </div>
+ )
+ },
+ {
+ key: 'amount',
+ header: t('transactions.valuation', lang),
+ sortable: true,
+ align: 'right',
+ cellClassName: 'font-black text-dark dark:text-white text-lg tracking-tighter',
+ render: (tx) => `${currencyCode} ${tx.amount.toLocaleString()}`
+ },
+ {
+ key: 'balanceAfter',
+ header: t('masterForm.runningBalance', lang) || 'Running Balance',
+ align: 'right',
+ render: (tx) => tx.balanceAfter !== undefined ? (
+ <span className="text-xs font-black text-gray-600 dark:text-gray-300">
+ {formatCurrency(tx.balanceAfter)}
+ </span>
+ ) : (
+ <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500">N/A</span>
+ )
+ },
+ {
+ key: 'status',
+ header: t('transactions.status', lang),
+ sortable: true,
+ align: 'right',
+ render: (tx) => (
+ <span className={`inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${tx.status === 'Success' || tx.status as any === 'Completed' ? 'bg-emerald-500/10 text-emerald-500' :
+ tx.status === 'Processing' || tx.status as any === 'Pending' ? 'bg-amber-400/10 text-amber-500' :
+ 'bg-rose-500/10 text-rose-500'
+ }`}>
+ {t(`common.${txStatusKeyMap[tx.status] || 'success'}`, lang)}
+ </span>
+ )
+ },
+ {
+ key: 'actions',
+ header: t('transactions.actions', lang),
+ align: 'right',
+ render: (tx) => (
+ <button
+ onClick={() => handleDeleteClick(tx.id, tx.description)}
+ disabled={!!processingId}
+ className={`p-2 rounded-xl border transition-all ${processingId === tx.id
+ ? 'bg-red-50 border-red-100 cursor-wait'
+ : 'bg-transparent border-transparent text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:border-red-100 dark:hover:border-red-500/20'
+ }`}
+ title="Archive Transaction"
+ >
+ {processingId === tx.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
+ </button>
+ )
+ }
  ];
 
  return (
@@ -243,14 +340,14 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
  <SummaryMetricCard
  label={t('transactions.inflow', lang)}
- value={`BDT ${totals.inflow.toLocaleString()}`}
+ value={`${currencyCode} ${totals.inflow.toLocaleString()}`}
  note={t('transactions.received', lang)}
  valueClassName="text-2xl sm:text-3xl"
  noteClassName="text-emerald-500 text-sm sm:text-base"
  />
  <SummaryMetricCard
  label={t('transactions.deployed', lang)}
- value={`BDT ${totals.outflow.toLocaleString()}`}
+ value={`${currencyCode} ${totals.outflow.toLocaleString()}`}
  note={t('transactions.investedSpent', lang)}
  variant="dark"
  valueClassName="text-2xl sm:text-3xl"
@@ -287,119 +384,17 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
  </div>
  </div>
 
- <div className="overflow-x-auto">
- <table className="w-full border-collapse">
- <thead>
- <tr className="bg-gray-50/30 dark:bg-white/5">
- <th onClick={() => handleSort('date')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap hover:text-brand transition-colors">
- <div className="flex items-center gap-2">{t('transactions.date', lang)} <SortIcon column="date" /></div>
- </th>
- <th onClick={() => handleSort('id')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap hover:text-brand transition-colors">
- <div className="flex items-center gap-2">{t('transactions.txRef', lang)} <SortIcon column="id" /></div>
- </th>
- <th onClick={() => handleSort('type')} className="cursor-pointer group px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap hover:text-brand transition-colors">
- <div className="flex items-center gap-2">{t('transactions.type', lang)} <SortIcon column="type" /></div>
- </th>
- <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">{t('transactions.description', lang)}</th>
- <th onClick={() => handleSort('amount')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap hover:text-brand transition-colors">
- <div className="flex items-center justify-end gap-2">{t('transactions.valuation', lang)} <SortIcon column="amount" /></div>
- </th>
- <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
- {t('masterForm.runningBalance', lang) || 'Running Balance'}
- </th>
- <th onClick={() => handleSort('status')} className="cursor-pointer group px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap hover:text-brand transition-colors">
- <div className="flex items-center justify-end gap-2">{t('transactions.status', lang)} <SortIcon column="status" /></div>
- </th>
- <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest whitespace-nowrap">
- {t('transactions.actions', lang)}
- </th>
- </tr>
- </thead>
- <tbody className="divide-y divide-gray-50 dark:divide-white/5">
- {loading ? (
- <tr>
- <td colSpan={7} className="px-10 py-20 text-center">
- <div className="flex flex-col items-center gap-4">
- <RefreshCw className="animate-spin text-brand" size={40} />
- <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Scanning Ledger...</p>
- </div>
- </td>
- </tr>
- ) : paginatedData.data.length === 0 ? (
- <tr>
- <td colSpan={7} className="px-10 py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-xs">
- {t('transactions.noTransactions', lang)}
- </td>
- </tr>
- ) : (
- paginatedData.data.map((tx) => (
- <tr key={tx.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
- <td className="px-10 py-6">
- <span className="text-[10px] font-black text-brand uppercase tracking-tighter" title={tx.id}>#{tx.id.substring(0, 8)}...</span>
- </td>
- <td className="px-10 py-6">
- <span className="text-xs font-bold text-gray-400 whitespace-nowrap">{formatDate(tx.date)}</span>
- </td>
- <td className="px-10 py-6">
- <div className="flex items-center gap-3">
- <div className="p-2.5 rounded-xl bg-gray-50 dark:bg-white/5">
- {getTypeIcon(tx.type)}
- </div>
- <span className="text-xs font-black dark:text-white uppercase tracking-wider">{t(`common.${txTypeKeyMap[tx.type] || 'deposit'}`, lang)}</span>
- </div>
- </td>
- <td className="px-10 py-6">
- <div className="flex flex-col">
- <p className="font-black text-dark dark:text-white text-sm leading-none mb-1">{tx.description}</p>
- {((tx as any).memberId || tx.member) && (
- <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">
- {t('transactions.partner', lang)} {(tx as any).memberId?.name || tx.member}
- {((tx as any).memberId?.memberId) && (
- <span className="ml-1 opacity-60">(#{(tx as any).memberId.memberId})</span>
- )}
- </p>
- )}
- </div>
- </td>
- <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-lg tracking-tighter">
- BDT {tx.amount.toLocaleString()}
- </td>
- <td className="px-10 py-6 text-right">
- {tx.balanceAfter !== undefined ? (
- <span className="text-xs font-black text-gray-600 dark:text-gray-300">
- {formatCurrency(tx.balanceAfter)}
- </span>
- ) : (
- <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500">N/A</span>
- )}
- </td>
- <td className="px-10 py-6 text-right">
- <span className={`inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${tx.status === 'Success' || tx.status as any === 'Completed' ? 'bg-emerald-500/10 text-emerald-500' :
- tx.status === 'Processing' || tx.status as any === 'Pending' ? 'bg-amber-400/10 text-amber-500' :
- 'bg-rose-500/10 text-rose-500'
- }`}>
- {t(`common.${txStatusKeyMap[tx.status] || 'success'}`, lang)}
- </span>
- </td>
- <td className="px-10 py-6 text-right">
- <button
- onClick={() => handleDeleteClick(tx.id, tx.description)}
- disabled={!!processingId}
- className={`p-2 rounded-xl border transition-all ${processingId === tx.id
- ? 'bg-red-50 border-red-100 cursor-wait'
- : 'bg-transparent border-transparent text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:border-red-100 dark:hover:border-red-500/20'
- }`}
- title="Archive Transaction"
- >
- {processingId === tx.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
- </button>
- </td>
- </tr>
- ))
- )}
- </tbody>
- </table>
- </div>
+ <Table
+ data={paginatedData.data}
+ columns={tableColumns}
+ loading={loading}
+ loadingMessage="Scanning Ledger..."
+ emptyMessage={<div className="text-gray-400 font-bold uppercase tracking-widest text-xs">{t('transactions.noTransactions', lang)}</div>}
+ sortBy={sortBy}
+ sortOrder={sortOrder}
+ onSort={handleSort}
+ rowKey={(tx) => tx.id}
+ />
 
  <div className="px-10 py-8 border-t border-gray-50 dark:border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">

@@ -1,82 +1,79 @@
-import mongoose from 'mongoose';
+import { checkDbHealth } from '../db/connection.js';
+
+// Helper to wait for DB connection
+const waitForDb = async (retries = 10, delay = 500) => {
+  for (let i = 0; i < retries; i++) {
+    const healthy = await checkDbHealth();
+    if (healthy) return true;
+    console.log(`[DB] Waiting for connection... (${i + 1}/${retries})`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+  return false;
+};
 
 // Middleware to check database connection before processing requests
-const checkDbConnection = (req, res, next) => {
- const dbState = mongoose.connection.readyState;
-
- // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
- if (dbState === 0 || dbState === 3) {
- console.warn(` Request blocked - Database disconnected: ${req.method} ${req.url}`);
-
- return res.status(503).json({
- success: false,
- message: 'Database connection unavailable. Please try again in a few moments.',
- error: 'SERVICE_UNAVAILABLE',
- retryAfter: 5 // Suggest client to retry after 5 seconds
- });
- }
-
- if (dbState === 2) {
- console.warn(` Request delayed - Database connecting: ${req.method} ${req.url}`);
-
- return res.status(503).json({
- success: false,
- message: 'Database connection in progress. Please try again shortly.',
- error: 'SERVICE_UNAVAILABLE',
- retryAfter: 3
- });
- }
-
- // Connection is healthy (readyState === 1)
- next();
+const checkDbConnection = async (req, res, next) => {
+  try {
+    const healthy = await checkDbHealth();
+    if (!healthy) {
+      const connected = await waitForDb();
+      if (!connected) {
+        return res.status(503).json({
+          success: false,
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Database is connecting. Please try again in a moment.',
+          retryAfter: 5
+        });
+      }
+    }
+    next();
+  } catch (error) {
+    return res.status(503).json({
+      success: false,
+      error: 'SERVICE_UNAVAILABLE',
+      message: 'Database connection timeout. Please try again.',
+      retryAfter: 5
+    });
+  }
 };
 
 // Async middleware to verify database connectivity with actual ping
 const verifyDbConnectivity = async (req, res, next) => {
- try {
- // Quick ping to verify database is actually responsive
- await mongoose.connection.db.admin().ping({ maxTimeMS: 2000 });
- next();
- } catch (error) {
- console.error(' Database ping failed:', error.message);
-
- return res.status(503).json({
- success: false,
- message: 'Database is not responding. Our team has been notified.',
- error: 'DATABASE_UNREACHABLE',
- retryAfter: 10
- });
- }
+  try {
+    const healthy = await checkDbHealth();
+    if (!healthy) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database is not responding. Our team has been notified.',
+        error: 'DATABASE_UNREACHABLE',
+        retryAfter: 10
+      });
+    }
+    next();
+  } catch (error) {
+    console.error('Database ping failed:', error.message);
+    return res.status(503).json({
+      success: false,
+      message: 'Database is not responding. Our team has been notified.',
+      error: 'DATABASE_UNREACHABLE',
+      retryAfter: 10
+    });
+  }
 };
 
 // Optional middleware - only logs connection state, doesn't block
 const logDbState = (req, res, next) => {
- const start = Date.now();
+  const start = Date.now();
+  console.log(`DB State check | ${req.method} ${req.url}`);
 
- // Log connection state at start of request
- const dbState = mongoose.connection.readyState;
- const stateMap = {
- 0: 'disconnected',
- 1: 'connected',
- 2: 'connecting',
- 3: 'disconnecting'
- };
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    if (duration > 1000) {
+      console.warn(`Slow request: ${req.method} ${req.url} took ${duration}ms`);
+    }
+  });
 
- console.log(` DB State: ${stateMap[dbState]} | ${req.method} ${req.url}`);
-
- // Listen for disconnect during request
- const disconnectHandler = () => {
- console.warn(` Database disconnected during request: ${req.method} ${req.url}`);
- };
-
- mongoose.connection.once('disconnected', disconnectHandler);
-
- // Clean up listener after response
- res.on('finish', () => {
- mongoose.connection.removeListener('disconnected', disconnectHandler);
- });
-
- next();
+  next();
 };
 
 export { checkDbConnection, verifyDbConnectivity, logDbState };

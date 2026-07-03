@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
 import asyncHandler from 'express-async-handler';
-import User from '../models/User.js';
-import BlacklistedToken from '../models/BlacklistedToken.js';
+import { eq } from 'drizzle-orm';
+import { getDb, setAppContext } from '../db/connection.js';
+import { users, blacklistedTokens } from '../db/schema/index.js';
 
 const createAuthError = (message, code, name = 'Error') => {
  const error = new Error(message);
@@ -20,8 +21,11 @@ const protect = asyncHandler(async (req, res, next) => {
  try {
  token = req.headers.authorization.split(' ')[1];
 
+ const db = getDb();
+
  // Check if token is blacklisted
- const isBlacklisted = await BlacklistedToken.findOne({ token });
+ const blacklistedResult = await db.select().from(blacklistedTokens).where(eq(blacklistedTokens.token, token)).limit(1);
+ const isBlacklisted = blacklistedResult[0];
  if (isBlacklisted) {
  res.status(401);
  throw new Error('Token has been revoked, please login again');
@@ -50,7 +54,20 @@ const protect = asyncHandler(async (req, res, next) => {
 
  // Get user from token
  try {
- req.user = await User.findById(decoded.id).select('-password');
+ const userResult = await db.select({
+  id: users.id,
+  name: users.name,
+  email: users.email,
+  role: users.role,
+  status: users.status,
+  permissions: users.permissions,
+  lastLogin: users.lastLogin,
+  avatar: users.avatar,
+  memberId: users.memberId,
+  createdAt: users.createdAt,
+  updatedAt: users.updatedAt,
+ }).from(users).where(eq(users.id, decoded.id)).limit(1);
+ req.user = userResult[0];
  } catch (err) {
  console.error('Auth Middleware DB Error:', err);
  res.status(500);
@@ -60,6 +77,15 @@ const protect = asyncHandler(async (req, res, next) => {
  if (!req.user) {
  res.status(401);
  throw new Error('Not authorized, user not found');
+ }
+
+ // Set RLS context for database-level row security
+ try {
+  const userId = String(req.user._id || req.user.id);
+  const role = req.user.role || 'Member';
+  await setAppContext(userId, role);
+ } catch (err) {
+  console.error('Failed to set RLS context:', err.message);
  }
 
  next();
@@ -81,7 +107,7 @@ const protect = asyncHandler(async (req, res, next) => {
 });
 
 const admin = (req, res, next) => {
- if (req.user && (req.user.role === 'Admin' || req.user.role === 'Administrator')) {
+ if (req.user && req.user.role === 'Admin') {
  next();
  } else {
  res.status(403);
@@ -90,7 +116,7 @@ const admin = (req, res, next) => {
 };
 
 const managerOrAdmin = (req, res, next) => {
- if (req.user && (req.user.role === 'Admin' || req.user.role === 'Administrator' || req.user.role === 'Manager')) {
+ if (req.user && (req.user.role === 'Admin' || req.user.role === 'Manager')) {
  next();
  } else {
  res.status(403);

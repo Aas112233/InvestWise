@@ -2,8 +2,9 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Mail, Phone, MoreVertical, Plus, Edit2, Trash2, X, Search, Filter, Hash, UserCheck, Lock, User as UserIcon, ShieldCheck, Key, Info, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Mail, Phone, MoreVertical, Plus, Edit2, Trash2, X, Search, Filter, Hash, UserCheck, Lock, User as UserIcon, ShieldCheck, Key, Info, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { Member, User, AccessLevel, AppScreen } from '../types';
+import { Table, TableColumn } from './ui/Table';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { memberService } from '../services/api';
 import Toast, { ToastType } from './Toast';
@@ -29,7 +30,7 @@ interface MembersProps {
 }
 
 const Members: React.FC<MembersProps> = ({ lang }) => {
-    const { members, addMember, updateMember, deleteMember, addSystemUser, onboardMember, systemUsers, refreshMembers, currentUser, updateUserPassword } = useGlobalState();
+    const { members, addMember, updateMember, deleteMember, addSystemUser, onboardMember, systemUsers, refreshMembers, currentUser, updateUserPassword, currencyCode } = useGlobalState();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [createUserAccess, setCreateUserAccess] = useState(false);
@@ -277,7 +278,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                 { label: t('members.legalName', lang), value: data.name },
                 { label: t('members.memberId', lang), value: data.memberId || 'Auto-generated' },
                 { label: t('members.accessRole', lang), value: data.role },
-                { label: t('members.valuation', lang), value: `BDT ${(data.shares * SHARE_VALUE).toLocaleString()}` },
+                { label: t('members.valuation', lang), value: `${currencyCode} ${(data.shares * SHARE_VALUE).toLocaleString()}` },
                 { label: t('members.systemAccess', lang), value: data.createUserAccess ? t('common.active', lang) : t('common.pending', lang) },
             ],
             onConfirm: () => executeSubmit(data)
@@ -293,9 +294,6 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             closeDialog();
             fetchPaginatedMembers(currentPage, searchQuery, rowsPerPage, sortBy, sortOrder);
         } catch (err: any) {
-            // Error handling is actually done in Context too, but we catch re-thrown error here to close dialog/show UI
-            // Context sets lastError, but we also want local toast if desired.
-            // since context re-throws, this catch block runs.
             const errorMessage = err.response?.data?.message || err.message || t('members.deleteError', lang);
             showNotification(errorMessage, "error");
             closeDialog();
@@ -315,6 +313,87 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
     };
 
     const totalPool = members.reduce((acc, m) => acc + (m.successfulDepositTotal || 0), 0);
+
+    const tableColumns: TableColumn<Member>[] = [
+        {
+            key: 'name',
+            header: t('members.partnerIdentity', lang),
+            sortable: true,
+            render: (member) => (
+                <div className="flex items-center gap-5">
+                    <Avatar name={member.name} size="lg" className="grayscale group-hover:grayscale-0" />
+                    <div>
+                        <p className="font-black text-dark dark:text-white text-lg leading-none mb-1 group-hover:text-brand transition-colors">{member.name}</p>
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{member.role}</p>
+                    </div>
+                </div>
+            )
+        },
+        {
+            key: 'memberId',
+            header: t('members.memberId', lang),
+            sortable: true,
+            cellClassName: 'font-mono text-sm font-black text-dark dark:text-brand',
+            render: (member) => `#${member.memberId}`
+        },
+        {
+            key: 'phone',
+            header: t('members.contactInfo', lang),
+            cellClassName: 'text-xs font-black text-dark dark:text-gray-300',
+            render: (member) => member.phone
+        },
+        {
+            key: 'hasUserAccess',
+            header: t('members.systemAccess', lang),
+            align: 'center',
+            render: (member) => (member.hasUserAccess || systemUsers.some(u => u.memberId === member.memberId)) ? (
+                <div className="flex justify-center">
+                    <span className="flex items-center justify-center w-8 h-8 bg-emerald-500/10 text-emerald-500 rounded-full border border-emerald-500/20 shadow-sm shadow-emerald-500/5 transition-all hover:scale-110" title={t('common.authorizedBadge', lang)}>
+                        <CheckCircle2 size={18} strokeWidth={2.5} />
+                    </span>
+                </div>
+            ) : (
+                <div className="flex justify-center">
+                    <span className="flex items-center justify-center w-8 h-8 bg-gray-500/5 text-gray-400 rounded-full border border-gray-500/10 opacity-40 transition-all hover:opacity-60" title={t('common.restrictedBadge', lang)}>
+                        <Lock size={16} strokeWidth={2} />
+                    </span>
+                </div>
+            )
+        },
+        {
+            key: 'shares',
+            header: t('members.shares', lang),
+            sortable: true,
+            align: 'center',
+            cellClassName: 'font-black text-dark dark:text-brand text-lg',
+            render: (member) => member.shares
+        },
+        {
+            key: 'successfulDepositTotal',
+            header: t('members.totalContribution', lang),
+            sortable: true,
+            align: 'right',
+            cellClassName: 'font-black text-dark dark:text-white text-xl tracking-tighter',
+            render: (member) => `${currencyCode} ${(member.successfulDepositTotal || 0).toLocaleString()}`
+        },
+        {
+            key: 'actions',
+            header: t('members.action', lang),
+            align: 'right',
+            render: (member) => (
+                <PermissionGuard screen={AppScreen.MEMBERS} requiredLevel={AccessLevel.WRITE}>
+                    <div className="flex items-center justify-end gap-2">
+                        <button onClick={() => handleOpenModal(member)} className="p-3 bg-gray-50 dark:bg-white/5 rounded-xl text-gray-400 hover:text-brand transition-colors">
+                            <Edit2 size={18} />
+                        </button>
+                        <button onClick={() => handleDeleteClick(member)} className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl text-rose-400 hover:text-rose-600 transition-colors">
+                            <Trash2 size={18} />
+                        </button>
+                    </div>
+                </PermissionGuard>
+            )
+        }
+    ];
 
     return (
         <div className="compact-screen space-y-10 animate-in fade-in duration-500">
@@ -369,7 +448,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                             { header: t('members.phone', lang), key: 'phone' },
                             { header: t('members.role', lang), key: 'role' },
                             { header: t('members.shares', lang), key: 'shares' },
-                            { header: `${t('members.totalContribution', lang)} (BDT)`, key: 'successfulDepositTotal', format: (m: any) => (m.successfulDepositTotal || 0).toLocaleString() },
+                            { header: `${t('members.totalContribution', lang)} (${currencyCode})`, key: 'successfulDepositTotal', format: (m: any) => (m.successfulDepositTotal || 0).toLocaleString() },
                             { header: t('members.access', lang), key: 'hasUserAccess', format: (m: any) => m.hasUserAccess ? (lang === 'bn' ? 'হ্যাঁ' : 'Yes') : (lang === 'bn' ? 'না' : 'No') }
                         ]}
                         fileName={`members_${new Date().toISOString().split('T')[0]}`}
@@ -413,104 +492,17 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                         />
                     </div>
 
-                    <div className="overflow-x-auto px-2">
-                        <table className="w-full border-collapse">
-                            <thead>
-                                <tr className="bg-gray-50/30 dark:bg-white/5 text-[11px] font-black text-gray-500 uppercase tracking-widest">
-                                    <th className="px-10 py-6 text-left cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('name')}>
-                                        <div className="flex items-center gap-2">
-                                            {t('members.partnerIdentity', lang)}
-                                            {sortBy === 'name' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
-                                        </div>
-                                    </th>
-                                    <th className="px-10 py-6 text-left cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('memberId')}>
-                                        <div className="flex items-center gap-2">
-                                            {t('members.memberId', lang)}
-                                            {sortBy === 'memberId' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
-                                        </div>
-                                    </th>
-                                    <th className="px-10 py-6 text-left">{t('members.contactInfo', lang)}</th>
-                                    <th className="px-10 py-6 text-center">{t('members.systemAccess', lang)}</th>
-                                    <th className="px-10 py-6 text-center cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('shares')}>
-                                        <div className="flex items-center justify-center gap-2">
-                                            {t('members.shares', lang)}
-                                            {sortBy === 'shares' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
-                                        </div>
-                                    </th>
-                                    <th className="px-10 py-6 text-right cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('successfulDepositTotal')}>
-                                        <div className="flex items-center justify-end gap-2">
-                                            {t('members.totalContribution', lang)}
-                                            {sortBy === 'successfulDepositTotal' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
-                                        </div>
-                                    </th>
-                                    <th className="px-10 py-6 text-right">{t('members.action', lang)}</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50 dark:divide-white/5">
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan={6} className="px-10 py-20 text-center">
-                                            <div className="flex flex-col items-center gap-4">
-                                                <RefreshCw className="animate-spin text-brand" size={40} />
-                                                <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Scanning Ledger...</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ) : paginatedMembers.data.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} className="px-10 py-20 text-center">
-                                            <p className="text-xs font-black text-gray-400 uppercase tracking-widest">No stakeholders found matching your search</p>
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    paginatedMembers.data.map((member, index) => (
-                                        <tr key={member.id || member.memberId || `member-${index}`} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
-                                            <td className="px-10 py-6">
-                                                <div className="flex items-center gap-5">
-                                                    <Avatar name={member.name} size="lg" className="grayscale group-hover:grayscale-0" />
-                                                    <div>
-                                                        <p className="font-black text-dark dark:text-white text-lg leading-none mb-1 group-hover:text-brand transition-colors">{member.name}</p>
-                                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{member.role}</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-10 py-6 font-mono text-sm font-black text-dark dark:text-brand">#{member.memberId}</td>
-                                            <td className="px-10 py-6 text-xs font-black text-dark dark:text-gray-300">{member.phone}</td>
-                                            <td className="px-10 py-6 text-center">
-                                                {(member.hasUserAccess || systemUsers.some(u => u.memberId === member.memberId)) ? (
-                                                    <span className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 shadow-sm shadow-emerald-500/5 transition-all hover:scale-105">
-                                                        <ShieldCheck size={12} strokeWidth={3} /> {t('common.authorizedBadge', lang)}
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-2 px-4 py-2 bg-gray-500/5 text-gray-400 rounded-xl text-[10px] font-black uppercase tracking-widest border border-gray-500/10 opacity-40 transition-all hover:opacity-60">
-                                                        <Lock size={12} /> {t('common.restrictedBadge', lang)}
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-10 py-6 text-center">
-                                                <span className="font-black text-dark dark:text-brand text-lg">{member.shares}</span>
-                                            </td>
-                                            <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-xl tracking-tighter">
-                                                BDT {(member.successfulDepositTotal || 0).toLocaleString()}
-                                            </td>
-                                            <td className="px-10 py-6 text-right">
-                                                <PermissionGuard screen={AppScreen.MEMBERS} requiredLevel={AccessLevel.WRITE}>
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <button onClick={() => handleOpenModal(member)} className="p-3 bg-gray-50 dark:bg-white/5 rounded-xl text-gray-400 hover:text-brand transition-colors">
-                                                            <Edit2 size={18} />
-                                                        </button>
-                                                        <button onClick={() => handleDeleteClick(member)} className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl text-rose-400 hover:text-rose-600 transition-colors">
-                                                            <Trash2 size={18} />
-                                                        </button>
-                                                    </div>
-                                                </PermissionGuard>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                    <Table
+                        data={paginatedMembers.data}
+                        columns={tableColumns}
+                        loading={loading}
+                        loadingMessage="Scanning Ledger..."
+                        emptyMessage={<p className="text-xs font-black text-gray-400 uppercase tracking-widest">No stakeholders found matching your search</p>}
+                        sortBy={sortBy}
+                        sortOrder={sortOrder}
+                        onSort={handleSort}
+                        rowKey={(member, index) => member.id || member.memberId || `member-${index}`}
+                    />
 
                     <div className="px-10 py-8 border-t border-gray-50 dark:border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
                         <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
@@ -537,7 +529,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                 onClose={handleCloseModal}
                 title={t('members.intake', lang)}
                 subtitle={`${t('members.memberId', lang)}: #${watchedMemberId || 'Auto'}`}
-                onSubmit={handleSubmit(handleReviewSubmit)}
+                onSubmit={handleSubmit((data) => handleReviewSubmit(data as MemberFormData))}
                 submitLabel={t('common.save', lang)}
                 maxWidth="max-w-6xl"
                 loading={isSubmitting || isFormSubmitting}
@@ -628,7 +620,6 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                                     error={errors.password?.message}
                                     required={!systemUsers.some(u => u.memberId === watchedMemberId)}
                                     placeholder={systemUsers.some(u => u.memberId === watchedMemberId) ? "Leave empty to keep" : "Min 6 chars"}
-                                    showPasswordToggle
                                     icon={<Key size={14} />}
                                 />
                             </div>
@@ -654,7 +645,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
 
                 <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-white/5 rounded-3xl">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Initial Valuation</p>
-                    <p className="text-2xl font-black text-dark dark:text-brand tracking-tighter">BDT {((watchedShares || 0) * SHARE_VALUE).toLocaleString()}</p>
+                    <p className="text-2xl font-black text-dark dark:text-brand tracking-tighter">{currencyCode} {((watchedShares || 0) * SHARE_VALUE).toLocaleString()}</p>
                 </div>
             </ModalForm>
 

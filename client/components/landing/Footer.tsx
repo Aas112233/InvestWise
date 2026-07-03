@@ -79,7 +79,7 @@ const Footer: React.FC = () => {
  <div className="flex items-center gap-8">
  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-700">
  <Globe size={12} />
- EN-US / BDT
+ EN-US / Currency
  </div>
  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-500">
  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />

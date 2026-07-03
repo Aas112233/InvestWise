@@ -1,4 +1,5 @@
 import { Language, t } from '../i18n/translations';
+import { getActiveCurrencyCode, normalizeCurrencyCode } from '../utils/currency';
 
 const LONGCAT_API_URL = 'https://api.longcat.chat/openai/v1/chat/completions';
 
@@ -108,6 +109,9 @@ class AIRateLimiter {
 // Create singleton rate limiter instance
 const aiRateLimiter = new AIRateLimiter();
 
+const getCurrencyCode = (state: any) =>
+ normalizeCurrencyCode(state?.settings?.financial?.baseCurrency) || getActiveCurrencyCode();
+
 const SYSTEM_PROMPT = `You are the InvestWise AI Strategist. Provide concise, data-driven insights.
 RULES:
 - Use ONLY the provided data - no assumptions or hallucinations
@@ -137,6 +141,8 @@ CUSTOM QUERY HANDLING - IMPORTANT:
 
 const buildContext = (state: any, options: QueryOptions) => {
  const { type, memberId, projectId, fundId, searchQuery, customInstruction } = options;
+ const currencyCode = getCurrencyCode(state);
+ const currencyPrefix = currencyCode ? `${currencyCode} ` : '';
 
  const totalFunds = state.funds.reduce((acc: number, f: any) => acc + f.balance, 0);
  const activeProjects = state.projects.filter((p: any) => p.status === 'In Progress');
@@ -187,6 +193,7 @@ const buildContext = (state: any, options: QueryOptions) => {
  });
 
  let contextData = {
+ currencyCode,
  overview: {
  totalFunds: totalFunds.toLocaleString(),
  activeProjects: activeProjects.length,
@@ -195,8 +202,8 @@ const buildContext = (state: any, options: QueryOptions) => {
  totalDeposits: totalDeposits.toLocaleString(),
  totalExpenses: totalExpenses.toLocaleString(),
  netPosition: (totalDeposits - totalExpenses).toLocaleString(),
- topProjects: activeProjects.length > 0 ? activeProjects.slice(0, 3).map((p: any) => `${p.title}: BDT ${p.budget?.toLocaleString() || 0}`) : ['No active projects'],
- recentExpenses: state.expenses.length > 0 ? state.expenses.slice(0, 3).map((e: any) => `${e.category}: BDT ${e.amount.toLocaleString()}`) : ['No recent expenses'],
+ topProjects: activeProjects.length > 0 ? activeProjects.slice(0, 3).map((p: any) => `${p.title}: ${currencyPrefix}${p.budget?.toLocaleString() || 0}`) : ['No active projects'],
+ recentExpenses: state.expenses.length > 0 ? state.expenses.slice(0, 3).map((e: any) => `${e.category}: ${currencyPrefix}${e.amount.toLocaleString()}`) : ['No recent expenses'],
  },
  member: null as any,
  project: null as any,
@@ -251,7 +258,7 @@ const buildContext = (state: any, options: QueryOptions) => {
  totalContribution: totalContribution.toLocaleString(),
  depositCount: memberDeposits.length || 0,
  shares: member.shares || 0,
- recentDeposits: memberDeposits.slice(0, 3).map((d: any) => `${d.depositMonth || 'N/A'}: BDT ${(d.amount || 0).toLocaleString()}`),
+ recentDeposits: memberDeposits.slice(0, 3).map((d: any) => `${d.depositMonth || 'N/A'}: ${currencyPrefix}${(d.amount || 0).toLocaleString()}`),
  };
  }
  }
@@ -271,7 +278,7 @@ const buildContext = (state: any, options: QueryOptions) => {
  remaining: ((project.budget || 0) - totalSpent).toLocaleString(),
  expenseCount: projectExpenses.length || 0,
  roi: project.roi || 'N/A',
- recentExpenses: projectExpenses.slice(0, 3).map((e: any) => `${e.category || 'General'}: BDT ${(e.amount || 0).toLocaleString()}`),
+ recentExpenses: projectExpenses.slice(0, 3).map((e: any) => `${e.category || 'General'}: ${currencyPrefix}${(e.amount || 0).toLocaleString()}`),
  };
  }
  }
@@ -305,8 +312,8 @@ const buildContext = (state: any, options: QueryOptions) => {
  contextData.deposits = {
  total: totalDeposits.toLocaleString(),
  count: state.deposits?.length || 0,
- byMonth: Object.entries(depositsByMonth).slice(0, 6).map(([month, amount]) => `${month}: BDT ${amount.toLocaleString()}`),
- topContributors: topContributors.map(c => `${c.name}: BDT ${c.total.toLocaleString()}`),
+ byMonth: Object.entries(depositsByMonth).slice(0, 6).map(([month, amount]) => `${month}: ${currencyPrefix}${amount.toLocaleString()}`),
+ topContributors: topContributors.map(c => `${c.name}: ${currencyPrefix}${c.total.toLocaleString()}`),
  };
  }
 
@@ -318,8 +325,8 @@ const buildContext = (state: any, options: QueryOptions) => {
  contextData.expenses = {
  total: totalExpenses.toLocaleString(),
  count: state.expenses?.length || 0,
- byCategory: Object.entries(expensesByCategory).map(([cat, amount]) => `${cat}: BDT ${amount.toLocaleString()}`),
- recent: state.expenses?.slice(0, 5).map((e: any) => `${e.description}: BDT ${e.amount.toLocaleString()}`) || [],
+ byCategory: Object.entries(expensesByCategory).map(([cat, amount]) => `${cat}: ${currencyPrefix}${amount.toLocaleString()}`),
+ recent: state.expenses?.slice(0, 5).map((e: any) => `${e.description}: ${currencyPrefix}${e.amount.toLocaleString()}`) || [],
  };
  }
 
@@ -333,10 +340,10 @@ const buildContext = (state: any, options: QueryOptions) => {
  return (state.deposits?.filter((d: any) => d.memberId === m.id).length || 0) === 0;
  }).slice(0, 5);
  contextData.risk = {
- lowFunds: lowFunds.map((f: any) => `${f.name}: BDT ${f.balance.toLocaleString()}`),
- overBudgetProjects: overBudgetProjects.map((p: any) => `${p.title}: Exceeded by BDT ${(state.expenses?.filter((e: any) => e.projectId === p.id).reduce((acc: number, e: any) => acc + e.amount, 0) || 0) - (p.budget || 0)}`),
+ lowFunds: lowFunds.map((f: any) => `${f.name}: ${currencyPrefix}${f.balance.toLocaleString()}`),
+ overBudgetProjects: overBudgetProjects.map((p: any) => `${p.title}: Exceeded by ${currencyPrefix}${(state.expenses?.filter((e: any) => e.projectId === p.id).reduce((acc: number, e: any) => acc + e.amount, 0) || 0) - (p.budget || 0)}`),
  inactiveMembers: inactiveMembers.map((m: any) => m.name),
- highExpenses: (state.expenses?.filter((e: any) => e.amount > 50000).slice(0, 3) || []).map((e: any) => `${e.description}: BDT ${e.amount.toLocaleString()}`),
+ highExpenses: (state.expenses?.filter((e: any) => e.amount > 50000).slice(0, 3) || []).map((e: any) => `${e.description}: ${currencyPrefix}${e.amount.toLocaleString()}`),
  };
  }
 
@@ -360,6 +367,10 @@ const buildContext = (state: any, options: QueryOptions) => {
 };
 
 const buildPrompt = (type: QueryType, data: any, lang: Language, customInstruction?: string) => {
+ const currencyCode = data.currencyCode || '';
+ const currencyPrefix = currencyCode ? `${currencyCode} ` : '';
+ const currencySuffix = currencyCode ? ` (${currencyCode})` : '';
+ const money = (value: any) => `${currencyPrefix}${Number(value || 0).toLocaleString()}`;
  const languageInstruction = lang === 'bn'
  ? 'IMPORTANT: Respond in Bengali (বাংলা) language only.'
  : 'IMPORTANT: Respond in English language only.';
@@ -372,11 +383,11 @@ const buildPrompt = (type: QueryType, data: any, lang: Language, customInstructi
  const detailedDataSection = `
 
 DETAILED DATA FOR CUSTOM QUERIES:
-- All Members: ${data.allMembers.map((m: any) => `${m.name} (ID: ${m.memberId}, Shares: ${m.shares}, Total: BDT ${m.totalContribution.toLocaleString()}, Deposits: ${m.depositCount}, Months: ${m.depositMonths.join(', ')})`).join('; ')}
-- All Deposits: ${data.allDeposits.map((d: any) => `TX: ${d.id} | ${d.memberName}: BDT ${d.amount.toLocaleString()} in ${d.depositMonth}`).join('; ')}
-- All Projects: ${data.allProjects.map((p: any) => `${p.title} - Status: ${p.status}, Budget: BDT ${p.budget.toLocaleString()}, Spent: BDT ${p.spent.toLocaleString()}`).join('; ')}
-- All Funds: ${data.allFunds.map((f: any) => `${f.name} (${f.type}): BDT ${f.balance.toLocaleString()}`).join('; ')}
-- Fund Transactions: ${Object.entries(data.fundTransactions).map(([fundName, txs]: [string, any[]]) => `${fundName}: ${txs.map((t: any) => `TX-${t.id} (${t.memberName}, BDT ${t.amount}, ${t.depositMonth})`).join(', ')}`).join('; ')}
+- All Members: ${data.allMembers.map((m: any) => `${m.name} (ID: ${m.memberId}, Shares: ${m.shares}, Total: ${money(m.totalContribution)}, Deposits: ${m.depositCount}, Months: ${m.depositMonths.join(', ')})`).join('; ')}
+- All Deposits: ${data.allDeposits.map((d: any) => `TX: ${d.id} | ${d.memberName}: ${money(d.amount)} in ${d.depositMonth}`).join('; ')}
+- All Projects: ${data.allProjects.map((p: any) => `${p.title} - Status: ${p.status}, Budget: ${money(p.budget)}, Spent: ${money(p.spent)}`).join('; ')}
+- All Funds: ${data.allFunds.map((f: any) => `${f.name} (${f.type}): ${money(f.balance)}`).join('; ')}
+- Fund Transactions: ${Object.entries(data.fundTransactions).map(([fundName, txs]: [string, any[]]) => `${fundName}: ${txs.map((t: any) => `TX-${t.id} (${t.memberName}, ${money(t.amount)}, ${t.depositMonth})`).join(', ')}`).join('; ')}
 - Inactive Members (0 deposits): ${data.inactiveMembers.length > 0 ? data.inactiveMembers.map((m: any) => `${m.name} (${m.memberId})`).join('; ') : 'None'}
 `;
 
@@ -389,23 +400,23 @@ DETAILED DATA FOR CUSTOM QUERIES:
 
  const prompts: Record<QueryType, string> = {
  overview: `Analyze overall financial health:
-- Funds: BDT ${data.overview.totalFunds}
-- Active Projects: ${data.overview.activeProjects}/${data.overview.totalProjects}
-- Members: ${data.overview.members}
-- Total Deposits: BDT ${data.overview.totalDeposits}
-- Total Expenses: BDT ${data.overview.totalExpenses}
-- Net Position: BDT ${data.overview.netPosition}
-- Top Projects: ${data.overview.topProjects.join(', ')}
-- Recent Expenses: ${data.overview.recentExpenses.join(', ')}
+- Funds${currencySuffix}: ${data.overview.totalFunds}
+ - Active Projects: ${data.overview.activeProjects}/${data.overview.totalProjects}
+ - Members: ${data.overview.members}
+- Total Deposits${currencySuffix}: ${data.overview.totalDeposits}
+- Total Expenses${currencySuffix}: ${data.overview.totalExpenses}
+- Net Position${currencySuffix}: ${data.overview.netPosition}
+ - Top Projects: ${data.overview.topProjects.join(', ')}
+ - Recent Expenses: ${data.overview.recentExpenses.join(', ')}
 ${detailedDataSection}${didNotDepositSection}
 ${languageInstruction}${customInstructionText}
 Provide key insights on capital efficiency and growth opportunities.`,
 
- member: data.member ? `Analyze member:
+member: data.member ? `Analyze member:
 - Name: ${data.member.name}
 - ID: ${data.member.memberId}
 - Role: ${data.member.role}
-- Total Contribution: BDT ${data.member.totalContribution}
+- Total Contribution${currencySuffix}: ${data.member.totalContribution}
 - Deposits: ${data.member.depositCount}
 - Shares: ${data.member.shares}
 - Recent: ${data.member.recentDeposits.join('; ')}
@@ -415,12 +426,12 @@ Provide contribution analysis and engagement assessment.` : lang === 'bn'
  ? 'সদস্য পাওয়া যায়নি। অনুগ্রহ করে সদস্য আইডি পরীক্ষা করে আবার চেষ্টা করুন।'
  : 'Member not found. Please check the member ID and try again.',
 
- project: data.project ? `Analyze project:
+project: data.project ? `Analyze project:
 - Title: ${data.project.title}
 - Status: ${data.project.status}
-- Budget: BDT ${data.project.budget}
-- Spent: BDT ${data.project.totalSpent}
-- Remaining: BDT ${data.project.remaining}
+- Budget${currencySuffix}: ${data.project.budget}
+- Spent${currencySuffix}: ${data.project.totalSpent}
+- Remaining${currencySuffix}: ${data.project.remaining}
 - Transactions: ${data.project.expenseCount}
 - ROI: ${data.project.roi}
 - Recent Expenses: ${data.project.recentExpenses.join('; ')}
@@ -430,12 +441,12 @@ Provide budget health and performance insights.` : lang === 'bn'
  ? 'প্রজেক্ট পাওয়া যায়নি। অনুগ্রহ করে প্রজেক্ট আইডি পরীক্ষা করে আবার চেষ্টা করুন।'
  : 'Project not found. Please check the project ID and try again.',
 
- fund: data.fund ? `Analyze fund:
+fund: data.fund ? `Analyze fund:
 - Name: ${data.fund.name}
 - Type: ${data.fund.type}
-- Current Balance: BDT ${data.fund.balance}
-- Initial Balance: BDT ${data.fund.initialBalance}
-- Change: BDT ${data.fund.change}
+- Current Balance${currencySuffix}: ${data.fund.balance}
+- Initial Balance${currencySuffix}: ${data.fund.initialBalance}
+- Change${currencySuffix}: ${data.fund.change}
 - Officer: ${data.fund.officer}
 ${detailedDataSection}${didNotDepositSection}
 ${languageInstruction}${customInstructionText}
@@ -443,8 +454,8 @@ Provide fund health and liquidity recommendations.` : lang === 'bn'
  ? 'ফান্ড পাওয়া যায়নি। অনুগ্রহ করে ফান্ড আইডি পরীক্ষা করে আবার চেষ্টা করুন।'
  : 'Fund not found. Please check the fund ID and try again.',
 
- deposits: data.deposits ? `Analyze deposit trends:
-- Total Deposits: BDT ${data.deposits.total}
+deposits: data.deposits ? `Analyze deposit trends:
+- Total Deposits${currencySuffix}: ${data.deposits.total}
 - Transactions: ${data.deposits.count}
 - Monthly Breakdown: ${data.deposits.byMonth.join('; ')}
 - Top Contributors: ${data.deposits.topContributors.join('; ')}
@@ -454,8 +465,8 @@ Provide insights on contribution patterns and member engagement.` : lang === 'bn
  ? 'কোন ডিপোজিট ডেটা উপলব্ধ নেই।'
  : 'No deposit data available.',
 
- expenses: data.expenses ? `Analyze expense patterns:
-- Total Expenses: BDT ${data.expenses.total}
+expenses: data.expenses ? `Analyze expense patterns:
+- Total Expenses${currencySuffix}: ${data.expenses.total}
 - Transactions: ${data.expenses.count}
 - By Category: ${data.expenses.byCategory.join('; ')}
 - Recent: ${data.expenses.recent.join('; ')}
@@ -476,11 +487,11 @@ Identify critical risks and recommend immediate actions.` : lang === 'bn'
  ? 'কোন ঝুঁকির ডেটা উপলব্ধ নেই।'
  : 'No risk data available.',
 
- trends: data.trends ? `Analyze financial trends:
-- Net Cash Flow: BDT ${data.trends.netFlow}
+trends: data.trends ? `Analyze financial trends:
+- Net Cash Flow${currencySuffix}: ${data.trends.netFlow}
 - Savings Rate: ${data.trends.savingsRate}
-- Avg Deposit: BDT ${data.trends.avgDeposit}
-- Avg Expense: BDT ${data.trends.avgExpense}
+- Avg Deposit${currencySuffix}: ${data.trends.avgDeposit}
+- Avg Expense${currencySuffix}: ${data.trends.avgExpense}
 - Activity: ${data.trends.depositGrowth}
 - Expense Ratio: ${data.trends.expenseRatio}
 ${detailedDataSection}${didNotDepositSection}

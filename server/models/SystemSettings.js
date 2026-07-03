@@ -1,16 +1,16 @@
 import mongoose from 'mongoose';
 
 const SystemSettingsSchema = new mongoose.Schema({
- financial: {
- fiscalYearStart: { type: String, default: 'July' },
- baseCurrency: { type: String, default: 'BDT (Bangladeshi Taka)' },
- taxRate: { type: Number, default: 15.0 },
- accountingMethod: { type: String, default: 'Cash' },
+financial: {
+  fiscalYearStart: { type: String, default: 'July' },
+ baseCurrency: { type: String, default: '' },
+  taxRate: { type: Number, default: 15.0 },
+  accountingMethod: { type: String, default: 'Cash' },
  /**
- * Share Value Configuration (BDT)
- * Each share = configurable BDT amount (default: 1000 BDT)
- * Once transactions exist, this becomes permanently locked.
- */
+ * Share Value Configuration
+ * Each share = configurable currency amount (default: 1000)
+  * Once transactions exist, this becomes permanently locked.
+  */
  shareValueBdt: { type: Number, default: 1000, min: 1 },
  /**
  * Indicates whether the share value is permanently locked.

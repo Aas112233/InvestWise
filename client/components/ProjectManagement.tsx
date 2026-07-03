@@ -9,6 +9,7 @@ import {
 import { Project, Member, ProjectMemberParticipation, Transaction, ProjectUpdateRecord, AccessLevel, AppScreen } from '../types';
 import ActionDialog, { ActionDialogProps } from './ActionDialog';
 import Toast, { ToastType } from './Toast';
+import { Table, TableColumn } from './ui/Table';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalState } from '../context/GlobalStateContext';
 import ExportMenu from './ExportMenu';
@@ -44,7 +45,8 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  deleteProjectUpdate,
  deleteProject,
  refreshProjects,
- currentUser
+ currentUser,
+ currencyCode
  } = useGlobalState();
 
  const activeMembers = globalMembers.filter(m => m.status === 'active');
@@ -279,7 +281,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  details: [
  { label: t('projects.projectIdentifier', lang), value: newProject.title },
  { label: t('projects.sectorClassification', lang), value: t(`common.${catKeyMap[newProject.category] || 'realEstate'}`, lang) },
- { label: t('projects.plannedBudget', lang), value: `${t('common.bdt', lang)} ${(totalShares * SHARE_VALUE).toLocaleString()}` },
+ { label: t('projects.plannedBudget', lang), value: `${currencyCode} ${(totalShares * SHARE_VALUE).toLocaleString()}` },
  { label: t('projects.fundHandler', lang), value: newProject.projectFundHandler },
  { label: t('projects.memberStakeholders', lang), value: participationList.length }
  ],
@@ -297,7 +299,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  type: 'confirm',
  details: [
  { label: "Event", value: update.description },
- { label: "Amount", value: `BDT ${formatCurrency(update.amount)}` },
+ { label: "Amount", value: `${currencyCode} ${formatCurrency(update.amount)}` },
  { label: "Date", value: new Date(update.date).toLocaleDateString() }
  ],
  onConfirm: async () => {
@@ -411,6 +413,112 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  }
  };
 
+ const capitalFlowColumns: TableColumn<Project>[] = [
+ {
+ key: 'financialEvent',
+ header: t('projects.financialEvent', lang),
+ render: (p) => (
+ <div className="flex items-center gap-4">
+ <div className="p-3 bg-brand/10 text-brand rounded-2xl group-hover:scale-110 transition-transform"><ArrowUpRight size={18} strokeWidth={3} /></div>
+ <div>
+ <p className="font-black text-dark dark:text-white text-sm uppercase group-hover:text-brand transition-colors">{t('projects.capitalInjection', lang)}</p>
+ <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Token: {p.id.substring(0, 8)}</p>
+ </div>
+ </div>
+ )
+ },
+ {
+ key: 'date',
+ header: t('projects.date', lang),
+ render: (p) => <span className="text-xs font-bold text-gray-400">{new Date(p.startDate).toLocaleDateString()}</span>
+ },
+ {
+ key: 'strategicVenture',
+ header: t('projects.strategicVenture', lang),
+ render: (p) => <span className="font-black text-dark dark:text-white text-sm">{p.title}</span>
+ },
+ {
+ key: 'debitCredit',
+ header: t('projects.debitCredit', lang),
+ align: 'right',
+ render: (p) => <span className="font-black text-dark dark:text-white text-2xl tracking-tighter">-{formatCurrency(p.initialInvestment)}</span>
+ },
+ {
+ key: 'auditStatus',
+ header: t('projects.auditStatus', lang),
+ align: 'right',
+ render: () => (
+ <span className="px-5 py-2 bg-emerald-500/10 text-emerald-500 text-[9px] font-black uppercase tracking-widest rounded-full border border-emerald-500/20">{t('projects.verifiedLedger', lang)}</span>
+ )
+ }
+ ];
+
+ const projectTransactionsColumns: TableColumn<any>[] = [
+ {
+ key: 'projectTitle',
+ header: t('projects.ventureEntity', lang),
+ render: (update) => <span className="font-black text-xs dark:text-white group-hover:text-brand uppercase transition-colors">{update.projectTitle}</span>
+ },
+ {
+ key: 'description',
+ header: t('projects.eventDetail', lang),
+ render: (update) => (
+ <div>
+ <p className="text-sm font-black dark:text-white uppercase leading-none mb-1">{update.description}</p>
+ <span className={`text-[9px] font-black uppercase tracking-widest ${update.type === 'Earning' ? 'text-emerald-500' : 'text-rose-500'}`}>
+ {update.type === 'Earning' ? t('projects.earning', lang) : t('projects.expense', lang)}
+ </span>
+ </div>
+ )
+ },
+ {
+ key: 'date',
+ header: t('projects.timestamp', lang),
+ render: (update) => <span className="text-[11px] font-bold text-gray-400 font-mono tracking-tighter">{new Date(update.date).toLocaleDateString()}</span>
+ },
+ {
+ key: 'amount',
+ header: 'Amount',
+ align: 'right',
+ render: (update) => (
+ <span className={`font-black text-xl tracking-tighter ${update.type === 'Earning' ? 'text-emerald-500' : 'text-rose-500'}`}>
+ {update.type === 'Earning' ? '+' : '-'}{formatCurrency(update.amount)}
+ </span>
+ )
+ },
+ {
+ key: 'balanceBefore',
+ header: t('masterForm.preBalance', lang) || 'Prev Balance',
+ align: 'right',
+ render: (update) => <span className="text-[11px] font-bold text-gray-400">{formatCurrency(update.balanceBefore || 0)}</span>
+ },
+ {
+ key: 'balanceAfter',
+ header: t('masterForm.postBalance', lang) || 'New Balance',
+ align: 'right',
+ render: (update) => <span className="text-[11px] font-black dark:text-white">{formatCurrency(update.balanceAfter || 0)}</span>
+ }
+ ];
+
+ if (hasWritePermission) {
+ projectTransactionsColumns.push({
+ key: 'actions',
+ header: 'Actions',
+ align: 'right',
+ render: (update) => (
+ <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+ <button
+ onClick={() => handleDeleteUpdate(update)}
+ className="p-2 bg-rose-50 dark:bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm"
+ title="Delete Record"
+ >
+ <Trash2 size={14} />
+ </button>
+ </div>
+ )
+ });
+ }
+
  return (
  <div className="compact-screen space-y-10 animate-in fade-in duration-500">
  <Toast isVisible={toast.isVisible} message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, isVisible: false })} />
@@ -439,7 +547,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  { header: 'ID', key: 'id' },
  { header: t('projects.projectIdentifier', lang), key: 'title' },
  { header: t('projects.auditStatus', lang), key: 'status' },
- { header: `${t('projects.plannedBudget', lang)} (BDT)`, key: 'budget', format: (p: any) => p.budget.toLocaleString() },
+ { header: `${t('projects.plannedBudget', lang)} (${currencyCode})`, key: 'budget', format: (p: any) => p.budget.toLocaleString() },
  { header: t('projects.performanceMargin', lang), key: 'expectedRoi', format: (p: any) => `${p.expectedRoi}%` },
  { header: t('projects.date', lang), key: 'startDate' }
  ]}
@@ -649,40 +757,12 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
 
  {activeTab === 'Capital Flow' && (
  <div className="bg-white dark:bg-[#1A221D] rounded-[4rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5 animate-in slide-in-from-bottom-4 duration-500">
- <div className="overflow-x-auto">
- <table className="w-full border-collapse">
- <thead>
- <tr className="bg-gray-50/50 dark:bg-white/5">
- <th className="px-12 py-8 text-left text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('projects.financialEvent', lang)}</th>
- <th className="px-12 py-8 text-left text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('projects.date', lang)}</th>
- <th className="px-12 py-8 text-left text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('projects.strategicVenture', lang)}</th>
- <th className="px-12 py-8 text-right text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('projects.debitCredit', lang)}</th>
- <th className="px-12 py-8 text-right text-[11px] font-black text-gray-500 uppercase tracking-widest">{t('projects.auditStatus', lang)}</th>
- </tr>
- </thead>
- <tbody className="divide-y divide-gray-50 dark:divide-white/5">
- {globalProjects.map(p => (
- <tr key={p.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
- <td className="px-12 py-8">
- <div className="flex items-center gap-4">
- <div className="p-3 bg-brand/10 text-brand rounded-2xl group-hover:scale-110 transition-transform"><ArrowUpRight size={18} strokeWidth={3} /></div>
- <div>
- <p className="font-black text-dark dark:text-white text-sm uppercase group-hover:text-brand transition-colors">{t('projects.capitalInjection', lang)}</p>
- <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Token: {p.id.substring(0, 8)}</p>
- </div>
- </div>
- </td>
- <td className="px-12 py-8 text-xs font-bold text-gray-400">{new Date(p.startDate).toLocaleDateString()}</td>
- <td className="px-12 py-8 font-black text-dark dark:text-white text-sm">{p.title}</td>
- <td className="px-12 py-8 text-right font-black text-dark dark:text-white text-2xl tracking-tighter">-{formatCurrency(p.initialInvestment)}</td>
- <td className="px-12 py-8 text-right">
- <span className="px-5 py-2 bg-emerald-500/10 text-emerald-500 text-[9px] font-black uppercase tracking-widest rounded-full border border-emerald-500/20">{t('projects.verifiedLedger', lang)}</span>
- </td>
- </tr>
- ))}
- </tbody>
- </table>
- </div>
+ <Table
+ data={globalProjects}
+ columns={capitalFlowColumns}
+ rowKey={(p) => p.id}
+ emptyMessage={<div className="text-gray-400 font-bold uppercase tracking-widest text-xs px-10 py-8">{t('projects.noProjects', lang)}</div>}
+ />
  </div>
  )}
 
@@ -718,55 +798,12 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  </div>
  </div>
  <div className="flex-1 overflow-y-auto max-h-[700px] no-scrollbar">
- <table className="w-full text-left">
- <thead>
- <tr className="bg-gray-50/50 dark:bg-white/5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 dark:border-white/10">
- <th className="px-10 py-5">{t('projects.ventureEntity', lang)}</th>
- <th className="px-10 py-5">{t('projects.eventDetail', lang)}</th>
- <th className="px-10 py-5">{t('projects.timestamp', lang)}</th>
- <th className="px-10 py-5 text-right">{t('masterForm.preBalance', lang) || 'Prev Balance'}</th>
- <th className="px-10 py-5 text-right font-black text-dark dark:text-brand">{t('masterForm.postBalance', lang) || 'New Balance'}</th>
- {hasWritePermission && (
- <th className="px-10 py-5 text-right">Actions</th>
- )}
- </tr>
- </thead>
- <tbody className="divide-y divide-gray-50 dark:divide-white/5">
- {globalProjects.flatMap(p => p.updates.map(u => ({ ...u, projectTitle: p.title, projectId: p.id, _id: (u as any)._id }))).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((update, idx) => (
- <tr key={`${update.projectId}-${idx}`} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
- <td className="px-10 py-8 font-black text-xs dark:text-white group-hover:text-brand uppercase transition-colors">{update.projectTitle}</td>
- <td className="px-10 py-8">
- <p className="text-sm font-black dark:text-white uppercase leading-none mb-1">{update.description}</p>
- <span className={`text-[9px] font-black uppercase tracking-widest ${update.type === 'Earning' ? 'text-emerald-500' : 'text-rose-500'}`}>{update.type === 'Earning' ? t('projects.earning', lang) : t('projects.expense', lang)}</span>
- </td>
- <td className="px-10 py-8 text-[11px] font-bold text-gray-400 font-mono tracking-tighter">{new Date(update.date).toLocaleDateString()}</td>
- <td className={`px-10 py-8 text-right font-black text-xl tracking-tighter ${update.type === 'Earning' ? '+' : '-'} ${update.type === 'Earning' ? 'text-emerald-500' : 'text-rose-500'}`}>
- {formatCurrency(update.amount)}
- </td>
- <td className="px-10 py-8 text-right text-[11px] font-bold text-gray-400">
- {formatCurrency(update.balanceBefore || 0)}
- </td>
- <td className="px-10 py-8 text-right text-[11px] font-black dark:text-white">
- {formatCurrency(update.balanceAfter || 0)}
- </td>
- {hasWritePermission && (
- <td className="px-10 py-8 text-right">
- <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
- {/* Edit button removed as per instructions */}
- <button
- onClick={() => handleDeleteUpdate(update)}
- className="p-2 bg-rose-50 dark:bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm"
- title="Delete Record"
- >
- <Trash2 size={14} />
- </button>
- </div>
- </td>
- )}
- </tr>
- ))}
- </tbody>
- </table>
+ <Table
+ data={globalProjects.flatMap(p => p.updates.map(u => ({ ...u, projectTitle: p.title, projectId: p.id, _id: (u as any)._id }))).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())}
+ columns={projectTransactionsColumns}
+ rowKey={(update, idx) => `${update.projectId}-${idx}`}
+ emptyMessage={<div className="text-gray-400 font-bold uppercase tracking-widest text-xs px-10 py-8">No project transactions found</div>}
+ />
  </div>
  </div>
  </div>
@@ -822,7 +859,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter flex items-center gap-4">
  <Users className="text-brand" size={28} /> {t('projects.equityParticipation', lang)}
  </h4>
- <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t('common.bdt', lang)}</span>
+ <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{currencyCode}</span>
  </div>
  <div className="space-y-6">
  {selectedProject.involvedMembers.map((m) => {
@@ -1031,7 +1068,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t('projects.totalSeedCapital', lang)}</p>
  <div className="text-right">
  <p className="text-xl font-black text-dark dark:text-white tracking-tighter">
- BDT {(participationList.reduce((acc, p) => acc + p.sharesInvested, 0) * SHARE_VALUE).toLocaleString()}
+ {currencyCode} {(participationList.reduce((acc, p) => acc + p.sharesInvested, 0) * SHARE_VALUE).toLocaleString()}
  </p>
  <p className="text-[9px] font-black text-brand uppercase tracking-widest">
  {participationList.reduce((acc, p) => acc + p.sharesInvested, 0)} {t('dashboard.trust', lang)}

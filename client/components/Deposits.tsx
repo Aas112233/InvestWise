@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, X, User, CheckSquare, Square, Edit2, Trash2, Loader2, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload } from 'lucide-react';
+import { Plus, Search, Filter, X, User, CheckSquare, Square, Edit2, Trash2, Loader2, RefreshCw, Download, Upload, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 // Dynamically imported: import * as XLSX from 'xlsx';
 import { Deposit, AccessLevel, AppScreen } from '../types';
+import { Table, TableColumn } from './ui/Table';
 import Toast, { ToastType } from './Toast';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { financeService } from '../services/api';
@@ -25,7 +26,7 @@ interface DepositsProps {
 }
 
 const Deposits: React.FC<DepositsProps> = ({ lang }) => {
-    const { deposits: globalDeposits, members: globalMembers, funds, refreshTransactions, currentUser, settings } = useGlobalState();
+    const { deposits: globalDeposits, members: globalMembers, funds, refreshTransactions, currentUser, settings, currencyCode } = useGlobalState();
     const SHARE_WORTH = settings?.financial?.shareValueBdt || 1000;
     const [deposits, setDeposits] = useState<Deposit[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
@@ -422,7 +423,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                 'Month': bulkMonth,
                 'Transaction Date (YYYY-MM-DD)': new Date().toISOString().split('T')[0],
                 'Shares': m.shares,
-                'Deposit Amount (BDT)': m.shares * SHARE_WORTH,
+                [`Deposit Amount (${currencyCode})`]: m.shares * SHARE_WORTH,
                 '_internal_id': m.id // Important for precise matching
             }));
 
@@ -540,7 +541,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
 
                     return {
                         memberId,
-                        amount: (item['Deposit Amount (BDT)'] || 0).toString(),
+                        amount: (item[`Deposit Amount (${currencyCode})`] || 0).toString(),
                         shareNumber: (item['Shares'] || 0).toString(),
                         depositMonth,
                         txnDate
@@ -644,6 +645,177 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
     const totalAmount = paginatedData.totalInflow;
     const totalCount = paginatedData.total;
 
+    const tableColumns: TableColumn<Deposit>[] = [
+        {
+            key: 'date',
+            header: t('deposits.depositTx', lang),
+            sortable: true,
+            render: (dep) => (
+                <div className="flex flex-col font-black">
+                    <p className="text-[10px] text-brand uppercase tracking-tighter">#{dep.id.slice(-6)}</p>
+                    <p className="text-[9px] text-gray-400">{dep.date}</p>
+                </div>
+            )
+        },
+        {
+            key: 'memberId',
+            header: t('deposits.partnerEntity', lang),
+            sortable: true,
+            render: (dep) => (
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-white/5 flex items-center justify-center text-dark dark:text-brand font-black text-xs uppercase">
+                        {dep.memberName.split(' ').map(n => n[0]).join('')}
+                    </div>
+                    <div>
+                        <p className="font-black text-dark dark:text-white text-base leading-none mb-1 group-hover:text-brand transition-colors">{dep.memberName}</p>
+                        <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">ID: {dep.memberId}</p>
+                    </div>
+                </div>
+            )
+        },
+        {
+            key: 'shares',
+            header: t('deposits.shares', lang),
+            sortable: true,
+            align: 'center',
+            cellClassName: 'font-black text-dark dark:text-brand text-lg',
+            render: (dep) => dep.shareNumber
+        },
+        {
+            key: 'depositMonth',
+            header: t('deposits.monthPeriod', lang),
+            cellClassName: 'font-black text-gray-500 text-xs leading-tight',
+            render: (dep) => dep.depositMonth
+        },
+        {
+            key: 'amount',
+            header: `${t('deposits.amountCurrency', lang)} (${currencyCode})`,
+            sortable: true,
+            align: 'right',
+            cellClassName: 'font-black text-dark dark:text-white text-xl tracking-tighter leading-none',
+            render: (dep) => formatCurrency(dep.amount)
+        },
+        {
+            key: 'depositMethod',
+            header: 'Method',
+            align: 'center',
+            render: (dep) => (
+                <span className="inline-block px-3 py-1 bg-gray-100 dark:bg-white/5 rounded-lg text-[10px] font-black uppercase text-gray-600 dark:text-gray-400">
+                    {dep.depositMethod || 'Cash'}
+                </span>
+            )
+        },
+        {
+            key: 'fundName',
+            header: t('funds.fundName', lang),
+            render: (dep) => {
+                const getFundAccent = (name: string) => {
+                    const n = (name || '').toLowerCase();
+                    const accents = [
+                        { bg: 'bg-emerald-50 dark:bg-emerald-500/20', border: 'border-emerald-200 dark:border-emerald-500/30', dot: 'bg-emerald-500' },
+                        { bg: 'bg-blue-50 dark:bg-blue-500/20', border: 'border-blue-200 dark:border-blue-500/30', dot: 'bg-blue-500' },
+                        { bg: 'bg-purple-50 dark:bg-purple-500/20', border: 'border-purple-200 dark:border-purple-500/30', dot: 'bg-purple-500' },
+                        { bg: 'bg-rose-50 dark:bg-rose-500/20', border: 'border-rose-200 dark:border-rose-500/30', dot: 'bg-rose-500' },
+                        { bg: 'bg-indigo-50 dark:bg-indigo-500/20', border: 'border-indigo-200 dark:border-indigo-500/30', dot: 'bg-indigo-500' },
+                        { bg: 'bg-teal-50 dark:bg-teal-500/20', border: 'border-teal-200 dark:border-teal-500/30', dot: 'bg-teal-500' },
+                        { bg: 'bg-orange-50 dark:bg-orange-500/20', border: 'border-orange-200 dark:border-orange-500/30', dot: 'bg-orange-500' },
+                        { bg: 'bg-cyan-50 dark:bg-cyan-500/20', border: 'border-cyan-200 dark:border-cyan-500/30', dot: 'bg-cyan-500' },
+                        { bg: 'bg-sky-50 dark:bg-sky-500/20', border: 'border-sky-200 dark:border-sky-500/30', dot: 'bg-sky-500' },
+                        { bg: 'bg-amber-50 dark:bg-amber-500/20', border: 'border-amber-200 dark:border-amber-500/30', dot: 'bg-amber-500' },
+                        { bg: 'bg-lime-50 dark:bg-lime-500/20', border: 'border-lime-200 dark:border-lime-500/30', dot: 'bg-lime-500' },
+                        { bg: 'bg-violet-50 dark:bg-violet-500/20', border: 'border-violet-200 dark:border-violet-500/30', dot: 'bg-violet-500' }
+                    ];
+
+                    let hash = 0;
+                    for (let i = 0; i < n.length; i++) {
+                        hash = n.charCodeAt(i) + ((hash << 5) - hash);
+                    }
+                    const index = Math.abs(hash) % accents.length;
+                    return accents[index];
+                };
+
+                const accent = getFundAccent(dep.fundName || '');
+
+                return (
+                    <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg border w-fit shadow-sm text-black dark:text-white ${accent.bg} ${accent.border}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${accent.dot}`} />
+                        {dep.fundName}
+                    </div>
+                );
+            }
+        },
+        {
+            key: 'cashierName',
+            header: t('deposits.handledBy', lang),
+            render: (dep) => (
+                <div className="flex items-center gap-2 text-xs font-black text-gray-500 uppercase tracking-tighter">
+                    <User size={12} />
+                    {dep.cashierName}
+                </div>
+            )
+        },
+        {
+            key: 'audit',
+            header: 'Audit',
+            render: (dep) => (
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1.5 text-[9px] font-black text-gray-400 uppercase tracking-wider">
+                        <span className="text-gray-300 dark:text-gray-600">IN:</span> {dep.createdAt}
+                    </div>
+                    {dep.updatedAt && (
+                        <div className="flex items-center gap-1.5 text-[9px] font-black text-brand uppercase tracking-wider">
+                            <span className="text-gray-300 dark:text-gray-600">UP:</span> {dep.updatedAt}
+                        </div>
+                    )}
+                </div>
+            )
+        },
+        {
+            key: 'status',
+            header: t('transactions.status', lang),
+            align: 'right',
+            render: (dep) => (
+                <span className={`inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${dep.status === 'Completed' ? 'bg-brand/10 text-brand' : 'bg-amber-400/10 text-amber-500'
+                    }`}>
+                    {(dep.status === ('Completed' as any) || dep.status === ('Success' as any)) ? t('common.completed', lang) : (lang === 'bn' ? 'বিবেচনাধীন' : 'Pending')}
+                </span>
+            )
+        },
+        {
+            key: 'actions',
+            header: t('transactions.actions', lang),
+            align: 'right',
+            render: (dep) => (
+                <PermissionGuard screen={AppScreen.DEPOSITS} requiredLevel={AccessLevel.WRITE}>
+                    <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteClick(dep.id, dep.memberName);
+                            }}
+                            disabled={!!processingId}
+                            className={`p-3 rounded-2xl shadow-xl border transition-all ${processingId === dep.id ? 'bg-red-50 border-red-100 cursor-wait' : 'bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30'}`}
+                        >
+                            {processingId === dep.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
+                        </button>
+
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleOpenModal(dep);
+                            }}
+                            className="p-3 rounded-2xl shadow-xl border bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-brand hover:border-brand/30 transition-all"
+                        >
+                            <Edit2 size={16} />
+                        </button>
+                    </div>
+                </PermissionGuard>
+            )
+        }
+    ];
+
     return (
         <div className="compact-screen space-y-10 animate-in fade-in duration-500">
             <Toast
@@ -700,7 +872,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                             { header: t('deposits.monthPeriod', lang), key: 'depositMonth' },
                             { header: t('deposits.shares', lang), key: 'shareNumber' },
                             { header: t('deposits.shares', lang), key: 'shareNumber' },
-                            { header: `${t('deposits.amountBDT', lang)} (BDT)`, key: 'amount', format: (d: any) => d.amount.toLocaleString() },
+                            { header: `${t('deposits.amountCurrency', lang)} (${currencyCode})`, key: 'amount', format: (d: any) => d.amount.toLocaleString() },
                             { header: 'Method', key: 'depositMethod' },
                             { header: t('funds.fundName', lang), key: 'fundName' },
                             { header: 'Created At', key: 'createdAt' },
@@ -806,193 +978,17 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                         </button>
                     </div>
 
-                    <div className="overflow-x-auto px-2">
-                        <table className="w-full border-collapse">
-                            <thead>
-                                <tr className="bg-gray-50/30 dark:bg-white/5">
-                                    <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('date')}>
-                                        <div className="flex items-center gap-2">
-                                            {t('deposits.depositTx', lang)}
-                                            {sortBy === 'date' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
-                                        </div>
-                                    </th>
-                                    <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('memberId')}>
-                                        <div className="flex items-center gap-2">
-                                            {t('deposits.partnerEntity', lang)}
-                                            {sortBy === 'memberId' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
-                                        </div>
-                                    </th>
-                                    <th className="px-6 py-6 text-center text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('shares')}>
-                                        <div className="flex items-center justify-center gap-2">
-                                            {t('deposits.shares', lang)}
-                                            {sortBy === 'shares' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
-                                        </div>
-                                    </th>
-                                    <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('deposits.monthPeriod', lang)}</th>
-                                    <th className="px-6 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('amount')}>
-                                        <div className="flex items-center justify-end gap-2">
-                                            {t('deposits.amountBDT', lang)}
-                                            {sortBy === 'amount' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
-                                        </div>
-                                    </th>
-                                    <th className="px-6 py-6 text-center text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Method</th>
-                                    <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('funds.fundName', lang)}</th>
-                                    <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('deposits.handledBy', lang)}</th>
-                                    <th className="px-6 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Audit</th>
-                                    <th className="px-6 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('transactions.status', lang)}</th>
-                                    <th className="px-6 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('transactions.actions', lang)}</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50 dark:divide-white/5">
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan={9} className="px-10 py-20 text-center">
-                                            <div className="flex flex-col items-center gap-4">
-                                                <RefreshCw className="animate-spin text-brand" size={40} />
-                                                <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Scanning Ledger...</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ) : deposits.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={9} className="px-10 py-20 text-center">
-                                            <p className="text-xs font-black text-gray-400 uppercase tracking-widest">No deposits found matching your search</p>
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    deposits.map((dep) => (
-                                        <tr key={dep.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
-                                            <td className="px-6 py-6">
-                                                <div className="flex flex-col font-black">
-                                                    <p className="text-[10px] text-brand uppercase tracking-tighter">#{dep.id.slice(-6)}</p>
-                                                    <p className="text-[9px] text-gray-400">{dep.date}</p>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-6">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-white/5 flex items-center justify-center text-dark dark:text-brand font-black text-xs uppercase">
-                                                        {dep.memberName.split(' ').map(n => n[0]).join('')}
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-black text-dark dark:text-white text-base leading-none mb-1 group-hover:text-brand transition-colors">{dep.memberName}</p>
-                                                        <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">ID: {dep.memberId}</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-6 text-center">
-                                                <span className="font-black text-dark dark:text-brand text-lg">{dep.shareNumber}</span>
-                                            </td>
-                                            <td className="px-6 py-6">
-                                                <p className="font-black text-gray-500 text-xs leading-tight">{dep.depositMonth}</p>
-                                            </td>
-                                            <td className="px-6 py-6 text-right">
-                                                <p className="font-black text-dark dark:text-white text-xl tracking-tighter leading-none">
-                                                    {formatCurrency(dep.amount)}
-                                                </p>
-                                            </td>
-                                            <td className="px-6 py-6 text-center">
-                                                <span className="inline-block px-3 py-1 bg-gray-100 dark:bg-white/5 rounded-lg text-[10px] font-black uppercase text-gray-600 dark:text-gray-400">
-                                                    {dep.depositMethod || 'Cash'}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-6">
-                                                {(() => {
-                                                    const getFundAccent = (name: string) => {
-                                                        const n = (name || '').toLowerCase();
-
-                                                        // Extended palette for variety
-                                                        const accents = [
-                                                            { bg: 'bg-emerald-50 dark:bg-emerald-500/20', border: 'border-emerald-200 dark:border-emerald-500/30', dot: 'bg-emerald-500' },
-                                                            { bg: 'bg-blue-50 dark:bg-blue-500/20', border: 'border-blue-200 dark:border-blue-500/30', dot: 'bg-blue-500' },
-                                                            { bg: 'bg-purple-50 dark:bg-purple-500/20', border: 'border-purple-200 dark:border-purple-500/30', dot: 'bg-purple-500' },
-                                                            { bg: 'bg-rose-50 dark:bg-rose-500/20', border: 'border-rose-200 dark:border-rose-500/30', dot: 'bg-rose-500' },
-                                                            { bg: 'bg-indigo-50 dark:bg-indigo-500/20', border: 'border-indigo-200 dark:border-indigo-500/30', dot: 'bg-indigo-500' },
-                                                            { bg: 'bg-teal-50 dark:bg-teal-500/20', border: 'border-teal-200 dark:border-teal-500/30', dot: 'bg-teal-500' },
-                                                            { bg: 'bg-orange-50 dark:bg-orange-500/20', border: 'border-orange-200 dark:border-orange-500/30', dot: 'bg-orange-500' },
-                                                            { bg: 'bg-cyan-50 dark:bg-cyan-500/20', border: 'border-cyan-200 dark:border-cyan-500/30', dot: 'bg-cyan-500' },
-                                                            { bg: 'bg-sky-50 dark:bg-sky-500/20', border: 'border-sky-200 dark:border-sky-500/30', dot: 'bg-sky-500' },
-                                                            { bg: 'bg-amber-50 dark:bg-amber-500/20', border: 'border-amber-200 dark:border-amber-500/30', dot: 'bg-amber-500' },
-                                                            { bg: 'bg-lime-50 dark:bg-lime-500/20', border: 'border-lime-200 dark:border-lime-500/30', dot: 'bg-lime-500' },
-                                                            { bg: 'bg-violet-50 dark:bg-violet-500/20', border: 'border-violet-200 dark:border-violet-500/30', dot: 'bg-violet-500' }
-                                                        ];
-
-                                                        // Simple hash to ensure same name = same color, but different name = different color
-                                                        let hash = 0;
-                                                        for (let i = 0; i < n.length; i++) {
-                                                            hash = n.charCodeAt(i) + ((hash << 5) - hash);
-                                                        }
-                                                        const index = Math.abs(hash) % accents.length;
-                                                        return accents[index];
-                                                    };
-
-                                                    const accent = getFundAccent(dep.fundName || '');
-
-                                                    return (
-                                                        <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg border w-fit shadow-sm text-black dark:text-white ${accent.bg} ${accent.border}`}>
-                                                            <div className={`w-1.5 h-1.5 rounded-full ${accent.dot}`} />
-                                                            {dep.fundName}
-                                                        </div>
-                                                    );
-                                                })()}
-                                            </td>
-                                            <td className="px-6 py-6">
-                                                <div className="flex items-center gap-2 text-xs font-black text-gray-500 uppercase tracking-tighter">
-                                                    <User size={12} />
-                                                    {dep.cashierName}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-6">
-                                                <div className="flex flex-col gap-1">
-                                                    <div className="flex items-center gap-1.5 text-[9px] font-black text-gray-400 uppercase tracking-wider">
-                                                        <span className="text-gray-300 dark:text-gray-600">IN:</span> {dep.createdAt}
-                                                    </div>
-                                                    {dep.updatedAt && (
-                                                        <div className="flex items-center gap-1.5 text-[9px] font-black text-brand uppercase tracking-wider">
-                                                            <span className="text-gray-300 dark:text-gray-600">UP:</span> {dep.updatedAt}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-6 text-right">
-                                                <span className={`inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${dep.status === 'Completed' ? 'bg-brand/10 text-brand' : 'bg-amber-400/10 text-amber-500'
-                                                    }`}>
-                                                    {(dep.status === ('Completed' as any) || dep.status === ('Success' as any)) ? t('common.completed', lang) : (lang === 'bn' ? 'বিবেচনাধীন' : 'Pending')}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-6 text-right">
-                                                <PermissionGuard screen={AppScreen.DEPOSITS} requiredLevel={AccessLevel.WRITE}>
-                                                    <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                handleDeleteClick(dep.id, dep.memberName);
-                                                            }}
-                                                            disabled={!!processingId}
-                                                            className={`p-3 rounded-2xl shadow-xl border transition-all ${processingId === dep.id ? 'bg-red-50 border-red-100 cursor-wait' : 'bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30'}`}
-                                                        >
-                                                            {processingId === dep.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
-                                                        </button>
-
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                handleOpenModal(dep);
-                                                            }}
-                                                            className="p-3 rounded-2xl shadow-xl border bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-brand hover:border-brand/30 transition-all"
-                                                        >
-                                                            <Edit2 size={16} />
-                                                        </button>
-                                                    </div>
-                                                </PermissionGuard>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                    <Table
+                        data={deposits}
+                        columns={tableColumns}
+                        loading={loading}
+                        loadingMessage="Scanning Ledger..."
+                        emptyMessage={<p className="text-xs font-black text-gray-400 uppercase tracking-widest">No deposits found matching your search</p>}
+                        sortBy={sortBy}
+                        sortOrder={sortOrder}
+                        onSort={handleSort}
+                        rowKey={(dep) => dep.id}
+                    />
 
                     <div className="px-10 py-8 border-t border-gray-50 dark:border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
                         <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
@@ -1077,7 +1073,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                                 placeholder={t('deposits.selectFund', lang)}
                                 options={funds.filter(f => (f.type === 'DEPOSIT' || f.type === 'Primary' || f.type === 'OTHER') && f.status !== 'ARCHIVED').map(f => ({
                                     value: f.id,
-                                    label: `${f.name} (${f.balance.toLocaleString()} ${f.currency || 'BDT'})`
+                                    label: `${f.name} (${f.balance.toLocaleString()} ${f.currency || currencyCode})`
                                 }))}
                                 icon={<CheckSquare size={18} />}
                                 required
@@ -1086,7 +1082,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                             {/* Field 4: Amount */}
                             <div className="space-y-2 relative">
                                 <div className="flex items-center justify-between px-1">
-                                    <label className="text-[10px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('deposits.totalAmountBDT', lang)}</label>
+                                    <label className="text-[10px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{`${t('deposits.totalAmountCurrency', lang)} (${currencyCode})`}</label>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -1244,7 +1240,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                                             <th className="px-4 py-4 text-center text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">{t('deposits.monthPeriod', lang)}</th>
                                             <th className="px-4 py-4 text-center text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">{t('deposits.transactionDate', lang)}</th>
                                             <th className="px-4 py-4 text-center text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">{t('deposits.shares', lang)}</th>
-                                            <th className="px-4 py-4 text-right text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">{t('deposits.amountBDT', lang)}</th>
+                                            <th className="px-4 py-4 text-right text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">{`${t('deposits.amountCurrency', lang)} (${currencyCode})`}</th>
                                             <th className="w-16"></th>
                                         </tr>
                                     </thead>

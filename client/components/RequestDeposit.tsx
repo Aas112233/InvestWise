@@ -14,6 +14,7 @@ import ExportMenu from './ExportMenu';
 import { Download, Upload } from 'lucide-react';
 import SummaryMetricCard from './SummaryMetricCard';
 import MonthPickerField from './ui/MonthPickerField';
+import { Table, TableColumn } from './ui/Table';
 import { getCurrentMonthYearLabel, localizeMonthYearLabel, monthYearLabelToDateInput } from '../utils/months';
 import { resolveMemberIdentity } from '../utils/memberLookup';
 
@@ -24,7 +25,7 @@ interface RequestDepositProps {
 }
 
 const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
- const { members: globalMembers, deposits: globalDeposits, funds, refreshTransactions, currentUser, settings } = useGlobalState();
+ const { members: globalMembers, deposits: globalDeposits, funds, refreshTransactions, currentUser, settings, currencyCode } = useGlobalState();
  const SHARE_WORTH = settings?.financial?.shareValueBdt || 1000;
  const [requests, setRequests] = useState<Deposit[]>([]);
  const [currentPage, setCurrentPage] = useState(1);
@@ -271,8 +272,13 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  throw new Error("Please select a Target Fund.");
  }
 
+ const selectedMember = activeMembers.find(m => m.id === formData.memberId);
+ if (!selectedMember) {
+ throw new Error("Please select a valid member.");
+ }
+
  const payload = {
- memberId: formData.memberId,
+ memberId: selectedMember.id,
  amount: parseInt(formData.amount),
  fundId: formData.fundId,
  description: formData.depositMonth,
@@ -301,11 +307,18 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  setRequests(prev => [mappedDeposit, ...prev]);
  showNotification(`Deposit request for ${formData.memberName} submitted successfully.`);
  handleCloseModal();
- fetchPaginatedRequests(currentPage, rowsPerPage, searchQuery, sortBy, sortOrder);
- await refreshTransactions();
+ if (typeof fetchPaginatedRequests === 'function') {
+    fetchPaginatedRequests(currentPage, rowsPerPage, searchQuery, sortBy, sortOrder);
+ }
+ if (typeof refreshTransactions === 'function') {
+    await refreshTransactions();
+ }
  } catch (error: any) {
  console.error(error);
- showNotification(error.message || "Failed to submit request", "error");
+ const errorMessage = error.response?.data?.errors 
+ ? error.response.data.errors.map((e: any) => e.msg).join(', ') 
+ : error.response?.data?.message || error.message || "Failed to submit request.";
+ showNotification(errorMessage, "error");
  } finally {
  setIsSubmitting(false);
  }
@@ -367,6 +380,126 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  const totalRequested = requests.reduce((acc, r) => acc + r.amount, 0);
 
 
+ const requestsColumns: TableColumn<Deposit>[] = [
+ {
+ key: 'date',
+ header: 'Request Ref',
+ sortable: true,
+ render: (req) => (
+ <div className="flex flex-col">
+ <p className="text-[10px] font-black text-brand uppercase tracking-tighter">#{req.id.slice(-6)}</p>
+ <span className="text-xs font-bold text-gray-400 whitespace-nowrap">{req.date}</span>
+ </div>
+ )
+ },
+ {
+ key: 'memberId',
+ header: 'Partner',
+ sortable: true,
+ render: (req) => (
+ <div className="flex items-center gap-3">
+ <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-white/5 flex items-center justify-center text-dark dark:text-brand font-black text-xs uppercase">
+ {req.memberName.split(' ').map(n => n[0]).join('')}
+ </div>
+ <div>
+ <p className="font-black text-dark dark:text-white text-base leading-none mb-1 group-hover:text-brand transition-colors">{req.memberName}</p>
+ <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">ID: {req.memberDisplayId || req.memberId}</p>
+ </div>
+ </div>
+ )
+ },
+ {
+ key: 'shares',
+ header: 'Shares',
+ sortable: true,
+ align: 'center',
+ render: (req) => <span className="font-black text-dark dark:text-brand text-lg">{req.shareNumber}</span>
+ },
+ {
+ key: 'period',
+ header: 'Period',
+ render: (req) => (
+ <div className="flex items-center gap-2 text-xs font-black text-gray-600 dark:text-gray-300">
+ <Calendar size={14} className="text-brand" />
+ {req.depositMonth}
+ </div>
+ )
+ },
+ {
+ key: 'method',
+ header: t('deposits.depositMethod', lang),
+ render: (req) => (
+ <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-tighter">
+ <CreditCard size={12} />
+ {t(`deposits.methods.${(req.depositMethod?.toLowerCase().replace(' ', '') === 'mobilebanking' ? 'mobile' : req.depositMethod?.toLowerCase()) || 'bank'}`, lang)}
+ </div>
+ )
+ },
+ {
+ key: 'audit',
+ header: 'Audit',
+ render: (req) => (
+ <div className="flex flex-col gap-1">
+ <div className="flex items-center gap-1.5 text-[9px] font-black text-gray-400 uppercase tracking-wider">
+ <span className="text-gray-300 dark:text-gray-600">IN:</span> {req.createdAt}
+ </div>
+ {req.updatedAt && (
+ <div className="flex items-center gap-1.5 text-[9px] font-black text-brand uppercase tracking-wider">
+ <span className="text-gray-300 dark:text-gray-600">UP:</span> {req.updatedAt}
+ </div>
+ )}
+ </div>
+ )
+ },
+ {
+ key: 'amount',
+ header: `Amount (${currencyCode})`,
+ sortable: true,
+ align: 'right',
+ render: (req) => <span className="font-black text-dark dark:text-white text-xl tracking-tighter">{formatCurrency(req.amount)}</span>
+ },
+ {
+ key: 'status',
+ header: 'Status',
+ align: 'right',
+ render: (req) => (
+ <span className="inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-400/10 text-amber-500">
+ {req.status}
+ </span>
+ )
+ },
+ {
+ key: 'actions',
+ header: 'Actions',
+ align: 'right',
+ render: (req) => (
+ <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
+ {currentUser?.permissions[AppScreen.DEPOSITS] === AccessLevel.WRITE && (
+ <button
+ onClick={(e) => handleApprove(e, req.id)}
+ disabled={!!processingId}
+ title="Approve Request"
+ className={`p-3 rounded-2xl border transition-all ${processingId === req.id ? 'bg-gray-100 border-gray-200 cursor-wait' : 'bg-brand/10 text-brand border-brand/20 hover:bg-brand hover:text-dark'}`}
+ >
+ {processingId === req.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} strokeWidth={3} />}
+ </button>
+ )}
+ {currentUser?.permissions[AppScreen.REQUEST_DEPOSIT] === AccessLevel.WRITE && (
+ <>
+ <button onClick={() => handleOpenModal(req)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-dark dark:hover:text-brand hover:border-brand transition-all">
+ <Edit2 size={16} />
+ </button>
+ <button onClick={() => handleDeleteClick(req.id, req.memberName)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30 transition-all">
+ <Trash2 size={16} />
+ </button>
+ </>
+ )}
+ </div>
+ )
+ }
+ ];
+
+
  return (
  <div className="compact-screen space-y-10 animate-in fade-in duration-500">
  <Toast isVisible={toast.isVisible} message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, isVisible: false })} />
@@ -415,7 +548,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  />
  <SummaryMetricCard
  label={t('deposits.requestedVolume', lang)}
- value={`BDT ${totalRequested.toLocaleString()}`}
+ value={`${currencyCode} ${totalRequested.toLocaleString()}`}
  description={t('deposits.projectedInflow', lang)}
  variant="dark"
  valueClassName="text-2xl sm:text-3xl"
@@ -448,7 +581,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  { header: 'Shares', key: 'shareNumber' },
  { header: 'Month', key: 'depositMonth' },
  { header: 'Method', key: 'depositMethod' },
- { header: 'Amount (BDT)', key: 'amount', format: (d: any) => d.amount.toLocaleString() },
+ { header: `Amount (${currencyCode})`, key: 'amount', format: (d: any) => d.amount.toLocaleString() },
  { header: 'Status', key: 'status' },
  { header: 'Created At', key: 'createdAt' },
  { header: 'Updated At', key: 'updatedAt' }
@@ -462,140 +595,17 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  </div>
 
  <div className="overflow-x-auto px-2">
- <table className="w-full border-collapse">
- <thead>
- <tr className="bg-gray-50/30 dark:bg-white/5">
- <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('date')}>
- <div className="flex items-center gap-2">
- Request Ref
- {sortBy === 'date' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
- </div>
- </th>
- <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('memberId')}>
- <div className="flex items-center gap-2">
- Partner
- {sortBy === 'memberId' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
- </div>
- </th>
- <th className="px-10 py-6 text-center text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('shares')}>
- <div className="flex items-center justify-center gap-2">
- Shares
- {sortBy === 'shares' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
- </div>
- </th>
- <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Period</th>
- <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{t('deposits.depositMethod', lang)}</th>
- <th className="px-10 py-6 text-left text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Audit</th>
- <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest cursor-pointer hover:text-brand transition-colors group" onClick={() => handleSort('amount')}>
- <div className="flex items-center justify-end gap-2">
- Amount (BDT)
- {sortBy === 'amount' ? (sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />) : <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
- </div>
- </th>
- <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Status</th>
- <th className="px-10 py-6 text-right text-[11px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Actions</th>
- </tr>
- </thead>
- <tbody className="divide-y divide-gray-50 dark:divide-white/5">
- {loading ? (
- <tr>
- <td colSpan={8} className="px-10 py-20 text-center">
- <div className="flex flex-col items-center gap-4">
- <RefreshCw className="animate-spin text-brand" size={40} />
- <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Scanning Requests...</p>
- </div>
- </td>
- </tr>
- ) : requests.length === 0 ? (
- <tr>
- <td colSpan={8} className="px-10 py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-xs">
- No pending vesting requests found in pipeline
- </td>
- </tr>
- ) : (
- requests.map((req) => (
- <tr key={req.id} className="hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group">
- <td className="px-10 py-6">
- <div className="flex flex-col">
- <p className="text-[10px] font-black text-brand uppercase tracking-tighter">#{req.id.slice(-6)}</p>
- <span className="text-xs font-bold text-gray-400 whitespace-nowrap">{req.date}</span>
- </div>
- </td>
- <td className="px-10 py-6">
- <div className="flex items-center gap-3">
- <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-white/5 flex items-center justify-center text-dark dark:text-brand font-black text-xs uppercase">
- {req.memberName.split(' ').map(n => n[0]).join('')}
- </div>
- <div>
- <p className="font-black text-dark dark:text-white text-base leading-none mb-1 group-hover:text-brand transition-colors">{req.memberName}</p>
- <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">ID: {req.memberDisplayId || req.memberId}</p>
- </div>
- </div>
- </td>
- <td className="px-10 py-6 text-center">
- <span className="font-black text-dark dark:text-brand text-lg">{req.shareNumber}</span>
- </td>
- <td className="px-10 py-6">
- <div className="flex items-center gap-2 text-xs font-black text-gray-600 dark:text-gray-300">
- <Calendar size={14} className="text-brand" />
- {req.depositMonth}
- </div>
- </td>
- <td className="px-10 py-6">
- <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-tighter">
- <CreditCard size={12} />
- {t(`deposits.methods.${(req.depositMethod?.toLowerCase().replace(' ', '') === 'mobilebanking' ? 'mobile' : req.depositMethod?.toLowerCase()) || 'bank'}`, lang)}
- </div>
- </td>
- <td className="px-10 py-6">
- <div className="flex flex-col gap-1">
- <div className="flex items-center gap-1.5 text-[9px] font-black text-gray-400 uppercase tracking-wider">
- <span className="text-gray-300 dark:text-gray-600">IN:</span> {req.createdAt}
- </div>
- {req.updatedAt && (
- <div className="flex items-center gap-1.5 text-[9px] font-black text-brand uppercase tracking-wider">
- <span className="text-gray-300 dark:text-gray-600">UP:</span> {req.updatedAt}
- </div>
- )}
- </div>
- </td>
- <td className="px-10 py-6 text-right font-black text-dark dark:text-white text-xl tracking-tighter">
- {formatCurrency(req.amount)}
- </td>
- <td className="px-10 py-6 text-right">
- <span className="inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-400/10 text-amber-500">
- {req.status}
- </span>
- </td>
- <td className="px-10 py-6 text-right">
- <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
- {currentUser?.permissions[AppScreen.DEPOSITS] === AccessLevel.WRITE && (
- <button
- onClick={(e) => handleApprove(e, req.id)}
- disabled={!!processingId}
- title="Approve Request"
- className={`p-3 rounded-2xl border transition-all ${processingId === req.id ? 'bg-gray-100 border-gray-200 cursor-wait' : 'bg-brand/10 text-brand border-brand/20 hover:bg-brand hover:text-dark'}`}
- >
- {processingId === req.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} strokeWidth={3} />}
- </button>
- )}
- {currentUser?.permissions[AppScreen.REQUEST_DEPOSIT] === AccessLevel.WRITE && (
- <>
- <button onClick={() => handleOpenModal(req)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-dark dark:hover:text-brand hover:border-brand transition-all">
- <Edit2 size={16} />
- </button>
- <button onClick={() => handleDeleteClick(req.id, req.memberName)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30 transition-all">
- <Trash2 size={16} />
- </button>
- </>
- )}
- </div>
- </td>
- </tr>
- ))
- )}
- </tbody>
- </table>
+ <Table
+          data={requests}
+          columns={requestsColumns}
+          rowKey={(r) => r.id}
+          loading={loading}
+          loadingMessage="Scanning Requests..."
+          emptyMessage="No pending vesting requests found in pipeline"
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSort={handleSort}
+        />
  </div>
 
  <div className="px-10 py-8 border-t border-gray-50 dark:border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
@@ -681,7 +691,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  }}
  options={funds.filter(f => (f.type === 'DEPOSIT' || f.type === 'Primary' || f.type === 'OTHER') && f.status !== 'ARCHIVED').map(f => ({
  value: f.id,
- label: `${f.name} (BDT ${f.balance.toLocaleString()})`
+ label: `${f.name} (${currencyCode} ${f.balance.toLocaleString()})`
  }))}
  icon={<CheckSquare size={18} />}
  required
@@ -690,7 +700,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  {/* Field 4: Amount */}
  <div className="space-y-2">
  <div className="flex items-center justify-between px-1">
- <label className="text-[10px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Amount (BDT)</label>
+ <label className="text-[10px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Amount ({currencyCode})</label>
  <button
  type="button"
  onClick={handleToggleAutoCalc}
@@ -756,7 +766,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-white/5 rounded-3xl">
  <p className="text-[11px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">Impact Analysis</p>
  <p className="text-3xl font-black text-dark dark:text-brand tracking-tighter leading-none">
- + {(parseInt(formData.amount || '0')).toLocaleString()} <span className="text-lg opacity-40">BDT</span>
+ + {(parseInt(formData.amount || '0')).toLocaleString()} <span className="text-lg opacity-40">{currencyCode}</span>
  </p>
  </div>
  </div>

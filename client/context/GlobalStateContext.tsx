@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Member, Project, Deposit, Expense, Fund, User, AccessLevel, AppScreen, Transaction } from '../types';
 import api, { memberService, projectService, fundService, financeService, authService, analyticsService, auditService, isNetworkError, isDatabaseError, settingsService } from '../services/api';
 import { resolveMemberIdentity } from '../utils/memberLookup';
+import { getActiveCurrencyCode, normalizeCurrencyCode, setActiveCurrencyCode } from '../utils/currency';
 
 // ... imports
 export type ConnectionStatus = 'online' | 'offline' | 'degraded';
@@ -34,6 +35,7 @@ interface GlobalState {
  systemUsers: User[];
  currentUser: User | null;
  settings: SystemSettings | null;
+ currencyCode: string;
  addDescription?: string; // Optional
  addMember: (m: Member) => void;
  updateMember: (m: Member) => Promise<void>;
@@ -200,6 +202,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  try {
  const data = await settingsService.get();
  setSettings(data);
+ const normalizedCurrency = normalizeCurrencyCode(data?.financial?.baseCurrency);
+ setActiveCurrencyCode(normalizedCurrency);
  } catch (e: any) {
  console.error("Fetch settings failed", e);
  // Don't show error for settings - it's not critical
@@ -715,6 +719,8 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  try {
  const updated = await settingsService.update(s);
  setSettings(updated);
+ const normalizedCurrency = normalizeCurrencyCode(updated?.financial?.baseCurrency);
+ setActiveCurrencyCode(normalizedCurrency);
  setLastError({ message: 'Settings saved successfully', type: 'warning' });
  } catch (e: any) {
  setLastError({ message: 'Failed to update settings', type: 'error' });
@@ -764,6 +770,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  <GlobalStateContext.Provider value={{
  members, projects, deposits, expenses, funds, systemUsers, transactions, currentUser: user,
  settings,
+ currencyCode: getActiveCurrencyCode(),
  globalStats,
  addMember, updateMember, deleteMember, addProject, addDeposit, addExpense, editExpense, updateProject, deleteProject, addProjectUpdate, editProjectUpdate, deleteProjectUpdate,
  addFund, updateFund,

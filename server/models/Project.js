@@ -79,7 +79,7 @@ const projectSchema = mongoose.Schema(
  default: 0,
  },
  involvedMembers: [{
- memberId: { type: String },
+ memberId: { type: mongoose.Schema.Types.ObjectId, ref: 'Member' },
  sharesInvested: Number,
  ownershipPercentage: Number
  }],
