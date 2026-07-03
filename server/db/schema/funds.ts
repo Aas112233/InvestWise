@@ -1,5 +1,4 @@
 import { pgTable, uuid, varchar, text, decimal, boolean, timestamp } from 'drizzle-orm/pg-core';
-import { projects } from './projects.js';
 
 export const funds = pgTable('funds', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -7,7 +6,7 @@ export const funds = pgTable('funds', {
   type: varchar('type', { length: 50 }).default('OTHER'),
   status: varchar('status', { length: 50 }).default('ACTIVE'),
   currency: varchar('currency', { length: 10 }).default(''),
-  linkedProjectId: uuid('linked_project_id').references(() => projects.id),
+  linkedProjectId: uuid('linked_project_id'),
   accountNumber: varchar('account_number', { length: 255 }).unique(),
   balance: decimal('balance', { precision: 15, scale: 2 }).default('0').notNull(),
   lastReconciledAt: timestamp('last_reconciled_at', { withTimezone: true }),
