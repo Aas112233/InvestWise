@@ -22,7 +22,6 @@ const matchPassword = async (enteredPassword, hashedPassword) => {
 // @route POST /api/auth/login
 // @access Public
 const authUser = asyncHandler(async (req, res) => {
-  try {
   const { email, password } = req.body;
   const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   const userAgent = req.get('User-Agent') || 'Unknown';
@@ -156,14 +155,6 @@ const authUser = asyncHandler(async (req, res) => {
 
     res.status(401);
     throw new Error('Invalid email or password');
-  }
-  } catch (debugError) {
-    console.error('LOGIN DEBUG ERROR:', debugError.message, debugError.stack);
-    res.status(500).json({
-      success: false,
-      message: 'DEBUG: ' + debugError.message,
-      stack: debugError.stack?.split('\n').slice(0, 3).join(' | ')
-    });
   }
 });
 

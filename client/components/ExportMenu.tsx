@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Download, FileSpreadsheet, FileText, Image as ImageIcon, ChevronDown, Check, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 // dynamic imports will be used instead
 import { reportService } from '../services/api';
 
@@ -147,7 +148,7 @@ const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title,
 
  const handleExportJPEG = async () => {
  if (!targetId) {
- alert("Visual Capture target not specified for this view.");
+ toast.error("Visual Capture target not specified for this view.");
  return;
  }
 
