@@ -12,8 +12,9 @@ const API_KEY = import.meta.env.VITE_LONGCAT_API_KEY || '';
 const hasApiKey = () => {
  const key = API_KEY;
  if (!key || key === '') {
- console.warn(' LongCat API key not configured. AI features will be limited.');
- console.warn(' Add LONGCAT_API_KEY to server/.env file');
+ if (import.meta.env.DEV) {
+ console.warn('LongCat API key not configured. AI features will be limited.');
+ }
  return false;
  }
  return true;

@@ -82,7 +82,9 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
 
                                 // Skip if critical IDs are missing (would cause 400)
                                 if (!mId || !fId) {
-                                    console.warn('Skipping sync for deposit due to missing IDs:', t);
+                                    if (import.meta.env.DEV) {
+                                        console.warn('Skipping sync for deposit due to missing IDs:', t);
+                                    }
                                     return Promise.resolve();
                                 }
 
@@ -98,7 +100,6 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                                     depositMethod: t.depositMethod || 'Cash'
                                 };
 
-                                console.log('Syncing Date for:', t._id, payload);
                                 return financeService.editDeposit(t._id || t.id, payload);
                             });
                         }

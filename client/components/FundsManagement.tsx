@@ -74,10 +74,6 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
  };
 
  const handleEditFund = (fund: Fund) => {
- console.log('🔍 DEBUG - Fund object being edited:', fund);
- console.log('🔍 DEBUG - Fund accountNumber:', fund.accountNumber);
- console.log('🔍 DEBUG - All fund keys:', Object.keys(fund));
- 
  setFormData({
  name: fund.name,
  type: fund.type as any,
@@ -86,7 +82,6 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
  handlingOfficer: fund.handlingOfficer || '',
  accountNumber: fund.accountNumber || ''
  });
- console.log('🔍 DEBUG - Form data after setting:', { name: fund.name, accountNumber: fund.accountNumber });
  setEditingFundId(fund.id);
  setIsModalOpen(true);
  setOpenMenuId(null);

@@ -72,13 +72,10 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
         if (activeTab === 'Financial') {
             const refreshSettings = async () => {
                 try {
-                    console.log('[Settings] Refreshing settings from backend...');
                     const { data } = await api.get('/settings');
-                    console.log('[Settings] Backend returned financial:', JSON.stringify(data.financial, null, 2));
                     if (data.financial) {
                         setFinancialConfig(prev => {
                             const updated = { ...prev, ...data.financial };
-                            console.log('[Settings] Updated financialConfig, isShareValueLocked:', updated.isShareValueLocked);
                             return updated;
                         });
                     }

@@ -330,15 +330,13 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
 
  if (processingId) return; // Prevent double clicks
 
- console.log("Approve initiated for:", id);
  const request = requests.find(r => r.id === id);
  if (!request) {
  console.error("Request not found:", id);
  return;
  }
 
- // Removed window.confirm to avoid blocking/cancellation issues during debugging
- // Ideally use a custom modal, but simple click to approve is often acceptable for admin dashboards
+ // Confirmation handled by dialog
 
  try {
  setProcessingId(id);
