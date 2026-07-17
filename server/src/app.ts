@@ -33,10 +33,18 @@ app.use(cors({
       callback(null, true);
       return;
     }
-    // Exact-match only — no prefix/substring matching that could over-allow
-    // malformed origins (e.g. "https://evil.com?localhost" would pass a
-    // substring check but fails an exact set lookup).
+    // Exact match
     if (allowedOriginSet.has(origin)) {
+      callback(null, true);
+      return;
+    }
+    // Allow any Vercel preview deployment (.vercel.app)
+    if (origin.endsWith('.vercel.app')) {
+      callback(null, true);
+      return;
+    }
+    // Allow localhost on any port (development)
+    if (/^https?:\/\/localhost:\d+$/.test(origin)) {
       callback(null, true);
       return;
     }
