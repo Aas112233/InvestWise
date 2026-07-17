@@ -221,3 +221,6 @@ web_modules/
 .antigravityignore
 .vercel
 .env*
+/tests
+/tests/_tests
+server/src/__tests__/api-smoke.test.ts
