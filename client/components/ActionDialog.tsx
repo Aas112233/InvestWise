@@ -136,7 +136,7 @@ const ActionDialog: React.FC<ActionDialogProps> = ({
  <div className="space-y-2">
  <p className="text-sm font-black text-blue-700 dark:text-blue-400 uppercase tracking-wide">Checking Data Integrity</p>
  <p className="text-xs font-bold text-blue-800 dark:text-blue-300">
- Scanning for connected records and dependencies...
+ Checking dependencies...
  </p>
  </div>
  </div>

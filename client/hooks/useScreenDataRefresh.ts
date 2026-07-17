@@ -14,7 +14,6 @@ export const useScreenDataRefresh = (
     }
 ) => {
     const location = useLocation();
-    const previousPathRef = useRef<string>('');
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isMountedRef = useRef<boolean>(true);
 
@@ -44,19 +43,15 @@ export const useScreenDataRefresh = (
         }
     }, [refreshFn]);
 
-    // Initial load
-    useEffect(() => {
-        if (immediate && !skipPaths.includes(location.pathname)) {
-            performRefresh();
-        }
-    }, []); // Run once on mount
+    // Track previous path for route-change detection only
+    const pathRef = useRef<string>(location.pathname);
 
-    // Refresh on route change
+    // Refresh when the route changes (NOT on initial mount)
     useEffect(() => {
         const currentPath = location.pathname;
 
-        // Skip if same path or in skip list
-        if (currentPath === previousPathRef.current || skipPaths.includes(currentPath)) {
+        // Skip: same path, initial mount, or excluded paths
+        if (currentPath === pathRef.current || skipPaths.includes(currentPath)) {
             return;
         }
 
@@ -69,7 +64,7 @@ export const useScreenDataRefresh = (
         timeoutRef.current = setTimeout(() => {
             if (isMountedRef.current) {
                 performRefresh();
-                previousPathRef.current = currentPath;
+                pathRef.current = currentPath;
             }
         }, debounceMs);
 
@@ -79,6 +74,14 @@ export const useScreenDataRefresh = (
             }
         };
     }, [location.pathname, performRefresh, debounceMs, skipPaths]);
+
+    // Initial load — single refresh on mount
+    useEffect(() => {
+        if (immediate && !skipPaths.includes(location.pathname)) {
+            performRefresh();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Run once on mount
 
     // Manual refresh trigger
     const triggerRefresh = useCallback(() => {

@@ -27,6 +27,8 @@ import { financeService } from '../services/api';
 import Pagination from './Pagination';
 import SearchBar from './SearchBar';
 import { Table, TableColumn } from './ui/Table';
+import { FormInput, FormSelect, FormTextarea } from './ui/FormElements';
+import { Button } from './ui/Button';
 
 interface DividendManagementProps {
  lang: Language;
@@ -397,34 +399,31 @@ const DividendManagement: React.FC<DividendManagementProps> = ({ lang }) => {
  </div>
 
  <div className="space-y-4">
- <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">
- {distributionType === 'Project' ? t('dividends.selectProject', lang) : t('dividends.selectSourceFund', lang)}
- </label>
- {distributionType === 'Project' ? (
- <select
- value={selectedProjectId}
- onChange={(e) => setSelectedProjectId(e.target.value)}
- className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-6 rounded-xl font-black text-xs appearance-none focus:border-brand dark:text-white transition-all shadow-inner"
- >
- <option value="">{t('dividends.selectVenture', lang)}</option>
- {projects.map(p => (
- <option key={p.id} value={p.id}>{p.title} (Balance: {p.currentFundBalance})</option>
- ))}
- </select>
- ) : (
- <select
- value={selectedFundId}
- onChange={(e) => setSelectedFundId(e.target.value)}
- className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 p-6 rounded-xl font-black text-xs appearance-none focus:border-brand dark:text-white transition-all shadow-inner"
- >
- <option value="">{t('dividends.selectPrimaryFund', lang)}</option>
- {funds.map(f => (
- <option key={f.id} value={f.id}>{f.name} ({f.balance})</option>
- ))}
- </select>
- )}
- </div>
- </div>
+      {distributionType === 'Project' ? (
+        <FormSelect
+          label={t('dividends.selectProject', lang)}
+          value={selectedProjectId}
+          onChange={(e) => setSelectedProjectId(e.target.value)}
+          placeholder={t('dividends.selectVenture', lang)}
+          options={projects.map(p => ({
+            value: p.id,
+            label: `${p.title} (Balance: ${p.currentFundBalance})`
+          }))}
+        />
+      ) : (
+        <FormSelect
+          label={t('dividends.selectSourceFund', lang)}
+          value={selectedFundId}
+          onChange={(e) => setSelectedFundId(e.target.value)}
+          placeholder={t('dividends.selectPrimaryFund', lang)}
+          options={funds.map(f => ({
+            value: f.id,
+            label: `${f.name} (${f.balance})`
+          }))}
+        />
+      )}
+  </div>
+  </div>
 
  <div className="flex flex-col gap-3 mb-6">
  <div className="flex justify-between items-center px-1">

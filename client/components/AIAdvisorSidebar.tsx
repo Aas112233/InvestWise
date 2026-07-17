@@ -612,7 +612,7 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
  { label: "Selected Fund", val: selectedFund ? state.funds.find((f: any) => f.id === selectedFund)?.name?.substring(0, 15) || 'N/A' : 'None', fill: "100%" },
  { label: "Current Balance", val: `${currencyCode} ${(state.funds.find((f: any) => f.id === selectedFund)?.balance || 0) / 1000}K`, fill: "80%" },
  { label: "Fund Type", val: state.funds.find((f: any) => f.id === selectedFund)?.type || 'N/A', fill: "50%" },
- { label: "Initial Balance", val: `${currencyCode} ${(state.funds.find((f: any) => f.id === selectedFund)?.initialBalance || 0) / 1000}K`, fill: "60%" }
+ { label: "Initial Balance", val: `${currencyCode} ${((state.funds.find((f: any) => f.id === selectedFund) as any)?.initialBalance || 0) / 1000}K`, fill: "60%" }
  ].map((m, i) => (
  <div key={i}>
  <div className="flex justify-between text-[8px] font-black uppercase text-white/30 mb-1.5">

@@ -11,7 +11,7 @@ import {
  ResponsiveContainer, LineChart, Line, Cell, AreaChart, Area,
  PieChart, Pie, ComposedChart
 } from 'recharts';
-import { Member, Deposit } from '../types';
+import { Member, Deposit, Project } from '../types';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { formatCurrency } from '../utils/formatters';
 import ExportMenu from './ExportMenu';

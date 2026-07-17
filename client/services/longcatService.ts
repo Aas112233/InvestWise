@@ -169,7 +169,7 @@ const buildContext = (state: any, options: QueryOptions) => {
  });
 
  // Pre-compute members who did NOT deposit in each month
- const allDepositMonths = [...new Set(state.deposits.map((d: any) => d.depositMonth))];
+ const allDepositMonths: string[] = Array.from(new Set<string>(state.deposits.map((d: any) => String(d.depositMonth))));
  const membersNotDepositedByMonth: Record<string, any[]> = {};
  allDepositMonths.forEach(month => {
  membersNotDepositedByMonth[month] = memberDepositActivity.filter(m => !m.depositMonths.includes(month));

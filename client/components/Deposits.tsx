@@ -186,7 +186,8 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
 
     useEffect(() => {
         fetchPaginatedDeposits(currentPage, rowsPerPage, searchQuery, searchField, sortBy, sortOrder);
-    }, [currentPage, rowsPerPage, searchQuery, searchField, sortBy, sortOrder, globalDeposits, lang]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPage, rowsPerPage, searchQuery, searchField, sortBy, sortOrder, lang]);
 
     const handleSort = (field: string) => {
         if (sortBy === field) {
@@ -983,7 +984,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                         data={deposits}
                         columns={tableColumns}
                         loading={loading}
-                        loadingMessage="Scanning Ledger..."
+                        loadingMessage="Loading deposits..."
                         emptyMessage={<p className="text-xs font-black text-gray-400 uppercase tracking-widest">No deposits found matching your search</p>}
                         sortBy={sortBy}
                         sortOrder={sortOrder}

@@ -72,8 +72,8 @@ const ConnectionBanner: React.FC = () => {
                     {isOffline ? <WifiOff size={16} /> : <WifiOff size={16} />}
                     <span>
                         {isOffline
-                            ? "Server offline. You can keep working; changes will not be saved until connection returns."
-                            : "Connection unstable. Some actions may fail."}
+                            ? "No connection. Changes will be saved when reconnected."
+                            : "Slow connection. Retrying automatically..."}
                     </span>
                 </div>
                 <button

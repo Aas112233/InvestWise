@@ -101,7 +101,8 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
 
  useEffect(() => {
  fetchPaginatedRequests(currentPage, rowsPerPage, searchQuery, sortBy, sortOrder);
- }, [currentPage, rowsPerPage, searchQuery, sortBy, sortOrder, globalDeposits, globalMembers, lang]);
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ }, [currentPage, rowsPerPage, searchQuery, sortBy, sortOrder, lang]);
 
  const handleSort = (field: string) => {
  if (sortBy === field) {
@@ -598,7 +599,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
           columns={requestsColumns}
           rowKey={(r) => r.id}
           loading={loading}
-          loadingMessage="Scanning Requests..."
+          loadingMessage="Loading requests..."
           emptyMessage="No pending vesting requests found in pipeline"
           sortBy={sortBy}
           sortOrder={sortOrder}

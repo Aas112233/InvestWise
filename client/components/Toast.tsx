@@ -100,7 +100,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
 
  return (
  <div
- className="fixed right-10 z-[100] animate-in slide-in-from-right-10 fade-in duration-300"
+ className="fixed right-10 z-[9999] animate-in slide-in-from-right-10 fade-in duration-300"
  style={{ top: `${2.5 + Math.max(displayState.index, 0) * 5.5}rem` }}
  >
  <div className={`flex items-center gap-4 px-6 py-4 rounded-[2rem] card-shadow border max-w-[28rem] ${type === 'success'

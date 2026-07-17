@@ -22,5 +22,6 @@
     "uuidv",
     "financials",
     "Financials"
-  ]
+  ],
+  "mimo.preferredModel": "mimo-v2-pro"
 }

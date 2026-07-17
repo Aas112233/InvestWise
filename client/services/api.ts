@@ -1,4 +1,11 @@
-import axios from 'axios';
+import axios, { InternalAxiosRequestConfig } from 'axios';
+
+// Augment axios to support metadata on requests
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    metadata?: { retryCount?: number; startTime?: number };
+  }
+}
 
 const DEFAULT_API_BASE_URL = 'http://localhost:5000/api';
 
@@ -25,6 +32,7 @@ const MAX_RETRY_DELAY = 10000; // 10 seconds
 // Token refresh lock to prevent multiple simultaneous refresh requests
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];
+let isRedirectingToLogin = false;
 
 // Subscribe to token refresh
 const subscribeTokenRefresh = (cb: (token: string) => void) => {
@@ -39,6 +47,44 @@ const onRefreshed = (token: string) => {
 
 // Helper function to delay execution
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const redirectToLogin = (params?: { session?: string; error?: string }) => {
+    if (typeof window === 'undefined' || isRedirectingToLogin) {
+        return;
+    }
+
+    if (window.location.pathname === '/login') {
+        return;
+    }
+
+    isRedirectingToLogin = true;
+    localStorage.removeItem('userInfo');
+
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const loginUrl = new URL('/login', window.location.origin);
+
+    loginUrl.searchParams.set('session', params?.session || 'expired');
+
+    if (currentPath !== '/login') {
+        loginUrl.searchParams.set('redirect', currentPath);
+    }
+
+    if (params?.error) {
+        loginUrl.searchParams.set('error', params.error);
+    }
+
+    window.location.replace(loginUrl.toString());
+};
+
+const isPublicAuthEndpoint = (url?: string) => {
+    if (!url) return false;
+    return url.includes('/auth/login') || url.includes('/auth/register');
+};
+
+const isRefreshEndpoint = (url?: string) => {
+    if (!url) return false;
+    return url.includes('/auth/refresh');
+};
 
 // Helper function to check if error is retryable
 const isRetryableError = (error: any): boolean => {
@@ -74,11 +120,8 @@ api.interceptors.request.use(
             }
         }
 
-        // Initialize retry count if not present
-        if (!config.metadata) {
-            config.metadata = {};
-        }
-        (config.metadata as any).retryCount = (config.metadata as any).retryCount || 0;
+        config.metadata = config.metadata || {};
+        config.metadata.retryCount = config.metadata.retryCount || 0;
 
         return config;
     },
@@ -91,6 +134,7 @@ api.interceptors.response.use(
     async (error) => {
         const config = error.config;
         const originalRequest = config;
+        const requestUrl = originalRequest?.url as string | undefined;
 
         // Check if we should retry
         if (config && isRetryableError(error) && (config.metadata?.retryCount || 0) < MAX_RETRIES) {
@@ -99,7 +143,7 @@ api.interceptors.response.use(
             // Calculate delay with exponential backoff
             const retryDelay = Math.min(RETRY_DELAY * Math.pow(2, config.metadata.retryCount - 1), MAX_RETRY_DELAY);
 
-            console.warn(` Request failed. Retrying (${config.metadata.retryCount}/${MAX_RETRIES}) in ${retryDelay}ms...`);
+            // Silent retry — no toast, no console noise
 
             await delay(retryDelay);
             return api(config);
@@ -107,6 +151,10 @@ api.interceptors.response.use(
 
         // Handle 401 - Token expired, try to refresh
         if (error.response?.status === 401 && !config.sent) {
+            if (isPublicAuthEndpoint(requestUrl) || isRefreshEndpoint(requestUrl)) {
+                return Promise.reject(error);
+            }
+
             config.sent = true;
 
             const userInfo = localStorage.getItem('userInfo');
@@ -139,15 +187,7 @@ api.interceptors.response.use(
                             isRefreshing = false;
                             // Refresh failed, logout user immediately
                             console.warn('Token refresh failed, redirecting to login');
-                            localStorage.removeItem('userInfo');
-
-                            // Redirect to login with expired session flag
-                            const currentPath = window.location.pathname;
-                            if (currentPath !== '/login') {
-                                window.location.href = `/login?session=expired&redirect=${encodeURIComponent(currentPath)}`;
-                            } else {
-                                window.location.href = '/login?session=expired';
-                            }
+                            redirectToLogin({ session: 'expired' });
 
                             return Promise.reject(refreshError);
                         }
@@ -162,20 +202,13 @@ api.interceptors.response.use(
                     }
                 } catch (parseError) {
                     console.error('Failed to parse user info for refresh:', parseError);
-                    localStorage.removeItem('userInfo');
-                    window.location.href = '/login?error=invalid_session';
+                    redirectToLogin({ session: 'expired', error: 'invalid_session' });
                 }
             }
 
             // No refresh token available, logout
             console.warn('No refresh token found, redirecting to login');
-            localStorage.removeItem('userInfo');
-            const currentPath = window.location.pathname;
-            if (currentPath !== '/login') {
-                window.location.href = `/login?session=expired&redirect=${encodeURIComponent(currentPath)}`;
-            } else {
-                window.location.href = '/login?session=expired';
-            }
+            redirectToLogin({ session: 'expired' });
         }
 
         const message = error.response?.data?.message || error.message || 'An error occurred';

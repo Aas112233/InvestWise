@@ -11,8 +11,8 @@ export default {
  theme: {
  extend: {
  colors: {
- brand: '#BFF300',
- dark: '#111814',
+ brand: '#2563EB',
+ dark: '#0f172a',
  },
  },
  },

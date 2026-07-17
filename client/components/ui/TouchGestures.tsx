@@ -382,7 +382,13 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({
 // TOUCH-FRIENDLY BUTTON
 // ==========================================
 
-interface TouchButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+// Omit event handlers that conflict with framer-motion's overloaded types
+type SafeButtonProps = Omit<
+ React.ButtonHTMLAttributes<HTMLButtonElement>,
+ 'onDrag' | 'onDragEnd' | 'onDragStart' | 'onAnimationStart'
+>;
+
+interface TouchButtonProps extends SafeButtonProps {
  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
  size?: 'sm' | 'md' | 'lg';
  fullWidth?: boolean;
@@ -440,7 +446,7 @@ export const TouchButton: React.FC<TouchButtonProps> = ({
  ${className}
  `}
  disabled={disabled || loading}
- {...props}
+ {...(props as any)}
  >
  {loading && (
  <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">

@@ -609,7 +609,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  {loading ? (
  <div className="col-span-full h-96 flex flex-col items-center justify-center text-center p-10">
  <RefreshCw className="animate-spin text-brand mb-4" size={48} strokeWidth={3} />
- <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Scanning Portfolio...</p>
+ <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Loading projects...</p>
  </div>
  ) : paginatedProjects.data.length === 0 ? (
  <div className="col-span-full h-96 flex flex-col items-center justify-center text-center p-10 bg-white/5 border border-dashed border-gray-300 dark:border-white/10 rounded-[4rem]">
