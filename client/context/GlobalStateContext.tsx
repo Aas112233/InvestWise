@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Member, Project, Deposit, Expense, Fund, User, AccessLevel, AppScreen, Transaction } from '../types';
 import api, { memberService, projectService, fundService, financeService, authService, analyticsService, auditService, isNetworkError, isDatabaseError, settingsService } from '../services/api';
 import { resolveMemberIdentity } from '../utils/memberLookup';
@@ -118,10 +118,19 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('online');
  const [lastOnlineAt, setLastOnlineAt] = useState<number | null>(Date.now());
  const [lastError, setLastError] = useState<{ message: string; type: 'error' | 'warning' } | null>(null);
+ const lastErrorTime = useRef<number>(0);
  const [globalStats, setGlobalStats] = useState<any>(null);
  const [notifications, setNotifications] = useState<{ count: number; items: any[] }>({ count: 0, items: [] });
 
- const clearError = () => setLastError(null);
+ // Debounced error setter — prevents duplicate toasts when multiple requests fail at once
+ const setLastErrorDebounced = useCallback((error: { message: string; type: 'error' | 'warning' } | null) => {
+   const now = Date.now();
+   if (now - lastErrorTime.current < 5000) return; // suppress duplicates within 5 seconds
+   lastErrorTime.current = now;
+   setLastError(error);
+ }, []);
+
+ const clearError = () => { lastErrorTime.current = 0; setLastError(null); };
 
  const checkConnection = async () => {
  try {
@@ -134,14 +143,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  // Check if database is healthy
  if (dbStatus === 'disconnected' || dbStatus === 'unreachable') {
  setConnectionStatus('offline');
- setLastError({
+ setLastErrorDebounced({
  message: 'Database connection lost. Some features may not work.',
  type: 'error'
  });
- } else if (dbStatus === 'slow' || latency > 1000) {
+ } else if (dbStatus === 'slow' || latency > 3000) {
  setConnectionStatus('degraded');
- setLastError({
- message: 'Connection is slow. Performance may be affecteded.',
+ setLastErrorDebounced({
+ message: 'Connection is slow. Performance may be affected.',
  type: 'warning'
  });
  } else {
@@ -152,19 +161,19 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  } catch (error: any) {
  if (isDatabaseError(error)) {
  setConnectionStatus('offline');
- setLastError({
- message: 'Database unavailable. Retrying...',
+ setLastErrorDebounced({
+ message: 'Connecting to server...',
  type: 'error'
  });
  } else if (isNetworkError(error)) {
  setConnectionStatus('offline');
- setLastError({
+ setLastErrorDebounced({
  message: 'Server offline. You can keep working; changes will not be saved until connection returns.',
  type: 'warning'
  });
  } else if (error.response?.status >= 500) {
  setConnectionStatus('degraded');
- setLastError({
+ setLastErrorDebounced({
  message: 'Server error. Please try again.',
  type: 'error'
  });
@@ -193,7 +202,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  } catch (e: any) {
  console.error("Fetch members failed", e);
  if (isDatabaseError(e)) {
- setLastError({ message: 'Unable to load members. Database unavailable.', type: 'error' });
+ setLastErrorDebounced({ message: 'Could not load members. Check your connection.', type: 'error' });
  }
  }
  };
@@ -218,19 +227,20 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  } catch (e: any) {
  console.error("Fetch projects failed", e);
  if (isDatabaseError(e)) {
- setLastError({ message: 'Unable to load projects. Database unavailable.', type: 'error' });
+ setLastErrorDebounced({ message: 'Could not load projects. Check your connection.', type: 'error' });
  }
  }
  };
 
  const fetchFunds = async () => {
  try {
- const data = await fundService.getAll();
- setFunds(data.map((f: any) => ({ ...f, id: f._id || f.id })));
+ const response = await fundService.getAll();
+ const fundsList = response.data || response;
+ setFunds(fundsList.map((f: any) => ({ ...f, id: f._id || f.id })));
  } catch (e: any) {
  console.error("Fetch funds failed", e);
  if (isDatabaseError(e)) {
- setLastError({ message: 'Unable to load funds. Database unavailable.', type: 'error' });
+ setLastErrorDebounced({ message: 'Could not load funds. Check your connection.', type: 'error' });
  }
  }
  };
@@ -286,7 +296,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  } catch (e: any) {
  console.error("Fetch transactions failed", e);
  if (isDatabaseError(e)) {
- setLastError({ message: 'Unable to load transactions. Database unavailable.', type: 'error' });
+ setLastErrorDebounced({ message: 'Could not load transactions. Check your connection.', type: 'error' });
  }
  }
  };
@@ -369,7 +379,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
 
  const addMember = async (m: Member) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot add member while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot add member while offline.', type: 'warning' });
  return;
  }
  try {
@@ -378,14 +388,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchMembers();
  fetchAnalytics();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to add member', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to add member', type: 'error' });
  throw e;
  }
  };
 
  const updateMember = async (m: Member) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot update member while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot update member while offline.', type: 'warning' });
  return;
  }
  try {
@@ -395,14 +405,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchMembers();
  fetchAnalytics();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to update member', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to update member', type: 'error' });
  throw e;
  }
  };
 
  const deleteMember = async (id: string) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot delete member while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot delete member while offline.', type: 'warning' });
  return;
  }
  try {
@@ -412,14 +422,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchAnalytics();
  } catch (e: any) {
  const message = e.response?.data?.message || e.message || 'Failed to delete member';
- setLastError({ message, type: 'error' });
+ setLastErrorDebounced({ message, type: 'error' });
  throw e;
  }
  };
 
  const onboardMember = async (data: any) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot onboard member while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot onboard member while offline.', type: 'warning' });
  return;
  }
  try {
@@ -432,14 +442,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchSystemUsers();
  }
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to onboard member', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to onboard member', type: 'error' });
  throw e;
  }
  };
 
  const addProject = async (p: Project) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot add project while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot add project while offline.', type: 'warning' });
  return;
  }
  try {
@@ -450,13 +460,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchAnalytics();
  fetchFunds();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to add project', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to add project', type: 'error' });
  }
  };
 
  const addDeposit = async (d: Deposit) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot add deposit while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot add deposit while offline.', type: 'warning' });
  return;
  }
  try {
@@ -476,14 +486,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchFunds();
  fetchMembers();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to add deposit', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to add deposit', type: 'error' });
  throw e;
  }
  };
 
  const addExpense = async (e: Expense) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot add expense while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot add expense while offline.', type: 'warning' });
  return;
  }
  try {
@@ -503,13 +513,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchFunds();
  fetchProjects();
  } catch (err: any) {
- setLastError({ message: err.message || 'Failed to add expense', type: 'error' });
+ setLastErrorDebounced({ message: err.message || 'Failed to add expense', type: 'error' });
  }
  };
 
  const editExpense = async (id: string, e: Expense) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot edit expense while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot edit expense while offline.', type: 'warning' });
  return;
  }
  try {
@@ -528,14 +538,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchFunds();
  fetchProjects();
  } catch (err: any) {
- setLastError({ message: err.message || 'Failed to edit expense', type: 'error' });
+ setLastErrorDebounced({ message: err.message || 'Failed to edit expense', type: 'error' });
  throw err;
  }
  };
 
  const updateProject = async (p: Project) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot update project while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot update project while offline.', type: 'warning' });
  return;
  }
  try {
@@ -546,13 +556,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchFunds();
  fetchAnalytics();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to update project', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to update project', type: 'error' });
  }
  };
 
  const addProjectUpdate = async (projectId: string, update: any) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot add update while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot add update while offline.', type: 'warning' });
  return;
  }
  try {
@@ -562,13 +572,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchProjects();
  fetchAnalytics();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to add project update', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to add project update', type: 'error' });
  }
  };
 
  const editProjectUpdate = async (projectId: string, updateId: string, update: any) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot edit update while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot edit update while offline.', type: 'warning' });
  return;
  }
  try {
@@ -578,14 +588,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchProjects();
  fetchAnalytics();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to edit project update', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to edit project update', type: 'error' });
  throw e;
  }
  };
 
  const deleteProjectUpdate = async (projectId: string, updateId: string) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot delete update while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot delete update while offline.', type: 'warning' });
  return;
  }
  try {
@@ -595,14 +605,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchProjects();
  fetchAnalytics();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to delete project update', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to delete project update', type: 'error' });
  throw e;
  }
  };
 
  const deleteProject = async (id: string) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot delete project while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot delete project while offline.', type: 'warning' });
  return;
  }
  try {
@@ -612,14 +622,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchFunds();
  fetchAnalytics();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to delete project', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to delete project', type: 'error' });
  throw e;
  }
  };
 
  const addFund = async (f: Fund) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot create fund while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot create fund while offline.', type: 'warning' });
  return;
  }
  try {
@@ -627,14 +637,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchFunds();
  fetchAnalytics();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to create fund', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to create fund', type: 'error' });
  throw e;
  }
  };
 
  const updateFund = async (f: Fund) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot update fund while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot update fund while offline.', type: 'warning' });
  return;
  }
  try {
@@ -644,13 +654,13 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  fetchFunds();
  fetchAnalytics();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to update fund', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to update fund', type: 'error' });
  }
  };
 
  const addSystemUser = async (u: User) => {
  if (connectionStatus === 'offline') {
- setLastError({ message: 'Cannot add user while offline.', type: 'warning' });
+ setLastErrorDebounced({ message: 'Cannot add user while offline.', type: 'warning' });
  return;
  }
  try {
@@ -673,7 +683,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  setSystemUsers(prev => [...prev, standardized]);
  fetchSystemUsers();
  } catch (e: any) {
- setLastError({ message: e.message || 'Failed to create user', type: 'error' });
+ setLastErrorDebounced({ message: e.message || 'Failed to create user', type: 'error' });
  throw e;
  }
  };
@@ -689,7 +699,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  // Background refresh to ensure consistency
  fetchSystemUsers();
  } catch (e: any) {
- setLastError({ message: 'Failed to update user', type: 'error' });
+ setLastErrorDebounced({ message: 'Failed to update user', type: 'error' });
  throw e;
  }
  };
@@ -697,9 +707,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  const updateUserPassword = async (userId: string, newPass: string) => {
  try {
  await authService.updateUserPassword(userId, newPass);
- setLastError({ message: 'Password updated successfully', type: 'warning' });
+ setLastErrorDebounced({ message: 'Password updated successfully', type: 'warning' });
  } catch (e: any) {
- setLastError({ message: 'Failed to reset password', type: 'error' });
+ setLastErrorDebounced({ message: 'Failed to reset password', type: 'error' });
  throw e;
  }
  };
@@ -709,9 +719,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  await authService.deleteUser(userId);
  setSystemUsers(prev => prev.filter(u => u.id !== userId));
  fetchSystemUsers();
- setLastError({ message: 'User access revoked', type: 'warning' });
+ setLastErrorDebounced({ message: 'User access revoked', type: 'warning' });
  } catch (e: any) {
- setLastError({ message: 'Failed to revoke access', type: 'error' });
+ setLastErrorDebounced({ message: 'Failed to revoke access', type: 'error' });
  }
  };
 
@@ -721,9 +731,9 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  setSettings(updated);
  const normalizedCurrency = normalizeCurrencyCode(updated?.financial?.baseCurrency);
  setActiveCurrencyCode(normalizedCurrency);
- setLastError({ message: 'Settings saved successfully', type: 'warning' });
+ setLastErrorDebounced({ message: 'Settings saved successfully', type: 'warning' });
  } catch (e: any) {
- setLastError({ message: 'Failed to update settings', type: 'error' });
+ setLastErrorDebounced({ message: 'Failed to update settings', type: 'error' });
  throw e;
  }
  };
@@ -733,7 +743,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  await financeService.distributeDividends(data);
  await refreshData();
  } catch (e: any) {
- setLastError({ message: e.response?.data?.message || 'Dividend distribution failed', type: 'error' });
+ setLastErrorDebounced({ message: e.response?.data?.message || 'Dividend distribution failed', type: 'error' });
  throw e;
  }
  };
@@ -743,7 +753,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  await financeService.transferEquity(data);
  await refreshData();
  } catch (e: any) {
- setLastError({ message: e.response?.data?.message || 'Equity transfer failed', type: 'error' });
+ setLastErrorDebounced({ message: e.response?.data?.message || 'Equity transfer failed', type: 'error' });
  throw e;
  }
  };

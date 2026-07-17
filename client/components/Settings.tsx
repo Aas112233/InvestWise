@@ -45,11 +45,16 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
     // Local state for settings forms
     const [financialConfig, setFinancialConfig] = useState({
         fiscalYearStart: 'July',
+        fiscalYearEnd: 'June',
         baseCurrency: '',
         taxRate: 15.0,
         accountingMethod: 'Cash',
         shareValueBdt: 1000,
-        isShareValueLocked: false
+        isShareValueLocked: false,
+        withdrawalLimitPercent: 25,
+        withdrawalNoticeDays: 30,
+        maxWithdrawalPerRequest: 100000,
+        statutoryReservePercent: 10,
     });
 
     const [systemConfig, setSystemConfig] = useState({
@@ -793,10 +798,41 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
                                         value={financialConfig.accountingMethod}
                                         onChange={(e) => setFinancialConfig({ ...financialConfig, accountingMethod: e.target.value })}
                                     />
+                                    <MonthSelect
+                                        label="Fiscal Year End"
+                                        lang={lang}
+                                        value={financialConfig.fiscalYearEnd}
+                                        valueMode="english-name"
+                                        onChange={(value) => setFinancialConfig({ ...financialConfig, fiscalYearEnd: value })}
+                                    />
+                                    <FormInput
+                                        label="Withdrawal Limit (% of contribution)"
+                                        value={financialConfig.withdrawalLimitPercent.toString()}
+                                        onChange={(e) => setFinancialConfig({ ...financialConfig, withdrawalLimitPercent: parseFloat(e.target.value) || 0 })}
+                                        type="number"
+                                    />
+                                    <FormInput
+                                        label="Withdrawal Notice Period (days)"
+                                        value={financialConfig.withdrawalNoticeDays.toString()}
+                                        onChange={(e) => setFinancialConfig({ ...financialConfig, withdrawalNoticeDays: parseInt(e.target.value) || 0 })}
+                                        type="number"
+                                    />
+                                    <FormInput
+                                        label="Max Withdrawal Per Request"
+                                        value={financialConfig.maxWithdrawalPerRequest.toString()}
+                                        onChange={(e) => setFinancialConfig({ ...financialConfig, maxWithdrawalPerRequest: parseFloat(e.target.value) || 0 })}
+                                        type="number"
+                                    />
+                                    <FormInput
+                                        label="Statutory Reserve (%)"
+                                        value={financialConfig.statutoryReservePercent.toString()}
+                                        onChange={(e) => setFinancialConfig({ ...financialConfig, statutoryReservePercent: parseFloat(e.target.value) || 0 })}
+                                        type="number"
+                                    />
                                     <div className="md:col-span-2">
                                         <div className="relative">
                                             <FormInput
-                                                label={`Share Value (${financialConfig.baseCurrency || 'Currency'} per Share)`}
+                                                label={`Share Value (${financialConfig.baseCurrency || 'BDT'} per Share)`}
                                                 value={financialConfig.shareValueBdt.toString()}
                                                 onChange={(e) => setFinancialConfig({ ...financialConfig, shareValueBdt: parseInt(e.target.value) || 1000 })}
                                                 type="number"

@@ -19,6 +19,7 @@ import { ModalForm, FormInput, FormSelect, FormLabel } from './ui/FormElements';
 import PermissionGuard from './PermissionGuard';
 import { memberSchema, MemberFormData } from '../utils/validations';
 import SummaryMetricCard from './SummaryMetricCard';
+import { Button } from './ui/Button';
 
 const SHARE_VALUE = 1000;
 
@@ -122,7 +123,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
         setError: setFieldError,
         clearErrors
     } = useForm<MemberFormData>({
-        resolver: zodResolver(memberSchema),
+        resolver: zodResolver(memberSchema) as any,
         mode: 'onChange',
         reValidateMode: 'onChange',
         defaultValues: {
@@ -320,11 +321,11 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             header: t('members.partnerIdentity', lang),
             sortable: true,
             render: (member) => (
-                <div className="flex items-center gap-5">
-                    <Avatar name={member.name} size="lg" className="grayscale group-hover:grayscale-0" />
+                <div className="flex items-center gap-3">
+                    <Avatar name={member.name} size="sm" />
                     <div>
-                        <p className="font-black text-dark dark:text-white text-lg leading-none mb-1 group-hover:text-brand transition-colors">{member.name}</p>
-                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{member.role}</p>
+                        <p className="font-medium text-slate-900 dark:text-white text-xs leading-none mb-0.5">{member.name}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">{member.role}</p>
                     </div>
                 </div>
             )
@@ -333,13 +334,13 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             key: 'memberId',
             header: t('members.memberId', lang),
             sortable: true,
-            cellClassName: 'font-mono text-sm font-black text-dark dark:text-brand',
+            cellClassName: 'font-mono text-xs text-slate-700 dark:text-blue-400',
             render: (member) => `#${member.memberId}`
         },
         {
             key: 'phone',
             header: t('members.contactInfo', lang),
-            cellClassName: 'text-xs font-black text-dark dark:text-gray-300',
+            cellClassName: 'text-xs text-slate-650 dark:text-gray-300',
             render: (member) => member.phone
         },
         {
@@ -348,14 +349,14 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             align: 'center',
             render: (member) => (member.hasUserAccess || systemUsers.some(u => u.memberId === member.memberId)) ? (
                 <div className="flex justify-center">
-                    <span className="flex items-center justify-center w-8 h-8 bg-emerald-500/10 text-emerald-500 rounded-full border border-emerald-500/20 shadow-sm shadow-emerald-500/5 transition-all hover:scale-110" title={t('common.authorizedBadge', lang)}>
-                        <CheckCircle2 size={18} strokeWidth={2.5} />
+                    <span className="flex items-center justify-center w-6 h-6 bg-emerald-500/10 text-emerald-500 rounded border border-emerald-500/20" title={t('common.authorizedBadge', lang)}>
+                        <CheckCircle2 size={14} strokeWidth={2.5} />
                     </span>
                 </div>
             ) : (
                 <div className="flex justify-center">
-                    <span className="flex items-center justify-center w-8 h-8 bg-gray-500/5 text-gray-400 rounded-full border border-gray-500/10 opacity-40 transition-all hover:opacity-60" title={t('common.restrictedBadge', lang)}>
-                        <Lock size={16} strokeWidth={2} />
+                    <span className="flex items-center justify-center w-6 h-6 bg-gray-500/5 text-gray-400 rounded border border-gray-500/10 opacity-40" title={t('common.restrictedBadge', lang)}>
+                        <Lock size={12} strokeWidth={2} />
                     </span>
                 </div>
             )
@@ -365,7 +366,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             header: t('members.shares', lang),
             sortable: true,
             align: 'center',
-            cellClassName: 'font-black text-dark dark:text-brand text-lg',
+            cellClassName: 'font-mono text-xs font-semibold text-slate-900 dark:text-slate-200',
             render: (member) => member.shares
         },
         {
@@ -373,7 +374,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             header: t('members.totalContribution', lang),
             sortable: true,
             align: 'right',
-            cellClassName: 'font-black text-dark dark:text-white text-xl tracking-tighter',
+            cellClassName: 'font-mono text-xs font-semibold text-slate-900 dark:text-white',
             render: (member) => `${currencyCode} ${(member.successfulDepositTotal || 0).toLocaleString()}`
         },
         {
@@ -382,12 +383,12 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             align: 'right',
             render: (member) => (
                 <PermissionGuard screen={AppScreen.MEMBERS} requiredLevel={AccessLevel.WRITE}>
-                    <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => handleOpenModal(member)} className="p-3 bg-gray-50 dark:bg-white/5 rounded-xl text-gray-400 hover:text-brand transition-colors">
-                            <Edit2 size={18} />
+                    <div className="flex items-center justify-end gap-1.5">
+                        <button onClick={() => handleOpenModal(member)} className="p-1.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-slate-800 text-gray-500 hover:text-blue-600 transition-colors">
+                            <Edit2 size={14} />
                         </button>
-                        <button onClick={() => handleDeleteClick(member)} className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl text-rose-400 hover:text-rose-600 transition-colors">
-                            <Trash2 size={18} />
+                        <button onClick={() => handleDeleteClick(member)} className="p-1.5 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 text-red-500 hover:text-red-650 transition-colors">
+                            <Trash2 size={14} />
                         </button>
                     </div>
                 </PermissionGuard>
@@ -396,23 +397,23 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
     ];
 
     return (
-        <div className="compact-screen space-y-10 animate-in fade-in duration-500">
+        <div className="space-y-4">
             <Toast isVisible={toast.isVisible} message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, isVisible: false })} />
 
-            <div className="flex items-end justify-between px-2">
+            <div className="flex items-center justify-between">
                 <div>
-                    <nav className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2 uppercase tracking-widest">
+                    <nav className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 uppercase tracking-wider mb-1">
                         <span>{t('nav.management', lang)}</span>
                         <span className="opacity-30">/</span>
-                        <span className="text-brand">{t('members.stakeholders', lang)}</span>
+                        <span className="text-blue-600 dark:text-blue-400">{t('members.stakeholders', lang)}</span>
                     </nav>
-                    <div className="flex items-center gap-4">
-                        <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('nav.members', lang)}</h1>
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-base font-semibold text-slate-900 dark:text-white leading-tight">{t('nav.members', lang)}</h1>
                         <button
                             onClick={handleRefresh}
-                            className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 transition-all ${refreshing ? 'animate-spin' : ''}`}
+                            className={`p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 transition-all ${refreshing ? 'animate-spin' : ''}`}
                         >
-                            <RefreshCw size={20} />
+                            <RefreshCw size={14} />
                         </button>
                         <PermissionGuard screen={AppScreen.MEMBERS} requiredLevel={AccessLevel.WRITE}>
                             <button
@@ -430,16 +431,16 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                                         }
                                     }
                                 }}
-                                className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 transition-all ${refreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 transition-all ${refreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 title="Recalculate Financials"
                                 disabled={refreshing}
                             >
-                                <Hash size={20} />
+                                <Hash size={14} />
                             </button>
                         </PermissionGuard>
                     </div>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
                     <ExportMenu
                         data={members}
                         columns={[
@@ -457,18 +458,19 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                         targetId="members-snapshot-target"
                     />
                     <PermissionGuard screen={AppScreen.MEMBERS} requiredLevel={AccessLevel.WRITE}>
-                        <button
+                        <Button
+                            variant="primary"
+                            size="sm"
                             onClick={() => handleOpenModal()}
-                            className="bg-dark dark:bg-brand text-white dark:text-dark px-8 py-4 rounded-[2rem] font-black text-[11px] uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-xl shadow-brand/10"
+                            icon={<Plus size={14} />}
                         >
-                            <Plus size={18} />
-                            <span>{t('common.add', lang)}</span>
-                        </button>
+                            {t('common.add', lang)}
+                        </Button>
                     </PermissionGuard>
                 </div>
             </div>
-            <div id="members-snapshot-target" className="space-y-10">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div id="members-snapshot-target" className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <SummaryMetricCard
                         label={t('members.totalPartners', lang)}
                         value={paginatedMembers.total}
@@ -481,8 +483,8 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                     />
                 </div>
 
-                <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5">
-                    <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between gap-6">
+                <div className="bg-white dark:bg-slate-900 rounded border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-4">
                         <SearchBar
                             onSearch={(q) => {
                                 setSearchQuery(q);
@@ -496,16 +498,16 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                         data={paginatedMembers.data}
                         columns={tableColumns}
                         loading={loading}
-                        loadingMessage="Scanning Ledger..."
-                        emptyMessage={<p className="text-xs font-black text-gray-400 uppercase tracking-widest">No stakeholders found matching your search</p>}
+                        loadingMessage="Loading members..."
+                        emptyMessage={<p className="text-xs font-semibold text-gray-400">No stakeholders found matching your search</p>}
                         sortBy={sortBy}
                         sortOrder={sortOrder}
                         onSort={handleSort}
                         rowKey={(member, index) => member.id || member.memberId || `member-${index}`}
                     />
 
-                    <div className="px-10 py-8 border-t border-gray-50 dark:border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
-                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800 flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div className="text-xs font-medium text-slate-500">
                             {paginatedMembers.meta && (
                                 <>Showing {paginatedMembers.meta.from} to {paginatedMembers.meta.to} of {paginatedMembers.meta.total} stakeholders</>
                             )}
@@ -529,7 +531,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                 onClose={handleCloseModal}
                 title={t('members.intake', lang)}
                 subtitle={`${t('members.memberId', lang)}: #${watchedMemberId || 'Auto'}`}
-                onSubmit={handleSubmit((data) => handleReviewSubmit(data as MemberFormData))}
+                onSubmit={handleSubmit((data) => handleReviewSubmit(data as any))}
                 submitLabel={t('common.save', lang)}
                 maxWidth="max-w-6xl"
                 loading={isSubmitting || isFormSubmitting}
@@ -550,12 +552,11 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                             required
                         />
                         <FormInput
-                            label={t('members.contactInfo', lang)}
+                            label={t('members.phone', lang)}
                             type="tel"
-                            placeholder="+8801XXXXXXXXX"
+                            placeholder="01XXXXXXXXX"
                             {...register('phone')}
                             error={errors.phone?.message}
-                            required
                         />
                     </div>
 
@@ -565,24 +566,26 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                         {...register('shares', { valueAsNumber: true })}
                         error={errors.shares?.message}
                         required
+                        disabled={!!editingMember}
+                        title={editingMember ? 'Shares are locked after creation. Use deposits to increase shares.' : ''}
                     />
                 </div>
-                {editingMember && editingMember.totalContributed > 0 && (
-                    <p className="text-[10px] font-bold text-brand flex items-center gap-1 mt-1">
-                        <Lock size={10} /> Shares are managed independently
+                {editingMember && (
+                    <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-1">
+                        <Lock size={10} /> Shares are locked — changes are derived from total deposits
                     </p>
                 )}
 
                 {/* System Access Section */}
-                <div className={`p-6 rounded-[2rem] border transition-all duration-300 ${watchedCreateUserAccess ? 'bg-brand/5 border-brand/20 dark:bg-brand/5 dark:border-brand/20' : 'bg-gray-50 dark:bg-[#111814] border-gray-100 dark:border-white/5'}`}>
+                <div className={`p-4 rounded border transition-colors ${watchedCreateUserAccess ? 'bg-blue-50/50 dark:bg-blue-950/10 border-blue-200 dark:border-blue-900/50' : 'bg-slate-50 dark:bg-slate-800/50 border-gray-200 dark:border-gray-800'}`}>
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-4">
-                            <div className={`p-3 rounded-xl transition-colors ${watchedCreateUserAccess ? 'bg-brand text-dark' : 'bg-gray-200 dark:bg-white/5 text-gray-400'}`}>
-                                <ShieldCheck size={20} />
+                            <div className={`p-2 rounded transition-colors ${watchedCreateUserAccess ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+                                <ShieldCheck size={18} />
                             </div>
                             <div>
-                                <h4 className={`text-xs font-black uppercase tracking-widest ${watchedCreateUserAccess ? 'text-dark dark:text-brand' : 'text-gray-500'}`}>{t('members.systemAccessControl', lang)}</h4>
-                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                                <h4 className={`text-xs font-semibold ${watchedCreateUserAccess ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500'}`}>{t('members.systemAccessControl', lang)}</h4>
+                                <p className="text-[10px] font-medium text-slate-450 mt-0.5">
                                     {systemUsers.some(u => u.memberId === watchedMemberId) ? t('members.portalActive', lang) : watchedCreateUserAccess ? t('members.portalEnabled', lang) : t('members.noPortal', lang)}
                                 </p>
                             </div>
@@ -593,13 +596,13 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                                 {...register('createUserAccess')}
                                 className="sr-only peer"
                             />
-                            <div className="w-11 h-6 bg-gray-200 dark:bg-dark rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand shadow-inner"></div>
+                            <div className="w-11 h-6 bg-gray-200 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div>
                         </label>
                     </div>
 
                     {watchedCreateUserAccess && (
-                        <div className="space-y-4 animate-in slide-in-from-top-2 duration-300 pt-4 border-t border-brand/10 dark:border-white/5">
-                            <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-800">
+                            <div className="grid grid-cols-2 gap-4">
                                 <FormSelect
                                     label="Access Role"
                                     {...register('userRole')}
@@ -611,7 +614,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                                         { value: "Member", label: t('members.memberRole', lang) }
                                     ]}
                                     error={errors.userRole?.message}
-                                    icon={<UserCheck size={14} className="text-brand" />}
+                                    icon={<UserCheck size={14} className="text-blue-600 dark:text-blue-400" />}
                                 />
                                 <FormInput
                                     label={systemUsers.some(u => u.memberId === watchedMemberId) ? 'Reset Password' : 'Login Password'}
@@ -624,13 +627,13 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                                 />
                             </div>
 
-                            <div className="bg-white/50 dark:bg-white/5 p-4 rounded-2xl flex items-start gap-3">
-                                <Info size={16} className="text-brand shrink-0 mt-0.5" />
+                            <div className="bg-gray-50 dark:bg-slate-850 p-3 rounded border border-gray-200 dark:border-gray-800 flex items-start gap-3">
+                                <Info size={14} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                                 <div>
-                                    <p className="text-[10px] font-black text-dark dark:text-white uppercase tracking-widest mb-1">
+                                    <p className="text-xs font-semibold text-slate-900 dark:text-white mb-1">
                                         {watchedUserRole} Permissions:
                                     </p>
-                                    <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 leading-relaxed">
+                                    <p className="text-xs text-slate-500 leading-relaxed">
                                         {watchedUserRole === 'Admin' && t('members.adminDesc', lang)}
                                         {watchedUserRole === 'Manager' && t('members.managerDesc', lang)}
                                         {watchedUserRole === 'Audit' && t('members.auditDesc', lang)}
@@ -643,9 +646,9 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                     )}
                 </div>
 
-                <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-white/5 rounded-3xl">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Initial Valuation</p>
-                    <p className="text-2xl font-black text-dark dark:text-brand tracking-tighter">{currencyCode} {((watchedShares || 0) * SHARE_VALUE).toLocaleString()}</p>
+                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded border border-gray-200 dark:border-gray-800">
+                    <p className="text-xs font-semibold text-slate-500">Initial Valuation</p>
+                    <p className="text-xl font-semibold text-slate-900 dark:text-blue-400 font-mono">{currencyCode} {((watchedShares || 0) * SHARE_VALUE).toLocaleString()}</p>
                 </div>
             </ModalForm>
 

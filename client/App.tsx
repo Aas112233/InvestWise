@@ -50,47 +50,52 @@ const AppLayout = ({ children, user, lang, isDarkMode, toggleTheme, setLang, onL
  onLogout: () => void
 }) => {
  const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
+ const aiAdvisorEnabled = localStorage.getItem('aiAdvisorEnabled') === 'true';
 
  if (!user) return null;
 
- return (
- <div className="flex h-screen w-full bg-[#F8FAFC] dark:bg-[#111814] overflow-hidden transition-colors duration-300">
- <Sidebar lang={lang} currentUser={user} />
- <div className="flex-1 flex flex-col min-w-0 relative">
- <ConnectionBanner />
- <Header
- user={user}
- onLogout={onLogout}
- isDarkMode={isDarkMode}
- toggleTheme={toggleTheme}
- lang={lang}
- setLang={setLang}
- />
- <main className="flex-1 overflow-y-auto p-10">
- <div className="max-w-[1600px] mx-auto pb-20">
- <DataRefreshWrapper>
- {children}
- </DataRefreshWrapper>
- </div>
- </main>
+  return (
+    <div className="flex h-screen w-full bg-[#F1F5F9] dark:bg-[#0f172a] overflow-hidden">
+      <Sidebar lang={lang} currentUser={user} />
+      <div className="flex-1 flex flex-col min-w-0 relative">
+        <ConnectionBanner />
+        <Header
+          user={user}
+          onLogout={onLogout}
+          isDarkMode={isDarkMode}
+          toggleTheme={toggleTheme}
+          lang={lang}
+          setLang={setLang}
+        />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="max-w-[1600px] mx-auto pb-10">
+            <DataRefreshWrapper>
+              {children}
+            </DataRefreshWrapper>
+          </div>
+        </main>
 
- <button
- onClick={() => setIsAISidebarOpen(true)}
- className="fixed bottom-10 right-10 w-20 h-20 bg-dark dark:bg-brand text-white dark:text-dark rounded-[2.5rem] shadow-2xl shadow-brand/20 flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-[90]"
- aria-label="Open AI Advisor"
- >
- <div className="absolute inset-0 bg-brand/20 rounded-[2.5rem] animate-ping group-hover:animate-none opacity-40"></div>
- <Sparkles size={32} strokeWidth={3} className="relative z-10" />
- </button>
+        {aiAdvisorEnabled && (
+          <>
+            <button
+              onClick={() => setIsAISidebarOpen(true)}
+              className="fixed bottom-6 right-6 px-4 py-2 bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded shadow-md flex items-center gap-2 hover:shadow-lg transition-all z-[90]"
+              aria-label="Open AI Advisor"
+            >
+              <Sparkles size={16} strokeWidth={2} />
+              <span className="text-xs font-medium">AI Advisor</span>
+            </button>
 
- <AIAdvisorSidebar
- isOpen={isAISidebarOpen}
- onClose={() => setIsAISidebarOpen(false)}
- lang={lang}
- />
- </div>
- </div>
- );
+            <AIAdvisorSidebar
+              isOpen={isAISidebarOpen}
+              onClose={() => setIsAISidebarOpen(false)}
+              lang={lang}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
 };
 
 const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => void; isLoading: boolean }> = ({ user, setUser, isLoading }) => {

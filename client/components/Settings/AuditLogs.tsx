@@ -5,8 +5,7 @@ import { Language, t } from '../../i18n/translations';
 import { User as UserType } from '../../types';
 
 interface AuditLog {
- _id: string;
- user: { _id: string; name: string; email: string; role: string } | null;
+ id: string;
  userName: string;
  action: string;
  resourceType: string;
@@ -31,7 +30,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ lang, currentUser }) => {
  const [actionFilter, setActionFilter] = useState('');
  const [resourceFilter, setResourceFilter] = useState('');
 
- const [metadata, setMetadata] = useState<{ actions: string[]; resources: string[] }>({ actions: [], resources: [] });
+ const [metadata, setMetadata] = useState<{ actions: string[]; resourceTypes: string[] }>({ actions: [], resourceTypes: [] });
 
  useEffect(() => {
  fetchMetadata();
@@ -58,13 +57,14 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ lang, currentUser }) => {
  try {
  const params = new URLSearchParams();
  params.append('page', page.toString());
+ params.append('limit', '10');
  if (searchTerm) params.append('search', searchTerm);
  if (actionFilter) params.append('action', actionFilter);
  if (resourceFilter) params.append('resourceType', resourceFilter);
 
  const { data } = await api.get(`/audit?${params.toString()}`);
- setLogs(data.logs);
- setTotalPages(data.pages);
+ setLogs(data.data || []);
+ setTotalPages(data.meta?.pages || 1);
  setLoading(false);
  } catch (error) {
  console.error('Failed to fetch audit logs:', error);
@@ -112,7 +112,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ lang, currentUser }) => {
  className="w-full appearance-none bg-white dark:bg-[#1A221D] pl-10 pr-10 py-4 rounded-2xl border border-gray-100 dark:border-white/5 outline-none focus:border-brand font-bold text-xs uppercase tracking-wider text-gray-600 dark:text-gray-300 cursor-pointer"
  >
  <option value="">All Actions</option>
- {metadata.actions.map(a => <option key={a} value={a}>{a}</option>)}
+ {metadata.actions?.map(a => <option key={a} value={a}>{a}</option>)}
  </select>
  <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-gray-400 pointer-events-none" size={14} />
  </div>
@@ -125,7 +125,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ lang, currentUser }) => {
  className="w-full appearance-none bg-white dark:bg-[#1A221D] pl-10 pr-10 py-4 rounded-2xl border border-gray-100 dark:border-white/5 outline-none focus:border-brand font-bold text-xs uppercase tracking-wider text-gray-600 dark:text-gray-300 cursor-pointer"
  >
  <option value="">All Resources</option>
- {metadata.resources.map(r => <option key={r} value={r}>{r}</option>)}
+ {metadata.resourceTypes?.map(r => <option key={r} value={r}>{r}</option>)}
  </select>
  <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-gray-400 pointer-events-none" size={14} />
  </div>
@@ -145,7 +145,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ lang, currentUser }) => {
  <div className="text-center py-20 text-gray-400 font-bold uppercase tracking-widest text-xs">No audit records found</div>
  ) : (
  logs.map(log => (
- <div key={log._id} className="group bg-white dark:bg-[#1A221D] hover:bg-gray-50 dark:hover:bg-[#222] p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 transition-all">
+ <div key={log.id} className="group bg-white dark:bg-[#1A221D] hover:bg-gray-50 dark:hover:bg-[#222] p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 transition-all">
  <div className="flex justify-between items-start mb-4">
  <div className="flex items-center gap-4">
  <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${log.status === 'SUCCESS' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
@@ -156,7 +156,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ lang, currentUser }) => {
  <Clock size={12} /> {new Date(log.createdAt).toLocaleString()}
  </span>
  </div>
- <span className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">ID: {log._id.slice(-6)}</span>
+ <span className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">ID: {log.id.slice(-6)}</span>
  </div>
 
  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
@@ -176,7 +176,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ lang, currentUser }) => {
  <FileText size={12} /> {log.resourceType}: {log.resourceId || 'N/A'}
  </p>
  <div className="text-xs font-mono text-gray-600 dark:text-gray-300 break-all">
- {Object.entries(log.details).map(([key, value]) => (
+ {Object.entries(log.details || {}).map(([key, value]) => (
  <div key={key} className="flex gap-2">
  <span className="text-gray-400">{key}:</span>
  <span>{formatDetailValue(value)}</span>

@@ -11,19 +11,13 @@ const emailSchema = z.string()
 
 // Positive number validation
 const positiveNumberSchema = z.coerce
- .number({
- required_error: 'Amount is required',
- invalid_type_error: 'Must be a valid number'
- })
+ .number({ message: 'Must be a valid number' })
  .positive('Amount must be greater than 0')
  .finite('Amount must be a finite number');
 
 // Positive integer validation
 const positiveIntegerSchema = z.coerce
- .number({
- required_error: 'This field is required',
- invalid_type_error: 'Must be a valid number'
- })
+ .number({ message: 'Must be a valid number' })
  .int('Must be a whole number')
  .positive('Must be greater than 0')
  .finite();
@@ -74,17 +68,13 @@ export const memberSchema = z.object({
  .max(100, 'Name cannot exceed 100 characters')
  .trim(),
  email: emailSchema,
- phone: z.string()
- .min(1, 'Phone number is required')
- .regex(bangladeshPhoneRegex, 'Please enter a valid Bangladesh phone number (e.g., +8801XXXXXXXXX or 01XXXXXXXXX)'),
+ phone: z.string().optional(),
  role: z.string().min(1, 'Please select a role'),
- shares: positiveIntegerSchema.or(z.literal(0)),
+ shares: z.coerce.number().int().min(1, 'Shares must be at least 1').finite(),
  memberId: z.string().optional(),
  password: z.string().optional(),
-        userRole: z.enum(['Admin', 'Administrator', 'Manager', 'Investor', 'Member', 'Audit'], {
-            required_error: 'Please select a user role'
-        }),
-        createUserAccess: z.boolean().optional().default(false)
+        userRole: z.enum(['Admin', 'Administrator', 'Manager', 'Investor', 'Member', 'Audit'], { message: 'Please select a user role' }),
+        createUserAccess: z.boolean()
     }).refine((data) => {
  if (data.createUserAccess && !data.password) {
  return false;
@@ -114,9 +104,7 @@ export const depositSchema = z.object({
  depositMonth: z.string().min(1, 'Please select a deposit month'),
  cashierName: z.string().min(1, 'Cashier name is required').trim(),
  fundId: z.string().min(1, 'Please select a fund'),
- depositMethod: z.enum(['Cash', 'Bank', 'Mobile Banking', 'Check', 'Other'], {
- required_error: 'Please select a deposit method'
- }),
+ depositMethod: z.enum(['Cash', 'Bank', 'Mobile Banking', 'Check', 'Other'], { message: 'Please select a deposit method' }),
  txnDate: pastDateSchema
 });
 
@@ -186,12 +174,12 @@ export type GoalFormData = z.infer<typeof goalSchema>;
 // ==========================================
 
 export const formatZodError = (error: z.ZodError): string => {
- const firstError = error.errors[0];
+ const firstError = error.issues[0];
  return firstError?.message || 'Validation failed';
 };
 
 export const getFieldError = (error: z.ZodError | null, field: string): string | undefined => {
  if (!error) return undefined;
- const fieldError = error.errors.find(e => e.path.includes(field));
+ const fieldError = error.issues.find(e => e.path.includes(field));
  return fieldError?.message;
 };

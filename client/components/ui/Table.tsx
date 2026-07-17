@@ -39,24 +39,24 @@ export function Table<T>({
   
   const SortIcon = ({ column }: { column: string }) => {
     if (sortBy !== column) {
-      return <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />;
+      return <ArrowUpDown size={11} className="opacity-0 group-hover:opacity-100 transition-opacity" />;
     }
-    return sortOrder === 'asc' ? <ArrowUp size={12} className="text-brand" /> : <ArrowDown size={12} className="text-brand" />;
+    return sortOrder === 'asc' ? <ArrowUp size={11} className="text-blue-600 dark:text-blue-400" /> : <ArrowDown size={11} className="text-blue-600 dark:text-blue-400" />;
   };
 
   return (
-    <div className="overflow-x-auto px-2">
-      <table className="w-full border-collapse">
+    <div className="overflow-x-auto w-full">
+      <table className="w-full border-collapse border border-gray-200 dark:border-gray-800">
         <thead>
-          <tr className="bg-gray-50/30 dark:bg-white/5 text-[11px] font-black text-gray-500 uppercase tracking-widest">
+          <tr className="bg-slate-55 dark:bg-slate-800/70 text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800">
             {columns.map((col) => {
               const alignmentClass = 
                 col.align === 'center' ? 'text-center' : 
                 col.align === 'right' ? 'text-right' : 'text-left';
               
               const isSortable = col.sortable && onSort;
-              const thClasses = `px-10 py-6 ${alignmentClass} border-b border-r border-gray-200 dark:border-white/10 last:border-r-0 ${
-                isSortable ? 'cursor-pointer hover:text-brand transition-colors group' : ''
+              const thClasses = `px-3 py-2 ${alignmentClass} border-r border-gray-200 dark:border-gray-800 last:border-r-0 ${
+                isSortable ? 'cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors group' : ''
               } ${col.className || ''}`;
 
               return (
@@ -65,7 +65,7 @@ export function Table<T>({
                   className={thClasses}
                   onClick={() => isSortable ? onSort(col.key) : undefined}
                 >
-                  <div className={`flex items-center gap-2 ${
+                  <div className={`flex items-center gap-1.5 ${
                     col.align === 'center' ? 'justify-center' : 
                     col.align === 'right' ? 'justify-end' : 'justify-start'
                   }`}>
@@ -77,20 +77,20 @@ export function Table<T>({
             })}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
           {loading ? (
             <tr>
-              <td colSpan={columns.length} className="px-10 py-20 text-center border-b border-gray-200 dark:border-white/10">
-                <div className="flex flex-col items-center gap-4">
-                  <RefreshCw className="animate-spin text-brand" size={40} />
-                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest">{loadingMessage}</p>
+              <td colSpan={columns.length} className="px-4 py-12 text-center border-b border-gray-200 dark:border-gray-800">
+                <div className="flex flex-col items-center gap-2">
+                  <RefreshCw className="animate-spin text-blue-600 dark:text-blue-400" size={24} />
+                  <p className="text-xs font-medium text-slate-400">{loadingMessage}</p>
                 </div>
               </td>
             </tr>
           ) : data.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-10 py-20 text-center border-b border-gray-200 dark:border-white/10">
-                <div className="text-xs font-black text-gray-400 uppercase tracking-widest">
+              <td colSpan={columns.length} className="px-4 py-12 text-center border-b border-gray-200 dark:border-gray-800">
+                <div className="text-xs font-medium text-slate-400">
                   {emptyMessage}
                 </div>
               </td>
@@ -99,7 +99,7 @@ export function Table<T>({
             data.map((item, index) => (
               <tr 
                 key={rowKey(item, index)} 
-                className={`hover:bg-gray-50/50 dark:hover:bg-white/10 transition-all group ${
+                className={`hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-all ${
                   rowClassName ? rowClassName(item) : ''
                 }`}
               >
@@ -113,7 +113,7 @@ export function Table<T>({
                     : col.cellClassName || '';
 
                   return (
-                    <td key={col.key} className={`px-10 py-6 ${alignmentClass} border-b border-r border-gray-200 dark:border-white/10 last:border-r-0 ${customCellClass}`}>
+                    <td key={col.key} className={`px-3 py-2 text-xs text-slate-850 dark:text-slate-200 ${alignmentClass} border-r border-gray-200 dark:border-gray-800 last:border-r-0 ${customCellClass}`}>
                       {col.render 
                         ? col.render(item, index) 
                         : (item as any)[col.key] as React.ReactNode}

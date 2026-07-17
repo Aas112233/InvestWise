@@ -2,261 +2,176 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  font-size: 80%;
+}
+
+
 * {
- margin: 0;
- padding: 0;
- box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 body {
- font-family: 'Inter', sans-serif;
- -webkit-font-smoothing: antialiased;
- -moz-osx-font-smoothing: grayscale;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Language specific font overrides */
 .lang-bn {
- font-family: 'Hind Siliguri', sans-serif !important;
- font-size: 1.05em;
- line-height: 1.6;
+  font-family: 'Hind Siliguri', sans-serif !important;
+  font-size: 1.05em;
+  line-height: 1.6;
 }
 
 .lang-bn * {
- font-family: 'Hind Siliguri', sans-serif !important;
- letter-spacing: normal !important;
- text-transform: none !important;
+  font-family: 'Hind Siliguri', sans-serif !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
 }
 
 .lang-en {
- font-family: 'Inter', sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 
 .card-shadow {
- box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(226, 232, 240, 0.8);
 }
 
 .dark .card-shadow {
- box-shadow: 0 4px 25px -2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* More compact card styling for non-dashboard screens */
+/* Compact layout style resets */
 .compact-screen > * + * {
- margin-top: 2rem !important;
-}
-
-.compact-screen [class*="rounded-[4rem]"] {
- border-radius: 2rem !important;
-}
-
-.compact-screen [class*="rounded-[3.5rem]"],
-.compact-screen [class*="rounded-[3rem]"] {
- border-radius: 1.5rem !important;
-}
-
-.compact-screen [class*="rounded-[2.5rem]"],
-.compact-screen [class*="rounded-3xl"] {
- border-radius: 1.25rem !important;
-}
-
-.compact-screen div[class*="bg-white"][class*="border"][class*="p-12"],
-.compact-screen div[class*="bg-dark"][class*="p-12"] {
- padding: 1.5rem !important;
-}
-
-.compact-screen div[class*="bg-white"][class*="border"][class*="p-10"],
-.compact-screen div[class*="bg-dark"][class*="p-10"],
-.compact-screen div[class*="bg-white"][class*="border"][class*="p-8"],
-.compact-screen div[class*="bg-dark"][class*="p-8"] {
- padding: 1.25rem !important;
-}
-
-.compact-screen div[class*="bg-white"][class*="border"][class*="p-6"],
-.compact-screen div[class*="bg-dark"][class*="p-6"] {
- padding: 1rem !important;
-}
-
-.compact-screen [class~="card-shadow"] {
- box-shadow: 0 3px 14px -4px rgba(0, 0, 0, 0.08);
-}
-
-.dark .compact-screen [class~="card-shadow"] {
- box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.55);
+  margin-top: 1rem !important;
 }
 
 ::-webkit-scrollbar {
- width: 6px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
- background: transparent;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
- background: #E2E8F0;
- border-radius: 10px;
+  background: #E2E8F0;
+  border-radius: 4px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
- background: #2D3732;
+  background: #334155;
 }
 
 ::-webkit-scrollbar-thumb:hover {
- background: #CBD5E1;
+  background: #CBD5E1;
 }
 
 .no-scrollbar::-webkit-scrollbar {
- display: none;
+  display: none;
 }
 
 .no-scrollbar {
- -ms-overflow-style: none;
- scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
- width: 6px;
+  width: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
- background: transparent;
+  background: transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
- background: #E2E8F0;
- border-radius: 10px;
+  background: #E2E8F0;
+  border-radius: 4px;
 }
 
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
- background: #2D3732;
+  background: #334155;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
- background: #CBD5E1;
+  background: #CBD5E1;
 }
 
 /* ==========================================
- SKELETON LOADING ANIMATIONS
+ SKELETON LOADING
  ========================================== */
-
-@keyframes shimmer {
- 0% {
- background-position: -200% 0;
- }
- 100% {
- background-position: 200% 0;
- }
-}
-
 .skeleton-wave {
- background: linear-gradient(
- 90deg,
- #E2E8F0 25%,
- #F1F5F9 50%,
- #E2E8F0 75%
- );
- background-size: 200% 100%;
- animation: shimmer 1.5s ease-in-out infinite;
+  background: #F1F5F9;
 }
-
 .dark .skeleton-wave {
- background: linear-gradient(
- 90deg,
- rgba(255, 255, 255, 0.05) 25%,
- rgba(255, 255, 255, 0.1) 50%,
- rgba(255, 255, 255, 0.05) 75%
- );
- background-size: 200% 100%;
+  background: #1e293b;
 }
 
 /* ==========================================
- SUCCESS ANIMATIONS
+ PAGE TRANSITIONS (Instant)
  ========================================== */
-
-@keyframes success-pop {
- 0% {
- transform: scale(0) rotate(-180deg);
- opacity: 0;
- }
- 50% {
- transform: scale(1.2) rotate(0deg);
- }
- 100% {
- transform: scale(1) rotate(0deg);
- opacity: 1;
- }
-}
-
-.success-pop {
- animation: success-pop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-}
-
-/* ==========================================
- PAGE TRANSITIONS
- ========================================== */
-
 .page-enter {
- opacity: 0;
- transform: translateY(20px);
+  opacity: 1;
 }
 
 .page-enter-active {
- opacity: 1;
- transform: translateY(0);
- transition: opacity 0.3s ease, transform 0.3s ease;
+  opacity: 1;
 }
 
 .page-exit {
- opacity: 1;
+  opacity: 0;
 }
 
 .page-exit-active {
- opacity: 0;
- transition: opacity 0.2s ease;
+  opacity: 0;
 }
 
 /* ==========================================
- ACCESSIBILITY IMPROVEMENTS
+ ACCESSIBILITY & FOCUS
  ========================================== */
-
 /* Focus visible for keyboard navigation */
 *:focus-visible {
- outline: 2px solid #BFF300;
- outline-offset: 2px;
- border-radius: 4px;
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 button:focus-visible,
 a:focus-visible {
- outline: 3px solid #BFF300;
- outline-offset: 2px;
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
 }
 
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
- *,
- *::before,
- *::after {
- animation-duration: 0.01ms !important;
- animation-iteration-count: 1 !important;
- transition-duration: 0.01ms !important;
- }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ==========================================
  PRINT STYLES
  ========================================== */
-
 @media print {
- .no-print {
- display: none !important;
- }
+  .no-print {
+    display: none !important;
+  }
 
- body {
- background: white !important;
- color: black !important;
- }
+  body {
+    background: white !important;
+    color: black !important;
+  }
 
- .print-break {
- page-break-after: always;
- }
+  .print-break {
+    page-break-after: always;
+  }
 }

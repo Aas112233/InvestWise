@@ -1,0 +1,35 @@
+import { pgTable, uuid, varchar, integer, decimal, boolean, timestamp, index } from 'drizzle-orm/pg-core';
+import { users } from './users.js';
+
+export const members = pgTable('members', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  memberId: varchar('member_id', { length: 50 }).unique().notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  email: varchar('email', { length: 255 }).unique().notNull(),
+  phone: varchar('phone', { length: 50 }).notNull(),
+  role: varchar('role', { length: 50 }).default('Member'),
+  shares: integer('shares').default(0).notNull(),
+  totalContributed: decimal('total_contributed', { precision: 15, scale: 2 }).default('0'),
+  status: varchar('status', { length: 50 }).default('active'),
+  avatar: varchar('avatar'),
+  lastActive: timestamp('last_active', { withTimezone: true }).defaultNow(),
+  monthlyDepositTarget: decimal('monthly_deposit_target', { precision: 15, scale: 2 }).default('0'),
+  depositFrequency: varchar('deposit_frequency', { length: 20 }).default('monthly'),
+  joinDate: timestamp('join_date', { withTimezone: true }).defaultNow(),
+  lastDepositMonth: varchar('last_deposit_month', { length: 7 }),
+  totalArrears: decimal('total_arrears', { precision: 15, scale: 2 }).default('0'),
+  withdrawalRequests: integer('withdrawal_requests').default(0),
+  createdBy: uuid('created_by').references(() => users.id),
+  updatedBy: uuid('updated_by').references(() => users.id),
+  userId: uuid('user_id').references(() => users.id),
+  hasUserAccess: boolean('has_user_access').default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index('idx_members_status_name').on(table.status, table.name),
+  index('idx_members_email_status').on(table.email, table.status),
+  index('idx_members_name').on(table.name),
+  index('idx_members_user_id').on(table.userId),
+  index('idx_members_role_status').on(table.role, table.status),
+  index('idx_members_created_at').on(table.createdAt),
+]);
