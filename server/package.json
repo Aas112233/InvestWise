@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && node -e \"require('fs').cpSync('api','dist/api',{recursive:true})\"",
+    "build": "npx tsc && node -e \"require('fs').cpSync('api','dist/api',{recursive:true})\"",
     "start": "tsx src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -33,6 +33,7 @@
     "pino-pretty": "^11.2.0",
     "postgres": "^3.4.9",
     "uuid": "^11.1.1",
+    "typescript": "^5.6.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
@@ -46,7 +47,6 @@
     "drizzle-kit": "^0.28.0",
     "eslint": "^9.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.0",
     "typescript-eslint": "^8.0.0",
     "vitest": "^2.1.0"
   }
