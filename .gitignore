@@ -224,3 +224,9 @@ web_modules/
 /tests
 /tests/_tests
 server/src/__tests__/api-smoke.test.ts
+.codegraph/
+
+.claude/
+.gemini/
+.codegraphignore
+.mimocode/
