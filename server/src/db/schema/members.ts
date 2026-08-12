@@ -23,6 +23,13 @@ export const members = pgTable('members', {
   updatedBy: uuid('updated_by').references(() => users.id),
   userId: uuid('user_id').references(() => users.id),
   hasUserAccess: boolean('has_user_access').default(false),
+  nidOrPassport: varchar('nid_or_passport', { length: 100 }),
+  fatherName: varchar('father_name', { length: 255 }),
+  address: varchar('address', { length: 500 }),
+  nomineeName: varchar('nominee_name', { length: 255 }),
+  nomineeRelation: varchar('nominee_relation', { length: 100 }),
+  nomineeNidOrPassport: varchar('nominee_nid_or_passport', { length: 100 }),
+  nomineePhone: varchar('nominee_phone', { length: 50 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [

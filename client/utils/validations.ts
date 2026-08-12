@@ -72,9 +72,16 @@ export const memberSchema = z.object({
  role: z.string().min(1, 'Please select a role'),
  shares: z.coerce.number().int().min(1, 'Shares must be at least 1').finite(),
  memberId: z.string().optional(),
+ nidOrPassport: z.string().optional(),
+ fatherName: z.string().optional(),
+ address: z.string().optional(),
+ nomineeName: z.string().optional(),
+ nomineeRelation: z.string().optional(),
+ nomineeNidOrPassport: z.string().optional(),
+ nomineePhone: z.string().optional(),
  password: z.string().optional(),
-        userRole: z.enum(['Admin', 'Administrator', 'Manager', 'Investor', 'Member', 'Audit'], { message: 'Please select a user role' }),
-        createUserAccess: z.boolean()
+ userRole: z.enum(['Admin', 'Administrator', 'Manager', 'Investor', 'Member', 'Audit'], { message: 'Please select a user role' }),
+ createUserAccess: z.boolean()
     }).refine((data) => {
  if (data.createUserAccess && !data.password) {
  return false;

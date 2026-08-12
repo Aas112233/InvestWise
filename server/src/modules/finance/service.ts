@@ -371,16 +371,10 @@ export async function addDeposit(data: DepositInput, userId: string, userName: s
 
       const newContributed = toNum(member.totalContributed) + amount;
 
-      // Derive shares: shares = totalContributed / shareValueBdt
-      const [settings] = await tx.select({ sv: systemSettings.shareValueBdt }).from(systemSettings).limit(1);
-      const shareValue = Number(settings?.sv ?? 1000);
-      const derivedShares = shareValue > 0 ? Math.floor(newContributed / shareValue) : member.shares;
-
       await tx
         .update(members)
         .set({
           totalContributed: fmtAmount(newContributed),
-          shares: derivedShares,
           lastDepositMonth: depositDate.toISOString().slice(0, 7),
           updatedAt: new Date(),
         })

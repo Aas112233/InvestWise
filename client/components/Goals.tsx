@@ -6,6 +6,7 @@ import { goalService, projectService } from '../services/api';
 import { Goal, Project } from '../types';
 import toast from 'react-hot-toast';
 import { ModalForm, FormInput, FormSelect, FormTextarea } from './ui/FormElements';
+import { InlineTopForm } from './ui/InlineTopForm';
 import { Button } from './ui/Button';
 
 interface GoalsProps {
@@ -484,7 +485,7 @@ const Goals: React.FC<GoalsProps> = ({ lang }) => {
                       </div>
                     </div>
 
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <div className="flex gap-1">
                       <Button variant="ghost" size="sm" onClick={() => openEditModal(goal)}>
                         {t('common.edit', lang)}
                       </Button>
@@ -561,13 +562,12 @@ const Goals: React.FC<GoalsProps> = ({ lang }) => {
         </div>
       )}
 
-      <ModalForm
+      <InlineTopForm
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingGoal ? t('goals.editGoal', lang) : t('goals.addGoal', lang)}
         onSubmit={handleSubmit}
         submitLabel={t('common.save', lang)}
-        maxWidth="max-w-lg"
       >
         <div className="space-y-4 pt-4">
           <FormInput
@@ -644,7 +644,7 @@ const Goals: React.FC<GoalsProps> = ({ lang }) => {
             })) : []}
           />
         </div>
-      </ModalForm>
+      </InlineTopForm>
     </div>
   );
 };

@@ -10,6 +10,13 @@ export const createMemberSchema = z.object({
   shares: z.number().int().min(1, 'Shares must be at least 1').default(1),
   status: z.enum(['active', 'inactive']).default('active'),
   avatar: z.string().optional(),
+  nidOrPassport: z.string().optional(),
+  fatherName: z.string().optional(),
+  address: z.string().optional(),
+  nomineeName: z.string().optional(),
+  nomineeRelation: z.string().optional(),
+  nomineeNidOrPassport: z.string().optional(),
+  nomineePhone: z.string().optional(),
 });
 
 // Shares are locked after creation — derived from totalContributed / shareValueBdt
@@ -20,6 +27,13 @@ export const updateMemberSchema = z.object({
   role: z.string().optional(),
   status: z.enum(['active', 'inactive']).optional(),
   avatar: z.string().optional(),
+  nidOrPassport: z.string().optional(),
+  fatherName: z.string().optional(),
+  address: z.string().optional(),
+  nomineeName: z.string().optional(),
+  nomineeRelation: z.string().optional(),
+  nomineeNidOrPassport: z.string().optional(),
+  nomineePhone: z.string().optional(),
 });
 
 export const onboardMemberSchema = z.object({
@@ -32,4 +46,11 @@ export const onboardMemberSchema = z.object({
   password: z.string().optional(),
   userRole: z.string().default('Member'),
   status: z.enum(['active', 'inactive']).default('active'),
+  nidOrPassport: z.string().optional(),
+  fatherName: z.string().optional(),
+  address: z.string().optional(),
+  nomineeName: z.string().optional(),
+  nomineeRelation: z.string().optional(),
+  nomineeNidOrPassport: z.string().optional(),
+  nomineePhone: z.string().optional(),
 });

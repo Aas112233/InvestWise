@@ -3,20 +3,8 @@ import { members, projects, projectMembers, systemSettings } from '../../db/sche
 import { eq, sql } from 'drizzle-orm';
 
 export async function recalculateAllMemberShares(): Promise<{ updated: number }> {
-  const db = getDb();
-  const [settings] = await db.select().from(systemSettings).limit(1);
-  const shareValue = Number(settings?.shareValueBdt ?? 1000);
-  if (shareValue <= 0) return { updated: 0 };
-  const all = await db.select({ id: members.id, totalContributed: members.totalContributed, shares: members.shares }).from(members).where(eq(members.status, 'active'));
-  let updated = 0;
-  for (const m of all) {
-    const derived = Math.floor(Number(m.totalContributed ?? 0) / shareValue);
-    if (derived !== (m.shares ?? 0)) {
-      await db.update(members).set({ shares: derived, updatedAt: new Date() }).where(eq(members.id, m.id));
-      updated++;
-    }
-  }
-  return { updated };
+  // Member shares are fixed via member management / settings screen and are not derived from transactions
+  return { updated: 0 };
 }
 
 export async function checkProjectShareInvariants() {

@@ -71,7 +71,7 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
 
   useEffect(() => {
     fetchPaginatedTransactions(currentPage, rowsPerPage, searchQuery, sortBy, sortOrder, filterType);
-  }, [currentPage, rowsPerPage, searchQuery, sortBy, sortOrder, filterType, transactions]);
+  }, [currentPage, rowsPerPage, searchQuery, sortBy, sortOrder, filterType]);
 
   const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
     isVisible: false,

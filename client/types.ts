@@ -51,6 +51,13 @@ export interface Member {
  avatar: string;
  status: 'active' | 'pending' | 'inactive';
  hasUserAccess?: boolean;
+ nidOrPassport?: string;
+ fatherName?: string;
+ address?: string;
+ nomineeName?: string;
+ nomineeRelation?: string;
+ nomineeNidOrPassport?: string;
+ nomineePhone?: string;
 }
 
 export interface ProjectMemberParticipation {
