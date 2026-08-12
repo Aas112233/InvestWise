@@ -20,16 +20,44 @@ export async function connectDB(): Promise<typeof db> {
   if (db && sql) return db;
 
   const connectionString = env.DATABASE_URL;
-  sql = postgres(connectionString, {
-    ...poolOptions,
-    onnotice: () => {},
-  });
+  const maxAttempts = 5;
+  const delayMs = 2000;
 
-  db = drizzle(sql, { schema });
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      sql = postgres(connectionString, {
+        ...poolOptions,
+        onnotice: () => {},
+      });
 
-  await sql`SELECT 1`;
-  console.log('✓ PostgreSQL connected');
-  return db;
+      db = drizzle(sql, { schema });
+
+      await sql`SELECT 1`;
+      console.log('✓ PostgreSQL connected');
+      return db;
+    } catch (error) {
+      console.error(`✗ Connection attempt ${attempt}/${maxAttempts} failed:`, error);
+      
+      if (sql) {
+        try {
+          await sql.end();
+        } catch (endError) {
+          // Ignore error during closing failed connection
+        }
+        sql = null;
+        db = null;
+      }
+
+      if (attempt === maxAttempts) {
+        throw new Error(`Failed to connect to database after ${maxAttempts} attempts: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      console.log(`Retrying database connection in ${delayMs / 1000}s...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw new Error('Database connection failed');
 }
 
 export function getDb(): ReturnType<typeof drizzle<typeof schema>> {

@@ -10,6 +10,7 @@ import { formatCurrency, formatDate } from '../utils/formatters';
 import { Language, t } from '../i18n/translations';
 import ActionDialog from './ActionDialog';
 import { ModalForm, FormInput, FormSelect } from './ui/FormElements';
+import { InlineTopForm } from './ui/InlineTopForm';
 import ExportMenu from './ExportMenu';
 import { Download, Upload } from 'lucide-react';
 import SummaryMetricCard from './SummaryMetricCard';
@@ -59,6 +60,11 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  const mapped = response.data.map((t: any) => {
  const memberIdentity = resolveMemberIdentity(t.memberId, globalMembers);
  const fallbackMember = globalMembers.find(m => m.id === t.memberMongoId || m.memberId === t.memberDisplayId);
+ const rawFundId = typeof t.fundId === 'object' && t.fundId ? (t.fundId._id || t.fundId.id) : (t.fundId || '');
+ const matchedFund = funds.find(f => f.id === rawFundId || (f as any)._id === rawFundId);
+ const resolvedFundName = (t.fundName && !t.fundName.includes('-'))
+     ? t.fundName
+     : (t.fundId?.name || matchedFund?.name || 'General Fund');
 
  return {
  id: t._id || t.id,
@@ -72,6 +78,8 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  shareNumber: Math.floor(t.amount / SHARE_WORTH),
  depositMonth: localizeMonthYearLabel((t.description?.match(/\[(.*?)\]/) || [])[1] || t.description || 'N/A', lang),
  cashierName: t.handlingOfficer || 'System',
+ fundId: rawFundId,
+ fundName: resolvedFundName,
  depositMethod: t.depositMethod || 'Bank',
  createdAt: t.createdAt ? new Date(t.createdAt).toLocaleDateString() : new Date(t.date).toLocaleDateString(),
  updatedAt: t.updatedAt && t.updatedAt !== t.createdAt ? new Date(t.updatedAt).toLocaleDateString() : undefined
@@ -472,7 +480,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  header: 'Actions',
  align: 'right',
  render: (req) => (
- <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
+ <div className="flex justify-end gap-3 transition-all">
  {currentUser?.permissions[AppScreen.DEPOSITS] === AccessLevel.WRITE && (
  <button
  onClick={(e) => handleApprove(e, req.id)}
@@ -532,11 +540,29 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  </button>
  </div>
  </div>
- {currentUser?.permissions[AppScreen.REQUEST_DEPOSIT] === AccessLevel.WRITE && (
- <button onClick={() => handleOpenModal()} className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20">
- <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
- </button>
- )}
+ <div className="flex items-center gap-3">
+    <ExportMenu
+      data={requests}
+      columns={[
+        { header: 'ID', key: 'id' },
+        { header: 'Date', key: 'date' },
+        { header: 'Partner', key: 'memberName' },
+        { header: 'Shares', key: 'shareNumber' },
+        { header: 'Month', key: 'depositMonth' },
+        { header: 'Method', key: 'depositMethod' },
+        { header: `Amount (${currencyCode})`, key: 'amount', format: (d: any) => d.amount.toLocaleString() },
+        { header: 'Status', key: 'status' },
+        { header: 'Created At', key: 'createdAt' },
+        { header: 'Updated At', key: 'updatedAt' }
+      ]}
+      fileName={`deposit_requests_${new Date().toISOString().split('T')[0]}`}
+    />
+    {currentUser?.permissions[AppScreen.REQUEST_DEPOSIT] === AccessLevel.WRITE && (
+      <button onClick={() => handleOpenModal()} className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20">
+        <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
+      </button>
+    )}
+  </div>
  </div>
 
  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -555,7 +581,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  </div>
 
  <div className="bg-white dark:bg-[#1A221D] rounded-[3.5rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5">
- <div className="px-10 py-8 border-b border-gray-50 dark:border-white/5 flex items-center justify-between gap-6">
+ <div className="px-10 py-8 flex items-center justify-between gap-6">
  <div className="relative flex-1 max-w-lg">
  <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
  <input
@@ -569,24 +595,6 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  className="w-full bg-gray-50/50 dark:bg-[#111814] pl-14 pr-6 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/5 focus:ring-2 focus:ring-dark dark:focus:ring-brand text-sm font-bold transition-all text-dark dark:text-white"
  />
  </div>
- </div>
- <div className="flex items-center gap-3">
- <ExportMenu
- data={requests}
- columns={[
- { header: 'ID', key: 'id' },
- { header: 'Date', key: 'date' },
- { header: 'Partner', key: 'memberName' },
- { header: 'Shares', key: 'shareNumber' },
- { header: 'Month', key: 'depositMonth' },
- { header: 'Method', key: 'depositMethod' },
- { header: `Amount (${currencyCode})`, key: 'amount', format: (d: any) => d.amount.toLocaleString() },
- { header: 'Status', key: 'status' },
- { header: 'Created At', key: 'createdAt' },
- { header: 'Updated At', key: 'updatedAt' }
- ]}
- fileName={`deposit_requests_${new Date().toISOString().split('T')[0]}`}
- />
  <button className="p-4 bg-gray-50 dark:bg-white/5 rounded-2xl text-gray-500 dark:text-gray-400 hover:text-dark dark:hover:text-white transition-colors">
  <Filter size={20} />
  </button>
@@ -626,150 +634,160 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  </div>
 
  {isModalOpen && (
- <ModalForm
- isOpen={isModalOpen}
- onClose={handleCloseModal}
- title={editingRequest ? 'Modify Request' : 'Deposit Request'}
- subtitle="Module: External Vesting Initiation"
- onSubmit={handleSubmit}
- submitLabel={editingRequest ? 'Update Request' : 'Submit for Approval'}
- loading={isSubmitting}
- maxWidth="max-w-5xl"
- >
- <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
- {/* Field: Deposit Method */}
- <FormSelect
- label={t('deposits.depositMethod', lang)}
- name="depositMethod"
- value={formData.depositMethod}
- onChange={e => setFormData({ ...formData, depositMethod: e.target.value })}
- options={['Cash', 'Bank', 'Mobile Banking', 'Check', 'Other'].map(m => ({
- value: m,
- label: t(`deposits.methods.${m.toLowerCase().replace(' ', '') === 'mobilebanking' ? 'mobile' : m.toLowerCase()}`, lang) || m
- }))}
- icon={<CreditCard size={18} />}
- required
- />
+  <InlineTopForm
+  isOpen={isModalOpen}
+  onClose={handleCloseModal}
+  title={editingRequest ? 'Modify Request' : 'Deposit Request'}
+  subtitle="Module: External Vesting Initiation"
+  onSubmit={handleSubmit}
+  submitLabel={editingRequest ? 'Update Request' : 'Submit for Approval'}
+  loading={isSubmitting}
+  >
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+  {/* Field: Deposit Method */}
+  <FormSelect
+  label={t('deposits.depositMethod', lang)}
+  name="depositMethod"
+  value={formData.depositMethod}
+  onChange={e => setFormData({ ...formData, depositMethod: e.target.value })}
+  options={['Cash', 'Bank', 'Mobile Banking', 'Check', 'Other'].map(m => ({
+  value: m,
+  label: m
+  }))}
+  required
+  />
 
- {/* Field 1: Partner */}
- <FormSelect
- label="Source Partner"
- name="memberId"
- value={formData.memberId}
- onChange={handleMemberChange}
- options={activeMembers.map(p => ({
- value: p.id,
- label: `${p.name} (#${p.memberId}) - ${p.shares} ${t('deposits.shares', lang)}`
- }))}
- icon={<User size={18} />}
- required
- />
+  {/* Field 1: Partner */}
+  <FormSelect
+  label={t('deposits.strategicPartner', lang)}
+  name="memberId"
+  value={formData.memberId}
+  onChange={handleMemberChange}
+  placeholder={t('deposits.selectMember', lang)}
+  options={activeMembers.map(p => ({
+  value: p.id,
+  label: `${p.name} (#${p.memberId}) - ${p.shares} ${t('deposits.shares', lang)}`,
+  className: "bg-white dark:bg-dark text-dark dark:text-white"
+  }))}
+  icon={<User size={18} />}
+  required
+  disabled={!!editingRequest || !(currentUser?.role === 'Admin' || currentUser?.role === 'Manager')}
+  className={!!editingRequest || !(currentUser?.role === 'Admin' || currentUser?.role === 'Manager') ? "opacity-60 cursor-not-allowed" : ""}
+  />
 
- {/* Field 2: Shares */}
- <FormInput
- label="Shares Holding"
- value={formData.shareNumber}
- readOnly
- required
- className="opacity-50 cursor-not-allowed"
- />
+  {/* Field 2: Shares */}
+  <FormInput
+  label={t('deposits.sharesCount', lang)}
+  name="shareNumber"
+  value={formData.shareNumber}
+  readOnly
+  required
+  className="opacity-70 cursor-not-allowed"
+  />
 
- {/* Field 3: Target Fund */}
- <FormSelect
- label="Target Fund"
- name="fundId"
- value={formData.fundId}
- onChange={e => {
- const selectedFundId = e.target.value;
- const selectedFund = funds.find(f => f.id === selectedFundId);
- setFormData({
- ...formData,
- fundId: selectedFundId,
- cashierName: selectedFund?.handlingOfficer || 'System'
- });
- }}
- options={funds.filter(f => (f.type === 'DEPOSIT' || f.type === 'Primary' || f.type === 'OTHER') && f.status !== 'ARCHIVED').map(f => ({
- value: f.id,
- label: `${f.name} (${currencyCode} ${f.balance.toLocaleString()})`
- }))}
- icon={<CheckSquare size={18} />}
- required
- />
+  {/* Field 3: Target Fund */}
+  <FormSelect
+  label={t('deposits.targetFund', lang)}
+  name="fundId"
+  value={formData.fundId}
+  onChange={e => {
+  const selectedFundId = e.target.value;
+  if (!selectedFundId) {
+  setFormData({ ...formData, fundId: '' });
+  return;
+  }
+  const selectedFund = funds.find(f => f.id === selectedFundId);
+  setFormData({
+  ...formData,
+  fundId: selectedFundId,
+  cashierName: selectedFund?.handlingOfficer || 'System'
+  });
+  }}
+  placeholder={t('deposits.selectFund', lang)}
+  options={funds.filter(f => (f.type === 'DEPOSIT' || f.type === 'Primary' || f.type === 'OTHER') && f.status !== 'ARCHIVED').map(f => ({
+  value: f.id,
+  label: `${f.name} (${f.balance.toLocaleString()} ${f.currency || currencyCode})`
+  }))}
+  icon={<CheckSquare size={18} />}
+  required
+  />
 
- {/* Field 4: Amount */}
- <div className="space-y-2">
- <div className="flex items-center justify-between px-1">
- <label className="text-[10px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">Amount ({currencyCode})</label>
- <button
- type="button"
- onClick={handleToggleAutoCalc}
- className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-brand hover:opacity-80 transition-all"
- >
- {autoCalculate ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
- Auto-Calc
- </button>
- </div>
- <input
- required
- disabled={autoCalculate}
- type="number"
- value={formData.amount}
- onChange={e => setFormData({ ...formData, amount: e.target.value })}
- className={`w-full bg-gray-50 dark:bg-[#111814] px-5 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/10 focus:ring-2 focus:ring-dark dark:focus:ring-brand outline-none text-sm font-bold text-dark dark:text-white transition-all ${autoCalculate ? 'opacity-50 cursor-not-allowed' : ''}`}
- />
- </div>
+  {/* Field 4: Amount */}
+  <div className="space-y-2 relative">
+  <div className="flex items-center justify-between px-1">
+  <label className="text-[10px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{`${t('deposits.totalAmountCurrency', lang)} (${currencyCode})`}</label>
+  <button
+  type="button"
+  onClick={() => {
+  if (!editingRequest) handleToggleAutoCalc();
+  }}
+  className={`flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-brand hover:opacity-80 transition-all ${!!editingRequest ? 'opacity-50 cursor-not-allowed' : ''}`}
+  >
+  {autoCalculate ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
+  {t('deposits.autoCalc', lang)}
+  </button>
+  </div>
+  <input
+  required
+  disabled={autoCalculate || !!editingRequest}
+  type="number"
+  value={formData.amount}
+  onChange={e => setFormData({ ...formData, amount: e.target.value })}
+  className={`w-full bg-gray-50 dark:bg-[#111814] px-5 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/10 focus:ring-2 focus:ring-dark dark:focus:ring-brand outline-none text-sm font-bold text-dark dark:text-white transition-all ${(autoCalculate || !!editingRequest) ? 'opacity-50 cursor-not-allowed' : ''}`}
+  />
+  </div>
 
- {/* Field 5: Month */}
- <MonthPickerField
- label={t('deposits.depositMonth', lang)}
- value={formData.depositMonth}
- lang={lang}
- required
- onChange={(depositMonth) => {
- const currentMonth = getCurrentMonthYear();
- const lockedDate = depositMonth !== currentMonth
- ? getDateFromMonthStr(depositMonth)
- : new Date().toISOString().split('T')[0];
+  {/* Field 5: Month */}
+  <MonthPickerField
+  label={t('deposits.depositMonth', lang)}
+  value={formData.depositMonth}
+  lang={lang}
+  required
+  onChange={(depositMonth) => {
+  const currentMonth = getCurrentMonthYearLabel(lang);
+  const lockedDate = depositMonth !== currentMonth
+  ? monthYearLabelToDateInput(depositMonth)
+  : new Date().toISOString().split('T')[0];
 
- setFormData((prev) => ({
- ...prev,
- depositMonth,
- txnDate: lockedDate || prev.txnDate
- }));
- }}
- />
+  setFormData((prev) => ({
+  ...prev,
+  depositMonth,
+  txnDate: lockedDate || prev.txnDate
+  }));
+  }}
+  />
 
- {/* Field 6: Officer */}
- <FormInput
- label={t('deposits.handlingOfficer', lang)}
- value={formData.cashierName}
- readOnly
- required
- className="opacity-70 cursor-not-allowed"
- />
+  {/* Field 6: Officer */}
+  <FormInput
+  label={t('deposits.handlingOfficer', lang)}
+  value={formData.cashierName}
+  readOnly
+  required
+  className="opacity-70 cursor-not-allowed"
+  />
 
- {/* Field New: Transaction Date */}
- <FormInput
- label={t('deposits.transactionDate', lang)}
- name="txnDate"
- type="date"
- value={formData.txnDate}
- onChange={e => setFormData({ ...formData, txnDate: e.target.value })}
- required
- className={formData.depositMonth !== getCurrentMonthYear() ? "opacity-60 cursor-not-allowed" : ""}
- disabled={formData.depositMonth !== getCurrentMonthYear()}
- />
- </div>
+  {/* Field New: Transaction Date */}
+  <FormInput
+  label={t('deposits.transactionDate', lang)}
+  name="txnDate"
+  type="date"
+  value={formData.txnDate}
+  onChange={e => setFormData({ ...formData, txnDate: e.target.value })}
+  required
+  className={formData.depositMonth !== getCurrentMonthYearLabel(lang) ? "opacity-60 cursor-not-allowed" : ""}
+  disabled={formData.depositMonth !== getCurrentMonthYearLabel(lang)}
+  />
+  </div>
 
- <div className="mt-auto">
- <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-white/5 rounded-3xl">
- <p className="text-[11px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">Impact Analysis</p>
- <p className="text-3xl font-black text-dark dark:text-brand tracking-tighter leading-none">
- + {(parseInt(formData.amount || '0')).toLocaleString()} <span className="text-lg opacity-40">{currencyCode}</span>
- </p>
- </div>
- </div>
- </ModalForm>
+  <div className="mt-auto">
+  <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-white/5 rounded-3xl">
+  <p className="text-[11px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">Impact Analysis</p>
+  <p className="text-3xl font-black text-dark dark:text-brand tracking-tighter leading-none">
+  + {(parseInt(formData.amount || '0')).toLocaleString()} <span className="text-lg opacity-40">{currencyCode}</span>
+  </p>
+  </div>
+  </div>
+  </InlineTopForm>
  )
  }
  </div >

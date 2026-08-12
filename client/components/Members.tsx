@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Mail, Phone, MoreVertical, Plus, Edit2, Trash2, X, Search, Filter, Hash, UserCheck, Lock, User as UserIcon, ShieldCheck, Key, Info, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Mail, Phone, MapPin, MoreVertical, Plus, Edit2, Trash2, X, Search, Filter, Hash, UserCheck, Lock, User as UserIcon, Users, CreditCard, ShieldCheck, Key, Info, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { Member, User, AccessLevel, AppScreen } from '../types';
 import { Table, TableColumn } from './ui/Table';
 import { useGlobalState } from '../context/GlobalStateContext';
@@ -16,6 +16,8 @@ import ExportMenu from './ExportMenu';
 import { formatCurrency } from '../utils/formatters';
 import Avatar from './Avatar';
 import { ModalForm, FormInput, FormSelect, FormLabel } from './ui/FormElements';
+import { InlineTopForm } from './ui/InlineTopForm';
+import { FormPhoneInput } from './ui/FormPhoneInput';
 import PermissionGuard from './PermissionGuard';
 import { memberSchema, MemberFormData } from '../utils/validations';
 import SummaryMetricCard from './SummaryMetricCard';
@@ -121,7 +123,8 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
         setValue,
         watch,
         setError: setFieldError,
-        clearErrors
+        clearErrors,
+        control
     } = useForm<MemberFormData>({
         resolver: zodResolver(memberSchema) as any,
         mode: 'onChange',
@@ -165,6 +168,13 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                 role: member.role,
                 shares: member.shares,
                 memberId: member.memberId,
+                nidOrPassport: member.nidOrPassport || '',
+                fatherName: member.fatherName || '',
+                address: member.address || '',
+                nomineeName: member.nomineeName || '',
+                nomineeRelation: member.nomineeRelation || '',
+                nomineeNidOrPassport: member.nomineeNidOrPassport || '',
+                nomineePhone: member.nomineePhone || '',
                 userRole: linkedUser?.role || 'Investor',
                 password: '',
                 createUserAccess: !!member.hasUserAccess || !!linkedUser
@@ -180,6 +190,13 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                 role: 'Associate Member',
                 shares: 0,
                 memberId: '',
+                nidOrPassport: '',
+                fatherName: '',
+                address: '',
+                nomineeName: '',
+                nomineeRelation: '',
+                nomineeNidOrPassport: '',
+                nomineePhone: '',
                 password: '',
                 userRole: 'Investor',
                 createUserAccess: false
@@ -200,6 +217,13 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             role: 'Associate Member',
             shares: 0,
             memberId: '',
+            nidOrPassport: '',
+            fatherName: '',
+            address: '',
+            nomineeName: '',
+            nomineeRelation: '',
+            nomineeNidOrPassport: '',
+            nomineePhone: '',
             password: '',
             userRole: 'Investor',
             createUserAccess: false
@@ -224,7 +248,14 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                     systemAccess: data.createUserAccess,
                     password: data.password,
                     userRole: data.userRole,
-                    status: 'active'
+                    status: 'active',
+                    nidOrPassport: data.nidOrPassport,
+                    fatherName: data.fatherName,
+                    address: data.address,
+                    nomineeName: data.nomineeName,
+                    nomineeRelation: data.nomineeRelation,
+                    nomineeNidOrPassport: data.nomineeNidOrPassport,
+                    nomineePhone: data.nomineePhone
                 });
                 showNotification(
                     data.createUserAccess
@@ -239,7 +270,14 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                     phone: data.phone,
                     email: data.email,
                     role: data.role,
-                    hasUserAccess: data.createUserAccess
+                    hasUserAccess: data.createUserAccess,
+                    nidOrPassport: data.nidOrPassport,
+                    fatherName: data.fatherName,
+                    address: data.address,
+                    nomineeName: data.nomineeName,
+                    nomineeRelation: data.nomineeRelation,
+                    nomineeNidOrPassport: data.nomineeNidOrPassport,
+                    nomineePhone: data.nomineePhone
                 };
                 await updateMember(updatedMember);
 
@@ -269,19 +307,46 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
     };
 
     const handleReviewSubmit = (data: MemberFormData) => {
-        // Show review dialog before submission
+        // Show comprehensive review dialog with all new implementation details
+        const reviewDetails: { label: string; value: string | number }[] = [
+            { label: t('members.legalName', lang), value: data.name },
+            { label: t('members.memberId', lang), value: data.memberId || 'Auto-generated' },
+            { label: 'Member Type / Category', value: data.role || 'Normal Shareholder' },
+            { label: 'Email Identifier', value: data.email },
+            { label: 'Contact Phone', value: data.phone || 'N/A' },
+        ];
+
+        if (data.nidOrPassport) {
+            reviewDetails.push({ label: 'NID / Passport Number', value: data.nidOrPassport });
+        }
+        if (data.fatherName) {
+            reviewDetails.push({ label: 'Father / Guardian', value: data.fatherName });
+        }
+        if (data.address) {
+            reviewDetails.push({ label: 'Residential Address', value: data.address });
+        }
+        if (data.nomineeName) {
+            reviewDetails.push({ label: 'Nominee Beneficiary', value: `${data.nomineeName}${data.nomineeRelation ? ` (${data.nomineeRelation})` : ''}` });
+        }
+        if (data.nomineeNidOrPassport) {
+            reviewDetails.push({ label: 'Nominee NID / Passport', value: data.nomineeNidOrPassport });
+        }
+        if (data.nomineePhone) {
+            reviewDetails.push({ label: 'Nominee Contact Phone', value: data.nomineePhone });
+        }
+
+        reviewDetails.push(
+            { label: t('members.shares', lang), value: `${data.shares} Shares` },
+            { label: t('members.valuation', lang), value: `${currencyCode} ${((data.shares || 0) * SHARE_VALUE).toLocaleString()}` },
+            { label: t('members.systemAccess', lang), value: data.createUserAccess ? `Active Portal (${data.userRole || 'Investor'})` : 'No Portal Access' }
+        );
+
         setDialog({
             isOpen: true,
             type: 'review',
-            title: editingMember ? t('members.reviewTitle', lang) : t('members.reviewTitle', lang),
+            title: editingMember ? 'Review Profile Updates' : t('members.reviewTitle', lang),
             message: t('members.reviewMessage', lang),
-            details: [
-                { label: t('members.legalName', lang), value: data.name },
-                { label: t('members.memberId', lang), value: data.memberId || 'Auto-generated' },
-                { label: t('members.accessRole', lang), value: data.role },
-                { label: t('members.valuation', lang), value: `${currencyCode} ${(data.shares * SHARE_VALUE).toLocaleString()}` },
-                { label: t('members.systemAccess', lang), value: data.createUserAccess ? t('common.active', lang) : t('common.pending', lang) },
-            ],
+            details: reviewDetails,
             onConfirm: () => executeSubmit(data)
         });
     };
@@ -320,62 +385,160 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             key: 'name',
             header: t('members.partnerIdentity', lang),
             sortable: true,
-            render: (member) => (
-                <div className="flex items-center gap-3">
-                    <Avatar name={member.name} size="sm" />
-                    <div>
-                        <p className="font-medium text-slate-900 dark:text-white text-xs leading-none mb-0.5">{member.name}</p>
-                        <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">{member.role}</p>
+            render: (member) => {
+                const getRoleBadgeStyle = (roleStr: string) => {
+                    const r = (roleStr || '').toLowerCase();
+                    if (r.includes('founding')) return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+                    if (r.includes('investor')) return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+                    if (r.includes('board') || r.includes('director')) return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20';
+                    if (r.includes('associate')) return 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20';
+                    return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
+                };
+
+                return (
+                    <div className="flex items-center gap-3">
+                        <Avatar name={member.name} size="sm" />
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <p className="font-bold text-slate-900 dark:text-white text-xs leading-none">{member.name}</p>
+                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${getRoleBadgeStyle(member.role)}`}>
+                                    {member.role || 'Normal Shareholder'}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                {member.nidOrPassport && (
+                                    <span className="text-[9px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700">
+                                        NID: {member.nidOrPassport}
+                                    </span>
+                                )}
+                                {member.fatherName && (
+                                    <span className="text-[9px] text-gray-400 dark:text-gray-500">
+                                        F/N: {member.fatherName}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
                     </div>
-                </div>
-            )
+                );
+            }
         },
         {
             key: 'memberId',
             header: t('members.memberId', lang),
             sortable: true,
-            cellClassName: 'font-mono text-xs text-slate-700 dark:text-blue-400',
-            render: (member) => `#${member.memberId}`
-        },
-        {
-            key: 'phone',
-            header: t('members.contactInfo', lang),
-            cellClassName: 'text-xs text-slate-650 dark:text-gray-300',
-            render: (member) => member.phone
-        },
-        {
-            key: 'hasUserAccess',
-            header: t('members.systemAccess', lang),
-            align: 'center',
-            render: (member) => (member.hasUserAccess || systemUsers.some(u => u.memberId === member.memberId)) ? (
-                <div className="flex justify-center">
-                    <span className="flex items-center justify-center w-6 h-6 bg-emerald-500/10 text-emerald-500 rounded border border-emerald-500/20" title={t('common.authorizedBadge', lang)}>
-                        <CheckCircle2 size={14} strokeWidth={2.5} />
-                    </span>
-                </div>
-            ) : (
-                <div className="flex justify-center">
-                    <span className="flex items-center justify-center w-6 h-6 bg-gray-500/5 text-gray-400 rounded border border-gray-500/10 opacity-40" title={t('common.restrictedBadge', lang)}>
-                        <Lock size={12} strokeWidth={2} />
-                    </span>
+            cellClassName: 'font-mono text-xs font-bold text-slate-700 dark:text-blue-400',
+            render: (member) => (
+                <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" title="Active Stakeholder" />
+                    <span>#{member.memberId}</span>
                 </div>
             )
         },
         {
+            key: 'phone',
+            header: 'Contact & Address',
+            cellClassName: 'text-xs text-slate-650 dark:text-gray-300',
+            render: (member) => (
+                <div className="flex flex-col space-y-0.5">
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs">{member.phone || 'No phone'}</span>
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500">{member.email}</span>
+                    {member.address && (
+                        <span className="text-[9px] text-slate-450 dark:text-slate-400 flex items-center gap-1 max-w-[180px]" title={member.address}>
+                            <MapPin size={10} className="text-slate-400 shrink-0" />
+                            <span className="truncate">{member.address}</span>
+                        </span>
+                    )}
+                </div>
+            )
+        },
+        {
+            key: 'nomineeName',
+            header: 'Nominee Beneficiary',
+            render: (member) => (
+                member.nomineeName ? (
+                    <div className="flex flex-col space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">{member.nomineeName}</span>
+                            {member.nomineeRelation && (
+                                <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50">
+                                    {member.nomineeRelation}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-gray-400 dark:text-gray-500">
+                            {member.nomineePhone && (
+                                <span className="flex items-center gap-1">
+                                    <Phone size={10} className="text-slate-400 shrink-0" />
+                                    {member.nomineePhone}
+                                </span>
+                            )}
+                            {member.nomineeNidOrPassport && (
+                                <span className="flex items-center gap-1">
+                                    <CreditCard size={10} className="text-slate-400 shrink-0" />
+                                    {member.nomineeNidOrPassport}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <span className="text-[10px] italic text-gray-400 dark:text-gray-600">Unspecified</span>
+                )
+            )
+        },
+        {
             key: 'shares',
-            header: t('members.shares', lang),
+            header: `${t('members.shares', lang)} & Equity`,
             sortable: true,
             align: 'center',
-            cellClassName: 'font-mono text-xs font-semibold text-slate-900 dark:text-slate-200',
-            render: (member) => member.shares
+            render: (member) => (
+                <div className="flex flex-col items-center">
+                    <span className="font-mono text-xs font-bold text-slate-900 dark:text-slate-200">{member.shares} Units</span>
+                    <span className="text-[9px] font-mono text-slate-450 dark:text-slate-400">
+                        {currencyCode} {((member.shares || 0) * SHARE_VALUE).toLocaleString()}
+                    </span>
+                </div>
+            )
         },
         {
             key: 'successfulDepositTotal',
             header: t('members.totalContribution', lang),
             sortable: true,
             align: 'right',
-            cellClassName: 'font-mono text-xs font-semibold text-slate-900 dark:text-white',
-            render: (member) => `${currencyCode} ${(member.successfulDepositTotal || 0).toLocaleString()}`
+            render: (member) => {
+                const totalContrib = member.successfulDepositTotal || 0;
+                const poolPercent = totalPool > 0 ? ((totalContrib / totalPool) * 100).toFixed(1) : '0';
+                return (
+                    <div className="flex flex-col items-end">
+                        <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">
+                            {currencyCode} {totalContrib.toLocaleString()}
+                        </span>
+                        <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400">
+                            {poolPercent}% of Total Pool
+                        </span>
+                    </div>
+                );
+            }
+        },
+        {
+            key: 'hasUserAccess',
+            header: t('members.systemAccess', lang),
+            align: 'center',
+            render: (member) => {
+                const hasAccess = member.hasUserAccess || systemUsers.some(u => u.memberId === member.memberId);
+                return (
+                    <div className="flex justify-center">
+                        {hasAccess ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-[10px] font-bold border border-emerald-500/20" title={t('common.authorizedBadge', lang)}>
+                                <CheckCircle2 size={12} strokeWidth={2.5} /> Active
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-500/5 text-gray-400 rounded-lg text-[10px] font-semibold border border-gray-500/10 opacity-60" title={t('common.restrictedBadge', lang)}>
+                                <Lock size={10} strokeWidth={2} /> No Access
+                            </span>
+                        )}
+                    </div>
+                );
+            }
         },
         {
             key: 'actions',
@@ -384,10 +547,10 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
             render: (member) => (
                 <PermissionGuard screen={AppScreen.MEMBERS} requiredLevel={AccessLevel.WRITE}>
                     <div className="flex items-center justify-end gap-1.5">
-                        <button onClick={() => handleOpenModal(member)} className="p-1.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-slate-800 text-gray-500 hover:text-blue-600 transition-colors">
+                        <button onClick={() => handleOpenModal(member)} className="p-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-slate-800 text-gray-500 hover:text-blue-600 transition-colors shadow-sm" title="Edit Member Profile">
                             <Edit2 size={14} />
                         </button>
-                        <button onClick={() => handleDeleteClick(member)} className="p-1.5 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 text-red-500 hover:text-red-650 transition-colors">
+                        <button onClick={() => handleDeleteClick(member)} className="p-1.5 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 text-red-500 hover:text-red-600 transition-colors shadow-sm" title="Archive Stakeholder">
                             <Trash2 size={14} />
                         </button>
                     </div>
@@ -458,14 +621,12 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                         targetId="members-snapshot-target"
                     />
                     <PermissionGuard screen={AppScreen.MEMBERS} requiredLevel={AccessLevel.WRITE}>
-                        <Button
-                            variant="primary"
-                            size="sm"
+                        <button
                             onClick={() => handleOpenModal()}
-                            icon={<Plus size={14} />}
+                            className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20"
                         >
-                            {t('common.add', lang)}
-                        </Button>
+                            <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
+                        </button>
                     </PermissionGuard>
                 </div>
             </div>
@@ -526,40 +687,140 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                 </div>
             </div>
 
-            <ModalForm
+            <InlineTopForm
                 isOpen={isModalOpen}
                 onClose={handleCloseModal}
                 title={t('members.intake', lang)}
                 subtitle={`${t('members.memberId', lang)}: #${watchedMemberId || 'Auto'}`}
                 onSubmit={handleSubmit((data) => handleReviewSubmit(data as any))}
                 submitLabel={t('common.save', lang)}
-                maxWidth="max-w-6xl"
                 loading={isSubmitting || isFormSubmitting}
             >
                 <div className="space-y-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <FormInput
-                            label={t('members.legalName', lang)}
-                            {...register('name')}
-                            error={errors.name?.message}
-                            required
-                        />
-                        <FormInput
-                            label={t('auth.identifier', lang)}
-                            type="email"
-                            {...register('email')}
-                            error={errors.email?.message}
-                            required
-                        />
-                        <FormInput
-                            label={t('members.phone', lang)}
-                            type="tel"
-                            placeholder="01XXXXXXXXX"
-                            {...register('phone')}
-                            error={errors.phone?.message}
-                        />
+                    {/* SECTION 1: PRIMARY IDENTITY */}
+                    <div>
+                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                            <UserIcon size={14} className="text-brand" /> Primary Profile & Contact
+                        </h4>
+                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                            <FormInput
+                                label={t('members.legalName', lang)}
+                                {...register('name')}
+                                error={errors.name?.message}
+                                required
+                            />
+                            <FormInput
+                                label={t('auth.identifier', lang)}
+                                type="email"
+                                {...register('email')}
+                                error={errors.email?.message}
+                                required
+                            />
+                            <Controller
+                                control={control}
+                                name="phone"
+                                render={({ field }) => (
+                                    <FormPhoneInput
+                                        label={t('members.phone', lang)}
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        error={errors.phone?.message}
+                                    />
+                                )}
+                            />
+                            <FormSelect
+                                label="Member Type / Category"
+                                {...register('role')}
+                                options={[
+                                    { value: "Founding Member", label: "Founding Member" },
+                                    { value: "Normal Shareholder", label: "Normal Shareholder" },
+                                    { value: "Investor", label: "Investor" },
+                                    { value: "Associate Member", label: "Associate Member" },
+                                    { value: "Board Director", label: "Board Director" }
+                                ]}
+                                error={errors.role?.message}
+                                required
+                            />
+                        </div>
                     </div>
 
+                    {/* SECTION 2: KYC & IDENTIFICATION */}
+                    <div>
+                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                            <CreditCard size={14} className="text-emerald-500" /> KYC & Identification Details
+                        </h4>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <FormInput
+                                label="NID / Passport Number"
+                                placeholder="e.g. 1990123456789"
+                                {...register('nidOrPassport')}
+                                error={errors.nidOrPassport?.message}
+                            />
+                            <FormInput
+                                label="Father / Guardian Name"
+                                placeholder="Full Name"
+                                {...register('fatherName')}
+                                error={errors.fatherName?.message}
+                            />
+                            <FormInput
+                                label="Residential Address"
+                                placeholder="House, Road, City, District"
+                                {...register('address')}
+                                error={errors.address?.message}
+                            />
+                        </div>
+                    </div>
+
+                    {/* SECTION 3: NOMINEE INFORMATION */}
+                    <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-gray-200/80 dark:border-gray-800">
+                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                            <Users size={14} className="text-blue-500" /> Nominee & Beneficiary Information
+                        </h4>
+                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                            <FormInput
+                                label="Nominee Full Name"
+                                placeholder="Nominee Legal Name"
+                                {...register('nomineeName')}
+                                error={errors.nomineeName?.message}
+                            />
+                            <FormSelect
+                                label="Relationship"
+                                {...register('nomineeRelation')}
+                                options={[
+                                    { value: "", label: "Select Relationship" },
+                                    { value: "Spouse", label: "Spouse" },
+                                    { value: "Son", label: "Son" },
+                                    { value: "Daughter", label: "Daughter" },
+                                    { value: "Father", label: "Father" },
+                                    { value: "Mother", label: "Mother" },
+                                    { value: "Brother", label: "Brother" },
+                                    { value: "Sister", label: "Sister" },
+                                    { value: "Other", label: "Other" }
+                                ]}
+                                error={errors.nomineeRelation?.message}
+                            />
+                            <FormInput
+                                label="Nominee NID / Passport"
+                                placeholder="Nominee NID / DOB"
+                                {...register('nomineeNidOrPassport')}
+                                error={errors.nomineeNidOrPassport?.message}
+                            />
+                            <Controller
+                                control={control}
+                                name="nomineePhone"
+                                render={({ field }) => (
+                                    <FormPhoneInput
+                                        label="Nominee Contact Phone"
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        error={errors.nomineePhone?.message}
+                                    />
+                                )}
+                            />
+                        </div>
+                    </div>
+
+                    {/* SECTION 4: SHARES */}
                     <FormInput
                         label={t('members.shares', lang)}
                         type="number"
@@ -577,10 +838,10 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                 )}
 
                 {/* System Access Section */}
-                <div className={`p-4 rounded border transition-colors ${watchedCreateUserAccess ? 'bg-blue-50/50 dark:bg-blue-950/10 border-blue-200 dark:border-blue-900/50' : 'bg-slate-50 dark:bg-slate-800/50 border-gray-200 dark:border-gray-800'}`}>
+                <div className={`p-4 rounded-2xl transition-colors ${watchedCreateUserAccess ? 'bg-blue-50/50 dark:bg-blue-950/10 border border-blue-200 dark:border-blue-900/50' : 'bg-slate-50 dark:bg-slate-800/50 border border-gray-200 dark:border-gray-800'}`}>
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-4">
-                            <div className={`p-2 rounded transition-colors ${watchedCreateUserAccess ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+                            <div className={`p-2 rounded-xl transition-colors ${watchedCreateUserAccess ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
                                 <ShieldCheck size={18} />
                             </div>
                             <div>
@@ -627,7 +888,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                                 />
                             </div>
 
-                            <div className="bg-gray-50 dark:bg-slate-850 p-3 rounded border border-gray-200 dark:border-gray-800 flex items-start gap-3">
+                            <div className="bg-gray-50 dark:bg-slate-850 p-3 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start gap-3">
                                 <Info size={14} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                                 <div>
                                     <p className="text-xs font-semibold text-slate-900 dark:text-white mb-1">
@@ -646,11 +907,11 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                     )}
                 </div>
 
-                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded border border-gray-200 dark:border-gray-800">
+                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-gray-200 dark:border-gray-800">
                     <p className="text-xs font-semibold text-slate-500">Initial Valuation</p>
                     <p className="text-xl font-semibold text-slate-900 dark:text-blue-400 font-mono">{currencyCode} {((watchedShares || 0) * SHARE_VALUE).toLocaleString()}</p>
                 </div>
-            </ModalForm>
+            </InlineTopForm>
 
             <ActionDialog
                 isOpen={dialog.isOpen}

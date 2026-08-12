@@ -11,6 +11,7 @@ import { formatCurrency } from '../utils/formatters';
 import { Language, t } from '../i18n/translations';
 import ActionDialog from './ActionDialog';
 import { ModalForm, FormInput, FormSelect, FormTextarea } from './ui/FormElements';
+import { InlineTopForm } from './ui/InlineTopForm';
 import PermissionGuard from './PermissionGuard';
 import SummaryMetricCard from './SummaryMetricCard';
 
@@ -439,14 +440,13 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
  </div>
  </div>
 
- <ModalForm
+ <InlineTopForm
  isOpen={isModalOpen}
  onClose={handleCloseModal}
  title={editingExpense ? t('common.edit', lang) + ' ' + t('nav.expenses', lang) : t('expenses.recordOutflow', lang)}
  subtitle={editingExpense ? t('expenses.modifyAllocation', lang) || "Modify strategic allocation" : t('expenses.strategicAllocation', lang)}
  onSubmit={handleSubmit}
  submitLabel={editingExpense ? t('common.save', lang) : t('expenses.postExpense', lang)}
- maxWidth="max-w-5xl"
  loading={isSubmitting}
  >
  <div className="space-y-8">
@@ -524,7 +524,7 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
  </div>
  </div>
  </div>
- </ModalForm>
+ </InlineTopForm>
  </div>
  );
 };

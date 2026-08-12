@@ -8,6 +8,7 @@ import { Language, t } from '../i18n/translations';
 import { formatCurrency } from '../utils/formatters';
 import ExportMenu from './ExportMenu';
 import { ModalForm, FormInput, FormSelect, FormTextarea, FormLabel } from './ui/FormElements';
+import { InlineTopForm } from './ui/InlineTopForm';
 import PermissionGuard from './PermissionGuard';
 
 interface FundsManagementProps {
@@ -421,15 +422,14 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
  </div>
  )}
 
- {/* Create Modal */}
- <ModalForm
+ {/* Create Fund Top Overlay Form */}
+ <InlineTopForm
  isOpen={isModalOpen}
  onClose={() => setIsModalOpen(false)}
  title={editingFundId ? "Modify Fund Basics" : t('funds.newFund', lang)}
  subtitle={editingFundId ? "Update account identifiers and custodian details" : t('funds.liquidityProv', lang)}
  onSubmit={handleCreateFund}
  submitLabel={editingFundId ? "Save Changes" : t('funds.createFund', lang)}
- maxWidth="max-w-5xl"
  loading={isSubmitting}
  >
  <div className="space-y-8">
@@ -505,10 +505,10 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
  className="h-32 resize-none"
  />
  </div>
- </ModalForm>
+ </InlineTopForm>
 
- {/* Transfer Funds Modal */}
- <ModalForm
+ {/* Transfer Funds Top Overlay Form */}
+ <InlineTopForm
  isOpen={isTransferModalOpen}
  onClose={() => {
  setIsTransferModalOpen(false);
@@ -519,7 +519,6 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
  onSubmit={handleTransfer}
  submitLabel={t('common.save', lang)}
  loading={isSubmitting}
- maxWidth="max-w-2xl"
  >
  <div className="space-y-6">
  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -570,7 +569,7 @@ const FundsManagement: React.FC<FundsManagementProps> = ({ lang }) => {
  </p>
  </div>
  </div>
- </ModalForm>
+ </InlineTopForm>
  </div>
  );
 };

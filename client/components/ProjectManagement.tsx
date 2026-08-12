@@ -21,6 +21,7 @@ import Pagination from './Pagination';
 import { projectService } from '../services/api';
 import SummaryMetricCard from './SummaryMetricCard';
 import { ModalForm, FormInput, FormSelect, FormTextarea, FormLabel } from './ui/FormElements';
+import { InlineTopForm } from './ui/InlineTopForm';
 import PermissionGuard from './PermissionGuard';
 import { usePermission } from '../hooks/usePermission';
 import ProjectTransactionMaster from './ProjectTransactionMaster';
@@ -922,16 +923,14 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  </main>
  </div>
 
- {/* CREATE PROJECT MODAL */}
- <ModalForm
+ {/* CREATE PROJECT TOP OVERLAY FORM */}
+ <InlineTopForm
  isOpen={isModalOpen}
  onClose={resetForm}
  title={isEditMode ? t('common.edit', lang) : t('projects.newPlan', lang)}
  subtitle={isEditMode ? "Structural Audit & Modification" : t('projects.ventureCapital', lang)}
  onSubmit={handleReviewCreate}
  submitLabel={isEditMode ? "Verify & Save Updates" : t('projects.launchVenture', lang)}
-
- maxWidth="max-w-6xl"
  loading={isSubmitting}
  >
  <div className="space-y-8">
@@ -1078,7 +1077,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  )}
  </div>
  </div>
- </ModalForm>
+ </InlineTopForm>
 
  <ProjectTransactionMaster
  lang={lang}

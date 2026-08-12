@@ -11,6 +11,7 @@ import { formatCurrency } from '../utils/formatters';
 import { Language, t } from '../i18n/translations';
 import ActionDialog from './ActionDialog';
 import { ModalForm, FormInput, FormSelect } from './ui/FormElements';
+import { InlineTopForm } from './ui/InlineTopForm';
 import PermissionGuard from './PermissionGuard';
 import Pagination from './Pagination';
 import SummaryMetricCard from './SummaryMetricCard';
@@ -149,6 +150,12 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
             const mapped = response.data.map((t: any) => {
                 const memberIdentity = resolveMemberIdentity(t.memberId, globalMembers);
                 const fallbackMember = globalMembers.find(m => m.id === t.memberMongoId || m.memberId === t.memberDisplayId);
+                const rawFundId = typeof t.fundId === 'object' && t.fundId ? (t.fundId._id || t.fundId.id) : (t.fundId || '');
+                const matchedFund = funds.find(f => f.id === rawFundId || (f as any)._id === rawFundId);
+                const resolvedFundName = (t.fundName && !t.fundName.includes('-'))
+                    ? t.fundName
+                    : (t.fundId?.name || matchedFund?.name || 'General Fund');
+
                 return {
                     id: t._id || t.id,
                     memberId: t.memberDisplayId || fallbackMember?.memberId || memberIdentity.memberDisplayId, // Display ID
@@ -160,8 +167,8 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                     shareNumber: Math.floor(t.amount / SHARE_WORTH),
                     depositMonth: localizeMonthYearLabel((t.description?.match(/\[(.*?)\]/) || [])[1] || t.description || 'N/A', lang),
                     cashierName: t.handlingOfficer || 'System',
-                    fundId: t.fundId?._id || t.fundId, // Capture fund ID
-                    fundName: t.fundId?.name || t.fundId || 'N/A', // Capture fund Name
+                    fundId: rawFundId, // Capture fund ID
+                    fundName: resolvedFundName, // Capture actual fund Name
                     depositMethod: t.depositMethod || 'Cash', // Capture Method
                     createdAt: t.createdAt ? new Date(t.createdAt).toLocaleDateString() : new Date(t.date).toLocaleDateString(),
                     updatedAt: t.updatedAt && t.updatedAt !== t.createdAt ? new Date(t.updatedAt).toLocaleDateString() : undefined
@@ -789,7 +796,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
             align: 'right',
             render: (dep) => (
                 <PermissionGuard screen={AppScreen.DEPOSITS} requiredLevel={AccessLevel.WRITE}>
-                    <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
+                    <div className="flex justify-end gap-3 transition-all">
                         <button
                             onClick={(e) => {
                                 e.preventDefault();
@@ -913,6 +920,161 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                 </div>
             </div>
 
+            <InlineTopForm
+                isOpen={isModalOpen}
+                onClose={handleCloseModal}
+                title={editingDeposit ? t('deposits.editDeposit', lang) || 'Edit Deposit' : t('deposits.initializeDeposit', lang)}
+                subtitle={t('deposits.moduleTitle', lang)}
+                onSubmit={handleSubmit}
+                submitLabel={editingDeposit ? t('common.update', lang) || 'Update' : t('deposits.commitTx', lang)}
+                loading={isSubmitting}
+            >
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-4">
+                    {/* Field 1: Partner */}
+                    <FormSelect
+                        label={t('deposits.strategicPartner', lang)}
+                        name="memberId"
+                        value={formData.memberId}
+                        onChange={handleMemberChange}
+                        placeholder={t('deposits.selectMember', lang)}
+                        options={activeMembers.map(p => ({
+                            value: p.id,
+                            label: `${p.name} (#${p.memberId}) - ${p.shares} ${t('deposits.shares', lang)}`,
+                            className: "bg-white dark:bg-dark text-dark dark:text-white"
+                        }))}
+                        icon={<User size={18} />}
+                        required
+                        disabled={!!editingDeposit}
+                        className={!!editingDeposit ? "opacity-60 cursor-not-allowed" : ""}
+                    />
+
+                    {/* Field 2: Shares */}
+                    <FormInput
+                        label={t('deposits.sharesCount', lang)}
+                        name="shareNumber"
+                        value={formData.shareNumber}
+                        readOnly
+                        required
+                        className="opacity-70 cursor-not-allowed"
+                    />
+
+                    {/* Field 3: Target Fund */}
+                    <FormSelect
+                        label={t('deposits.targetFund', lang)}
+                        name="fundId"
+                        value={formData.fundId}
+                        onChange={e => {
+                            const selectedFundId = e.target.value;
+                            if (!selectedFundId) {
+                                setFormData({ ...formData, fundId: '' });
+                                return;
+                            }
+                            const selectedFund = funds.find(f => f.id === selectedFundId);
+                            setFormData({
+                                ...formData,
+                                fundId: selectedFundId,
+                                cashierName: selectedFund?.handlingOfficer || 'System'
+                            });
+                        }}
+                        placeholder={t('deposits.selectFund', lang)}
+                        options={funds.filter(f => (f.type === 'DEPOSIT' || f.type === 'Primary' || f.type === 'OTHER') && f.status !== 'ARCHIVED').map(f => ({
+                            value: f.id,
+                            label: `${f.name} (${f.balance.toLocaleString()} ${f.currency || currencyCode})`
+                        }))}
+                        icon={<CheckSquare size={18} />}
+                        required
+                    />
+
+                    {/* Field 4: Amount */}
+                    <div className="space-y-2 relative">
+                        <div className="flex items-center justify-between px-1">
+                            <label className="text-[10px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{`${t('deposits.totalAmountCurrency', lang)} (${currencyCode})`}</label>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (!editingDeposit) handleToggleAutoCalc();
+                                }}
+                                className={`flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-brand hover:opacity-80 transition-all ${!!editingDeposit ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                {autoCalculate ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
+                                {t('deposits.autoCalc', lang)}
+                            </button>
+                        </div>
+                        <input
+                            required
+                            disabled={autoCalculate || !!editingDeposit}
+                            type="number"
+                            value={formData.amount}
+                            onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                            className={`w-full bg-gray-50 dark:bg-[#111814] px-5 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/10 focus:ring-2 focus:ring-dark dark:focus:ring-brand outline-none text-sm font-bold text-dark dark:text-white transition-all ${(autoCalculate || !!editingDeposit) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        />
+                    </div>
+
+                    {/* Field 5: Month */}
+                    <MonthPickerField
+                        label={t('deposits.depositMonth', lang)}
+                        value={formData.depositMonth}
+                        lang={lang}
+                        required
+                        onChange={(depositMonth) => {
+                            const currentMonth = getCurrentMonthYear();
+                            const lockedDate = depositMonth !== currentMonth
+                                ? getDateFromMonthStr(depositMonth)
+                                : new Date().toISOString().split('T')[0];
+
+                            setFormData((prev) => ({
+                                ...prev,
+                                depositMonth,
+                                txnDate: lockedDate || prev.txnDate
+                            }));
+                        }}
+                    />
+
+                    {/* Field 6: Officer */}
+                    <FormInput
+                        label={t('deposits.handlingOfficer', lang)}
+                        value={formData.cashierName}
+                        readOnly
+                        required
+                        className="opacity-70 cursor-not-allowed"
+                    />
+
+                    {/* Field 7: Method */}
+                    <FormSelect
+                        label="Deposit Method"
+                        name="depositMethod"
+                        value={formData.depositMethod}
+                        onChange={e => setFormData({ ...formData, depositMethod: e.target.value })}
+                        options={['Cash', 'Bank', 'Mobile Banking', 'Check', 'Other'].map(m => ({
+                            value: m,
+                            label: m
+                        }))}
+                        required
+                    />
+
+                    {/* Field New: Transaction Date */}
+                    <FormInput
+                        label={t('deposits.transactionDate', lang)}
+                        name="txnDate"
+                        type="date"
+                        value={formData.txnDate}
+                        onChange={e => setFormData({ ...formData, txnDate: e.target.value })}
+                        required
+                        className={formData.depositMonth !== getCurrentMonthYear() ? "opacity-60 cursor-not-allowed" : ""}
+                        disabled={formData.depositMonth !== getCurrentMonthYear()}
+                    />
+                </div>
+
+                <div className="mt-2">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-white/5 rounded-2xl">
+                        <p className="text-[11px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">{t('deposits.savingsImpact', lang)}</p>
+                        <p className="text-2xl font-black text-dark dark:text-brand tracking-tighter leading-none">
+                            + {formatCurrency(parseInt(formData.amount || '0'))}
+                        </p>
+                    </div>
+                </div>
+            </InlineTopForm>
+
             <div id="deposits-snapshot-target" className="space-y-10">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <SummaryMetricCard
@@ -1012,166 +1174,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                 </div>
             </div>
 
-            {
-                isModalOpen && (
-                    <ModalForm
-                        isOpen={isModalOpen}
-                        onClose={handleCloseModal}
-                        title={editingDeposit ? t('deposits.editDeposit', lang) || 'Edit Deposit' : t('deposits.initializeDeposit', lang)}
-                        subtitle={t('deposits.moduleTitle', lang)}
-                        onSubmit={handleSubmit}
-                        submitLabel={editingDeposit ? t('common.update', lang) || 'Update' : t('deposits.commitTx', lang)}
-                        maxWidth="max-w-7xl"
-                        loading={isSubmitting}
-                    >
-                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8">
-                            {/* Field 1: Partner */}
-                            <FormSelect
-                                label={t('deposits.strategicPartner', lang)}
-                                name="memberId"
-                                value={formData.memberId}
-                                onChange={handleMemberChange}
-                                placeholder={t('deposits.selectMember', lang)}
-                                options={activeMembers.map(p => ({
-                                    value: p.id, // Use Mongo ID
-                                    label: `${p.name} (#${p.memberId}) - ${p.shares} ${t('deposits.shares', lang)}`,
-                                    className: "bg-white dark:bg-dark text-dark dark:text-white"
-                                }))}
-                                icon={<User size={18} />}
-                                required
-                                disabled={!!editingDeposit}
-                                className={!!editingDeposit ? "opacity-60 cursor-not-allowed" : ""}
-                            />
 
-                            {/* Field 2: Shares */}
-                            <FormInput
-                                label={t('deposits.sharesCount', lang)}
-                                name="shareNumber"
-                                value={formData.shareNumber}
-                                readOnly
-                                required
-                                className="opacity-70 cursor-not-allowed"
-                            />
-
-                            {/* Field 3: Target Fund */}
-                            <FormSelect
-                                label={t('deposits.targetFund', lang)}
-                                name="fundId"
-                                value={formData.fundId}
-                                onChange={e => {
-                                    const selectedFundId = e.target.value;
-                                    // Only find if we have a valid ID (filter out placeholder calls if any, though native select event sends value)
-                                    if (!selectedFundId) {
-                                        setFormData({ ...formData, fundId: '' });
-                                        return;
-                                    }
-                                    const selectedFund = funds.find(f => f.id === selectedFundId);
-                                    setFormData({
-                                        ...formData,
-                                        fundId: selectedFundId,
-                                        cashierName: selectedFund?.handlingOfficer || 'System'
-                                    });
-                                }}
-                                placeholder={t('deposits.selectFund', lang)}
-                                options={funds.filter(f => (f.type === 'DEPOSIT' || f.type === 'Primary' || f.type === 'OTHER') && f.status !== 'ARCHIVED').map(f => ({
-                                    value: f.id,
-                                    label: `${f.name} (${f.balance.toLocaleString()} ${f.currency || currencyCode})`
-                                }))}
-                                icon={<CheckSquare size={18} />}
-                                required
-                            />
-
-                            {/* Field 4: Amount */}
-                            <div className="space-y-2 relative">
-                                <div className="flex items-center justify-between px-1">
-                                    <label className="text-[10px] font-black text-gray-600 dark:text-gray-400 uppercase tracking-widest">{`${t('deposits.totalAmountCurrency', lang)} (${currencyCode})`}</label>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            if (!editingDeposit) handleToggleAutoCalc();
-                                        }}
-                                        className={`flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-brand hover:opacity-80 transition-all ${!!editingDeposit ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    >
-                                        {autoCalculate ? <CheckSquare size={12} strokeWidth={3} /> : <Square size={12} strokeWidth={3} />}
-                                        {t('deposits.autoCalc', lang)}
-                                    </button>
-                                </div>
-                                <input
-                                    required
-                                    disabled={autoCalculate || !!editingDeposit}
-                                    type="number"
-                                    value={formData.amount}
-                                    onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                                    className={`w-full bg-gray-50 dark:bg-[#111814] px-5 py-4 rounded-2xl border-none ring-1 ring-gray-100 dark:ring-white/10 focus:ring-2 focus:ring-dark dark:focus:ring-brand outline-none text-sm font-bold text-dark dark:text-white transition-all ${(autoCalculate || !!editingDeposit) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                />
-                            </div>
-
-                            {/* Field 5: Month */}
-                            <MonthPickerField
-                                label={t('deposits.depositMonth', lang)}
-                                value={formData.depositMonth}
-                                lang={lang}
-                                required
-                                onChange={(depositMonth) => {
-                                    const currentMonth = getCurrentMonthYear();
-                                    const lockedDate = depositMonth !== currentMonth
-                                        ? getDateFromMonthStr(depositMonth)
-                                        : new Date().toISOString().split('T')[0];
-
-                                    setFormData((prev) => ({
-                                        ...prev,
-                                        depositMonth,
-                                        txnDate: lockedDate || prev.txnDate
-                                    }));
-                                }}
-                            />
-
-                            {/* Field 6: Officer */}
-                            <FormInput
-                                label={t('deposits.handlingOfficer', lang)}
-                                value={formData.cashierName}
-                                readOnly
-                                required
-                                className="opacity-70 cursor-not-allowed"
-                            />
-
-                            {/* Field 7: Method */}
-                            <FormSelect
-                                label="Deposit Method"
-                                name="depositMethod"
-                                value={formData.depositMethod}
-                                onChange={e => setFormData({ ...formData, depositMethod: e.target.value })}
-                                options={['Cash', 'Bank', 'Mobile Banking', 'Check', 'Other'].map(m => ({
-                                    value: m,
-                                    label: m
-                                }))}
-                                required
-                            />
-
-                            {/* Field New: Transaction Date */}
-                            <FormInput
-                                label={t('deposits.transactionDate', lang)}
-                                name="txnDate"
-                                type="date"
-                                value={formData.txnDate}
-                                onChange={e => setFormData({ ...formData, txnDate: e.target.value })}
-                                required
-                                className={formData.depositMonth !== getCurrentMonthYear() ? "opacity-60 cursor-not-allowed" : ""}
-                                disabled={formData.depositMonth !== getCurrentMonthYear()}
-                            />
-                        </div>
-
-                        <div className="mt-auto">
-                            <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-white/5 rounded-3xl">
-                                <p className="text-[11px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">{t('deposits.savingsImpact', lang)}</p>
-                                <p className="text-3xl font-black text-dark dark:text-brand tracking-tighter leading-none">
-                                    + {formatCurrency(parseInt(formData.amount || '0'))}
-                                </p>
-                            </div>
-                        </div>
-                    </ModalForm>
-                )
-            }
 
             {
                 isBulkModalOpen && (

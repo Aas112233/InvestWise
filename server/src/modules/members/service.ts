@@ -21,6 +21,13 @@ export interface CreateMemberInput {
   shares: number;
   status: string;
   avatar?: string;
+  nidOrPassport?: string;
+  fatherName?: string;
+  address?: string;
+  nomineeName?: string;
+  nomineeRelation?: string;
+  nomineeNidOrPassport?: string;
+  nomineePhone?: string;
 }
 
 export interface UpdateMemberInput {
@@ -30,8 +37,13 @@ export interface UpdateMemberInput {
   role?: string;
   status?: string;
   avatar?: string;
-  // shares is intentionally excluded — shares are derived from totalContributed / shareValueBdt
-  // and cannot be manually changed. Use deposit/equity-transfer to adjust.
+  nidOrPassport?: string;
+  fatherName?: string;
+  address?: string;
+  nomineeName?: string;
+  nomineeRelation?: string;
+  nomineeNidOrPassport?: string;
+  nomineePhone?: string;
 }
 
 export interface OnboardMemberInput {
@@ -44,6 +56,13 @@ export interface OnboardMemberInput {
   password?: string;
   userRole: string;
   status: string;
+  nidOrPassport?: string;
+  fatherName?: string;
+  address?: string;
+  nomineeName?: string;
+  nomineeRelation?: string;
+  nomineeNidOrPassport?: string;
+  nomineePhone?: string;
 }
 
 export interface ListMembersQuery {
@@ -88,6 +107,13 @@ const MEMBER_FIELDS = {
   avatar: members.avatar,
   lastActive: members.lastActive,
   hasUserAccess: members.hasUserAccess,
+  nidOrPassport: members.nidOrPassport,
+  fatherName: members.fatherName,
+  address: members.address,
+  nomineeName: members.nomineeName,
+  nomineeRelation: members.nomineeRelation,
+  nomineeNidOrPassport: members.nomineeNidOrPassport,
+  nomineePhone: members.nomineePhone,
   userId: members.userId,
   createdBy: members.createdBy,
   updatedBy: members.updatedBy,
@@ -225,6 +251,13 @@ export async function getMemberById(id: string) {
       avatar: members.avatar,
       lastActive: members.lastActive,
       hasUserAccess: members.hasUserAccess,
+      nidOrPassport: members.nidOrPassport,
+      fatherName: members.fatherName,
+      address: members.address,
+      nomineeName: members.nomineeName,
+      nomineeRelation: members.nomineeRelation,
+      nomineeNidOrPassport: members.nomineeNidOrPassport,
+      nomineePhone: members.nomineePhone,
       userId: members.userId,
       createdBy: members.createdBy,
       updatedBy: members.updatedBy,
@@ -262,6 +295,13 @@ export async function getMemberById(id: string) {
     avatar: r.avatar,
     lastActive: r.lastActive,
     hasUserAccess: r.hasUserAccess,
+    nidOrPassport: r.nidOrPassport,
+    fatherName: r.fatherName,
+    address: r.address,
+    nomineeName: r.nomineeName,
+    nomineeRelation: r.nomineeRelation,
+    nomineeNidOrPassport: r.nomineeNidOrPassport,
+    nomineePhone: r.nomineePhone,
     userId: r.userId,
     createdBy: r.createdBy,
     updatedBy: r.updatedBy,
@@ -310,11 +350,18 @@ export async function createMember(data: CreateMemberInput) {
           memberId,
           name: data.name,
           email: data.email,
-          phone: data.phone,
+          phone: data.phone || '',
           role: data.role,
           shares: data.shares,
           status: data.status,
-          ...(data.avatar ? { avatar: data.avatar } : {}),
+          avatar: data.avatar || null,
+          nidOrPassport: data.nidOrPassport || null,
+          fatherName: data.fatherName || null,
+          address: data.address || null,
+          nomineeName: data.nomineeName || null,
+          nomineeRelation: data.nomineeRelation || null,
+          nomineeNidOrPassport: data.nomineeNidOrPassport || null,
+          nomineePhone: data.nomineePhone || null,
         })
         .returning();
 
@@ -368,12 +415,27 @@ export async function updateMember(id: string, data: UpdateMemberInput) {
     }
   }
 
+  const updatePayload: Record<string, any> = {
+    updatedAt: new Date(),
+  };
+
+  if (data.name !== undefined) updatePayload.name = data.name;
+  if (data.email !== undefined) updatePayload.email = data.email;
+  if (data.phone !== undefined) updatePayload.phone = data.phone;
+  if (data.role !== undefined) updatePayload.role = data.role;
+  if (data.status !== undefined) updatePayload.status = data.status;
+  if (data.avatar !== undefined) updatePayload.avatar = data.avatar;
+  if (data.nidOrPassport !== undefined) updatePayload.nidOrPassport = data.nidOrPassport;
+  if (data.fatherName !== undefined) updatePayload.fatherName = data.fatherName;
+  if (data.address !== undefined) updatePayload.address = data.address;
+  if (data.nomineeName !== undefined) updatePayload.nomineeName = data.nomineeName;
+  if (data.nomineeRelation !== undefined) updatePayload.nomineeRelation = data.nomineeRelation;
+  if (data.nomineeNidOrPassport !== undefined) updatePayload.nomineeNidOrPassport = data.nomineeNidOrPassport;
+  if (data.nomineePhone !== undefined) updatePayload.nomineePhone = data.nomineePhone;
+
   const [updated] = await db
     .update(members)
-    .set({
-      ...data,
-      updatedAt: new Date(),
-    })
+    .set(updatePayload)
     .where(eq(members.id, id))
     .returning();
 
@@ -471,11 +533,18 @@ export async function onboardMember(data: OnboardMemberInput) {
         memberId,
         name: data.name,
         email: data.email,
-        phone: data.phone,
+        phone: data.phone || '',
         role: data.role,
         shares: data.shares,
         status: data.status,
         hasUserAccess: data.systemAccess,
+        nidOrPassport: data.nidOrPassport || null,
+        fatherName: data.fatherName || null,
+        address: data.address || null,
+        nomineeName: data.nomineeName || null,
+        nomineeRelation: data.nomineeRelation || null,
+        nomineeNidOrPassport: data.nomineeNidOrPassport || null,
+        nomineePhone: data.nomineePhone || null,
       })
       .returning();
 
