@@ -215,18 +215,27 @@ web_modules/
 *.local
 
 # =====================================
-# AI/Claude Code
+# AI / Agent Metadata & Local Tools
 # =====================================
 .gemini/
 .antigravityignore
 .vercel
-.env*
-/tests
-/tests/_tests
-server/src/__tests__/api-smoke.test.ts
+.vercel/
+client/.vercel/
+server/.vercel/
 .codegraph/
-
-.claude/
-.gemini/
 .codegraphignore
+.claude/
+.lingma/
 .mimocode/
+.agent/
+.agents/
+_agent/
+_agents/
+skills-lock.json
+
+# Scratch scripts
+_dream_query*.py
+fix_vite.js
+*.pyc
+__pycache__/
