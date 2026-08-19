@@ -1,0 +1,97 @@
+name: Database Backup (Cloudflare R2)
+
+on:
+  schedule:
+    # Runs daily at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: 'Days of backups to retain (default: 30)'
+        required: false
+        default: '30'
+
+jobs:
+  backup:
+    name: Backup PostgreSQL to Cloudflare R2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL Client & AWS CLI
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client awscli
+
+      - name: Dump Database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%d_%H-%M-%SZ")
+          FILENAME="investwise-backup-${TIMESTAMP}.dump"
+          echo "FILENAME=${FILENAME}" >> $GITHUB_ENV
+          echo "TIMESTAMP=${TIMESTAMP}" >> $GITHUB_ENV
+
+          echo "Starting database dump..."
+          pg_dump "$DATABASE_URL" \
+            --format=custom \
+            --no-owner \
+            --no-privileges \
+            --file="${FILENAME}"
+
+          DUMP_SIZE=$(du -h "${FILENAME}" | cut -f1)
+          echo "Dump completed successfully (${DUMP_SIZE})"
+          echo "DUMP_SIZE=${DUMP_SIZE}" >> $GITHUB_ENV
+
+      - name: Upload Backup to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          
+          echo "Uploading ${FILENAME} to Cloudflare R2..."
+          aws s3 cp "${FILENAME}" "s3://${R2_BUCKET_NAME}/backups/${FILENAME}" \
+            --endpoint-url "${R2_ENDPOINT}"
+
+          echo "Updating latest pointer..."
+          aws s3 cp "${FILENAME}" "s3://${R2_BUCKET_NAME}/backups/latest.dump" \
+            --endpoint-url "${R2_ENDPOINT}"
+
+          echo "Upload complete."
+
+      - name: Prune Old Backups (Retention Policy)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          RETENTION_DAYS: ${{ github.event.inputs.retention_days || '30' }}
+        run: |
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          CUTOFF_DATE=$(date -d "${RETENTION_DAYS} days ago" +%Y-%m-%d)
+          echo "Pruning backups older than ${CUTOFF_DATE}..."
+
+          aws s3 ls "s3://${R2_BUCKET_NAME}/backups/" --endpoint-url "${R2_ENDPOINT}" | while read -r line; do
+            FILE=$(echo "$line" | awk '{print $4}')
+            if [[ "$FILE" =~ investwise-backup-([0-9]{4}-[0-9]{2}-[0-9]{2})_.*\.dump ]]; then
+              FILE_DATE="${BASH_REMATCH[1]}"
+              if [[ "$FILE_DATE" < "$CUTOFF_DATE" ]]; then
+                echo "Deleting expired backup: ${FILE}"
+                aws s3 rm "s3://${R2_BUCKET_NAME}/backups/${FILE}" --endpoint-url "${R2_ENDPOINT}"
+              fi
+            fi
+          done
+
+      - name: Job Summary
+        run: |
+          echo "### Database Backup Successful 🛡️" >> $GITHUB_STEP_SUMMARY
+          echo "- **File**: \`${{ env.FILENAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Size**: \`${{ env.DUMP_SIZE }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp**: \`${{ env.TIMESTAMP }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Destination**: Cloudflare R2 (\`${{ secrets.R2_BUCKET_NAME }}/backups/\`)" >> $GITHUB_STEP_SUMMARY
