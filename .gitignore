@@ -239,3 +239,4 @@ _dream_query*.py
 fix_vite.js
 *.pyc
 __pycache__/
+.env*
