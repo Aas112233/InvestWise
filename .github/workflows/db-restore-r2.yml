@@ -26,6 +26,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: |
+          cd server && npm install @aws-sdk/client-s3
+
       - name: Install PostgreSQL 17 Client
         run: |
           sudo install -d /etc/apt/keyrings
@@ -37,23 +46,14 @@ jobs:
 
       - name: Download Backup from Cloudflare R2
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: us-east-1
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
           BACKUP_FILE: ${{ github.event.inputs.backup_file }}
+          NODE_PATH: server/node_modules
         run: |
-          aws configure set default.s3.addressing_style path
-          aws configure set default.s3.signature_version s3v4
-          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          echo "Downloading ${BACKUP_FILE} from Cloudflare R2..."
-          
-          aws s3 cp "s3://${R2_BUCKET_NAME}/backups/${BACKUP_FILE}" "./restore.dump" \
-            --endpoint-url "${R2_ENDPOINT}" \
-            --region us-east-1
-
-          echo "Download complete ($(du -h restore.dump | cut -f1))"
+          node scripts/r2-restore-download.js
 
       - name: Execute pg_restore
         env:
