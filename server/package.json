@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npx tsc && node -e \"require('fs').cpSync('api','dist/api',{recursive:true})\"",
+    "build": "npx tsc",
     "start": "tsx src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

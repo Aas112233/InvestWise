@@ -11,11 +11,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-// Compiled output lives one level up from dist/api/ (i.e. in dist/)
-import app from '../app.js';
-import { connectDB } from '../config/database.js';
+// Compiled TypeScript output lives in dist/
+import app from '../dist/app.js';
+import { connectDB } from '../dist/config/database.js';
 
 // Lazy-connect to database on first request (serverless cold start)
 let dbConnected = false;
