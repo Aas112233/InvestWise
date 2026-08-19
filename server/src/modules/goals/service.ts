@@ -1,6 +1,6 @@
 import { getDb } from '../../config/database.js';
 import { goals } from '../../db/schema/index.js';
-import { eq, desc, asc, sql, type SQL } from 'drizzle-orm';
+import { eq, desc, asc, sql } from 'drizzle-orm';
 import { NotFoundError, ForbiddenError } from '../../shared/errors.js';
 import { getPaginationParams, formatPaginatedResponse } from '../../shared/types.js';
 import type { PaginatedResponse } from '../../shared/types.js';

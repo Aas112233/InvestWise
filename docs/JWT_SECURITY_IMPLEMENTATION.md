@@ -87,7 +87,7 @@ This document describes the comprehensive JWT security enhancements and automati
 
 ---
 
-## ⏱ **Session Timeout Feature**
+##  **Session Timeout Feature**
 
 ### 1. Inactivity Detection
 
@@ -129,7 +129,7 @@ Session extended with message
 
 **Visual Elements:**
 - Security shield icon
-- ⏱ Live countdown timer (MM:SS format)
+-  Live countdown timer (MM:SS format)
 - Progress bar (green → yellow → red)
 - Two action buttons:
  - "Logout Now" - Immediate logout

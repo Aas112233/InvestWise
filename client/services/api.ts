@@ -18,6 +18,7 @@ const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
 
 const api = axios.create({
     baseURL: apiBaseUrl,
+    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -31,17 +32,26 @@ const MAX_RETRY_DELAY = 10000; // 10 seconds
 
 // Token refresh lock to prevent multiple simultaneous refresh requests
 let isRefreshing = false;
-let refreshSubscribers: ((token: string) => void)[] = [];
+let refreshSubscribers: Array<{
+    resolve: (token: string) => void;
+    reject: (error: any) => void;
+}> = [];
 let isRedirectingToLogin = false;
 
 // Subscribe to token refresh
-const subscribeTokenRefresh = (cb: (token: string) => void) => {
-    refreshSubscribers.push(cb);
+const subscribeTokenRefresh = (resolve: (token: string) => void, reject: (error: any) => void) => {
+    refreshSubscribers.push({ resolve, reject });
 };
 
-// Call all refresh subscribers
+// Call all refresh subscribers on success
 const onRefreshed = (token: string) => {
-    refreshSubscribers.forEach(cb => cb(token));
+    refreshSubscribers.forEach(sub => sub.resolve(token));
+    refreshSubscribers = [];
+};
+
+// Reject all refresh subscribers on failure
+const onRefreshFailed = (error: any) => {
+    refreshSubscribers.forEach(sub => sub.reject(error));
     refreshSubscribers = [];
 };
 
@@ -159,71 +169,60 @@ api.interceptors.response.use(
 
             const userInfo = localStorage.getItem('userInfo');
             if (userInfo) {
-                try {
-                    const { refreshToken } = JSON.parse(userInfo);
+                if (!isRefreshing) {
+                    isRefreshing = true;
 
-                    if (refreshToken && !isRefreshing) {
-                        isRefreshing = true;
-
+                    try {
+                        // Try to refresh token via HttpOnly cookie (or body fallback)
+                        let refreshToken: string | undefined;
                         try {
-                            // Try to refresh the token
-                            const { data } = await api.post('/auth/refresh', { refreshToken });
+                            const parsed = JSON.parse(userInfo);
+                            refreshToken = parsed.refreshToken;
+                        } catch {}
 
-                            // Update stored user info with new tokens
-                            const updatedUserInfo = {
-                                ...JSON.parse(userInfo),
-                                accessToken: data.accessToken,
-                                refreshToken: data.refreshToken,
-                            };
-                            localStorage.setItem('userInfo', JSON.stringify(updatedUserInfo));
+                        const { data } = await api.post('/auth/refresh', refreshToken ? { refreshToken } : {});
 
-                            isRefreshing = false;
-                            onRefreshed(data.accessToken);
-
-                            // Retry original request with new token
-                            originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
-                            return api(originalRequest);
-                        } catch (refreshError) {
-                            isRefreshing = false;
-                            // Refresh failed, logout user immediately
-                            console.warn('Token refresh failed, redirecting to login');
-                            redirectToLogin({ session: 'expired' });
-
-                            return Promise.reject(refreshError);
+                        // Update stored user info with refreshed tokens
+                        if (userInfo && data.accessToken) {
+                            try {
+                                const parsed = JSON.parse(userInfo);
+                                parsed.accessToken = data.accessToken;
+                                if (data.refreshToken) {
+                                    parsed.refreshToken = data.refreshToken;
+                                }
+                                localStorage.setItem('userInfo', JSON.stringify(parsed));
+                            } catch {}
                         }
-                    } else if (refreshToken && isRefreshing) {
-                        // Wait for the refresh to complete
-                        return new Promise((resolve) => {
-                            subscribeTokenRefresh((token: string) => {
-                                originalRequest.headers.Authorization = `Bearer ${token}`;
-                                resolve(api(originalRequest));
-                            });
-                        });
+
+                        isRefreshing = false;
+                        onRefreshed(data.accessToken || '');
+
+                        // Retry original request
+                        if (data.accessToken) {
+                            originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+                        }
+                        return api(originalRequest);
+                    } catch (refreshError) {
+                        isRefreshing = false;
+                        onRefreshFailed(refreshError);
+                        // Refresh failed, logout user immediately
+                        console.warn('Token refresh failed, redirecting to login');
+                        redirectToLogin({ session: 'expired' });
+
+                        return Promise.reject(refreshError);
                     }
-                } catch (parseError) {
-                    console.error('Failed to parse user info for refresh:', parseError);
-                    redirectToLogin({ session: 'expired', error: 'invalid_session' });
+                } else {
+                    // Wait for the refresh to complete
+                    return new Promise((resolve, reject) => {
+                        subscribeTokenRefresh((token: string) => {
+                            if (token) {
+                                originalRequest.headers.Authorization = `Bearer ${token}`;
+                            }
+                            resolve(api(originalRequest));
+                        }, reject);
+                    });
                 }
             }
-
-            // No refresh token available, logout
-            console.warn('No refresh token found, redirecting to login');
-            redirectToLogin({ session: 'expired' });
-        }
-
-        const message = error.response?.data?.message || error.message || 'An error occurred';
-        error.message = message;
-
-        // Enhance error object with network status info if applicable
-        if (!error.response) {
-            error.isNetworkError = true;
-        }
-
-        // Add database connection error detection
-        if (error.response?.data?.error === 'SERVICE_UNAVAILABLE' ||
-            error.response?.data?.error === 'DATABASE_UNREACHABLE') {
-            error.isDatabaseError = true;
-            error.retryAfter = error.response?.data?.retryAfter || 5;
         }
 
         return Promise.reject(error);
@@ -244,33 +243,53 @@ export const isDatabaseError = (error: any): boolean => {
         error.response?.status === 503;
 };
 
+// In-flight GET request deduplication cache
+const inFlightGetRequests = new Map<string, Promise<any>>();
+
+const deduplicatedGet = async <T = any>(url: string, config?: any): Promise<T> => {
+    const key = `${url}:${JSON.stringify(config || {})}`;
+    if (inFlightGetRequests.has(key)) {
+        return inFlightGetRequests.get(key)!;
+    }
+
+    const requestPromise = api.get<T>(url, config)
+        .then((response) => response.data)
+        .finally(() => {
+            inFlightGetRequests.delete(key);
+        });
+
+    inFlightGetRequests.set(key, requestPromise);
+    return requestPromise;
+};
+
 export const authService = {
     login: async (email: string, password: string) => {
         const { data } = await api.post('/auth/login', { email, password });
-        if (data.accessToken) {
+        if (data) {
             localStorage.setItem('userInfo', JSON.stringify(data));
         }
         return data;
     },
     logout: async () => {
-        const userInfo = localStorage.getItem('userInfo');
-        if (userInfo) {
-            try {
-                const { refreshToken } = JSON.parse(userInfo);
-                await api.post('/auth/logout', { refreshToken });
-            } catch (error) {
-                console.error('Logout error:', error);
-            } finally {
-                localStorage.removeItem('userInfo');
-            }
+        try {
+            await api.post('/auth/logout');
+        } catch (error) {
+            console.error('Logout error:', error);
+        } finally {
+            localStorage.removeItem('userInfo');
         }
     },
     logoutAllDevices: async () => {
-        await api.post('/auth/logout-all');
-        localStorage.removeItem('userInfo');
+        try {
+            await api.post('/auth/logout-all');
+        } catch (error) {
+            console.error('Logout all error:', error);
+        } finally {
+            localStorage.removeItem('userInfo');
+        }
     },
-    refreshToken: async (refreshToken: string) => {
-        const { data } = await api.post('/auth/refresh', { refreshToken });
+    refreshToken: async (refreshToken?: string) => {
+        const { data } = await api.post('/auth/refresh', refreshToken ? { refreshToken } : {});
         return data;
     },
     register: async (userData: any) => {
@@ -278,12 +297,10 @@ export const authService = {
         return data;
     },
     getProfile: async () => {
-        const { data } = await api.get('/auth/profile');
-        return data;
+        return deduplicatedGet('/auth/profile');
     },
     getAllUsers: async () => {
-        const { data } = await api.get('/auth/users');
-        return data;
+        return deduplicatedGet('/auth/users');
     },
     updateUser: async (id: string, data: any) => {
         const { data: responseData } = await api.put(`/auth/users/${id}`, data);
@@ -301,7 +318,14 @@ export const authService = {
 
 export const memberService = {
     getAll: async (params?: { page?: number; limit?: number; search?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' }) => {
-        const { data } = await api.get('/members', { params });
+        return deduplicatedGet('/members', { params });
+    },
+    getMyProfile: async () => {
+        const { data } = await api.get('/members/me');
+        return data;
+    },
+    getById: async (id: string) => {
+        const { data } = await api.get(`/members/${id}`);
         return data;
     },
     create: async (memberData: any) => {
@@ -328,8 +352,7 @@ export const memberService = {
 
 export const projectService = {
     getAll: async (params?: { page?: number; limit?: number; search?: string }) => {
-        const { data } = await api.get('/projects', { params });
-        return data;
+        return deduplicatedGet('/projects', { params });
     },
     create: async (projectData: any) => {
         const { data } = await api.post('/projects', projectData);
@@ -359,8 +382,7 @@ export const projectService = {
 
 export const fundService = {
     getAll: async () => {
-        const { data } = await api.get('/funds');
-        return data;
+        return deduplicatedGet('/funds');
     },
     create: async (fundData: any) => {
         const { data } = await api.post('/funds', fundData);
@@ -373,9 +395,8 @@ export const fundService = {
 };
 
 export const financeService = {
-    getTransactions: async (params?: { page?: number; limit?: number; search?: string; searchField?: string; sortBy?: string; sortOrder?: 'asc' | 'desc'; type?: string; status?: string }) => {
-        const { data } = await api.get('/finance/transactions', { params });
-        return data;
+    getTransactions: async (params?: { page?: number; limit?: number; search?: string; searchField?: string; sortBy?: string; sortOrder?: 'asc' | 'desc'; type?: string; status?: string; projectId?: string; memberId?: string; fundId?: string; startDate?: string; endDate?: string; month?: string | number; year?: string | number; [key: string]: any }) => {
+        return deduplicatedGet('/finance/transactions', { params });
     },
     addDeposit: async (depositData: any) => {
         const { data } = await api.post('/finance/deposits', depositData);
@@ -443,6 +464,12 @@ export const reportService = {
         });
         return response.data;
     },
+    getData: async (type: string, queryString: string) => {
+        const response = await api.get(`/reports/generate/${encodeURIComponent(type)}?${queryString}`, {
+            timeout: 60000
+        });
+        return response.data;
+    },
     exportGeneric: async (payload: { title?: string, columns: any[], data: any[], fileName: string, lang?: string }) => {
         const response = await api.post('/reports/export-generic', payload, {
             responseType: 'blob',
@@ -454,8 +481,7 @@ export const reportService = {
 
 export const analyticsService = {
     getStats: async () => {
-        const { data } = await api.get('/analytics/stats');
-        return data;
+        return deduplicatedGet('/analytics/stats');
     },
     recalculate: async () => {
         const { data } = await api.post('/analytics/recalculate');
@@ -465,23 +491,19 @@ export const analyticsService = {
 
 export const auditService = {
     getLogs: async (params?: any) => {
-        const { data } = await api.get('/audit', { params });
-        return data;
+        return deduplicatedGet('/audit', { params });
     },
     getMetadata: async () => {
-        const { data } = await api.get('/audit/metadata');
-        return data;
+        return deduplicatedGet('/audit/metadata');
     },
     getNotifications: async () => {
-        const { data } = await api.get('/audit/notifications');
-        return data;
+        return deduplicatedGet('/audit/notifications');
     }
 };
 
 export const goalService = {
     getAll: async () => {
-        const { data } = await api.get('/goals');
-        return data;
+        return deduplicatedGet('/goals');
     },
     create: async (goalData: any) => {
         const { data } = await api.post('/goals', goalData);
@@ -497,10 +519,77 @@ export const goalService = {
     }
 };
 
+export const meetingsService = {
+    getMeetings: async (params?: Record<string, any>) => {
+        return deduplicatedGet('/meetings', { params });
+    },
+    getMeetingById: async (id: string) => {
+        return deduplicatedGet(`/meetings/${id}`);
+    },
+    createMeeting: async (meetingData: any) => {
+        const { data } = await api.post('/meetings', meetingData);
+        return data;
+    },
+    updateMeeting: async (id: string, meetingData: any) => {
+        const { data } = await api.put(`/meetings/${id}`, meetingData);
+        return data;
+    },
+    startMeeting: async (id: string) => {
+        const { data } = await api.post(`/meetings/${id}/start`);
+        return data;
+    },
+    recordAttendance: async (id: string, records: Array<{ memberId: string; attendanceStatus: string; notes?: string }>) => {
+        const { data } = await api.post(`/meetings/${id}/attendance`, { records });
+        return data;
+    },
+    completeMeeting: async (id: string, notes?: string | null) => {
+        const { data } = await api.post(`/meetings/${id}/complete`, { notes: notes ?? null });
+        return data;
+    },
+    deleteMeeting: async (id: string) => {
+        const { data } = await api.delete(`/meetings/${id}`);
+        return data;
+    },
+};
+
+export const governanceService = {
+    getLeaderboard: async () => {
+        return deduplicatedGet('/governance/leaderboard');
+    },
+    getMemberPerformance: async (memberId: string, months?: number) => {
+        return deduplicatedGet(`/governance/performance/member/${memberId}`, { params: { months } });
+    },
+    recalculateMemberPerformance: async (memberId: string) => {
+        const { data } = await api.post(`/governance/performance/member/${memberId}/recalculate`);
+        return data;
+    },
+    recalculateAllPerformance: async () => {
+        const { data } = await api.post('/governance/performance/recalculate-all');
+        return data;
+    },
+    getPenalties: async (params?: Record<string, any>) => {
+        return deduplicatedGet('/governance/penalties', { params });
+    },
+    getMemberPenalties: async (memberId: string) => {
+        return deduplicatedGet(`/governance/penalties/member/${memberId}`);
+    },
+    issuePenalty: async (penaltyData: any) => {
+        const { data } = await api.post('/governance/penalties', penaltyData);
+        return data;
+    },
+    adjustMemberPerformance: async (memberId: string, newScore: number, reason?: string) => {
+        const { data } = await api.post(`/governance/performance/member/${memberId}/adjust`, { newScore, reason });
+        return data;
+    },
+    waivePenalty: async (id: string, waiveReason: string) => {
+        const { data } = await api.post(`/governance/penalties/${id}/waive`, { waiveReason });
+        return data;
+    },
+};
+
 export const settingsService = {
     get: async () => {
-        const { data } = await api.get('/settings');
-        return data;
+        return deduplicatedGet('/settings');
     },
     update: async (settingsData: any) => {
         const { data } = await api.put('/settings', settingsData);

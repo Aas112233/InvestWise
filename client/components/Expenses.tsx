@@ -1,19 +1,20 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Filter, X, Calendar, User, Briefcase, CreditCard, Download, Layers, Trash2, Loader2, RefreshCw, Edit2 } from 'lucide-react';
+import { Plus, Search, Filter, X, Calendar, User, Briefcase, CreditCard, Download, Layers, Trash2, Loader2, RefreshCw, Edit2, Printer } from 'lucide-react';
 import { Expense, Member, Project, AccessLevel, AppScreen } from '../types';
 import { Table, TableColumn } from './ui/Table';
 import Toast, { ToastType } from './Toast';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { financeService } from '../services/api';
 import ExportMenu from './ExportMenu';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, formatDate } from '../utils/formatters';
 import { Language, t } from '../i18n/translations';
 import ActionDialog from './ActionDialog';
 import { ModalForm, FormInput, FormSelect, FormTextarea } from './ui/FormElements';
 import { InlineTopForm } from './ui/InlineTopForm';
 import PermissionGuard from './PermissionGuard';
 import SummaryMetricCard from './SummaryMetricCard';
+import { generateExpenseVoucher, VoucherDocument } from '../utils/voucherGenerator';
+import PrintableReceiptModal from './ui/PrintableReceiptModal';
 
 type SortKey = keyof Expense;
 
@@ -23,6 +24,8 @@ interface ExpensesProps {
 
 const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
  const { expenses: globalExpenses, members: globalMembers, projects: globalProjects, funds: globalFunds, addExpense, refreshTransactions, currentUser, currencyCode } = useGlobalState();
+ const [selectedVoucher, setSelectedVoucher] = useState<VoucherDocument | null>(null);
+ const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
  const [expenses, setExpenses] = useState<Expense[]>([]);
 
  useEffect(() => {
@@ -293,7 +296,7 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
  key: 'amount',
  header: t('transactions.valuation', lang),
  sortable: true,
- align: 'right',
+align: 'right',
  cellClassName: 'font-black text-dark dark:text-white text-lg tracking-tighter',
  render: (exp) => `${currencyCode} ${exp.amount.toLocaleString()}`
  },
@@ -302,31 +305,46 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
  header: t('transactions.actions', lang),
  align: 'right',
  render: (exp) => (
- <PermissionGuard screen={AppScreen.EXPENSES} requiredLevel={AccessLevel.WRITE}>
- <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
- <button
- onClick={() => handleOpenModal(exp)}
- className="p-3 bg-white dark:bg-[#111814] rounded-2xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-brand hover:border-brand/30 transition-all shadow-sm"
- >
- <Edit2 size={16} />
- </button>
- <button
- onClick={(e) => {
- e.preventDefault();
- e.stopPropagation();
- handleDeleteClick(exp.id, exp.reason);
- }}
- disabled={!!processingId}
- className={`p-3 rounded-2xl border transition-all ${processingId === exp.id
- ? 'bg-rose-50 border-rose-100 cursor-wait'
- : 'bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-rose-500 hover:border-rose-500/30 shadow-sm'
- }`}
- title="Archive Expense"
- >
- {processingId === exp.id ? <Loader2 size={16} className="animate-spin text-rose-500" /> : <Trash2 size={16} />}
- </button>
- </div>
- </PermissionGuard>
+  <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all">
+  <button
+  onClick={(e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const voucher = generateExpenseVoucher(exp, globalProjects, globalFunds, currencyCode);
+  setSelectedVoucher(voucher);
+  setIsReceiptModalOpen(true);
+  }}
+  title="Print Expense Voucher"
+  className="p-3 bg-white dark:bg-[#111814] rounded-2xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-500/30 transition-all shadow-sm"
+  >
+  <Printer size={16} />
+  </button>
+  <PermissionGuard screen={AppScreen.EXPENSES} requiredLevel={AccessLevel.WRITE}>
+  <div className="flex gap-2">
+  <button
+  onClick={() => handleOpenModal(exp)}
+  className="p-3 bg-white dark:bg-[#111814] rounded-2xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-brand hover:border-brand/30 transition-all shadow-sm"
+  >
+  <Edit2 size={16} />
+  </button>
+  <button
+  onClick={(e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  handleDeleteClick(exp.id, exp.reason);
+  }}
+  disabled={!!processingId}
+  className={`p-3 rounded-2xl border transition-all ${processingId === exp.id
+  ? 'bg-rose-50 border-rose-100 cursor-wait'
+  : 'bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-rose-500 hover:border-rose-500/30 shadow-sm'
+  }`}
+  title="Archive Expense"
+  >
+  {processingId === exp.id ? <Loader2 size={16} className="animate-spin text-rose-500" /> : <Trash2 size={16} />}
+  </button>
+  </div>
+  </PermissionGuard>
+  </div>
  )
  }
  ];
@@ -368,14 +386,14 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
  <ExportMenu
  data={filteredAndSortedExpenses}
  columns={[
- { header: 'ID', key: 'id' },
- { header: t('transactions.date', lang), key: 'date', format: (e: any) => new Date(e.date).toLocaleDateString() },
- { header: t('expenses.category', lang), key: 'category' },
- { header: t('transactions.description', lang), key: 'reason' },
- { header: t('nav.members', lang), key: 'memberName' },
- { header: t('projects.project', lang), key: 'projectName', format: (e: any) => e.projectName || 'N/A' },
- { header: `${t('transactions.valuation', lang)} (${currencyCode})`, key: 'amount', format: (e: any) => e.amount.toLocaleString() },
- { header: t('deposits.targetFund', lang), key: 'sourceFund' }
+ { header: t('transactions.date', lang) || 'Date', key: 'date', format: (e: any) => e.date ? formatDate(e.date) : 'N/A' },
+ { header: 'Reference', key: 'referenceNumber', format: (e: any) => e.referenceNumber || 'N/A' },
+ { header: t('expenses.category', lang) || 'Category', key: 'category', format: (e: any) => e.category || 'General' },
+ { header: t('transactions.description', lang) || 'Description', key: 'reason', format: (e: any) => e.reason || e.description || 'N/A' },
+ { header: t('nav.members', lang) || 'Officer / Member Name', key: 'memberName', format: (e: any) => e.memberName || e.memberId?.name || (globalMembers.find(m => m.id === e.memberId)?.name) || 'N/A' },
+ { header: t('projects.project', lang) || 'Project Name', key: 'projectName', format: (e: any) => e.projectName || e.projectId?.name || (globalProjects.find(p => p.id === e.projectId)?.name) || 'General Operations' },
+ { header: `${t('transactions.valuation', lang) || 'Amount'} (${currencyCode})`, key: 'amount', format: (e: any) => Number(e.amount || 0).toLocaleString() },
+ { header: t('deposits.targetFund', lang) || 'Source Fund Name', key: 'sourceFund', format: (e: any) => e.sourceFund || e.fundName || e.fundId?.name || (globalFunds.find(f => f.id === e.fundId)?.name) || 'Central Fund' }
  ]}
  fileName={`expenses_${new Date().toISOString().split('T')[0]}`}
  title={t('expenses.reportTitle', lang)}
@@ -385,7 +403,7 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
  <PermissionGuard screen={AppScreen.EXPENSES} requiredLevel={AccessLevel.WRITE}>
  <button
  onClick={() => handleOpenModal()}
- className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20"
+ className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20 cursor-pointer"
  >
  <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
  </button>
@@ -525,6 +543,12 @@ const Expenses: React.FC<ExpensesProps> = ({ lang }) => {
  </div>
  </div>
  </InlineTopForm>
+
+ <PrintableReceiptModal
+ isOpen={isReceiptModalOpen}
+ onClose={() => setIsReceiptModalOpen(false)}
+ voucher={selectedVoucher}
+ />
  </div>
  );
 };

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, ArrowUpRight, ArrowDownLeft, Briefcase, CreditCard, Download, Trash2, Loader2, RefreshCw } from 'lucide-react';
-import { Transaction } from '../types';
+import { Search, Filter, ArrowUpRight, ArrowDownLeft, Briefcase, CreditCard, Download, Trash2, Loader2, RefreshCw, Printer } from 'lucide-react';
+import { Transaction, AppScreen, AccessLevel } from '../types';
 import { Table, TableColumn } from './ui/Table';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { financeService } from '../services/api';
@@ -12,13 +12,19 @@ import { Language, t } from '../i18n/translations';
 import SearchBar from './SearchBar';
 import Pagination from './Pagination';
 import SummaryMetricCard from './SummaryMetricCard';
+import { generateTransactionVoucher, VoucherDocument } from '../utils/voucherGenerator';
+import PrintableReceiptModal from './ui/PrintableReceiptModal';
+import { usePermission } from '../hooks/usePermission';
 
 interface TransactionsProps {
   lang: Language;
 }
 
 const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
-  const { transactions, refreshTransactions, currencyCode } = useGlobalState();
+  const { transactions = [], members = [], funds = [], projects = [], refreshTransactions, currencyCode } = useGlobalState();
+  const canWrite = usePermission(AppScreen.TRANSACTIONS, AccessLevel.WRITE);
+  const [selectedVoucher, setSelectedVoucher] = useState<VoucherDocument | null>(null);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('All');
   const [sortBy, setSortBy] = useState('date');
@@ -27,6 +33,7 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const [paginatedData, setPaginatedData] = useState<{
     data: Transaction[];
     total: number;
@@ -34,11 +41,19 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
     totalInflow: number;
     totalOutflow: number;
     meta?: any;
-  }>({ data: [], total: 0, pages: 0, totalInflow: 0, totalOutflow: 0 });
-  const [loading, setLoading] = useState(true);
+  }>(() => ({
+    data: safeTransactions.slice(0, 10),
+    total: safeTransactions.length,
+    pages: Math.ceil(safeTransactions.length / 10) || 1,
+    totalInflow: 0,
+    totalOutflow: 0,
+  }));
+  const [loading, setLoading] = useState(() => safeTransactions.length === 0);
 
   const fetchPaginatedTransactions = async (page: number, limit: number, search: string, sort: string, order: 'asc' | 'desc', type: string) => {
-    setLoading(true);
+    if (paginatedData.data.length === 0) {
+      setLoading(true);
+    }
     try {
       const params: any = {
         page,
@@ -170,13 +185,15 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
   };
 
   const exportColumns = [
-    { header: 'ID', key: 'id' },
-    { header: t('transactions.date', lang), key: 'date', format: (t: any) => formatDate(t.date) },
-    { header: t('transactions.type', lang), key: 'type' },
-    { header: t('transactions.description', lang), key: 'description' },
-    { header: `${t('transactions.valuation', lang)} (${currencyCode})`, key: 'amount', format: (t: any) => t.amount.toLocaleString() },
-    { header: t('transactions.status', lang), key: 'status' },
-    { header: t('analysis.partnerEntity', lang), key: 'member', format: (t: any) => (t as any).memberId?.name || t.member || 'N/A' }
+    { header: t('transactions.date', lang) || 'Date', key: 'date', format: (t: any) => formatDate(t.date) },
+    { header: 'Reference', key: 'referenceNumber', format: (t: any) => t.referenceNumber || 'N/A' },
+    { header: t('transactions.type', lang) || 'Type', key: 'type' },
+    { header: t('analysis.partnerEntity', lang) || 'Partner Name', key: 'member', format: (t: any) => (typeof t.memberId === 'object' && t.memberId ? t.memberId.name : (members.find((m: any) => m.id === t.memberId)?.name)) || t.member || 'N/A' },
+    { header: t('projects.project', lang) || 'Project Name', key: 'projectName', format: (t: any) => (typeof t.projectId === 'object' && t.projectId ? t.projectId.name : (projects.find((p: any) => p.id === t.projectId)?.name)) || 'N/A' },
+    { header: t('funds.fundName', lang) || 'Fund Name', key: 'fundName', format: (t: any) => (typeof t.fundId === 'object' && t.fundId ? t.fundId.name : (funds.find((f: any) => f.id === t.fundId)?.name)) || 'Central Fund' },
+    { header: t('transactions.description', lang) || 'Description', key: 'description', format: (t: any) => t.description || 'N/A' },
+    { header: `${t('transactions.valuation', lang) || 'Amount'} (${currencyCode})`, key: 'amount', format: (t: any) => Number(t.amount || 0).toLocaleString() },
+    { header: t('transactions.status', lang) || 'Status', key: 'status', format: (t: any) => t.status || 'Completed' }
   ];
 
   const tableColumns: TableColumn<Transaction>[] = [
@@ -270,18 +287,35 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
       header: t('transactions.actions', lang),
       align: 'right',
       render: (tx) => (
-        <button
-          onClick={() => handleDeleteClick(tx.id, tx.description)}
-          disabled={!!processingId}
-          className={`p-1 rounded border transition-colors ${
-            processingId === tx.id
-              ? 'bg-red-50 border-red-200 cursor-wait'
-              : 'bg-transparent border-transparent text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 hover:border-red-200 dark:hover:border-red-900/50'
-          }`}
-          title="Archive Transaction"
-        >
-          {processingId === tx.id ? <Loader2 size={14} className="animate-spin text-red-500" /> : <Trash2 size={14} />}
-        </button>
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const voucher = generateTransactionVoucher(tx, members, funds, projects, currencyCode);
+              setSelectedVoucher(voucher);
+              setIsReceiptModalOpen(true);
+            }}
+            className="p-1 rounded border border-transparent text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:border-blue-200 dark:hover:border-blue-900/50 transition-colors"
+            title="Print Transaction Voucher"
+          >
+            <Printer size={14} />
+          </button>
+          {canWrite && (
+            <button
+              onClick={() => handleDeleteClick(tx.id, tx.description)}
+              disabled={!!processingId}
+              className={`p-1 rounded border transition-colors ${
+                processingId === tx.id
+                  ? 'bg-red-50 border-red-200 cursor-wait'
+                  : 'bg-transparent border-transparent text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 hover:border-red-200 dark:hover:border-red-900/50'
+              }`}
+              title="Archive Transaction"
+            >
+              {processingId === tx.id ? <Loader2 size={14} className="animate-spin text-red-500" /> : <Trash2 size={14} />}
+            </button>
+          )}
+        </div>
       )
     }
   ];
@@ -409,6 +443,11 @@ const Transactions: React.FC<TransactionsProps> = ({ lang }) => {
           </div>
         </div>
       </div>
+      <PrintableReceiptModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        voucher={selectedVoucher}
+      />
     </div>
   );
 };

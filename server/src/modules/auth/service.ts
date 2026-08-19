@@ -77,7 +77,7 @@ const USER_SELECT = {
 // ---------------------------------------------------------------------------
 
 const ALL_SCREENS = [
-  'DASHBOARD', 'MEMBERS', 'GOALS', 'DEPOSITS', 'REQUEST_DEPOSIT',
+  'DASHBOARD', 'MEMBERS', 'MEETINGS', 'GOVERNANCE', 'GOALS', 'DEPOSITS', 'REQUEST_DEPOSIT',
   'TRANSACTIONS', 'DIVIDENDS', 'EXPENSES', 'PROJECT_MANAGEMENT',
   'FUNDS_MANAGEMENT', 'ANALYSIS', 'REPORTS', 'SETTINGS',
 ];
@@ -200,9 +200,12 @@ export async function loginUser(
     );
   }
 
-  // --- Find user -----------------------------------------------------------
+  // --- Find user with password in a single query ---------------------------
   const [userRow] = await db
-    .select(USER_SELECT)
+    .select({
+      ...USER_SELECT,
+      passwordHash: users.password,
+    })
     .from(users)
     .where(eq(users.email, normalizedEmail))
     .limit(1);
@@ -220,14 +223,8 @@ export async function loginUser(
     throw new AuthError('Invalid email or password');
   }
 
-  // --- Verify password (need full row for the hash) ------------------------
-  const [userWithPw] = await db
-    .select({ password: users.password })
-    .from(users)
-    .where(eq(users.id, userRow.id))
-    .limit(1);
-
-  const passwordOk = await comparePassword(password, userWithPw.password);
+  // --- Verify password -----------------------------------------------------
+  const passwordOk = await comparePassword(password, userRow.passwordHash);
   if (!passwordOk) {
     await db.insert(loginAttempts).values({
       email: normalizedEmail,
@@ -666,6 +663,9 @@ export async function refreshTokens(refreshToken: string): Promise<RefreshResult
     });
   } catch (insertError) {
     const pgErr = insertError as { code?: string; detail?: string; message?: string; constraint?: string; column?: string };
+    if (pgErr?.code === '23505') {
+      throw new AuthError('Token has been revoked or already rotated', 'TOKEN_REVOKED');
+    }
     console.error('[blacklist INSERT failed]', {
       code: pgErr.code,
       detail: pgErr.detail,
@@ -799,9 +799,13 @@ export async function getSessions(userId: string) {
 export async function revokeSession(userId: string, sessionId: string): Promise<void> {
   const db = getDb();
 
-  const [session] = await db
-    .select({ id: sessions.id })
-    .from(sessions)
+  const [updated] = await db
+    .update(sessions)
+    .set({
+      isActive: false,
+      isExpired: true,
+      logoutTime: new Date(),
+    })
     .where(
       and(
         eq(sessions.sessionId, sessionId),
@@ -809,20 +813,11 @@ export async function revokeSession(userId: string, sessionId: string): Promise<
         eq(sessions.isActive, true),
       ),
     )
-    .limit(1);
+    .returning({ id: sessions.id });
 
-  if (!session) {
+  if (!updated) {
     throw new NotFoundError('Session');
   }
-
-  await db
-    .update(sessions)
-    .set({
-      isActive: false,
-      isExpired: true,
-      logoutTime: new Date(),
-    })
-    .where(eq(sessions.id, session.id));
 }
 
 // ---------------------------------------------------------------------------

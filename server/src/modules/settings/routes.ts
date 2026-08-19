@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { protect, admin } from '../../middleware/auth.js';
+import { protect, requirePermission } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { updateSettingsSchema } from './validation.js';
 import {
@@ -11,7 +11,7 @@ import {
 const router = Router();
 
 router.get('/', protect, getSettingsHandler);
-router.put('/', protect, admin, validate(updateSettingsSchema), updateSettingsHandler);
+router.put('/', protect, requirePermission('SETTINGS', 'WRITE'), validate(updateSettingsSchema), updateSettingsHandler);
 router.get('/share-value-status', protect, getShareValueStatusHandler);
 
 export { router as settingsRouter };

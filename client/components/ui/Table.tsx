@@ -1,5 +1,6 @@
 import React from 'react';
-import { ArrowUp, ArrowDown, ArrowUpDown, RefreshCw } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Skeleton } from './Skeleton';
 
 export interface TableColumn<T> {
   key: string;
@@ -22,19 +23,20 @@ export interface TableProps<T> {
   onSort?: (field: string) => void;
   rowKey: (item: T, index: number) => string | number;
   rowClassName?: (item: T) => string;
+  loadingRowCount?: number;
 }
 
 export function Table<T>({
   data,
   columns,
   loading = false,
-  loadingMessage = 'Loading...',
   emptyMessage = 'No data found',
   sortBy,
   sortOrder,
   onSort,
   rowKey,
   rowClassName,
+  loadingRowCount = 6,
 }: TableProps<T>) {
   
   const SortIcon = ({ column }: { column: string }) => {
@@ -79,14 +81,44 @@ export function Table<T>({
         </thead>
         <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
           {loading ? (
-            <tr>
-              <td colSpan={columns.length} className="px-4 py-12 text-center border-b border-gray-200 dark:border-gray-800">
-                <div className="flex flex-col items-center gap-2">
-                  <RefreshCw className="animate-spin text-blue-600 dark:text-blue-400" size={24} />
-                  <p className="text-xs font-medium text-slate-400">{loadingMessage}</p>
-                </div>
-              </td>
-            </tr>
+            Array.from({ length: loadingRowCount }).map((_, rIdx) => (
+              <tr key={`loading-row-${rIdx}`} className="border-b border-gray-200 dark:border-gray-800">
+                {columns.map((col, cIdx) => {
+                  const alignmentClass = 
+                    col.align === 'center' ? 'text-center' : 
+                    col.align === 'right' ? 'text-right' : 'text-left';
+                  
+                  return (
+                    <td 
+                      key={`loading-col-${cIdx}`} 
+                      className={`px-3 py-3 border-r border-gray-200 dark:border-gray-800 last:border-r-0 ${alignmentClass}`}
+                    >
+                      {cIdx === 0 ? (
+                        <div className="flex items-center gap-2">
+                          <Skeleton width="1.75rem" height="1.75rem" borderRadius="9999px" />
+                          <div className="space-y-1 flex-1">
+                            <Skeleton width="75%" height="0.75rem" borderRadius="0.25rem" />
+                            <Skeleton width="45%" height="0.55rem" borderRadius="0.25rem" />
+                          </div>
+                        </div>
+                      ) : cIdx === columns.length - 1 ? (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Skeleton width="1.5rem" height="1.5rem" borderRadius="0.25rem" />
+                          <Skeleton width="1.5rem" height="1.5rem" borderRadius="0.25rem" />
+                        </div>
+                      ) : (
+                        <Skeleton 
+                          width={`${Math.max(35, (((rIdx + cIdx) * 19) % 55) + 35)}%`} 
+                          height="0.75rem" 
+                          borderRadius="0.25rem" 
+                          className={col.align === 'center' ? 'mx-auto' : col.align === 'right' ? 'ml-auto' : ''}
+                        />
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))
           ) : data.length === 0 ? (
             <tr>
               <td colSpan={columns.length} className="px-4 py-12 text-center border-b border-gray-200 dark:border-gray-800">

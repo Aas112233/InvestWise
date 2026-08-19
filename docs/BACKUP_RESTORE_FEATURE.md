@@ -58,7 +58,7 @@ The InvestWise application now includes a comprehensive backup and restore syste
 │                  │                          │
 └──────────────────┴──────────────────────────┘
 
-⚠ Important Notes:
+[WARN] Important Notes:
 - Backups include all data
 - Store securely
 - Restoring replaces all data
@@ -185,7 +185,7 @@ Currently returns placeholder response for future server-side backup storage.
 
 ### Restoring from Backup
 
-⚠️ **WARNING:** This will permanently replace ALL current data!
+[WARN] **WARNING:** This will permanently replace ALL current data!
 
 1. **Select Backup File**
    - Click "Choose File" button
@@ -207,16 +207,16 @@ Currently returns placeholder response for future server-side backup storage.
 ## Security Considerations
 
 ### Access Control
-- ✅ Requires authentication (JWT token)
-- ✅ Requires Admin or Administrator role
-- ✅ Middleware protection on all routes
-- ✅ No public access
+- [OK] Requires authentication (JWT token)
+- [OK] Requires Admin or Administrator role
+- [OK] Middleware protection on all routes
+- [OK] No public access
 
 ### Data Protection
-- ✅ File size limit: 50MB
-- ✅ JSON format validation
-- ✅ Transactional restore (atomic operation)
-- ✅ Rollback on failure
+- [OK] File size limit: 50MB
+- [OK] JSON format validation
+- [OK] Transactional restore (atomic operation)
+- [OK] Rollback on failure
 
 ### Best Practices
 1. **Encryption:** Encrypt backup files at rest

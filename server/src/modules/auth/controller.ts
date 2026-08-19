@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { asyncHandler } from '../../shared/asyncHandler.js';
 import * as authService from './service.js';
 import { ForbiddenError } from '../../shared/errors.js';
+import { setAuthCookies, clearAuthCookies, COOKIE_NAMES } from '../../lib/cookies.js';
 
 // ---------------------------------------------------------------------------
 // POST /login
@@ -15,8 +16,10 @@ export const authUser = asyncHandler(async (req: Request, res: Response) => {
   try {
     const result = await authService.loginUser(email, password, ip, userAgent, location);
 
-    // Frontend stores the entire response as the user object,
-    // so spread user fields + tokens at the top level.
+    // Set secure HttpOnly cookies for accessToken & refreshToken
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+
+    // Spread user fields + tokens for backwards compatibility with existing clients
     res.status(200).json({
       ...result.user,
       accessToken: result.accessToken,
@@ -123,7 +126,7 @@ export const changeCurrentUserPassword = asyncHandler(async (req: Request, res: 
 // POST /refresh
 // ---------------------------------------------------------------------------
 export const refreshToken = asyncHandler(async (req: Request, res: Response) => {
-  const { refreshToken: token } = req.body;
+  const token = req.cookies?.[COOKIE_NAMES.REFRESH_TOKEN] || req.body.refreshToken;
 
   if (!token) {
     res.status(400).json({
@@ -134,6 +137,9 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
   }
 
   const tokens = await authService.refreshTokens(token);
+
+  // Rotate HttpOnly cookies
+  setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
 
   res.status(200).json({
     success: true,
@@ -146,10 +152,13 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
 // POST /logout
 // ---------------------------------------------------------------------------
 export const logoutUser = asyncHandler(async (req: Request, res: Response) => {
-  const refreshToken = req.body.refreshToken as string | undefined;
+  const refreshToken = req.cookies?.[COOKIE_NAMES.REFRESH_TOKEN] || (req.body.refreshToken as string | undefined);
   const sessionId = req.body.sessionId as string | undefined;
 
   await authService.logoutUser(req.user!.id, refreshToken, sessionId);
+
+  // Clear HttpOnly auth cookies
+  clearAuthCookies(res);
 
   res.status(200).json({
     success: true,
@@ -162,6 +171,9 @@ export const logoutUser = asyncHandler(async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 export const logoutAllDevices = asyncHandler(async (req: Request, res: Response) => {
   await authService.logoutAllDevices(req.user!.id);
+
+  // Clear HttpOnly auth cookies
+  clearAuthCookies(res);
 
   res.status(200).json({
     success: true,

@@ -1,7 +1,7 @@
 import { getDb, getSql } from '../../config/database.js';
-import { transactions, funds, members, projects, projectUpdates, auditLogs, deletedRecords, systemSettings } from '../../db/schema/index.js';
+import { transactions, funds, members, projects, projectUpdates, auditLogs, deletedRecords, users } from '../../db/schema/index.js';
 import type { SQL } from 'drizzle-orm';
-import { eq, and, or, desc, asc, count, ilike, inArray, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, or, desc, asc, count, ilike, inArray, gte, lte, sql, aliasedTable } from 'drizzle-orm';
 import { AppError, NotFoundError, ConflictError } from '../../shared/errors.js';
 import { getPaginationParams, formatPaginatedResponse } from '../../shared/types.js';
 import { isValidUUID } from '../../shared/utils.js';
@@ -55,7 +55,7 @@ function parseDepositMonthLabel(depositMonth: string): Date | null {
  * Resolve the effective deposit date.
  * Prefers depositMonth label; falls back to explicit date; then first of current month.
  */
-function resolveDepositDate(date?: string, depositMonth?: string): Date {
+function resolveDepositDate(date?: string | null, depositMonth?: string | null): Date {
   const fromMonth = depositMonth ? parseDepositMonthLabel(depositMonth) : null;
   if (fromMonth) return fromMonth;
 
@@ -202,6 +202,31 @@ export async function getTransactions(query: Record<string, string | undefined>)
     conditions.push(eq(transactions.status, query.status));
   }
 
+  // --- project filter ----------------------------------------------------
+  if (query.projectId) {
+    conditions.push(eq(transactions.projectId, query.projectId));
+  }
+
+  // --- member filter -----------------------------------------------------
+  if (query.memberId) {
+    conditions.push(eq(transactions.memberId, query.memberId));
+  }
+
+  // --- fund filter -------------------------------------------------------
+  if (query.fundId) {
+    conditions.push(eq(transactions.fundId, query.fundId));
+  }
+
+  // --- date range filter -------------------------------------------------
+  if (query.startDate) {
+    conditions.push(sql`${transactions.date} >= ${new Date(query.startDate).toISOString()}::timestamptz`);
+  }
+  if (query.endDate) {
+    const end = new Date(query.endDate);
+    end.setHours(23, 59, 59, 999);
+    conditions.push(sql`${transactions.date} <= ${end.toISOString()}::timestamptz`);
+  }
+
   // --- month + year filter -----------------------------------------------
   if (query.month && query.year) {
     const month = parseInt(query.month, 10);
@@ -232,49 +257,78 @@ export async function getTransactions(query: Record<string, string | undefined>)
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  // --- total count -------------------------------------------------------
-  const [totalResult] = await db
-    .select({ count: count() })
-    .from(transactions)
-    .where(whereClause);
-  const totalCount = Number(totalResult.count);
+  const authorizer = aliasedTable(users, 'txn_authorizer');
+  const creator = aliasedTable(users, 'txn_creator');
 
-  // --- fetch page --------------------------------------------------------
-  const rows = await db
-    .select({
-      id: transactions.id,
-      type: transactions.type,
-      amount: transactions.amount,
-      description: transactions.description,
-      category: transactions.category,
-      referenceNumber: transactions.referenceNumber,
-      date: transactions.date,
-      status: transactions.status,
-      memberId: transactions.memberId,
-      projectId: transactions.projectId,
-      fundId: transactions.fundId,
-      handlingOfficer: transactions.handlingOfficer,
-      depositMethod: transactions.depositMethod,
-      balanceBefore: transactions.balanceBefore,
-      balanceAfter: transactions.balanceAfter,
-      isDeleted: transactions.isDeleted,
-      memberDisplayId: members.memberId,
-      memberName: members.name,
-      memberEmail: members.email,
-      fundName: funds.name,
-      projectName: projects.title,
-      referenceNumberOut: transactions.referenceNumber,
-      createdAt: transactions.createdAt,
-      updatedAt: transactions.updatedAt,
-    })
-    .from(transactions)
-    .leftJoin(members, eq(transactions.memberId, members.id))
-    .leftJoin(funds, eq(transactions.fundId, funds.id))
-    .leftJoin(projects, eq(transactions.projectId, projects.id))
-    .where(whereClause)
-    .orderBy(...orderBy)
-    .offset(skip)
-    .limit(limit);
+  // --- totals (inflow / outflow / monthly) --------------------------------
+  const totalsConditions: (SQL | undefined)[] = [];
+  if (conditions.length > 0) {
+    for (const c of conditions) {
+      totalsConditions.push(c);
+    }
+  }
+  totalsConditions.push(inArray(transactions.status, ['Completed', 'Processing']));
+
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  // Execute Count, Paginated Rows, and Financial Totals in Parallel (single network roundtrip)
+  const [[totalResult], rows, [totalsRow]] = await Promise.all([
+    db
+      .select({ count: count() })
+      .from(transactions)
+      .where(whereClause),
+    db
+      .select({
+        id: transactions.id,
+        type: transactions.type,
+        amount: transactions.amount,
+        description: transactions.description,
+        category: transactions.category,
+        referenceNumber: transactions.referenceNumber,
+        date: transactions.date,
+        status: transactions.status,
+        memberId: transactions.memberId,
+        projectId: transactions.projectId,
+        fundId: transactions.fundId,
+        handlingOfficer: transactions.handlingOfficer,
+        depositMethod: transactions.depositMethod,
+        balanceBefore: transactions.balanceBefore,
+        balanceAfter: transactions.balanceAfter,
+        isDeleted: transactions.isDeleted,
+        memberDisplayId: members.memberId,
+        memberName: members.name,
+        memberEmail: members.email,
+        fundName: funds.name,
+        projectName: projects.title,
+        authorizedByName: authorizer.name,
+        createdByName: creator.name,
+        referenceNumberOut: transactions.referenceNumber,
+        createdAt: transactions.createdAt,
+        updatedAt: transactions.updatedAt,
+      })
+      .from(transactions)
+      .leftJoin(members, eq(transactions.memberId, members.id))
+      .leftJoin(funds, eq(transactions.fundId, funds.id))
+      .leftJoin(projects, eq(transactions.projectId, projects.id))
+      .leftJoin(authorizer, eq(transactions.authorizedBy, authorizer.id))
+      .leftJoin(creator, eq(transactions.createdBy, creator.id))
+      .where(whereClause)
+      .orderBy(...orderBy)
+      .offset(skip)
+      .limit(limit),
+    db
+      .select({
+        totalInflow: sql`COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment') THEN amount::numeric ELSE 0 END), 0)`,
+        totalOutflow: sql`COALESCE(SUM(CASE WHEN type IN ('Expense', 'Withdrawal', 'Dividend') THEN amount::numeric ELSE 0 END), 0)`,
+        totalMonthly: sql`COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment') AND ${transactions.date} >= ${startOfMonth.toISOString()}::timestamptz THEN amount::numeric ELSE 0 END), 0)`,
+      })
+      .from(transactions)
+      .where(and(...totalsConditions)),
+  ]);
+
+  const totalCount = Number(totalResult?.count ?? 0);
 
   const data = rows.map((r) => ({
     ...r,
@@ -285,34 +339,10 @@ export async function getTransactions(query: Record<string, string | undefined>)
     memberName: r.memberName || 'Unknown',
     fundName: r.fundName || 'N/A',
     projectName: r.projectName || '',
+    authorizedBy: r.authorizedByName || r.handlingOfficer || 'System',
+    createdBy: r.createdByName || r.handlingOfficer || 'System',
+    approvedBy: r.authorizedByName || r.handlingOfficer || 'System',
   }));
-
-  // --- totals (inflow / outflow / monthly) --------------------------------
-  const totalsConditions: (SQL | undefined)[] = [];
-  if (conditions.length > 0) {
-    // Reuse search / type / date conditions but ensure we cover successful status
-    for (const c of conditions) {
-      // skip the isDeleted filter if present — we add it manually below
-      totalsConditions.push(c);
-    }
-  }
-  totalsConditions.push(inArray(transactions.status, ['Completed', 'Processing']));
-
-  // Rebuild month filter for totals as well
-  // We don't push another isDeleted because condition[0] already covers it.
-
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  startOfMonth.setHours(0, 0, 0, 0);
-
-  const [totalsRow] = await db
-    .select({
-      totalInflow: sql`COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment') THEN amount::numeric ELSE 0 END), 0)`,
-      totalOutflow: sql`COALESCE(SUM(CASE WHEN type IN ('Expense', 'Withdrawal', 'Dividend') THEN amount::numeric ELSE 0 END), 0)`,
-      totalMonthly: sql`COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment') AND ${transactions.date} >= ${startOfMonth.toISOString()}::timestamptz THEN amount::numeric ELSE 0 END), 0)`,
-    })
-    .from(transactions)
-    .where(and(...totalsConditions));
 
   const response = formatPaginatedResponse(data, page, limit, totalCount);
 
@@ -332,9 +362,9 @@ export async function addDeposit(data: DepositInput, userId: string, userName: s
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [fund] = await tx.select().from(funds).where(eq(funds.id, data.fundId)).limit(1);
+    const [fund] = await tx.select().from(funds).where(eq(funds.id, data.fundId)).for('update').limit(1);
     if (!fund) throw new NotFoundError('Fund');
-    const [member] = await tx.select().from(members).where(eq(members.id, data.memberId)).limit(1);
+    const [member] = await tx.select().from(members).where(eq(members.id, data.memberId)).for('update').limit(1);
     if (!member) throw new NotFoundError('Member');
 
     const amount = Number(data.amount);
@@ -366,15 +396,16 @@ export async function addDeposit(data: DepositInput, userId: string, userName: s
     if (isCompleted) {
       await tx
         .update(funds)
-        .set({ balance: fmtAmount(toNum(fund.balance) + amount), updatedAt: new Date() })
+        .set({
+          balance: sql<string>`(${funds.balance}::numeric + ${amount})::numeric(15,2)`,
+          updatedAt: new Date(),
+        })
         .where(eq(funds.id, data.fundId));
-
-      const newContributed = toNum(member.totalContributed) + amount;
 
       await tx
         .update(members)
         .set({
-          totalContributed: fmtAmount(newContributed),
+          totalContributed: sql<string>`(${members.totalContributed}::numeric + ${amount})::numeric(15,2)`,
           lastDepositMonth: depositDate.toISOString().slice(0, 7),
           updatedAt: new Date(),
         })
@@ -409,7 +440,7 @@ export async function editDeposit(id: string, data: DepositInput, userId: string
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [existing] = await tx.select().from(transactions).where(eq(transactions.id, id)).limit(1);
+    const [existing] = await tx.select().from(transactions).where(eq(transactions.id, id)).for('update').limit(1);
     if (!existing) throw new NotFoundError('Transaction');
     if (existing.type !== 'Deposit') throw new AppError('Transaction is not a deposit', 400, 'INVALID_TYPE');
 
@@ -426,39 +457,51 @@ export async function editDeposit(id: string, data: DepositInput, userId: string
 
     // 1. Revert old financial impact
     if (wasCompleted) {
-      const [oldFund] = await tx.select().from(funds).where(eq(funds.id, oldFundId)).limit(1);
+      const [oldFund] = await tx.select().from(funds).where(eq(funds.id, oldFundId)).for('update').limit(1);
       if (oldFund) {
         await tx
           .update(funds)
-          .set({ balance: fmtAmount(toNum(oldFund.balance) - oldAmount), updatedAt: new Date() })
+          .set({
+            balance: sql<string>`(${funds.balance}::numeric - ${oldAmount})::numeric(15,2)`,
+            updatedAt: new Date(),
+          })
           .where(eq(funds.id, oldFundId));
       }
 
-      const [oldMember] = await tx.select().from(members).where(eq(members.id, oldMemberId)).limit(1);
+      const [oldMember] = await tx.select().from(members).where(eq(members.id, oldMemberId)).for('update').limit(1);
       if (oldMember) {
         await tx
           .update(members)
-          .set({ totalContributed: fmtAmount(toNum(oldMember.totalContributed) - oldAmount), updatedAt: new Date() })
+          .set({
+            totalContributed: sql<string>`GREATEST(0, (${members.totalContributed}::numeric - ${oldAmount}))::numeric(15,2)`,
+            updatedAt: new Date(),
+          })
           .where(eq(members.id, oldMemberId));
       }
     }
 
     // 2. Apply new financial impact
     if (isNowCompleted) {
-      const [newFund] = await tx.select().from(funds).where(eq(funds.id, newFundId)).limit(1);
+      const [newFund] = await tx.select().from(funds).where(eq(funds.id, newFundId)).for('update').limit(1);
       if (!newFund) throw new NotFoundError(`Target fund`);
 
       await tx
         .update(funds)
-        .set({ balance: fmtAmount(toNum(newFund.balance) + newAmount), updatedAt: new Date() })
+        .set({
+          balance: sql<string>`(${funds.balance}::numeric + ${newAmount})::numeric(15,2)`,
+          updatedAt: new Date(),
+        })
         .where(eq(funds.id, newFundId));
 
-      const [newMember] = await tx.select().from(members).where(eq(members.id, newMemberId)).limit(1);
+      const [newMember] = await tx.select().from(members).where(eq(members.id, newMemberId)).for('update').limit(1);
       if (!newMember) throw new NotFoundError('Member');
 
       await tx
         .update(members)
-        .set({ totalContributed: fmtAmount(toNum(newMember.totalContributed) + newAmount), updatedAt: new Date() })
+        .set({
+          totalContributed: sql<string>`(${members.totalContributed}::numeric + ${newAmount})::numeric(15,2)`,
+          updatedAt: new Date(),
+        })
         .where(eq(members.id, newMemberId));
     }
 
@@ -513,7 +556,7 @@ export async function approveDeposit(id: string, userId: string, userName: strin
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [txn] = await tx.select().from(transactions).where(eq(transactions.id, id)).limit(1);
+    const [txn] = await tx.select().from(transactions).where(eq(transactions.id, id)).for('update').limit(1);
     if (!txn) throw new NotFoundError('Transaction');
     if (txn.status === 'Success' || txn.status === 'Completed') {
       throw new ConflictError('Transaction already approved');
@@ -522,21 +565,27 @@ export async function approveDeposit(id: string, userId: string, userName: strin
 
     const fundId = txn.fundId!;
     const memberId = txn.memberId!;
-    const [fund] = await tx.select().from(funds).where(eq(funds.id, fundId)).limit(1);
+    const [fund] = await tx.select().from(funds).where(eq(funds.id, fundId)).for('update').limit(1);
     if (!fund) throw new NotFoundError('Fund');
-    const [member] = await tx.select().from(members).where(eq(members.id, memberId)).limit(1);
+    const [member] = await tx.select().from(members).where(eq(members.id, memberId)).for('update').limit(1);
     if (!member) throw new NotFoundError('Member');
 
     const txnAmount = toNum(txn.amount);
 
     await tx
       .update(funds)
-      .set({ balance: fmtAmount(toNum(fund.balance) + txnAmount), updatedAt: new Date() })
+      .set({
+        balance: sql<string>`(${funds.balance}::numeric + ${txnAmount})::numeric(15,2)`,
+        updatedAt: new Date(),
+      })
       .where(eq(funds.id, fundId));
 
     await tx
       .update(members)
-      .set({ totalContributed: fmtAmount(toNum(member.totalContributed) + txnAmount), updatedAt: new Date() })
+      .set({
+        totalContributed: sql<string>`(${members.totalContributed}::numeric + ${txnAmount})::numeric(15,2)`,
+        updatedAt: new Date(),
+      })
       .where(eq(members.id, memberId));
 
     const [updated] = await tx
@@ -577,7 +626,7 @@ export async function addExpense(data: ExpenseInput, userId: string, userName: s
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const fund = await tx.select().from(funds).where(eq(funds.id, data.fundId)).limit(1).then((r) => r[0]);
+    const fund = await tx.select().from(funds).where(eq(funds.id, data.fundId)).for('update').limit(1).then((r) => r[0]);
     if (!fund) throw new NotFoundError('Source Fund');
 
     const projectId = data.projectId || null;
@@ -587,7 +636,7 @@ export async function addExpense(data: ExpenseInput, userId: string, userName: s
 
     // --- Project integrity checks ------------------------------------------
     if (projectId) {
-      projectRef = await tx.select().from(projects).where(eq(projects.id, projectId)).limit(1).then((r) => r[0]);
+      projectRef = await tx.select().from(projects).where(eq(projects.id, projectId)).for('update').limit(1).then((r) => r[0]);
       if (!projectRef) throw new NotFoundError('Project');
       if (projectRef.linkedFundId && projectRef.linkedFundId !== data.fundId) {
         throw new AppError('Transactions for this project must be routed through its dedicated project fund.', 400, 'LINKED_FUND_MISMATCH');
@@ -614,8 +663,8 @@ export async function addExpense(data: ExpenseInput, userId: string, userName: s
       await tx
         .update(projects)
         .set({
-          currentFundBalance: fmtAmount(newProjectBalance),
-          totalExpenses: fmtAmount(toNum(projectRef.totalExpenses) + amount),
+          currentFundBalance: sql<string>`(${projects.currentFundBalance}::numeric - ${amount})::numeric(15,2)`,
+          totalExpenses: sql<string>`(${projects.totalExpenses}::numeric + ${amount})::numeric(15,2)`,
           updatedAt: new Date(),
         })
         .where(eq(projects.id, projectId));
@@ -639,7 +688,10 @@ export async function addExpense(data: ExpenseInput, userId: string, userName: s
     const newFundBalance = toNum(fund.balance) - amount;
     await tx
       .update(funds)
-      .set({ balance: fmtAmount(newFundBalance), updatedAt: new Date() })
+      .set({
+        balance: sql<string>`(${funds.balance}::numeric - ${amount})::numeric(15,2)`,
+        updatedAt: new Date(),
+      })
       .where(eq(funds.id, data.fundId));
 
     // Resolve balanceAfter for transaction record
@@ -700,7 +752,7 @@ export async function editExpense(id: string, data: ExpenseInput, userId: string
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [existing] = await tx.select().from(transactions).where(eq(transactions.id, id)).limit(1);
+    const [existing] = await tx.select().from(transactions).where(eq(transactions.id, id)).for('update').limit(1);
     if (!existing) throw new NotFoundError('Transaction');
     if (existing.type !== 'Expense') throw new AppError('Transaction is not an expense', 400, 'INVALID_TYPE');
 
@@ -714,32 +766,33 @@ export async function editExpense(id: string, data: ExpenseInput, userId: string
 
     // 1. Revert old impact
     if (oldProjectId) {
-      const [proj] = await tx.select().from(projects).where(eq(projects.id, oldProjectId)).limit(1);
+      const [proj] = await tx.select().from(projects).where(eq(projects.id, oldProjectId)).for('update').limit(1);
       if (proj) {
-        const revertedBalance = toNum(proj.currentFundBalance) + oldAmount;
-        const revertedExpenses = Math.max(0, toNum(proj.totalExpenses) - oldAmount);
         await tx
           .update(projects)
           .set({
-            currentFundBalance: fmtAmount(revertedBalance),
-            totalExpenses: fmtAmount(revertedExpenses),
+            currentFundBalance: sql<string>`(${projects.currentFundBalance}::numeric + ${oldAmount})::numeric(15,2)`,
+            totalExpenses: sql<string>`GREATEST(0, (${projects.totalExpenses}::numeric - ${oldAmount}))::numeric(15,2)`,
             updatedAt: new Date(),
           })
           .where(eq(projects.id, oldProjectId));
       }
     }
 
-    const [oldFund] = await tx.select().from(funds).where(eq(funds.id, oldFundId)).limit(1);
+    const [oldFund] = await tx.select().from(funds).where(eq(funds.id, oldFundId)).for('update').limit(1);
     if (oldFund) {
       await tx
         .update(funds)
-        .set({ balance: fmtAmount(toNum(oldFund.balance) + oldAmount), updatedAt: new Date() })
+        .set({
+          balance: sql<string>`(${funds.balance}::numeric + ${oldAmount})::numeric(15,2)`,
+          updatedAt: new Date(),
+        })
         .where(eq(funds.id, oldFundId));
     }
 
     // 2. Apply new impact
     if (newProjectId) {
-      const [proj] = await tx.select().from(projects).where(eq(projects.id, newProjectId)).limit(1);
+      const [proj] = await tx.select().from(projects).where(eq(projects.id, newProjectId)).for('update').limit(1);
       if (!proj) throw new NotFoundError('New project');
       if (proj.linkedFundId && proj.linkedFundId !== newFundId) {
         throw new AppError('Transactions for this project must be routed through its dedicated project fund.', 400, 'LINKED_FUND_MISMATCH');
@@ -751,8 +804,8 @@ export async function editExpense(id: string, data: ExpenseInput, userId: string
       await tx
         .update(projects)
         .set({
-          currentFundBalance: fmtAmount(newProjectBalance),
-          totalExpenses: fmtAmount(toNum(proj.totalExpenses) + newAmount),
+          currentFundBalance: sql<string>`(${projects.currentFundBalance}::numeric - ${newAmount})::numeric(15,2)`,
+          totalExpenses: sql<string>`(${projects.totalExpenses}::numeric + ${newAmount})::numeric(15,2)`,
           updatedAt: new Date(),
         })
         .where(eq(projects.id, newProjectId));
@@ -772,7 +825,7 @@ export async function editExpense(id: string, data: ExpenseInput, userId: string
       }
     }
 
-    const [newFund] = await tx.select().from(funds).where(eq(funds.id, newFundId)).limit(1);
+    const [newFund] = await tx.select().from(funds).where(eq(funds.id, newFundId)).for('update').limit(1);
     if (!newFund) throw new NotFoundError('Source fund');
 
     if (!newProjectId && newFund.type === 'PROJECT') {
@@ -785,7 +838,10 @@ export async function editExpense(id: string, data: ExpenseInput, userId: string
 
     await tx
       .update(funds)
-      .set({ balance: fmtAmount(toNum(newFund.balance) - newAmount), updatedAt: new Date() })
+      .set({
+        balance: sql<string>`(${funds.balance}::numeric - ${newAmount})::numeric(15,2)`,
+        updatedAt: new Date(),
+      })
       .where(eq(funds.id, newFundId));
 
     // 3. Update transaction record
@@ -836,7 +892,7 @@ export async function addEarning(data: EarningInput, userId: string, userName: s
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [fund] = await tx.select().from(funds).where(eq(funds.id, data.fundId)).limit(1);
+    const [fund] = await tx.select().from(funds).where(eq(funds.id, data.fundId)).for('update').limit(1);
     if (!fund) throw new NotFoundError('Target Fund');
 
     const amount = Number(data.amount);
@@ -845,7 +901,7 @@ export async function addEarning(data: EarningInput, userId: string, userName: s
     let projectRef: typeof projects.$inferSelect | null = null;
 
     if (projectId) {
-      projectRef = await tx.select().from(projects).where(eq(projects.id, projectId)).limit(1).then((r) => r[0]);
+      projectRef = await tx.select().from(projects).where(eq(projects.id, projectId)).for('update').limit(1).then((r) => r[0]);
       if (!projectRef) throw new NotFoundError('Project');
       if (projectRef.linkedFundId && projectRef.linkedFundId !== data.fundId) {
         throw new AppError('Transactions for this project must be routed through its dedicated project fund.', 400, 'LINKED_FUND_MISMATCH');
@@ -854,12 +910,15 @@ export async function addEarning(data: EarningInput, userId: string, userName: s
     }
 
     // Update fund
-    const newFundBalance = toNum(fund.balance) + amount;
     await tx
       .update(funds)
-      .set({ balance: fmtAmount(newFundBalance), updatedAt: new Date() })
+      .set({
+        balance: sql<string>`(${funds.balance}::numeric + ${amount})::numeric(15,2)`,
+        updatedAt: new Date(),
+      })
       .where(eq(funds.id, data.fundId));
 
+    const newFundBalance = toNum(fund.balance) + amount;
     let balanceAfter = fmtAmount(newFundBalance);
 
     if (projectId && projectRef) {
@@ -869,8 +928,8 @@ export async function addEarning(data: EarningInput, userId: string, userName: s
       await tx
         .update(projects)
         .set({
-          currentFundBalance: fmtAmount(newProjectBalance),
-          totalEarnings: fmtAmount(toNum(projectRef.totalEarnings) + amount),
+          currentFundBalance: sql<string>`(${projects.currentFundBalance}::numeric + ${amount})::numeric(15,2)`,
+          totalEarnings: sql<string>`(${projects.totalEarnings}::numeric + ${amount})::numeric(15,2)`,
           updatedAt: new Date(),
         })
         .where(eq(projects.id, projectId));
@@ -952,6 +1011,14 @@ export async function deleteTransaction(id: string, userId: string, userName: st
           let adjusted = toNum(fund.balance);
           if (['Deposit', 'Earning', 'Investment'].includes(txn.type)) {
             adjusted -= txnAmount;
+            const minReserve = Number(fund.minimumBalance ?? 0);
+            if (adjusted < minReserve) {
+              throw new AppError(
+                `Cannot delete transaction: reversing ${txnAmount.toFixed(2)} would drop ${fund.name} balance below minimum reserve (${fund.balance} -> ${adjusted.toFixed(2)})`,
+                400,
+                'FUND_DEFICIT_PREVENTED',
+              );
+            }
           } else if (['Withdrawal', 'Expense', 'Dividend'].includes(txn.type)) {
             adjusted += txnAmount;
           }
@@ -1065,8 +1132,8 @@ export async function transferFunds(data: TransferInput, userId: string, userNam
   }
 
   return db.transaction(async (tx) => {
-    const [sourceFund] = await tx.select().from(funds).where(eq(funds.id, data.sourceFundId)).limit(1);
-    const [targetFund] = await tx.select().from(funds).where(eq(funds.id, data.targetFundId)).limit(1);
+    const [sourceFund] = await tx.select().from(funds).where(eq(funds.id, data.sourceFundId)).for('update').limit(1);
+    const [targetFund] = await tx.select().from(funds).where(eq(funds.id, data.targetFundId)).for('update').limit(1);
     if (!sourceFund) throw new NotFoundError('Source fund');
     if (!targetFund) throw new NotFoundError('Target fund');
 
@@ -1093,13 +1160,19 @@ export async function transferFunds(data: TransferInput, userId: string, userNam
     // Debit source
     await tx
       .update(funds)
-      .set({ balance: fmtAmount(newSourceBalance), updatedAt: new Date() })
+      .set({
+        balance: sql<string>`(${funds.balance}::numeric - ${amount})::numeric(15,2)`,
+        updatedAt: new Date(),
+      })
       .where(eq(funds.id, data.sourceFundId));
 
     // Credit target
     await tx
       .update(funds)
-      .set({ balance: fmtAmount(newTargetBalance), updatedAt: new Date() })
+      .set({
+        balance: sql<string>`(${funds.balance}::numeric + ${amount})::numeric(15,2)`,
+        updatedAt: new Date(),
+      })
       .where(eq(funds.id, data.targetFundId));
 
     // Withdrawal on source
@@ -1483,24 +1556,41 @@ export async function bulkAddDeposits(data: BulkDepositInput, userId: string, us
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [fund] = await tx.select().from(funds).where(eq(funds.id, data.fundId)).limit(1);
+    const [fund] = await tx.select().from(funds).where(eq(funds.id, data.fundId)).for('update').limit(1);
     if (!fund) throw new NotFoundError('Target fund');
 
     const batchId = `BLK-${Date.now()}`;
-    const results: Array<{ member: string; amount: number; txId: string }> = [];
-    let totalBatchAmount = 0;
     const seenEntries = new Set<string>();
+    const memberIds = data.deposits.map((d) => d.memberId);
 
+    // Validate batch duplicates
     for (const dep of data.deposits) {
       const month = dep.depositMonth || data.commonMonth || '';
       const entryKey = `${dep.memberId}-${month}`;
-
       if (seenEntries.has(entryKey)) {
         throw new AppError(`Duplicate entry detected: Member ID ${dep.memberId} is already in this batch for ${month}`, 400, 'DUPLICATE_BATCH');
       }
       seenEntries.add(entryKey);
+    }
 
-      const [member] = await tx.select().from(members).where(eq(members.id, dep.memberId)).limit(1);
+    // 1. Batch load all target members
+    const memberRows = await tx
+      .select()
+      .from(members)
+      .where(inArray(members.id, memberIds))
+      .for('update');
+
+    const memberMap = new Map(memberRows.map((m) => [m.id, m]));
+
+    // 2. Prepare transaction inserts and validate
+    let totalBatchAmount = 0;
+    const runningFundBalance = toNum(fund.balance);
+    const txnInserts: Array<typeof transactions.$inferInsert> = [];
+    const memberContributions = new Map<string, number>();
+    const results: Array<{ member: string; amount: number; txId?: string }> = [];
+
+    for (const dep of data.deposits) {
+      const member = memberMap.get(dep.memberId);
       if (!member) throw new AppError(`Member with ID ${dep.memberId} not found`, 404, 'MEMBER_NOT_FOUND');
 
       const depositAmount = Number(dep.amount);
@@ -1508,8 +1598,10 @@ export async function bulkAddDeposits(data: BulkDepositInput, userId: string, us
         throw new AppError(`Invalid amount for member ${member.name}`, 400, 'INVALID_AMOUNT');
       }
 
-      // Duplicate prevention: check existing deposits for same member + month
+      const month = dep.depositMonth || data.commonMonth || '';
       const depositDate = resolveDepositDate(dep.date, month);
+
+      // Check existing duplicate in this month
       const startOfMonth = new Date(depositDate.getFullYear(), depositDate.getMonth(), 1);
       const endOfMonth = new Date(depositDate.getFullYear(), depositDate.getMonth() + 1, 0, 23, 59, 59);
 
@@ -1536,46 +1628,63 @@ export async function bulkAddDeposits(data: BulkDepositInput, userId: string, us
         );
       }
 
-      // Update member totalContributed (per-deposit, but we also accumulate for fund)
-      const newContributed = toNum(member.totalContributed) + depositAmount;
-      await tx
-        .update(members)
-        .set({ totalContributed: fmtAmount(newContributed), updatedAt: new Date() })
-        .where(eq(members.id, dep.memberId));
-
-      // Create deposit transaction
-      const [txn] = await tx
-        .insert(transactions)
-        .values({
-          type: 'Deposit',
-          amount: fmtAmount(depositAmount),
-          description: `Bulk Deposit [${month}]`,
-          memberId: dep.memberId,
-          fundId: data.fundId,
-          date: depositDate,
-          status: 'Completed',
-          authorizedBy: userId,
-          createdBy: userId,
-          updatedBy: userId,
-          handlingOfficer: userName || data.cashierName || 'System',
-          depositMethod: data.depositMethod || 'Cash',
-          referenceNumber: batchId,
-          balanceBefore: fmtAmount(toNum(fund.balance) + totalBatchAmount),
-          balanceAfter: fmtAmount(toNum(fund.balance) + totalBatchAmount + depositAmount),
-        })
-        .returning();
-
+      const balanceBefore = runningFundBalance + totalBatchAmount;
+      const balanceAfter = balanceBefore + depositAmount;
       totalBatchAmount += depositAmount;
-      results.push({ member: member.name, amount: depositAmount, txId: txn.id });
+
+      txnInserts.push({
+        type: 'Deposit',
+        amount: fmtAmount(depositAmount),
+        description: `Bulk Deposit [${month}]`,
+        memberId: dep.memberId,
+        fundId: data.fundId,
+        date: depositDate,
+        status: 'Completed',
+        authorizedBy: userId,
+        createdBy: userId,
+        updatedBy: userId,
+        handlingOfficer: userName || data.cashierName || 'System',
+        depositMethod: data.depositMethod || 'Cash',
+        referenceNumber: batchId,
+        balanceBefore: fmtAmount(balanceBefore),
+        balanceAfter: fmtAmount(balanceAfter),
+      });
+
+      memberContributions.set(
+        dep.memberId,
+        (memberContributions.get(dep.memberId) || 0) + depositAmount,
+      );
+
+      results.push({ member: member.name, amount: depositAmount });
     }
 
-    // Single fund balance update for batch total
+    // 3. Batch insert transactions
+    const insertedTxns = await tx.insert(transactions).values(txnInserts).returning();
+    for (let i = 0; i < insertedTxns.length; i++) {
+      if (results[i]) results[i].txId = insertedTxns[i].id;
+    }
+
+    // 4. Update members totalContributed
+    for (const [memberId, addedAmount] of memberContributions) {
+      await tx
+        .update(members)
+        .set({
+          totalContributed: sql<string>`(${members.totalContributed}::numeric + ${addedAmount})::numeric(15,2)`,
+          updatedAt: new Date(),
+        })
+        .where(eq(members.id, memberId));
+    }
+
+    // 5. Update fund balance
     await tx
       .update(funds)
-      .set({ balance: fmtAmount(toNum(fund.balance) + totalBatchAmount), updatedAt: new Date() })
+      .set({
+        balance: sql<string>`(${funds.balance}::numeric + ${totalBatchAmount})::numeric(15,2)`,
+        updatedAt: new Date(),
+      })
       .where(eq(funds.id, data.fundId));
 
-    // Audit
+    // 6. Audit
     await tx.insert(auditLogs).values({
       userId,
       userName,

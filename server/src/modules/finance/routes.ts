@@ -9,6 +9,8 @@ import {
   dividendSchema,
   equityTransferSchema,
   bulkDepositSchema,
+  executeWithdrawalSchema,
+  executeExitSettlementSchema,
 } from './validation.js';
 import {
   getTransactions,
@@ -26,6 +28,8 @@ import {
   bulkAddDeposits,
   validateWithdrawalHandler,
   calculateExitSettlementHandler,
+  executeWithdrawalHandler,
+  executeExitSettlementHandler,
   getShareConsistencyHandler,
   recalculateSharesHandler,
 } from './controller.js';
@@ -36,8 +40,8 @@ const router = Router();
 router.use(protect);
 
 // ── Transactions ──────────────────────────────────────────────────────────
-router.get('/transactions', requirePermission('DEPOSITS', 'READ'), getTransactions);
-router.delete('/transactions/:id', requirePermission('EXPENSES', 'WRITE'), deleteTransaction);
+router.get('/transactions', requirePermission('TRANSACTIONS', 'READ'), getTransactions);
+router.delete('/transactions/:id', requirePermission('TRANSACTIONS', 'WRITE'), deleteTransaction);
 
 // ── Deposits ──────────────────────────────────────────────────────────────
 router.post('/deposits', requirePermission('DEPOSITS', 'WRITE'), validate(depositSchema), addDeposit);
@@ -64,9 +68,11 @@ router.post('/equity/transfer', requirePermission('DIVIDENDS', 'WRITE'), validat
 // ── Fund Reconciliation ───────────────────────────────────────────────────
 router.post('/funds/:id/reconcile', requirePermission('FUNDS_MANAGEMENT', 'WRITE'), reconcileFund);
 
-// ── Withdrawal Governance ─────────────────────────────────────────────────
+// ── Withdrawal Governance & Execution ─────────────────────────────────────
 router.post('/withdrawal/validate', requirePermission('FUNDS_MANAGEMENT', 'READ'), validateWithdrawalHandler);
 router.get('/withdrawal/settlement/:memberId', requirePermission('FUNDS_MANAGEMENT', 'READ'), calculateExitSettlementHandler);
+router.post('/withdrawal/execute', requirePermission('FUNDS_MANAGEMENT', 'WRITE'), validate(executeWithdrawalSchema), executeWithdrawalHandler);
+router.post('/withdrawal/settlement/:memberId/execute', requirePermission('FUNDS_MANAGEMENT', 'WRITE'), validate(executeExitSettlementSchema), executeExitSettlementHandler);
 
 // ── Share Consistency ─────────────────────────────────────────────────────
 router.get('/share-consistency', requirePermission('ANALYSIS', 'READ'), getShareConsistencyHandler);

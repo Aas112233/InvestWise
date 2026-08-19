@@ -1,5 +1,6 @@
-import { pgTable, uuid, varchar, decimal, integer, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, decimal, timestamp, index } from 'drizzle-orm/pg-core';
 import { members } from './members.js';
+import { users } from './users.js';
 
 export const memberArrears = pgTable('member_arrears', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -9,7 +10,7 @@ export const memberArrears = pgTable('member_arrears', {
   actualDeposited: decimal('actual_deposited', { precision: 15, scale: 2 }).default('0'),
   shortfall: decimal('shortfall', { precision: 15, scale: 2 }).notNull(),
   status: varchar('status', { length: 50 }).default('OUTSTANDING'),
-  waivedBy: uuid('waived_by').references(() => members.id),
+  waivedBy: uuid('waived_by').references(() => users.id, { onDelete: 'set null' }),
   waivedReason: varchar('waived_reason', { length: 500 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),

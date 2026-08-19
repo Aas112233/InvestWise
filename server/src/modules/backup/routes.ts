@@ -12,8 +12,8 @@ export const backupRouter = Router();
 // ============================================================
 backupRouter.post('/cron', asyncHandler(async (req, res) => {
   const auth = req.headers.authorization;
-  if (env.CRON_SECRET && (!auth || auth !== `Bearer ${env.CRON_SECRET}`)) {
-    res.status(401).json({ success: false, message: 'Invalid cron secret' });
+  if (!env.CRON_SECRET || !auth || auth !== `Bearer ${env.CRON_SECRET}`) {
+    res.status(401).json({ success: false, message: 'Invalid or missing cron secret' });
     return;
   }
 
@@ -48,7 +48,6 @@ backupRouter.use(protect, admin);
 // POST /manual — trigger manual backup
 backupRouter.post('/manual', asyncHandler(async (req, res) => {
   const { type = 'daily' } = req.body;
-  const db = getDb();
   const sql = getSql();
 
   const tables = [

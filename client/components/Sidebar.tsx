@@ -1,72 +1,102 @@
-
 import React, { useState, useMemo } from 'react';
 import { Menu, ChevronLeft } from 'lucide-react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import { NAVIGATION_ITEMS } from '../constants';
 import { AppScreen, AccessLevel, User } from '../types';
 import { Language, t } from '../i18n/translations';
-
-interface SidebarProps {
- lang: Language;
- currentUser?: User | null; // Pass currentUser for permission check
-}
-
 import { useGlobalState } from '../context/GlobalStateContext';
+import { checkUserPermission } from '../utils/permissions';
 import '../premium-ui.css';
 
+interface SidebarProps {
+  lang: Language;
+  currentUser?: User | null;
+}
+
+// Preload map for instant route transitions
+const ROUTE_PRELOADERS: Record<string, () => Promise<any>> = {
+  '/dashboard': () => import('./Dashboard'),
+  '/members': () => import('./Members'),
+  '/meetings': () => import('./MeetingPerformanceHub'),
+  '/governance': () => import('./MeetingPerformanceHub'),
+  '/deposits': () => import('./Deposits'),
+  '/request-deposit': () => import('./RequestDeposit'),
+  '/transactions': () => import('./Transactions'),
+  '/projects': () => import('./ProjectManagement'),
+  '/funds': () => import('./FundsManagement'),
+  '/expenses': () => import('./Expenses'),
+  '/analysis': () => import('./Analysis'),
+  '/reports': () => import('./Reports'),
+  '/settings': () => import('./Settings'),
+  '/goals': () => import('./Goals'),
+  '/dividends': () => import('./DividendManagement'),
+};
+
+const prefetchRoute = (route: string) => {
+  const preloader = ROUTE_PRELOADERS[route];
+  if (preloader) {
+    preloader().catch(() => {});
+  }
+};
+
 const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
- const { deposits } = useGlobalState();
- const [isPinned, setIsPinned] = useState(false);
- const [isHovered, setIsHovered] = useState(false);
- const navigate = useNavigate();
- const location = useLocation();
+  const { deposits, companyName, companyTagline } = useGlobalState();
+  const [isPinned, setIsPinned] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const location = useLocation();
 
- const isExpanded = isPinned || isHovered;
+  const isExpanded = isPinned || isHovered;
 
- // Helper to map AppScreen to Routes
- const getRoute = (screen: AppScreen): string => {
- switch (screen) {
- case AppScreen.DASHBOARD: return '/dashboard';
- case AppScreen.MEMBERS: return '/members';
- case AppScreen.DEPOSITS: return '/deposits';
- case AppScreen.REQUEST_DEPOSIT: return '/request-deposit';
- case AppScreen.TRANSACTIONS: return '/transactions';
- case AppScreen.PROJECT_MANAGEMENT: return '/projects';
- case AppScreen.FUNDS_MANAGEMENT: return '/funds';
- case AppScreen.EXPENSES: return '/expenses';
- case AppScreen.ANALYSIS: return '/analysis';
- case AppScreen.REPORTS: return '/reports';
- case AppScreen.SETTINGS: return '/settings';
- case AppScreen.GOALS: return '/goals';
- case AppScreen.DIVIDENDS: return '/dividends';
- default: return '/dashboard';
- }
- };
+  // Idle background prefetch for high-traffic routes
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      const coreRoutes = ['/dashboard', '/members', '/deposits', '/transactions', '/projects', '/funds'];
+      coreRoutes.forEach((r) => prefetchRoute(r));
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, []);
 
- // Filter navigation items based on user permissions
- const filteredNavItems = useMemo(() => {
- if (!currentUser) return NAVIGATION_ITEMS;
+  // Helper to map AppScreen to Routes
+  const getRoute = (screen: AppScreen): string => {
+    switch (screen) {
+      case AppScreen.DASHBOARD: return '/dashboard';
+      case AppScreen.MEMBERS: return '/members';
+      case AppScreen.MEETINGS: return '/meetings';
+      case AppScreen.GOVERNANCE: return '/governance';
+      case AppScreen.DEPOSITS: return '/deposits';
+      case AppScreen.REQUEST_DEPOSIT: return '/request-deposit';
+      case AppScreen.TRANSACTIONS: return '/transactions';
+      case AppScreen.PROJECT_MANAGEMENT: return '/projects';
+      case AppScreen.FUNDS_MANAGEMENT: return '/funds';
+      case AppScreen.EXPENSES: return '/expenses';
+      case AppScreen.ANALYSIS: return '/analysis';
+      case AppScreen.REPORTS: return '/reports';
+      case AppScreen.SETTINGS: return '/settings';
+      case AppScreen.GOALS: return '/goals';
+      case AppScreen.DIVIDENDS: return '/dividends';
+      default: return '/dashboard';
+    }
+  };
 
- return NAVIGATION_ITEMS.map(group => ({
- ...group,
- items: group.items.filter(item => {
- // Special rule for Dashboard - everyone sees it
- if (item.id === AppScreen.DASHBOARD) return true;
+  // Filter navigation items based on user permissions
+  const filteredNavItems = useMemo(() => {
+    if (!currentUser) return NAVIGATION_ITEMS;
 
- // Defensive check for permissions object
- if (!currentUser.permissions) return false;
+    return NAVIGATION_ITEMS.map(group => ({
+      ...group,
+      items: group.items.filter(item => {
+        // Special rule for Dashboard - everyone sees it
+        if (item.id === AppScreen.DASHBOARD) return true;
+        return checkUserPermission(currentUser, item.id, AccessLevel.READ);
+      })
+    })).filter(group => group.items.length > 0);
+  }, [currentUser]);
 
- const permission = currentUser.permissions[item.id];
- return permission && permission !== AccessLevel.NONE;
- })
- })).filter(group => group.items.length > 0);
- }, [currentUser]);
+  const pendingDepsCount = useMemo(() => {
+    return deposits.filter(d => d.status === 'Pending' || d.status === 'Processing').length;
+  }, [deposits]);
 
- const pendingDepsCount = useMemo(() => {
- return deposits.filter(d => d.status === 'Pending' || d.status === 'Processing').length;
- }, [deposits]);
-
- const toggleSidebar = () => setIsPinned(!isPinned);
+  const toggleSidebar = () => setIsPinned(!isPinned);
 
   return (
     <aside
@@ -81,35 +111,23 @@ const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
         {isExpanded ? (
           <div className="w-full flex items-center justify-between px-1">
             {/* Logo Mark */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center rounded bg-blue-600 text-white w-8 h-8 shadow-sm">
-                {/* Custom Investment Growth Icon */}
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  className="w-5 h-5"
-                >
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center justify-center rounded bg-blue-600 text-white w-8 h-8 shadow-sm shrink-0">
+                <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
                   <rect x="4" y="14" width="3" height="6" rx="0.5" fill="currentColor" opacity="0.5" />
                   <rect x="9" y="10" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.7" />
                   <rect x="14" y="6" width="3" height="14" rx="0.5" fill="currentColor" opacity="0.9" />
-                  <path
-                    d="M19 4L19 9M19 4L14 4M19 4L10 13"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                  <path d="M19 4L19 9M19 4L14 4M19 4L10 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
 
               {/* Wordmark */}
-              <div className="flex flex-col">
-                <h2 className="text-sm font-semibold tracking-tight leading-none">
-                  <span className="text-slate-800 dark:text-white">Invest</span>
-                  <span className="text-blue-600 dark:text-blue-400">Wise</span>
+              <div className="flex flex-col min-w-0 pr-1">
+                <h2 className="text-sm font-bold tracking-tight leading-none text-slate-800 dark:text-white truncate" title={companyName}>
+                  {companyName}
                 </h2>
-                <p className="text-[8px] font-medium text-gray-400 uppercase tracking-wider mt-0.5">
-                  Enterprise IMS
+                <p className="text-[8px] font-medium text-gray-400 uppercase tracking-wider mt-0.5 truncate" title={companyTagline}>
+                  {companyTagline}
                 </p>
               </div>
             </div>
@@ -130,21 +148,11 @@ const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
           /* Collapsed: Stacked layout */
           <div className="flex flex-col items-center gap-3">
             <div className="flex items-center justify-center rounded bg-blue-600 text-white w-9 h-9 shadow-sm">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className="w-6 h-6"
-              >
+              <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
                 <rect x="4" y="14" width="3" height="6" rx="0.5" fill="currentColor" opacity="0.5" />
                 <rect x="9" y="10" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.7" />
                 <rect x="14" y="6" width="3" height="14" rx="0.5" fill="currentColor" opacity="0.9" />
-                <path
-                  d="M19 4L19 9M19 4L14 4M19 4L10 13"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                <path d="M19 4L19 9M19 4L14 4M19 4L10 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
 
@@ -182,6 +190,8 @@ const Sidebar: React.FC<SidebarProps> = ({ lang, currentUser }) => {
                   <li key={item.id}>
                     <Link
                       to={route}
+                      onMouseEnter={() => prefetchRoute(route)}
+                      onFocus={() => prefetchRoute(route)}
                       className={`w-full flex items-center transition-all duration-150 font-medium text-xs ${
                         isExpanded ? 'px-3 py-2 gap-2.5 rounded' : 'p-2.5 justify-center rounded'
                       } ${

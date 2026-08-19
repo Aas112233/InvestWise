@@ -17,6 +17,7 @@ export const globalStatsTrends = pgTable('global_stats_trends', {
   id: uuid('id').defaultRandom().primaryKey(),
   globalStatsId: uuid('global_stats_id').references(() => globalStats.id, { onDelete: 'cascade' }).notNull(),
   month: varchar('month', { length: 50 }).notNull(),
+  deposit: decimal('deposit', { precision: 15, scale: 2 }).default('0'),
   inflow: decimal('inflow', { precision: 15, scale: 2 }).default('0'),
   outflow: decimal('outflow', { precision: 15, scale: 2 }).default('0'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),

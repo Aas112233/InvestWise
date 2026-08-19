@@ -3,6 +3,7 @@ import { asyncHandler } from '../../shared/asyncHandler.js';
 import {
   listMembers,
   getMemberById,
+  getCurrentMemberProfile,
   createMember,
   updateMember,
   deleteMember,
@@ -10,6 +11,17 @@ import {
   recalculateFinancials,
 } from './service.js';
 import type { ListMembersQuery } from './service.js';
+
+// ---------------------------------------------------------------------------
+// GET /api/members/me — current logged in member profile
+// ---------------------------------------------------------------------------
+export const getMyMemberProfileHandler = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const email = req.user?.email;
+  const memberId = req.user?.memberId;
+  const profile = await getCurrentMemberProfile(userId, email, memberId);
+  res.json(profile);
+});
 
 // ---------------------------------------------------------------------------
 // GET /api/members — paginated list
@@ -26,7 +38,9 @@ export const getMembers = asyncHandler(async (req: Request, res: Response) => {
     role: req.query.role as string | undefined,
   };
 
-  const result = await listMembers(params);
+  const userRole = req.user?.role || 'Member';
+  const userId = req.user?.id;
+  const result = await listMembers(params, userRole, userId);
 
   // Frontend expects { data, meta } at top level
   res.json(result);
@@ -37,7 +51,9 @@ export const getMembers = asyncHandler(async (req: Request, res: Response) => {
 // Frontend: uses result directly
 // ---------------------------------------------------------------------------
 export const getMemberByIdHandler = asyncHandler(async (req: Request, res: Response) => {
-  const member = await getMemberById(req.params.id as string);
+  const userRole = req.user?.role || 'Member';
+  const userId = req.user?.id;
+  const member = await getMemberById(req.params.id as string, userRole, userId);
   res.json(member);
 });
 

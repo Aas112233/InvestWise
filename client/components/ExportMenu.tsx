@@ -1,13 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Download, FileSpreadsheet, FileText, Image as ImageIcon, ChevronDown, Check, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useGlobalState } from '../context/GlobalStateContext';
 // dynamic imports will be used instead
 import { reportService } from '../services/api';
 
 interface Column {
  header: string;
  key: string;
- format?: (item: any) => string;
+ format?: (item: any) => any;
+ getValue?: (item: any) => any;
+ type?: 'string' | 'number' | 'date' | 'currency';
+ width?: number;
+ align?: 'left' | 'center' | 'right';
 }
 
 interface ExportMenuProps {
@@ -20,6 +25,7 @@ interface ExportMenuProps {
 }
 
 const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title, lang, targetId }) => {
+ const { companyName, members, projects, funds, currencyCode } = useGlobalState();
  const [isOpen, setIsOpen] = useState(false);
  const [exporting, setExporting] = useState<string | null>(null);
  const menuRef = useRef<HTMLDivElement>(null);
@@ -35,57 +41,84 @@ const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title,
  return () => document.removeEventListener('mousedown', handleClickOutside);
  }, []);
 
- const getFormattedData = () => {
- return data.map(item => {
- const row: Record<string, any> = {};
- columns.forEach(col => {
- let val = item[col.key];
- if (col.format) {
- val = col.format(item);
- }
- row[col.header] = val;
- });
- return row;
- });
- };
+  const resolveEntityName = (val: any, colKey?: string, colHeader?: string) => {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'object') {
+      if (val instanceof Date) return val.toLocaleDateString();
+      return val.name || val.title || val.label || val.memberId || val.description || '';
+    }
+    if (typeof val === 'string') {
+      const keyLower = (colKey || '').toLowerCase();
+      const headerLower = (colHeader || '').toLowerCase();
 
- const handleExportExcel = async () => {
- setExporting('excel');
- try {
- // Apply column formatters to the data for Excel export
- const formattedData = data.map(item => {
- const row = { ...item };
- columns.forEach(col => {
- if (col.format) {
- row[col.key] = col.format(item);
- }
- });
- return row;
- });
+      // If this column is specifically for Partner/Member ID, preserve/resolve the memberId code
+      if (keyLower.includes('code') || headerLower.includes('id') || keyLower.endsWith('id') || keyLower === 'partnerid' || keyLower === 'memberid') {
+        if (keyLower.includes('member') || headerLower.includes('partner') || headerLower.includes('member')) {
+          const found = members?.find(m => m.id === val || m.memberId === val || (m as any)._id === val);
+          if (found?.memberId) return found.memberId;
+        }
+        return val;
+      }
 
- const blob = await reportService.exportGeneric({
- title: title || 'Strategic Finance Report',
- columns,
- data: formattedData,
- fileName,
- lang: lang || 'en'
- });
+      if (keyLower.includes('member') || headerLower.includes('member') || headerLower.includes('partner') || headerLower.includes('recipient')) {
+        const found = members?.find(m => m.id === val || m.memberId === val);
+        if (found) return found.name;
+      }
+      if (keyLower.includes('project') || headerLower.includes('project')) {
+        const found = projects?.find(p => p.id === val);
+        if (found) return found.name;
+      }
+      if (keyLower.includes('fund') || headerLower.includes('fund')) {
+        const found = funds?.find(f => f.id === val);
+        if (found) return found.name;
+      }
+    }
+    return val;
+  };
 
- const url = window.URL.createObjectURL(blob);
- const link = document.createElement('a');
- link.href = url;
- link.setAttribute('download', `${fileName}.xlsx`);
- document.body.appendChild(link);
- link.click();
- link.remove();
- window.URL.revokeObjectURL(url);
- } catch (error) {
- console.error('Excel Export Failed:', error);
- } finally {
- setExporting(null);
- setIsOpen(false);
- }
- };
+  const getFormattedData = () => {
+    return data.map(item => {
+      const row: Record<string, any> = {};
+      columns.forEach(col => {
+        let val: any;
+        if (col.getValue) {
+          val = col.getValue(item);
+        } else if (col.format) {
+          val = col.format(item);
+        } else {
+          val = item[col.key];
+        }
+        val = resolveEntityName(val, col.key, col.header);
+        row[col.header] = val ?? '';
+      });
+      return row;
+    });
+  };
+
+  const handleExportExcel = async () => {
+    setExporting('excel');
+    try {
+      const { exportTableToExcel } = await import('../utils/excelExport');
+      await exportTableToExcel({
+        title: title || `${companyName} Financial Report`,
+        fileName,
+        columns,
+        data,
+        metadata: {
+          Format: 'Microsoft Excel OpenXML (.xlsx)',
+          Organization: companyName,
+          Language: lang || 'en'
+        }
+      });
+      toast.success('Excel spreadsheet generated successfully');
+    } catch (error) {
+      console.error('Excel Export Failed:', error);
+      toast.error('Failed to generate Excel export');
+    } finally {
+      setExporting(null);
+      setIsOpen(false);
+    }
+  };
 
  const handleExportPDF = async () => {
  setExporting('pdf');
@@ -113,7 +146,7 @@ const ExportMenu: React.FC<ExportMenuProps> = ({ data, columns, fileName, title,
 
  doc.setFontSize(9);
  doc.setTextColor(150);
- doc.text(`INVESTWISE ENTERPRISE SYSTEMS | GENERATED: ${new Date().toLocaleString()}`, 14, 28);
+ doc.text(`${(companyName || 'INVESTWISE').toUpperCase()} ENTERPRISE SYSTEMS | GENERATED: ${new Date().toLocaleString()}`, 14, 28);
 
  autoTable(doc, {
  head: [headers],

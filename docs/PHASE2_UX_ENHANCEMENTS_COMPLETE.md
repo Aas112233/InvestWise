@@ -112,8 +112,8 @@ toast.success('Saved!', {
 - **Success** (green) - Operation completed
 - **Error** (red) - Operation failed
 - **Warning** (amber) - Caution needed
-- ℹ **Info** (blue) - Informational message
-- ⏳ **Loading** (gray) - In progress (sticky)
+-  **Info** (blue) - Informational message
+-  **Loading** (gray) - In progress (sticky)
 
 ---
 

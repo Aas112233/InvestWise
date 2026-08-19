@@ -223,8 +223,8 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
  // Only show initial message if no persisted advice exists
  if (!advice) {
  setAdvice(lang === 'bn'
- ? 'একটি টেমপ্লেট নির্বাচন করুন এবং এআই-এর মাধ্যমে বিশ্লেষণ করতে "Analyze Data" এ ক্লিক করুন।'
- : 'Select a template and click Analyze to get AI-powered insights.');
+ ? 'একটি টেমপ্লেট নির্বাচন করুন এবং বিশ্লেষণ করতে "Analyze Data" এ ক্লিক করুন।'
+ : 'Select a template and click Analyze to generate portfolio analysis.');
  }
  }
  }, [isOpen, lang]);
@@ -300,7 +300,7 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
  <Brain size={20} strokeWidth={3} />
  </div>
  <div>
- <h2 className="text-lg font-black text-white uppercase tracking-tighter">AI Strategist</h2>
+ <h2 className="text-base font-bold text-white uppercase tracking-wider">Financial Assistant</h2>
  <div className="relative mt-1">
  <select
  value={selectedModel}
@@ -530,7 +530,7 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
  </div>
  ) : (
  <div className="max-h-[400px] overflow-y-auto no-scrollbar pr-2">
- <AIResponseRenderer content={advice || "Select a template and click Analyze to get AI-powered insights."} />
+ <AIResponseRenderer content={advice || (lang === 'bn' ? "একটি টেমপ্লেট নির্বাচন করুন এবং বিশ্লেষণ করতে Analyze Data এ ক্লিক করুন।" : "Select a template and click Analyze to generate portfolio analysis.")} />
  </div>
  )}
  </div>
@@ -551,7 +551,7 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
  <div className="space-y-4">
  {/* Overview Metrics */}
  {selectedType === 'overview' && [
- { label: "Total Funds", val: `${currencyCode} ${(state.funds.reduce((acc: number, f: any) => acc + f.balance, 0) / 1000000).toFixed(1)}M`, fill: "75%" },
+ { label: "Total Funds", val: `${currencyCode} ${(state.funds.reduce((acc: number, f: any) => acc + (parseFloat(String(f.balance || 0)) || 0), 0) / 1000000).toFixed(1)}M`, fill: "75%" },
  { label: "Active Projects", val: state.projects.filter((p: any) => p.status === 'In Progress').length.toString(), fill: "60%" },
  { label: "Total Members", val: state.members.length.toString(), fill: "80%" },
  { label: "Net Position", val: `${currencyCode} ${(state.deposits.reduce((acc: number, d: any) => acc + d.amount, 0) - state.expenses.reduce((acc: number, e: any) => acc + e.amount, 0)) / 1000000}M`, fill: "50%" }
@@ -610,7 +610,7 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
  {/* Fund Metrics */}
  {selectedType === 'fund' && [
  { label: "Selected Fund", val: selectedFund ? state.funds.find((f: any) => f.id === selectedFund)?.name?.substring(0, 15) || 'N/A' : 'None', fill: "100%" },
- { label: "Current Balance", val: `${currencyCode} ${(state.funds.find((f: any) => f.id === selectedFund)?.balance || 0) / 1000}K`, fill: "80%" },
+ { label: "Current Balance", val: `${currencyCode} ${((parseFloat(String(state.funds.find((f: any) => f.id === selectedFund)?.balance || 0)) || 0) / 1000).toFixed(0)}K`, fill: "80%" },
  { label: "Fund Type", val: state.funds.find((f: any) => f.id === selectedFund)?.type || 'N/A', fill: "50%" },
  { label: "Initial Balance", val: `${currencyCode} ${((state.funds.find((f: any) => f.id === selectedFund) as any)?.initialBalance || 0) / 1000}K`, fill: "60%" }
  ].map((m, i) => (
@@ -663,7 +663,7 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
 
  {/* Risk Metrics */}
  {selectedType === 'risk' && [
- { label: "Low Balance Funds", val: state.funds.filter((f: any) => f.balance < 100000).length.toString(), fill: "40%" },
+ { label: "Low Balance Funds", val: state.funds.filter((f: any) => (parseFloat(String(f.balance || 0)) || 0) < 100000).length.toString(), fill: "40%" },
  { label: "Over-Budget Projects", val: state.projects.filter((p: any) => {
  const spent = state.expenses.filter((e: any) => e.projectId === p.id).reduce((acc: number, e: any) => acc + e.amount, 0);
  return p.budget && spent > p.budget;
@@ -703,13 +703,13 @@ const AIAdvisorSidebar: React.FC<AIAdvisorSidebarProps> = ({ isOpen, onClose, la
  </div>
  </div>
 
- {/* Footer */}
- <div className="mt-4 pt-4 border-t border-white/10">
- <p className="text-[8px] font-black text-white/20 uppercase tracking-[0.5em] text-center">Powered by Investwise AI Engine</p>
- </div>
- </div>
- </div>
- );
-};
+          {/* Footer */}
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <p className="text-[10px] font-medium text-white/30 text-center">Portfolio Intelligence &amp; Analytics</p>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
 export default AIAdvisorSidebar;

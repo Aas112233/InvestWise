@@ -20,6 +20,7 @@ export const authLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: { success: false, message: 'Too many login attempts, please try again later', code: 'RATE_LIMITED' },
 });
 
@@ -28,5 +29,15 @@ export const apiLimiter = rateLimit({
   max: isProduction ? 500 : 5000,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: 'Too many requests',
+});
+
+export const aiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 20, // 20 requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false },
+  message: { success: false, message: 'AI request limit reached. Please wait a minute before sending another query.', code: 'AI_RATE_LIMITED' },
 });

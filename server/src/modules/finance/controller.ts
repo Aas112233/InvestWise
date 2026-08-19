@@ -1,6 +1,13 @@
 import type { Request, Response } from 'express';
 import { asyncHandler } from '../../shared/asyncHandler.js';
 import * as financeService from './service.js';
+import {
+  validateWithdrawal,
+  calculateExitSettlement,
+  executeWithdrawal,
+  executeMemberExitSettlement,
+} from './withdrawal-rules.js';
+import { getShareConsistencyReport, recalculateAllMemberShares } from './share-consistency.js';
 
 export const getTransactions = asyncHandler(async (req: Request, res: Response) => {
   const query = req.query as Record<string, string | undefined>;
@@ -70,8 +77,6 @@ export const bulkAddDeposits = asyncHandler(async (req: Request, res: Response) 
 });
 
 // ── Financial Governance ──────────────────────────────────────────────────
-import { validateWithdrawal, calculateExitSettlement } from './withdrawal-rules.js';
-import { getShareConsistencyReport, recalculateAllMemberShares } from './share-consistency.js';
 
 export const validateWithdrawalHandler = asyncHandler(async (req: Request, res: Response) => {
   const { memberId, amount, fundId } = req.body;
@@ -80,6 +85,18 @@ export const validateWithdrawalHandler = asyncHandler(async (req: Request, res: 
 
 export const calculateExitSettlementHandler = asyncHandler(async (req: Request, res: Response) => {
   res.json(await calculateExitSettlement(req.params.memberId as string));
+});
+
+export const executeWithdrawalHandler = asyncHandler(async (req: Request, res: Response) => {
+  const result = await executeWithdrawal(req.body, req.user!.id, req.user!.name);
+  res.status(201).json({ success: true, ...result, message: 'Withdrawal executed successfully' });
+});
+
+export const executeExitSettlementHandler = asyncHandler(async (req: Request, res: Response) => {
+  const memberId = req.params.memberId as string;
+  const { fundId, reason, paymentMethod } = req.body;
+  const result = await executeMemberExitSettlement({ memberId, fundId, reason, paymentMethod }, req.user!.id, req.user!.name);
+  res.status(201).json({ success: true, ...result });
 });
 
 export const getShareConsistencyHandler = asyncHandler(async (_req: Request, res: Response) => {

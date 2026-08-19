@@ -1,82 +1,122 @@
 
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Member, Project, Deposit, Expense, Fund, User, AccessLevel, AppScreen, Transaction } from '../types';
 import api, { memberService, projectService, fundService, financeService, authService, analyticsService, auditService, isNetworkError, isDatabaseError, settingsService } from '../services/api';
 import { resolveMemberIdentity } from '../utils/memberLookup';
 import { getActiveCurrencyCode, normalizeCurrencyCode, setActiveCurrencyCode } from '../utils/currency';
+import { checkUserPermission } from '../utils/permissions';
 
 // ... imports
 export type ConnectionStatus = 'online' | 'offline' | 'degraded';
 
+export interface OrganizationProfile {
+  companyName: string;
+  companyTagline?: string;
+  companyAddress?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  companyWebsite?: string;
+  companyRegNo?: string;
+}
+
 export interface SystemSettings {
- financial: {
- fiscalYearStart: string;
- baseCurrency: string;
- taxRate: number;
- accountingMethod: string;
- shareValueBdt: number;
- isShareValueLocked: boolean;
- };
- system: {
- language: string;
- refreshInterval: string;
- theme: string;
- dateFormat: string;
- isMaintenanceMode: boolean;
- };
+  organization?: OrganizationProfile;
+  financial: {
+    fiscalYearStart: string;
+    baseCurrency: string;
+    taxRate: number;
+    accountingMethod: string;
+    shareValueBdt: number;
+    isShareValueLocked: boolean;
+    withdrawalLimitPercent?: number;
+    withdrawalNoticeDays?: number;
+    maxWithdrawalPerRequest?: number;
+    statutoryReservePercent?: number;
+    fiscalYearEnd?: string;
+  };
+  governance?: {
+    monthlyMeetingDay: number;
+    depositDueDate: number;
+    gracePeriodDays: number;
+    meetingTypes: string[];
+    penaltyRules: Array<{
+      tier: number;
+      title: string;
+      type: string;
+      deductionAmount?: number;
+      isPercentage?: boolean;
+    }>;
+  };
+  system: {
+    language: string;
+    refreshInterval: string;
+    theme: string;
+    dateFormat: string;
+    isMaintenanceMode: boolean;
+  };
+  // Flat properties fallback
+  companyName?: string;
+  companyTagline?: string;
+  companyAddress?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  companyWebsite?: string;
+  companyRegNo?: string;
 }
 
 interface GlobalState {
- members: Member[];
- projects: Project[];
- deposits: Deposit[];
- expenses: Expense[];
- funds: Fund[];
- systemUsers: User[];
- currentUser: User | null;
- settings: SystemSettings | null;
- currencyCode: string;
- addDescription?: string; // Optional
- addMember: (m: Member) => void;
- updateMember: (m: Member) => Promise<void>;
- addProject: (p: Project) => void;
- addDeposit: (d: Deposit) => void;
- addExpense: (e: Expense) => void;
- editExpense: (id: string, e: Expense) => Promise<void>;
- updateProject: (p: Project) => void;
- deleteProject: (id: string) => void;
- addProjectUpdate: (projectId: string, update: any) => void;
- editProjectUpdate: (projectId: string, updateId: string, update: any) => Promise<void>;
- deleteProjectUpdate: (projectId: string, updateId: string) => Promise<void>;
- addFund: (f: Fund) => Promise<void>;
- updateFund: (f: Fund) => Promise<void>;
- addSystemUser: (u: User) => void;
- updateUser: (userId: string, data: Partial<User>) => Promise<void>;
- updateUserPassword: (userId: string, newPass: string) => void;
- deleteUser: (userId: string) => void;
- deleteMember: (id: string) => Promise<void>;
- onboardMember: (data: any) => Promise<void>;
- updateSettings: (s: Partial<SystemSettings>) => Promise<void>;
- connectionStatus: ConnectionStatus;
- lastOnlineAt: number | null;
- checkConnection: () => Promise<void>;
- lastError: { message: string; type: 'error' | 'warning' } | null;
- clearError: () => void;
- refreshMembers: () => Promise<void>;
- refreshProjects: () => Promise<void>;
- refreshFunds: () => Promise<void>;
- refreshTransactions: () => Promise<void>;
- refreshData: () => Promise<void>;
- refreshAllData: () => Promise<void>;
- distributeDividends: (data: any) => Promise<void>;
- transferEquity: (data: any) => Promise<void>;
- transferFunds: (data: any) => Promise<any>;
- reconcileFund: (id: string) => Promise<any>;
- transactions: Transaction[];
- globalStats: any;
- refreshAnalytics: () => Promise<void>;
- notifications: { count: number; items: any[] };
- refreshNotifications: () => Promise<void>;
+  members: Member[];
+  projects: Project[];
+  deposits: Deposit[];
+  expenses: Expense[];
+  funds: Fund[];
+  systemUsers: User[];
+  currentUser: User | null;
+  settings: SystemSettings | null;
+  currencyCode: string;
+  companyName: string;
+  companyTagline: string;
+  addDescription?: string; // Optional
+  addMember: (m: Member) => void;
+  updateMember: (m: Member) => Promise<void>;
+  addProject: (p: Project) => void;
+  addDeposit: (d: Deposit) => void;
+  addExpense: (e: Expense) => void;
+  editExpense: (id: string, e: Expense) => Promise<void>;
+  updateProject: (p: Project) => void;
+  deleteProject: (id: string) => void;
+  addProjectUpdate: (projectId: string, update: any) => void;
+  editProjectUpdate: (projectId: string, updateId: string, update: any) => Promise<void>;
+  deleteProjectUpdate: (projectId: string, updateId: string) => Promise<void>;
+  addFund: (f: Fund) => Promise<void>;
+  updateFund: (f: Fund) => Promise<void>;
+  addSystemUser: (u: User) => void;
+  updateUser: (userId: string, data: Partial<User>) => Promise<void>;
+  updateUserPassword: (userId: string, newPass: string) => void;
+  deleteUser: (userId: string) => void;
+  deleteMember: (id: string) => Promise<void>;
+  onboardMember: (data: any) => Promise<void>;
+  updateSettings: (s: Partial<SystemSettings>) => Promise<void>;
+  connectionStatus: ConnectionStatus;
+  lastOnlineAt: number | null;
+  checkConnection: () => Promise<void>;
+  lastError: { message: string; type: 'error' | 'warning' } | null;
+  clearError: () => void;
+  refreshMembers: () => Promise<void>;
+  refreshProjects: () => Promise<void>;
+  refreshFunds: () => Promise<void>;
+  refreshTransactions: () => Promise<void>;
+  refreshData: () => Promise<void>;
+  refreshAllData: () => Promise<void>;
+  distributeDividends: (data: any) => Promise<void>;
+  transferEquity: (data: any) => Promise<void>;
+  transferFunds: (data: any) => Promise<any>;
+  reconcileFund: (id: string) => Promise<any>;
+  transactions: Transaction[];
+  globalStats: any;
+  refreshAnalytics: () => Promise<void>;
+  notifications: { count: number; items: any[] };
+  refreshNotifications: () => Promise<void>;
 }
 
 const GlobalStateContext = createContext<GlobalState | undefined>(undefined);
@@ -194,141 +234,202 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  };
  }, []);
 
- const fetchMembers = async () => {
- try {
- const response = await memberService.getAll();
- const data = response.data || [];
- setMembers(data.map((m: any) => ({ ...m, id: m._id || m.id })));
- } catch (e: any) {
- console.error("Fetch members failed", e);
- if (isDatabaseError(e)) {
- setLastErrorDebounced({ message: 'Could not load members. Check your connection.', type: 'error' });
- }
- }
- };
+  const fetchMembers = async () => {
+    if (user && !checkUserPermission(user, AppScreen.MEMBERS, AccessLevel.READ)) {
+      return;
+    }
+    try {
+      const response = await memberService.getAll();
+      const data = response.data || [];
+      setMembers(data.map((m: any) => ({ ...m, id: m._id || m.id })));
+    } catch (e: any) {
+      if (e.response?.status !== 403) {
+        console.error("Fetch members failed", e);
+      }
+      if (isDatabaseError(e)) {
+        setLastErrorDebounced({ message: 'Could not load members. Check your connection.', type: 'error' });
+      }
+    }
+  };
 
- const fetchSettings = async () => {
- try {
- const data = await settingsService.get();
- setSettings(data);
- const normalizedCurrency = normalizeCurrencyCode(data?.financial?.baseCurrency);
- setActiveCurrencyCode(normalizedCurrency);
- } catch (e: any) {
- console.error("Fetch settings failed", e);
- // Don't show error for settings - it's not critical
- }
- };
+  const fetchSettings = async () => {
+    if (user && !checkUserPermission(user, AppScreen.SETTINGS, AccessLevel.READ)) {
+      return;
+    }
+    try {
+      const data = await settingsService.get();
+      setSettings(data);
+      const normalizedCurrency = normalizeCurrencyCode(data?.financial?.baseCurrency);
+      setActiveCurrencyCode(normalizedCurrency);
+    } catch (e: any) {
+      if (e.response?.status !== 403) {
+        console.error("Fetch settings failed", e);
+      }
+    }
+  };
 
- const fetchProjects = async () => {
- try {
- const response = await projectService.getAll();
- const data = response.data || [];
- setProjects(data.map((p: any) => ({ ...p, id: p._id || p.id })));
- } catch (e: any) {
- console.error("Fetch projects failed", e);
- if (isDatabaseError(e)) {
- setLastErrorDebounced({ message: 'Could not load projects. Check your connection.', type: 'error' });
- }
- }
- };
+  const fetchProjects = async () => {
+    if (user && !checkUserPermission(user, AppScreen.PROJECT_MANAGEMENT, AccessLevel.READ)) {
+      setProjects([]);
+      return;
+    }
+    try {
+      const response = await projectService.getAll();
+      const data = response.data || [];
+      setProjects(data.map((p: any) => ({ ...p, id: p._id || p.id })));
+    } catch (e: any) {
+      if (e.response?.status !== 403) {
+        console.error("Fetch projects failed", e);
+      }
+      if (isDatabaseError(e)) {
+        setLastErrorDebounced({ message: 'Could not load projects. Check your connection.', type: 'error' });
+      }
+    }
+  };
 
- const fetchFunds = async () => {
- try {
- const response = await fundService.getAll();
- const fundsList = response.data || response;
- setFunds(fundsList.map((f: any) => ({ ...f, id: f._id || f.id })));
- } catch (e: any) {
- console.error("Fetch funds failed", e);
- if (isDatabaseError(e)) {
- setLastErrorDebounced({ message: 'Could not load funds. Check your connection.', type: 'error' });
- }
- }
- };
+  const fetchFunds = async () => {
+    if (user && !checkUserPermission(user, AppScreen.FUNDS_MANAGEMENT, AccessLevel.READ)) {
+      setFunds([]);
+      return;
+    }
+    try {
+      const response = await fundService.getAll();
+      const fundsList = response.data || response;
+      const parsedFunds = (Array.isArray(fundsList) ? fundsList : []).map((f: any) => ({
+        ...f,
+        id: f._id || f.id,
+        balance: parseFloat(String(f.balance || 0)) || 0,
+        minimumBalance: parseFloat(String(f.minimumBalance || 0)) || 0,
+      }));
+      setFunds(parsedFunds);
+    } catch (e: any) {
+      if (e.response?.status !== 403) {
+        console.error("Fetch funds failed", e);
+      }
+      if (isDatabaseError(e)) {
+        setLastErrorDebounced({ message: 'Could not load funds. Check your connection.', type: 'error' });
+      }
+    }
+  };
 
- const fetchTransactions = async () => {
- try {
- const response = await financeService.getTransactions({ limit: 1000 });
- const allTransactions = response.data || [];
- const normalized = allTransactions.map((t: any) => {
- const memberIdentity = resolveMemberIdentity(t.memberId, members);
- const fallbackMember = members.find(member => member.id === t.memberMongoId || member.memberId === t.memberDisplayId);
+  const fetchTransactions = async () => {
+    if (user && !checkUserPermission(user, AppScreen.TRANSACTIONS, AccessLevel.READ) && !checkUserPermission(user, AppScreen.DEPOSITS, AccessLevel.READ)) {
+      setTransactions([]);
+      setDeposits([]);
+      setExpenses([]);
+      return;
+    }
+    try {
+      const response = await financeService.getTransactions({ limit: 1000 });
+      const allTransactions = response.data || [];
+      const normalized = allTransactions.map((t: any) => {
+        const memberIdentity = resolveMemberIdentity(t.memberId, members);
+        const fallbackMember = members.find(member => member.id === t.memberMongoId || member.memberId === t.memberDisplayId);
 
- return {
- ...t,
- id: t._id || t.id,
- memberDisplayId: t.memberDisplayId || fallbackMember?.memberId || memberIdentity.memberDisplayId,
- memberMongoId: t.memberMongoId || fallbackMember?.id || memberIdentity.memberMongoId,
- memberName: t.memberName || fallbackMember?.name || memberIdentity.memberName
- };
- });
- setTransactions(normalized);
+        return {
+          ...t,
+          id: t._id || t.id,
+          memberDisplayId: t.memberDisplayId || fallbackMember?.memberId || memberIdentity.memberDisplayId,
+          memberMongoId: t.memberMongoId || fallbackMember?.id || memberIdentity.memberMongoId,
+          memberName: t.memberName || fallbackMember?.name || memberIdentity.memberName
+        };
+      });
+      setTransactions(normalized);
 
- const depositsList = normalized.filter((t: any) => t.type === 'Deposit').map((t: any) => ({
- id: t.id,
- memberId: t.memberMongoId || t.memberId, // Use Mongo ID for backend operations
- memberDisplayId: t.memberDisplayId || 'N/A', // Custom ID for display
- memberName: t.memberName || 'Unknown',
- shareNumber: Math.floor(t.amount / 1000),
- amount: t.amount,
- depositMonth: new Date(t.date).toLocaleString('default', { month: 'long' }) + ' ' + new Date(t.date).getFullYear(),
- cashierName: t.handlingOfficer || 'System',
- status: t.status === 'Success' ? 'Completed' : t.status,
- date: t.date,
- fundId: t.fundId?._id || t.fundId, // Ensure fundId is available
- depositMethod: t.depositMethod || 'Cash'
- }));
- setDeposits(depositsList);
+      const depositsList = normalized.filter((t: any) => t.type === 'Deposit').map((t: any) => ({
+        id: t.id,
+        memberId: t.memberMongoId || t.memberId, // Use Mongo ID for backend operations
+        memberDisplayId: t.memberDisplayId || 'N/A', // Custom ID for display
+        memberName: t.memberName || 'Unknown',
+        shareNumber: Math.floor(t.amount / 1000),
+        amount: t.amount,
+        depositMonth: new Date(t.date).toLocaleString('default', { month: 'long' }) + ' ' + new Date(t.date).getFullYear(),
+        cashierName: t.handlingOfficer || 'System',
+        status: t.status === 'Success' ? 'Completed' : t.status,
+        date: t.date,
+        fundId: t.fundId?._id || t.fundId, // Ensure fundId is available
+        depositMethod: t.depositMethod || 'Cash'
+      }));
+      setDeposits(depositsList);
 
- const expensesList = normalized.filter((t: any) => t.type === 'Expense').map((t: any) => ({
- id: t.id,
- memberId: t.memberMongoId || t.memberId,
- memberDisplayId: t.memberDisplayId || 'N/A',
- memberName: t.memberName || 'Unknown',
- projectId: t.projectId?._id || t.projectId,
- projectName: t.projectId?.title || '',
- amount: t.amount,
- category: t.category || 'Operational',
- reason: t.description || 'No description',
- date: t.date,
- sourceFund: t.fundId?._id || t.fundId
- }));
- setExpenses(expensesList);
- } catch (e: any) {
- console.error("Fetch transactions failed", e);
- if (isDatabaseError(e)) {
- setLastErrorDebounced({ message: 'Could not load transactions. Check your connection.', type: 'error' });
- }
- }
- };
+      const expensesList = normalized.filter((t: any) => t.type === 'Expense').map((t: any) => ({
+        id: t.id,
+        memberId: t.memberMongoId || t.memberId,
+        memberDisplayId: t.memberDisplayId || 'N/A',
+        memberName: t.memberName || 'Unknown',
+        projectId: t.projectId?._id || t.projectId,
+        projectName: t.projectId?.title || '',
+        amount: t.amount,
+        category: t.category || 'Operational',
+        reason: t.description || 'No description',
+        date: t.date,
+        sourceFund: t.fundId?._id || t.fundId
+      }));
+      setExpenses(expensesList);
+    } catch (e: any) {
+      if (e.response?.status !== 403) {
+        console.error("Fetch transactions failed", e);
+      }
+      if (isDatabaseError(e)) {
+        setLastErrorDebounced({ message: 'Could not load transactions. Check your connection.', type: 'error' });
+      }
+    }
+  };
 
- const fetchSystemUsers = async () => {
- if (!user || (user.role !== 'Admin' && user.role !== 'Manager' && user.role !== 'Administrator')) return;
- try {
- const data = await authService.getAllUsers();
- const standardized = data.map((u: any) => ({
- ...u,
- id: u._id || u.id
- }));
- setSystemUsers(standardized);
- } catch (e: any) {
- console.error("Fetch users failed", e);
- }
- };
+  const fetchSystemUsers = async () => {
+    if (!user || (user.role !== 'Admin' && user.role !== 'Manager' && user.role !== 'Administrator')) return;
+    try {
+      const data = await authService.getAllUsers();
+      const standardized = data.map((u: any) => ({
+        ...u,
+        id: u._id || u.id
+      }));
+      setSystemUsers(standardized);
+    } catch (e: any) {
+      if (e.response?.status !== 403) {
+        console.error("Fetch users failed", e);
+      }
+    }
+  };
 
- const fetchAnalytics = async () => {
- try {
- const data = await analyticsService.getStats();
- setGlobalStats(data);
- } catch (e: any) { console.error("Fetch analytics failed", e); }
- };
+  const fetchAnalytics = async () => {
+    if (user && !checkUserPermission(user, AppScreen.ANALYSIS, AccessLevel.READ) && !checkUserPermission(user, AppScreen.DASHBOARD, AccessLevel.READ)) {
+      return;
+    }
+    try {
+      const data = await analyticsService.getStats();
+      setGlobalStats(data);
+    } catch (e: any) {
+      if (e.response?.status !== 403) {
+        console.error("Fetch analytics failed", e);
+      }
+    }
+  };
 
- const fetchNotifications = async () => {
- if (!user || (user.role !== 'Admin' && user.role !== 'Administrator')) return;
- try {
- const data = await auditService.getNotifications();
- setNotifications({ count: data.count, items: data.notifications });
- } catch (e: any) { console.error("Fetch notifications failed", e); }
- };
+  const fetchNotifications = async () => {
+    if (!user || (user.role !== 'Admin' && user.role !== 'Administrator')) return;
+    try {
+      const data = await auditService.getNotifications();
+      if (Array.isArray(data)) {
+        setNotifications({ count: data.length, items: data });
+      } else if (data && typeof data === 'object') {
+        const items = Array.isArray(data.notifications)
+          ? data.notifications
+          : Array.isArray(data.items)
+          ? data.items
+          : Array.isArray(data.data)
+          ? data.data
+          : [];
+        const count = typeof data.count === 'number' ? data.count : items.length;
+        setNotifications({ count, items });
+      } else {
+        setNotifications({ count: 0, items: [] });
+      }
+    } catch (e: any) { 
+      console.error("Fetch notifications failed", e); 
+      setNotifications({ count: 0, items: [] });
+    }
+  };
 
  // Comprehensive refresh all data - ensures latest data from server
  const refreshAllData = async () => {
@@ -358,24 +459,23 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  }
  };
 
- useEffect(() => {
- if (!user) return;
- if (connectionStatus === 'online') {
- fetchMembers();
- fetchProjects();
- fetchFunds();
- fetchTransactions();
- fetchAnalytics();
- fetchSettings();
- fetchSettings();
- if (user.role === 'Admin' || user.role === 'Manager' || user.role === 'Administrator') {
- fetchSystemUsers();
- }
- if (user.role === 'Admin' || user.role === 'Administrator') {
- fetchNotifications();
- }
- }
- }, [user, connectionStatus]);
+  useEffect(() => {
+    if (!user) return;
+    if (connectionStatus === 'online') {
+      fetchMembers();
+      fetchProjects();
+      fetchFunds();
+      fetchTransactions();
+      fetchAnalytics();
+      fetchSettings();
+      if (user.role === 'Admin' || user.role === 'Manager' || user.role === 'Administrator') {
+        fetchSystemUsers();
+      }
+      if (user.role === 'Admin' || user.role === 'Administrator') {
+        fetchNotifications();
+      }
+    }
+  }, [user, connectionStatus]);
 
  const addMember = async (m: Member) => {
  if (connectionStatus === 'offline') {
@@ -393,22 +493,23 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  }
  };
 
- const updateMember = async (m: Member) => {
- if (connectionStatus === 'offline') {
- setLastErrorDebounced({ message: 'Cannot update member while offline.', type: 'warning' });
- return;
- }
- try {
- const updated = await memberService.update(m.id, m);
- const standardized = { ...updated, id: updated._id || updated.id };
- setMembers(prev => prev.map(item => item.id === m.id ? standardized : item));
- fetchMembers();
- fetchAnalytics();
- } catch (e: any) {
- setLastErrorDebounced({ message: e.message || 'Failed to update member', type: 'error' });
- throw e;
- }
- };
+  const updateMember = async (m: any) => {
+    if (connectionStatus === 'offline') {
+      setLastErrorDebounced({ message: 'Cannot update member while offline.', type: 'warning' });
+      return;
+    }
+    try {
+      const updated = await memberService.update(m.id, m);
+      const standardized = { ...updated, id: updated._id || updated.id };
+      setMembers(prev => prev.map(item => item.id === m.id ? standardized : item));
+      fetchMembers();
+      fetchAnalytics();
+      fetchSystemUsers();
+    } catch (e: any) {
+      setLastErrorDebounced({ message: e.message || 'Failed to update member', type: 'error' });
+      throw e;
+    }
+  };
 
  const deleteMember = async (id: string) => {
  if (connectionStatus === 'offline') {
@@ -543,22 +644,31 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  }
  };
 
- const updateProject = async (p: Project) => {
- if (connectionStatus === 'offline') {
- setLastErrorDebounced({ message: 'Cannot update project while offline.', type: 'warning' });
- return;
- }
- try {
- const updated = await projectService.update(p.id, p);
- const standardized = { ...updated, id: updated._id || updated.id };
- setProjects(prev => prev.map(item => item.id === p.id ? standardized : item));
- fetchProjects();
- fetchFunds();
- fetchAnalytics();
- } catch (e: any) {
- setLastErrorDebounced({ message: e.message || 'Failed to update project', type: 'error' });
- }
- };
+  const updateProject = async (p: Partial<Project> & { id: string }) => {
+    if (connectionStatus === 'offline') {
+      setLastErrorDebounced({ message: 'Cannot update project while offline.', type: 'warning' });
+      return;
+    }
+    try {
+      const payload: any = {
+        ...p,
+        initialInvestment: p.initialInvestment !== undefined ? Number(p.initialInvestment) : undefined,
+        budget: p.budget !== undefined ? Number(p.budget) : undefined,
+        expectedRoi: p.expectedRoi !== undefined ? Number(p.expectedRoi) : undefined,
+        totalShares: p.totalShares !== undefined ? Number(p.totalShares) : undefined,
+        completionDate: p.completionDate || null,
+      };
+      const updated = await projectService.update(p.id, payload);
+      const standardized = { ...updated, id: updated._id || updated.id };
+      setProjects(prev => prev.map(item => item.id === p.id ? standardized : item));
+      fetchProjects();
+      fetchFunds();
+      fetchAnalytics();
+    } catch (e: any) {
+      setLastErrorDebounced({ message: e.message || 'Failed to update project', type: 'error' });
+      throw e;
+    }
+  };
 
  const addProjectUpdate = async (projectId: string, update: any) => {
  if (connectionStatus === 'offline') {
@@ -772,16 +882,34 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
  return result;
  };
 
- const refreshData = async () => {
- await refreshAllData();
- };
+  const refreshData = async () => {
+    await refreshAllData();
+  };
 
- return (
- <GlobalStateContext.Provider value={{
- members, projects, deposits, expenses, funds, systemUsers, transactions, currentUser: user,
- settings,
- currencyCode: getActiveCurrencyCode(),
- globalStats,
+  const currencyCode = useMemo(() => {
+    return normalizeCurrencyCode(settings?.financial?.baseCurrency) || 'BDT';
+  }, [settings?.financial?.baseCurrency]);
+
+  const companyName = useMemo(() => {
+    return settings?.organization?.companyName || settings?.companyName || 'InvestWise';
+  }, [settings]);
+
+  const companyTagline = useMemo(() => {
+    return settings?.organization?.companyTagline || settings?.companyTagline || 'Enterprise Investment Management';
+  }, [settings]);
+
+  useEffect(() => {
+    setActiveCurrencyCode(currencyCode);
+  }, [currencyCode]);
+
+  return (
+    <GlobalStateContext.Provider value={{
+      members, projects, deposits, expenses, funds, systemUsers, transactions, currentUser: user,
+      settings,
+      currencyCode,
+      companyName,
+      companyTagline,
+      globalStats,
  addMember, updateMember, deleteMember, addProject, addDeposit, addExpense, editExpense, updateProject, deleteProject, addProjectUpdate, editProjectUpdate, deleteProjectUpdate,
  addFund, updateFund,
  addSystemUser, updateUser, updateUserPassword, deleteUser,

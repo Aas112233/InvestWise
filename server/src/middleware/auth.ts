@@ -4,6 +4,7 @@ import { getDb } from '../config/database.js';
 import { users, blacklistedTokens } from '../db/schema/index.js';
 import { eq, and, gt } from 'drizzle-orm';
 import { verifyToken } from '../lib/jwt.js';
+import { COOKIE_NAMES } from '../lib/cookies.js';
 import { AuthError, ForbiddenError } from '../shared/errors.js';
 import { asyncHandler } from '../shared/asyncHandler.js';
 import { cache } from '../lib/cache.js';
@@ -96,16 +97,22 @@ function effectiveRole(role: string): EffectiveRole {
 }
 
 /**
- * Authenticate user via Bearer JWT token.
- * Sets req.user with full user record and RLS context.
+ * Authenticate user via HttpOnly cookie or Bearer JWT token.
+ * Sets req.user with full user record directly from the database.
  */
 export const protect = asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    throw new AuthError('No token provided', 'NO_TOKEN');
+  // 1. Prioritize secure HttpOnly cookie, fall back to Authorization header
+  let token: string | undefined = req.cookies?.[COOKIE_NAMES.ACCESS_TOKEN];
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.slice(7);
+    }
   }
 
-  const token = authHeader.slice(7);
+  if (!token) {
+    throw new AuthError('No token provided', 'NO_TOKEN');
+  }
 
   // Check blacklist (in-memory first, DB fallback)
   if (await isBlacklisted(token)) {
@@ -218,7 +225,73 @@ export function requireRole(...roles: EffectiveRole[]) {
 }
 
 /**
- * Require screen-level permission.
+ * Evaluate whether a user has the required permission for a screen.
+ * Resolves super roles (Admin/Administrator), explicit JSONB permissions,
+ * and role-based operational defaults.
+ */
+export function hasScreenPermission(
+  user: { role?: string; permissions?: Record<string, string> } | null | undefined,
+  screen: string,
+  requiredLevel: PermissionLevel = 'WRITE',
+): boolean {
+  if (!user) return false;
+
+  const role = user.role || 'Member';
+  // Super Admin & Admin have unconditional WRITE & READ across every screen
+  if (role === 'Admin' || role === 'Administrator') {
+    return true;
+  }
+
+  // Explicit user permission takes highest precedence (with parent fallback)
+  let explicit = user.permissions?.[screen];
+  if (!explicit) {
+    if (screen === 'MEETINGS' || screen === 'GOVERNANCE') {
+      explicit = user.permissions?.['MEMBERS'];
+    } else if (screen === 'REQUEST_DEPOSIT' || screen === 'TRANSACTIONS') {
+      explicit = user.permissions?.['DEPOSITS'];
+    }
+  }
+
+  if (explicit === 'WRITE') return true;
+  if (explicit === 'READ' && requiredLevel === 'READ') return true;
+  if (explicit === 'NONE') return false;
+
+  // Role defaults when no explicit override is set for this screen
+  if (role === 'Manager') {
+    // Managers have full operational WRITE on everything except SETTINGS
+    if (screen === 'SETTINGS') return false;
+    return true;
+  }
+
+  if (role === 'Audit') {
+    // Auditors have read-only access to financial/operational data
+    return requiredLevel === 'READ';
+  }
+
+  if (role === 'Investor') {
+    const investorReadScreens = [
+      'DASHBOARD',
+      'DEPOSITS',
+      'PROJECT_MANAGEMENT',
+      'ANALYSIS',
+      'REPORTS',
+      'GOALS',
+      'TRANSACTIONS',
+    ];
+    return investorReadScreens.includes(screen) && requiredLevel === 'READ';
+  }
+
+  if (role === 'Member' || role === 'Associate Member') {
+    if (screen === 'REQUEST_DEPOSIT') return true;
+    const memberReadScreens = ['DASHBOARD', 'DEPOSITS', 'GOALS'];
+    return memberReadScreens.includes(screen) && requiredLevel === 'READ';
+  }
+
+  return false;
+}
+
+/**
+ * Require screen-level permission with role inheritance and explicit override resolution.
  */
 export function requirePermission(screen: string, level: PermissionLevel) {
   return (req: Request, _res: Response, next: NextFunction): void => {
@@ -226,18 +299,8 @@ export function requirePermission(screen: string, level: PermissionLevel) {
       throw new AuthError('Authentication required');
     }
 
-    const userPerm = req.user.permissions[screen];
-
-    if (!userPerm) {
-      throw new ForbiddenError(`No permission for screen: ${screen}`);
-    }
-
-    if (level === 'WRITE' && userPerm !== 'WRITE') {
-      throw new ForbiddenError(`Write permission required for: ${screen}`);
-    }
-
-    if (level === 'READ' && userPerm !== 'READ' && userPerm !== 'WRITE') {
-      throw new ForbiddenError(`Read permission required for: ${screen}`);
+    if (!hasScreenPermission(req.user, screen, level)) {
+      throw new ForbiddenError(`${level === 'WRITE' ? 'Write' : 'Read'} permission required for: ${screen}`);
     }
 
     next();

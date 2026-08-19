@@ -54,21 +54,21 @@ const Marquee: React.FC = () => {
 
 const testimonials = [
   {
-    quote: "We went from 3 hours of weekly spreadsheet reconciliation to zero. InvestWise doesn't just track — it thinks.",
+    quote: "We eliminated manual spreadsheet reconciliation entirely. Automated ledgers and dividend calculations keep our entire partnership synchronized.",
     name: 'Rahim Ahmed',
     role: 'Managing Partner, Gulshan Holdings',
     initials: 'RA',
     color: 'bg-brand',
   },
   {
-    quote: "Our 14-partner group had complete chaos before this. Now everyone sees their exact share in real-time. No more trust issues.",
+    quote: "With 14 partners in our syndicate, financial clarity was critical. Now every stakeholder accesses their real-time ledger balance and quarterly yields directly.",
     name: 'Fatima Khan',
     role: 'Director, Banani Residences',
     initials: 'FK',
     color: 'bg-emerald-500',
   },
   {
-    quote: "The auto-dividend feature alone saved us 40 hours per quarter. The ROI on this tool is absurd.",
+    quote: "Automated dividend calculation and instant PDF statement generation save our accounting team substantial hours every quarter.",
     name: 'Karim Hassan',
     role: 'CFO, Dhanmondi Complex',
     initials: 'KH',

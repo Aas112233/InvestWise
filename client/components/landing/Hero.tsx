@@ -154,14 +154,14 @@ const Hero: React.FC = () => {
               animate="visible"
               className="text-[clamp(2.5rem,6vw,5.25rem)] font-extrabold text-dark dark:text-white tracking-[-0.035em] leading-[0.92] mb-7"
             >
-              <motion.span variants={wordVariant} className="inline-block mr-[0.25em]">Your</motion.span>
+              <motion.span variants={wordVariant} className="inline-block mr-[0.25em]">Precision</motion.span>
               <motion.span variants={wordVariant} className="inline-block mr-[0.25em]">capital</motion.span>
               <br />
-              <motion.span variants={wordVariant} className="inline-block mr-[0.25em]">deserves</motion.span>
-              <motion.span variants={wordVariant} className="inline-block mr-[0.25em]">a</motion.span>
+              <motion.span variants={wordVariant} className="inline-block mr-[0.25em]">&amp;</motion.span>
+              <motion.span variants={wordVariant} className="inline-block mr-[0.25em]">partner</motion.span>
               <br />
               <motion.span variants={wordVariant} className="relative inline-block">
-                <span className="text-shimmer">brain.</span>
+                <span className="text-shimmer">clarity.</span>
                 <motion.span
                   initial={{ scaleX: 0 }}
                   animate={{ scaleX: 1 }}
@@ -178,9 +178,8 @@ const Hero: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.6 }}
               className="text-lg text-gray-500 dark:text-gray-400 font-medium leading-[1.7] max-w-[500px] mb-10"
             >
-              InvestWise replaces your spreadsheet chaos with an immutable
-              ledger — tracking every taka across partners, projects, and
-              payouts with zero room for error.
+              InvestWise provides unified ledger tracking, fund management, and automated
+              dividend distributions across multi-partner investment portfolios.
             </motion.p>
 
             {/* CTA Buttons */}

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, X, User, CheckSquare, Square, Edit2, Trash2, CheckCircle, RefreshCw, Loader2, CreditCard, ArrowUpDown, ArrowUp, ArrowDown, Calendar } from 'lucide-react';
+import { Plus, Search, Filter, X, User, CheckSquare, Square, Edit2, Trash2, CheckCircle, RefreshCw, Loader2, CreditCard, ArrowUpDown, ArrowUp, ArrowDown, Calendar, Printer } from 'lucide-react';
 import Pagination from './Pagination';
 import { Deposit, AccessLevel, AppScreen } from '../types';
 import Toast, { ToastType } from './Toast';
@@ -18,6 +18,9 @@ import MonthPickerField from './ui/MonthPickerField';
 import { Table, TableColumn } from './ui/Table';
 import { getCurrentMonthYearLabel, localizeMonthYearLabel, monthYearLabelToDateInput } from '../utils/months';
 import { resolveMemberIdentity } from '../utils/memberLookup';
+import { generateDepositReceipt, VoucherDocument } from '../utils/voucherGenerator';
+import PrintableReceiptModal from './ui/PrintableReceiptModal';
+import { usePermission } from '../hooks/usePermission';
 
 
 
@@ -27,6 +30,8 @@ interface RequestDepositProps {
 
 const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  const { members: globalMembers, deposits: globalDeposits, funds, refreshTransactions, currentUser, settings, currencyCode } = useGlobalState();
+ const canApproveDeposits = usePermission(AppScreen.DEPOSITS, AccessLevel.WRITE);
+ const canWriteRequest = usePermission(AppScreen.REQUEST_DEPOSIT, AccessLevel.WRITE);
  const SHARE_WORTH = settings?.financial?.shareValueBdt || 1000;
  const [requests, setRequests] = useState<Deposit[]>([]);
  const [currentPage, setCurrentPage] = useState(1);
@@ -43,6 +48,8 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
 
  const [refreshing, setRefreshing] = useState(false);
  const [isSubmitting, setIsSubmitting] = useState(false);
+ const [selectedVoucher, setSelectedVoucher] = useState<VoucherDocument | null>(null);
+ const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
  const fetchPaginatedRequests = async (page: number, limit: number, search: string, sort: string, order: 'asc' | 'desc') => {
  setLoading(true);
@@ -480,28 +487,41 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  header: 'Actions',
  align: 'right',
  render: (req) => (
- <div className="flex justify-end gap-3 transition-all">
- {currentUser?.permissions[AppScreen.DEPOSITS] === AccessLevel.WRITE && (
- <button
- onClick={(e) => handleApprove(e, req.id)}
- disabled={!!processingId}
- title="Approve Request"
- className={`p-3 rounded-2xl border transition-all ${processingId === req.id ? 'bg-gray-100 border-gray-200 cursor-wait' : 'bg-brand/10 text-brand border-brand/20 hover:bg-brand hover:text-dark'}`}
- >
- {processingId === req.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} strokeWidth={3} />}
- </button>
- )}
- {currentUser?.permissions[AppScreen.REQUEST_DEPOSIT] === AccessLevel.WRITE && (
- <>
- <button onClick={() => handleOpenModal(req)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-dark dark:hover:text-brand hover:border-brand transition-all">
- <Edit2 size={16} />
- </button>
- <button onClick={() => handleDeleteClick(req.id, req.memberName)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30 transition-all">
- <Trash2 size={16} />
- </button>
- </>
- )}
- </div>
+  <div className="flex justify-end gap-2 transition-all">
+  <button
+  onClick={(e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const voucher = generateDepositReceipt(req, globalMembers, funds, currencyCode);
+  setSelectedVoucher(voucher);
+  setIsReceiptModalOpen(true);
+  }}
+  title="Print Deposit Voucher"
+  className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-500/30 transition-all"
+  >
+  <Printer size={16} />
+  </button>
+  {canApproveDeposits && (
+  <button
+  onClick={(e) => handleApprove(e, req.id)}
+  disabled={!!processingId}
+  title="Approve Request"
+  className={`p-3 rounded-2xl border transition-all ${processingId === req.id ? 'bg-gray-100 border-gray-200 cursor-wait' : 'bg-brand/10 text-brand border-brand/20 hover:bg-brand hover:text-dark'}`}
+  >
+  {processingId === req.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} strokeWidth={3} />}
+  </button>
+  )}
+  {canWriteRequest && (
+  <>
+  <button onClick={() => handleOpenModal(req)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-dark dark:hover:text-brand hover:border-brand transition-all">
+  <Edit2 size={16} />
+  </button>
+  <button onClick={() => handleDeleteClick(req.id, req.memberName)} className="p-3 bg-white dark:bg-[#111814] rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30 transition-all">
+  <Trash2 size={16} />
+  </button>
+  </>
+  )}
+  </div>
  )
  }
  ];
@@ -541,23 +561,44 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
  </div>
  </div>
  <div className="flex items-center gap-3">
-    <ExportMenu
-      data={requests}
-      columns={[
-        { header: 'ID', key: 'id' },
-        { header: 'Date', key: 'date' },
-        { header: 'Partner', key: 'memberName' },
-        { header: 'Shares', key: 'shareNumber' },
-        { header: 'Month', key: 'depositMonth' },
-        { header: 'Method', key: 'depositMethod' },
-        { header: `Amount (${currencyCode})`, key: 'amount', format: (d: any) => d.amount.toLocaleString() },
-        { header: 'Status', key: 'status' },
-        { header: 'Created At', key: 'createdAt' },
-        { header: 'Updated At', key: 'updatedAt' }
-      ]}
-      fileName={`deposit_requests_${new Date().toISOString().split('T')[0]}`}
-    />
-    {currentUser?.permissions[AppScreen.REQUEST_DEPOSIT] === AccessLevel.WRITE && (
+     <ExportMenu
+        data={requests}
+        columns={[
+          { 
+            header: t('nav.members', lang) || 'Partner Name', 
+            key: 'memberName', 
+            format: (d: any) => {
+              if (d.memberName && d.memberName !== 'N/A') return d.memberName;
+              const match = globalMembers.find(m => m.id === d.memberMongoId || m.id === d.memberId || m.memberId === d.memberId || m.memberId === d.partnerId);
+              return match?.name || d.memberName || 'N/A';
+            } 
+          },
+          { 
+            header: 'Partner ID', 
+            key: 'partnerId', 
+            format: (d: any) => {
+              if (d.partnerId && d.partnerId !== 'N/A') return d.partnerId;
+              if (d.memberCode && d.memberCode !== 'N/A') return d.memberCode;
+              if (d.memberDisplayId && d.memberDisplayId !== 'N/A') return d.memberDisplayId;
+              const match = globalMembers.find(m => m.id === d.memberMongoId || m.id === d.memberId || m.name === d.memberName);
+              if (match?.memberId) return match.memberId;
+              if (typeof d.memberId === 'string' && d.memberId && !d.memberId.includes('-')) return d.memberId;
+              return d.memberId || 'N/A';
+            } 
+          },
+         { header: t('transactions.date', lang) || 'Date', key: 'date', format: (d: any) => d.date ? formatDate(d.date) : 'N/A' },
+         { header: 'Reference', key: 'referenceNumber', format: (d: any) => d.referenceNumber || 'N/A' },
+         { header: t('deposits.monthPeriod', lang) || 'Month', key: 'depositMonth', format: (d: any) => d.depositMonth || 'N/A' },
+         { header: t('deposits.shares', lang) || 'Shares', key: 'shareNumber', format: (d: any) => d.shareNumber ?? 0 },
+         { header: `${t('deposits.amountCurrency', lang) || 'Amount'} (${currencyCode})`, key: 'amount', format: (d: any) => Number(d.amount || 0).toLocaleString() },
+         { header: 'Payment Method', key: 'depositMethod', format: (d: any) => d.depositMethod || 'N/A' },
+         { header: t('transactions.status', lang) || 'Status', key: 'status', format: (d: any) => d.status || 'Pending' }
+       ]}
+       fileName={`deposit_requests_${new Date().toISOString().split('T')[0]}`}
+       title="Capital Deposit Requests"
+       lang={lang}
+     />
+    {canWriteRequest && (
       <button onClick={() => handleOpenModal()} className="bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2rem] font-black text-sm uppercase flex items-center gap-3 hover:scale-105 transition-all shadow-2xl shadow-brand/20">
         <Plus size={20} strokeWidth={3} /> {t('common.add', lang)}
       </button>
@@ -671,8 +712,8 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
   }))}
   icon={<User size={18} />}
   required
-  disabled={!!editingRequest || !(currentUser?.role === 'Admin' || currentUser?.role === 'Manager')}
-  className={!!editingRequest || !(currentUser?.role === 'Admin' || currentUser?.role === 'Manager') ? "opacity-60 cursor-not-allowed" : ""}
+  disabled={!!editingRequest || !(currentUser?.role === 'Admin' || currentUser?.role === 'Administrator' || currentUser?.role === 'Manager')}
+  className={!!editingRequest || !(currentUser?.role === 'Admin' || currentUser?.role === 'Administrator' || currentUser?.role === 'Manager') ? "opacity-60 cursor-not-allowed" : ""}
   />
 
   {/* Field 2: Shares */}
@@ -706,7 +747,7 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
   placeholder={t('deposits.selectFund', lang)}
   options={funds.filter(f => (f.type === 'DEPOSIT' || f.type === 'Primary' || f.type === 'OTHER') && f.status !== 'ARCHIVED').map(f => ({
   value: f.id,
-  label: `${f.name} (${f.balance.toLocaleString()} ${f.currency || currencyCode})`
+  label: `${f.name} (${(parseFloat(String(f.balance || 0)) || 0).toLocaleString()} ${f.currency || currencyCode})`
   }))}
   icon={<CheckSquare size={18} />}
   required
@@ -790,6 +831,12 @@ const RequestDeposit: React.FC<RequestDepositProps> = ({ lang }) => {
   </InlineTopForm>
  )
  }
+
+ <PrintableReceiptModal
+   isOpen={isReceiptModalOpen}
+   onClose={() => setIsReceiptModalOpen(false)}
+   voucher={selectedVoucher}
+ />
  </div >
  );
 };

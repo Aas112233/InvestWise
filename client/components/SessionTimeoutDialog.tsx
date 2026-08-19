@@ -1,11 +1,11 @@
-import React, { useEffect } from 'react';
-import { Shield, Clock, LogOut, CheckCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Shield, Clock, LogOut, CheckCircle, Loader2 } from 'lucide-react';
 
 interface SessionTimeoutDialogProps {
  isOpen: boolean;
  timeRemaining: number;
- onExtend: () => void;
- onLogout: () => void;
+ onExtend: () => void | Promise<void>;
+ onLogout: () => void | Promise<void>;
 }
 
 const SessionTimeoutDialog: React.FC<SessionTimeoutDialogProps> = ({
@@ -14,6 +14,9 @@ const SessionTimeoutDialog: React.FC<SessionTimeoutDialogProps> = ({
  onExtend,
  onLogout,
 }) => {
+ const [isExtending, setIsExtending] = useState(false);
+ const [isLoggingOut, setIsLoggingOut] = useState(false);
+
  useEffect(() => {
  if (isOpen) {
  // Prevent background scrolling
@@ -25,6 +28,26 @@ const SessionTimeoutDialog: React.FC<SessionTimeoutDialogProps> = ({
  }, [isOpen]);
 
  if (!isOpen) return null;
+
+ const handleExtendClick = async () => {
+ if (isExtending || isLoggingOut) return;
+ setIsExtending(true);
+ try {
+ await onExtend();
+ } finally {
+ setIsExtending(false);
+ }
+ };
+
+ const handleLogoutClick = async () => {
+ if (isLoggingOut || isExtending) return;
+ setIsLoggingOut(true);
+ try {
+ await onLogout();
+ } finally {
+ setIsLoggingOut(false);
+ }
+ };
 
  const formatTime = (seconds: number) => {
  const mins = Math.floor(seconds / 60);
@@ -47,7 +70,7 @@ const SessionTimeoutDialog: React.FC<SessionTimeoutDialogProps> = ({
  {/* Backdrop with blur */}
  <div 
  className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
- onClick={onLogout}
+ onClick={handleLogoutClick}
  />
  
  {/* Dialog */}
@@ -98,18 +121,20 @@ const SessionTimeoutDialog: React.FC<SessionTimeoutDialogProps> = ({
  {/* Action Buttons */}
  <div className="flex gap-3">
  <button
- onClick={onLogout}
- className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 font-medium"
+ onClick={handleLogoutClick}
+ disabled={isLoggingOut || isExtending}
+ className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 font-medium cursor-pointer"
  >
- <LogOut className="w-5 h-5" />
- Logout Now
+ {isLoggingOut ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
+ {isLoggingOut ? 'Logging out...' : 'Logout Now'}
  </button>
  <button
- onClick={onExtend}
- className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg hover:from-amber-600 hover:to-orange-600 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 font-medium"
+ onClick={handleExtendClick}
+ disabled={isExtending || isLoggingOut}
+ className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 font-medium cursor-pointer"
  >
- <CheckCircle className="w-5 h-5" />
- Stay Logged In
+ {isExtending ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+ {isExtending ? 'Extending...' : 'Stay Logged In'}
  </button>
  </div>
 
