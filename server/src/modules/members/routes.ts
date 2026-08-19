@@ -5,6 +5,7 @@ import { validate } from '../../middleware/validate.js';
 import { createMemberSchema, updateMemberSchema, onboardMemberSchema } from './validation.js';
 import {
   getMembers,
+  getMyMemberProfileHandler,
   getMemberByIdHandler,
   createMemberHandler,
   updateMemberHandler,
@@ -17,6 +18,9 @@ const router = Router();
 
 // All routes require authentication
 router.use(protect);
+
+// GET /me — get current authenticated member profile (available to all logged-in users)
+router.get('/me', getMyMemberProfileHandler);
 
 // --- Specific routes (must come before parameterized /:id) ---
 

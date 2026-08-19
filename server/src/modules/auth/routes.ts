@@ -30,7 +30,7 @@ const router = Router();
 
 // Public
 router.post('/login', authLimiter, validate(loginSchema), authUser);
-router.post('/refresh', refreshToken);
+router.post('/refresh', authLimiter, refreshToken);
 
 // Authenticated — self-service
 router.post('/logout', protect, logoutUser);

@@ -54,6 +54,7 @@ export function formatPaginatedResponse<T>(data: T[], page: number, limit: numbe
 
 // User attached to request by auth middleware
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user?: {

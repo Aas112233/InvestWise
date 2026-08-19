@@ -1,6 +1,6 @@
-# 🔒 Security Best Practices
+#  Security Best Practices
 
-## 📋 **Table of Contents**
+##  **Table of Contents**
 - [Credential Management](#credential-management)
 - [Environment Variables](#environment-variables)
 - [Git Security](#git-security)
@@ -11,16 +11,16 @@
 
 ---
 
-## 🔐 Credential Management
+##  Credential Management
 
-### ✅ **DO:**
+### [OK] **DO:**
 - Use `.env` files for local development
 - Store production credentials in Vercel/Heroku dashboard
 - Rotate credentials regularly (every 90 days)
 - Use different credentials for development/production
 - Store sensitive credentials in a password manager (1Password, LastPass, Bitwarden)
 
-### ❌ **NEVER:**
+### [X] **NEVER:**
 - Commit `.env` files to git
 - Hardcode credentials in source code
 - Share credentials via email/chat
@@ -29,7 +29,7 @@
 
 ---
 
-## 🌍 Environment Variables
+##  Environment Variables
 
 ### **Local Development:**
 ```bash
@@ -65,15 +65,15 @@ NOTIFICATION_WEBHOOK_URL=https://discord.com/api/webhooks/...
 
 ---
 
-## 🛡️ Git Security
+##  Git Security
 
 ### **Protected Files (`.gitignore`):**
 These files are **automatically ignored** by git:
-- ✅ `.env` and all variants
-- ✅ `server/.env`
-- ✅ `docs/*_CONFIGURATION.md` (credential documentation)
-- ✅ `*.pem`, `*.key`, `*.crt` (certificates)
-- ✅ `secrets/`, `credentials/`, `private/` directories
+- [OK] `.env` and all variants
+- [OK] `server/.env`
+- [OK] `docs/*_CONFIGURATION.md` (credential documentation)
+- [OK] `*.pem`, `*.key`, `*.crt` (certificates)
+- [OK] `secrets/`, `credentials/`, `private/` directories
 
 ### **Verify Before Committing:**
 ```bash
@@ -89,7 +89,7 @@ git ls-files | grep -i ".env"
 
 ---
 
-## 🪝 Pre-Commit Hooks
+##  Pre-Commit Hooks
 
 A pre-commit hook is installed at `.git/hooks/pre-commit` that:
 
@@ -107,11 +107,11 @@ A pre-commit hook is installed at `.git/hooks/pre-commit` that:
 git commit --no-verify -m "your message"
 ```
 
-⚠️ **Only bypass if you're absolutely certain no credentials are exposed!**
+[WARN] **Only bypass if you're absolutely certain no credentials are exposed!**
 
 ---
 
-## ☁️ Cloudflare R2 Security
+##  Cloudflare R2 Security
 
 ### **Best Practices:**
 1. **Use minimal permissions** - Only grant Read/Write to specific bucket
@@ -129,11 +129,11 @@ git commit --no-verify -m "your message"
 
 ### **Token Permissions:**
 ```
-✅ Required:
+[OK] Required:
 - Object Read
 - Object Write
 
-❌ NOT Required:
+[X] NOT Required:
 - Bucket Read/Write
 - Account settings
 - Worker access
@@ -141,7 +141,7 @@ git commit --no-verify -m "your message"
 
 ---
 
-## 🗄️ MongoDB Security
+##  MongoDB Security
 
 ### **Best Practices:**
 1. **Use strong passwords** - Minimum 16 characters, mix of upper/lower/numbers/symbols
@@ -155,7 +155,7 @@ git commit --no-verify -m "your message"
 mongodb+srv://username:PASSWORD@cluster.mongodb.net/dbname?options
 ```
 
-⚠️ **If password contains special characters (`@`, `#`, `$`, etc.), URL-encode them:**
+[WARN] **If password contains special characters (`@`, `#`, `$`, etc.), URL-encode them:**
 ```
 @ → %40
 # → %23
@@ -165,19 +165,19 @@ $ → %24
 
 ---
 
-## 🚀 Deployment Security
+##  Deployment Security
 
 ### **Vercel:**
-- ✅ Use Environment Variables dashboard (encrypted at rest)
-- ✅ Set proper variable scope (Production/Preview/Development)
-- ✅ Enable Vercel's built-in security features
-- ✅ Use custom domains with HTTPS (automatic)
+- [OK] Use Environment Variables dashboard (encrypted at rest)
+- [OK] Set proper variable scope (Production/Preview/Development)
+- [OK] Enable Vercel's built-in security features
+- [OK] Use custom domains with HTTPS (automatic)
 
 ### **Never:**
-- ❌ Commit `.env` files
-- ❌ Use `vercel env pull` in CI/CD
-- ❌ Share environment variable exports
-- ❌ Log sensitive values
+- [X] Commit `.env` files
+- [X] Use `vercel env pull` in CI/CD
+- [X] Share environment variable exports
+- [X] Log sensitive values
 
 ### **Verify Deployment:**
 ```bash
@@ -190,7 +190,7 @@ vercel logs <deployment-url>
 
 ---
 
-## 🔍 Security Checklist
+##  Security Checklist
 
 Before deploying to production:
 
@@ -207,7 +207,7 @@ Before deploying to production:
 
 ---
 
-## 🆘 Emergency Procedures
+##  Emergency Procedures
 
 ### **If Credentials Are Compromised:**
 
@@ -234,7 +234,7 @@ Before deploying to production:
 
 ---
 
-## 📞 Security Contacts
+##  Security Contacts
 
 - **Report vulnerabilities:** Create a private issue or contact maintainers directly
 - **Security incidents:** Rotate affected credentials immediately

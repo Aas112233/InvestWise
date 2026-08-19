@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import { env, isProduction } from './config/env.js';
 import { apiLimiter } from './middleware/rate-limiter.js';
 import { errorHandler, notFound } from './middleware/error-handler.js';
@@ -10,14 +11,34 @@ import { cache } from './lib/cache.js';
 
 const app = express();
 
-// Trust proxy in production (Vercel, Render, etc.)
-app.set('trust proxy', isProduction);
+// Trust first proxy hop in production (Vercel, Render, Cloudflare, Nginx)
+app.set('trust proxy', isProduction ? 1 : false);
 
-// Security
+// Security & Content Security Policy (CSP)
 app.use(helmet({
-  contentSecurityPolicy: isProduction ? { directives: { defaultSrc: ["'self'"] } } : false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: ["'self'", "https:", "http://localhost:*", "ws://localhost:*"],
+      frameAncestors: ["'none'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+  noSniff: true,
+  xssFilter: true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
+
+// Cookie Parser for HttpOnly JWT authentication
+app.use(cookieParser());
 
 // CORS
 const allowedOrigins = env.CORS_ORIGINS
@@ -69,6 +90,7 @@ app.use((req, _res, next) => {
 
 // Request Logging Middleware
 app.use((req, res, next) => {
+  if (req.path === '/api/health' || req.path === '/api/ping') return next();
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
@@ -122,6 +144,11 @@ import { auditRouter } from './modules/audit/routes.js';
 import { settingsRouter } from './modules/settings/routes.js';
 import { reportsRouter } from './modules/reports/routes.js';
 import backupRouter from './modules/backup/routes.js';
+import { arrearsRouter } from './modules/arrears/routes.js';
+import { fiscalRouter } from './modules/fiscal/routes.js';
+import { aiRouter } from './modules/ai/routes.js';
+import { meetingsRouter } from './modules/meetings/routes.js';
+import { governanceRouter } from './modules/governance/routes.js';
 
 // API routes
 app.use('/api/auth', authRouter);
@@ -135,6 +162,11 @@ app.use('/api/audit', auditRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/backup', backupRouter);
+app.use('/api/arrears', arrearsRouter);
+app.use('/api/fiscal', fiscalRouter);
+app.use('/api/ai', aiRouter);
+app.use('/api/meetings', meetingsRouter);
+app.use('/api/governance', governanceRouter);
 
 // 404 + error handler (must be last)
 app.use(notFound);

@@ -4,12 +4,11 @@ import { env, isServerless } from '../config/env.js';
 import * as schema from '../db/schema/index.js';
 
 const poolOptions = {
-  max: 25,              // More concurrent connections to reduce queue wait
-  idle_timeout: 30,     // Keep idle connections alive (Supabase pooler drops at 60s)
-  connect_timeout: 10,  // Fail fast on connection errors
-  max_lifetime: 60 * 30, // 30 min — rotate connections to avoid stale state
+  max: 15,              // Optimal concurrent connection pool for Supabase PgBouncer pooler
+  idle_timeout: 20,     // Close idle connections cleanly before Supabase server drops them
+  connect_timeout: 30,  // 30s timeout allows sufficient headroom for international TLS handshakes
+  max_lifetime: 60 * 15, // 15 min connection lifetime rotation
   prepare: false,       // Required for Supabase transaction-mode pooler (port 6543)
-  // Reduce protocol overhead — don't send notices to the client
   debug: false,
 };
 
@@ -33,10 +32,20 @@ export async function connectDB(): Promise<typeof db> {
       db = drizzle(sql, { schema });
 
       await sql`SELECT 1`;
-      console.log('✓ PostgreSQL connected');
+      
+      // Auto-migrate critical schema columns if needed
+      try {
+        await sql`ALTER TABLE global_stats_trends ADD COLUMN IF NOT EXISTS deposit numeric(15, 2) DEFAULT '0'`;
+        await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS mother_name varchar(255)`;
+        await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS spouse_name varchar(255)`;
+      } catch {
+        // Non-blocking if tables not yet created
+      }
+
+      console.log('[OK] PostgreSQL connected');
       return db;
     } catch (error) {
-      console.error(`✗ Connection attempt ${attempt}/${maxAttempts} failed:`, error);
+      console.error(`[ERROR] Connection attempt ${attempt}/${maxAttempts} failed:`, error);
       
       if (sql) {
         try {

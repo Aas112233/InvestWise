@@ -9,7 +9,7 @@ export const normalizeCurrencyCode = (value?: string | null): string => {
     return /^[A-Z]{3}$/.test(firstToken) ? firstToken : '';
 };
 
-let activeCurrencyCode = '';
+let activeCurrencyCode = 'BDT';
 
 export const setActiveCurrencyCode = (value?: string | null) => {
     const normalized = normalizeCurrencyCode(value);
@@ -18,26 +18,49 @@ export const setActiveCurrencyCode = (value?: string | null) => {
     }
 };
 
-export const getActiveCurrencyCode = () => activeCurrencyCode;
+export const getActiveCurrencyCode = () => activeCurrencyCode || 'BDT';
 
 export const formatMoney = (
-    amount: number,
-    includeSymbol: boolean = true,
+    amount: number | string,
+    includeSymbolOrCurrency?: boolean | string,
     currencyCode?: string
 ): string => {
-    const resolvedCode = normalizeCurrencyCode(currencyCode) || activeCurrencyCode;
+    let includeSymbol = true;
+    let explicitCode: string | undefined = undefined;
 
-    if (!resolvedCode) {
-        return Number(amount || 0).toLocaleString('en-BD', {
+    if (typeof includeSymbolOrCurrency === 'string') {
+        explicitCode = includeSymbolOrCurrency;
+        includeSymbol = true;
+    } else if (typeof includeSymbolOrCurrency === 'boolean') {
+        includeSymbol = includeSymbolOrCurrency;
+        explicitCode = currencyCode;
+    } else if (currencyCode) {
+        explicitCode = currencyCode;
+    }
+
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    const validAmount = isNaN(num) ? 0 : num;
+
+    const resolvedCode = normalizeCurrencyCode(explicitCode) || activeCurrencyCode || 'BDT';
+
+    if (!includeSymbol) {
+        return validAmount.toLocaleString('en-US', {
             minimumFractionDigits: 0,
             maximumFractionDigits: 0,
         });
     }
 
-    return new Intl.NumberFormat('en-BD', {
-        style: includeSymbol ? 'currency' : 'decimal',
-        currency: resolvedCode,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-    }).format(Number(amount || 0));
+    try {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: resolvedCode,
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        }).format(validAmount);
+    } catch {
+        return `${resolvedCode} ${validAmount.toLocaleString('en-US', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        })}`;
+    }
 };

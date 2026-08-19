@@ -8,56 +8,94 @@ dotenv.config();
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  console.error('❌ DATABASE_URL environment variable is missing.');
+  console.error('[ERROR] DATABASE_URL environment variable is missing.');
   process.exit(1);
 }
 
-console.log('🔌 Connecting to Supabase PostgreSQL Database...');
+console.log('[CONNECTING] Connecting to Supabase PostgreSQL Database...');
 const sql = postgres(connectionString, { ssl: 'require', max: 1 });
 
 async function runDirectSchemaMigration() {
   try {
-    console.log('🚀 Applying ALTER TABLE schema updates for members table to Supabase...');
+    console.log('[MIGRATION] Applying ALTER TABLE schema updates for members table to Supabase...');
 
     await sql`
       ALTER TABLE members ADD COLUMN IF NOT EXISTS nid_or_passport varchar(100);
     `;
-    console.log('✅ Added column: nid_or_passport');
+    console.log('[OK] Added column: nid_or_passport');
 
     await sql`
       ALTER TABLE members ADD COLUMN IF NOT EXISTS father_name varchar(255);
     `;
-    console.log('✅ Added column: father_name');
+    console.log('[OK] Added column: father_name');
 
     await sql`
       ALTER TABLE members ADD COLUMN IF NOT EXISTS address varchar(500);
     `;
-    console.log('✅ Added column: address');
+    console.log('[OK] Added column: address');
 
     await sql`
       ALTER TABLE members ADD COLUMN IF NOT EXISTS nominee_name varchar(255);
     `;
-    console.log('✅ Added column: nominee_name');
+    console.log('[OK] Added column: nominee_name');
 
     await sql`
       ALTER TABLE members ADD COLUMN IF NOT EXISTS nominee_relation varchar(100);
     `;
-    console.log('✅ Added column: nominee_relation');
+    console.log('[OK] Added column: nominee_relation');
 
     await sql`
       ALTER TABLE members ADD COLUMN IF NOT EXISTS nominee_nid_or_passport varchar(100);
     `;
-    console.log('✅ Added column: nominee_nid_or_passport');
+    console.log('[OK] Added column: nominee_nid_or_passport');
 
     await sql`
-      ALTER TABLE members ADD COLUMN IF NOT EXISTS nominee_phone varchar(50);
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS warning_count integer DEFAULT 0 NOT NULL;
     `;
-    console.log('✅ Added column: nominee_phone');
+    await sql`
+      ALTER TABLE members ADD COLUMN IF NOT EXISTS performance_score numeric(5, 2) DEFAULT '100.00' NOT NULL;
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS monthly_meeting_day integer DEFAULT 5 NOT NULL;
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS deposit_due_date integer DEFAULT 10 NOT NULL;
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS grace_period_days integer DEFAULT 3 NOT NULL;
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS meeting_types jsonb DEFAULT '["FOUNDING_MEMBER", "SHAREHOLDER", "INVESTOR", "GENERAL"]'::jsonb;
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS penalty_rules jsonb;
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS company_name varchar(150) DEFAULT 'InvestWise';
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS company_tagline varchar(255) DEFAULT 'Enterprise Investment Management';
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS company_address varchar(255) DEFAULT '';
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS company_email varchar(100) DEFAULT '';
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS company_phone varchar(50) DEFAULT '';
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS company_website varchar(100) DEFAULT '';
+    `;
+    await sql`
+      ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS company_reg_no varchar(50) DEFAULT '';
+    `;
 
     // Also check if any migration file exists to execute
     const migrationFilePath = path.join(process.cwd(), 'drizzle', '0000_silly_hercules.sql');
     if (fs.existsSync(migrationFilePath)) {
-      console.log('📄 Found Drizzle migration file, executing complete schema verification...');
+      console.log('[INFO] Found Drizzle migration file, executing complete schema verification...');
       const sqlContent = fs.readFileSync(migrationFilePath, 'utf8');
       const statements = sqlContent
         .split('--> statement-breakpoint')
@@ -83,9 +121,9 @@ async function runDirectSchemaMigration() {
       }
     }
 
-    console.log('🎉 SCHEMA SUCCESSFULLY PUSHED TO SUPABASE POSTGRESQL!');
+    console.log('[OK] SCHEMA SUCCESSFULLY PUSHED TO SUPABASE POSTGRESQL!');
   } catch (err) {
-    console.error('❌ Migration Error:', err);
+    console.error('[ERROR] Migration Error:', err);
   } finally {
     await sql.end();
     process.exit(0);

@@ -8,13 +8,13 @@ const start = async () => {
   try {
     await connectDB();
   } catch (error) {
-    console.error('❌ Database connection failed at startup — aborting.');
+    console.error('[ERROR] Database connection failed at startup — aborting.');
     console.error((error as Error).message);
     process.exit(1);
   }
 
   const server = app.listen(env.PORT, () => {
-    console.log(`✓ InvestWise API v2 running on port ${env.PORT}`);
+    console.log(`[OK] InvestWise API v2 running on port ${env.PORT}`);
     console.log(`  Environment: ${env.NODE_ENV}`);
   });
 

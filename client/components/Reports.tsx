@@ -12,7 +12,25 @@ import { useGlobalState } from '../context/GlobalStateContext';
 import { Language, t } from '../i18n/translations';
 import MonthSelect from './ui/MonthSelect';
 
-type ReportType = 'Member Contribution' | 'Project Performance' | 'Expense Audit' | 'Funds Summary' | 'ROI Analysis' | 'Dividend Report' | 'Stakeholder Statement' | 'Project Growth Matrix' | 'Revenue Analytics' | 'Interest Accruals' | 'Earnings Ledger' | 'Comprehensive Master Ledger' | 'Project Specific Ledger' | 'Member Specific Ledger' | 'Project Expense Audit' | 'Member Deposit History' | 'Fund Specific Ledger';
+type ReportType =
+    | 'Member Contribution'
+    | 'Project Performance'
+    | 'Expense Audit'
+    | 'Funds Summary'
+    | 'ROI Analysis'
+    | 'Dividend Report'
+    | 'Stakeholder Statement'
+    | 'Project Growth Matrix'
+    | 'Revenue Analytics'
+    | 'Interest Accruals'
+    | 'Earnings Ledger'
+    | 'Comprehensive Master Ledger'
+    | 'Project Specific Ledger'
+    | 'Member Specific Ledger'
+    | 'Project Expense Audit'
+    | 'Member Deposit History'
+    | 'Fund Specific Ledger';
+
 type ExportFormat = 'PDF' | 'Excel' | 'JSON';
 type PeriodType = 'Monthly' | 'Quarterly' | 'Yearly' | 'Custom';
 type ReportCategory = 'Ledger' | 'Deposits' | 'Incomes' | 'Expenses' | 'Projects';
@@ -22,7 +40,7 @@ interface ReportsProps {
 }
 
 const Reports: React.FC<ReportsProps> = ({ lang }) => {
-    const { members, projects, funds } = useGlobalState();
+    const { members, projects, funds, currencyCode, companyName } = useGlobalState();
     const reportYears = Array.from({ length: 5 }, (_, index) => (new Date().getFullYear() - 1 + index));
     const [activeTab, setActiveTab] = useState<ReportCategory>('Ledger');
     const [activeType, setActiveType] = useState<ReportType>('Comprehensive Master Ledger');
@@ -95,7 +113,7 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
             else periodValue = `${startDate}_to_${endDate}`;
 
             const params = new URLSearchParams({
-                format,
+                format: 'json',
                 period: periodType,
                 date: periodValue,
                 lang: lang
@@ -105,17 +123,103 @@ const Reports: React.FC<ReportsProps> = ({ lang }) => {
             if (selectedMemberId) params.append('memberId', selectedMemberId);
             if (selectedFundId) params.append('fundId', selectedFundId);
 
-            const fileName = `${activeType.replace(/\s+/g, '_')}_${periodValue}.${format.toLowerCase() === 'excel' ? 'xlsx' : format.toLowerCase()}`;
-            const blob = await reportService.generate(activeType, params.toString());
+            const reportData = await reportService.getData(activeType, params.toString());
+            const baseFileName = `${activeType.replace(/\s+/g, '_')}_${periodValue}`;
 
-            triggerDownload(fileName, blob);
-            showNotification(`${activeType} report generated and downloaded.`, 'success');
+            if (format === 'Excel') {
+                const { exportFinancialReportToExcel } = await import('../utils/excelExport');
+                await exportFinancialReportToExcel({
+                    reportType: activeType,
+                    period: periodValue,
+                    data: reportData,
+                    currencyCode: currencyCode || 'BDT',
+                    fileName: `${baseFileName}.xlsx`,
+                    metadata: {
+                        'Period Type': periodType,
+                        'Organization': companyName,
+                        'Exported By': `${companyName} Enterprise System`,
+                        'System Language': lang
+                    }
+                });
+                showNotification(`${activeType} Excel report downloaded successfully.`, 'success');
+            } else if (format === 'PDF') {
+                const { jsPDF } = await import('jspdf');
+                const autoTableBase = await import('jspdf-autotable');
+                const autoTable = autoTableBase.default;
+
+                const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                doc.setFontSize(18);
+                doc.setTextColor(26, 34, 29);
+                doc.text(activeType.toUpperCase(), 14, 18);
+
+                doc.setFontSize(8.5);
+                doc.setTextColor(100, 116, 139);
+                doc.text(`${(companyName || 'INVESTWISE').toUpperCase()} | ${activeType.toUpperCase()} | Period: ${periodValue} | Currency: ${currencyCode || 'BDT'} | Date: ${new Date().toLocaleDateString()}`, 14, 25);
+
+                const dataRows = Array.isArray(reportData) ? reportData : (Array.isArray(reportData?.data) ? reportData.data : []);
+                if (dataRows.length > 0) {
+                    const IGNORED_KEYS = new Set([
+                        'id', '_id', 'memberId', 'fundId', 'projectId', 'memberMongoId',
+                        'isDeleted', 'deletedAt', 'deletedBy', 'deletionReason', '__v', 'password', 'createdAt', 'updatedAt'
+                    ]);
+                    const keys = Object.keys(dataRows[0]).filter(k => !IGNORED_KEYS.has(k));
+                    const headers = keys.map(k => {
+                        if (k === 'partnerName') return 'Partner Name';
+                        if (k === 'partnerId') return 'Partner ID';
+                        if (k === 'fundName') return 'Fund Name';
+                        if (k === 'projectName') return 'Project Name';
+                        if (k === 'authorizedBy') return 'Authorized By';
+                        if (k === 'createdBy') return 'Created By';
+                        if (k === 'handlingOfficer') return 'Handling Officer';
+                        if (k === 'reference') return 'Reference';
+                        if (k === 'debit') return 'Debit (Outflow)';
+                        if (k === 'credit') return 'Credit (Inflow)';
+                        if (k === 'runningBalance') return 'Running Balance';
+                        if (k === 'depositMethod') return 'Payment Method';
+                        return k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                    });
+                    const rows = dataRows.map(row => keys.map(k => {
+                        const val = row[k];
+                        if (val instanceof Date) return val.toISOString().split('T')[0];
+                        if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) return val.split('T')[0];
+                        if (typeof val === 'number') {
+                            const isMoney = /amount|balance|runningBalance|debit|credit|deposit|expense|investment|inflow|outflow|payout|price|valuation|revenue|total/i.test(k);
+                            if (isMoney) return `${currencyCode || 'BDT'} ${val.toLocaleString('en-US')}`;
+                            return val.toLocaleString('en-US');
+                        }
+                        if (val && typeof val === 'object') {
+                            return val.name || val.title || val.label || JSON.stringify(val);
+                        }
+                        return val ?? '';
+                    }));
+
+                    autoTable(doc, {
+                        head: [headers],
+                        body: rows,
+                        startY: 32,
+                        theme: 'grid',
+                        styles: { fontSize: 8, cellPadding: 3, valign: 'middle' },
+                        headStyles: { fillColor: [26, 34, 29], textColor: [204, 255, 0], fontStyle: 'bold' },
+                        alternateRowStyles: { fillColor: [248, 250, 248] }
+                    });
+                } else {
+                    doc.text('No transaction records found for the selected criteria.', 14, 35);
+                }
+
+                doc.save(`${baseFileName}.pdf`);
+                showNotification(`${activeType} PDF statement downloaded.`, 'success');
+            } else {
+                // JSON format
+                const jsonBlob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+                triggerDownload(`${baseFileName}.json`, jsonBlob);
+                showNotification(`${activeType} JSON dataset downloaded.`, 'success');
+            }
         } catch (error) {
             console.error('Report generation error:', error);
             showNotification('Failed to generate report. Please try again.', 'error');
+        } finally {
+            setIsGenerating(false);
         }
-
-        setIsGenerating(false);
     };
 
     const reportConfigs = [

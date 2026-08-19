@@ -1,1317 +1,1771 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-    User, Shield, Bell, Globe, CreditCard, Save,
-    Moon, Sun, Eye, EyeOff, CheckCircle2, AlertTriangle,
-    Terminal, Database, Lock, Sliders, Info, Users, Trash2, Key,
-    Check, X, ShieldCheck, ChevronRight, RefreshCw, Activity,
-    Download, Upload, HardDrive, Cloud, List, Calendar, Clock
+  Sliders,
+  CreditCard,
+  Calendar,
+  ShieldAlert,
+  Globe,
+  Database,
+  Users,
+  ShieldCheck,
+  HardDrive,
+  RefreshCw,
+  Save,
+  Lock,
+  Plus,
+  Trash2,
+  Key,
+  Download,
+  Upload,
+  Cloud,
+  CheckCircle2,
+  X,
+  AlertTriangle,
+  FileText,
+  UserCheck,
+  Building2,
+  Mail,
+  Phone,
+  MapPin,
+  Sparkles,
+  Settings as SettingsIcon,
 } from 'lucide-react';
-import { User as UserType, AccessLevel, AppScreen } from '../types';
+import { User as UserType, AccessLevel, AppScreen, Member } from '../types';
 import { useGlobalState } from '../context/GlobalStateContext';
 import Toast, { ToastType } from './Toast';
 import { Language, t } from '../i18n/translations';
-import { FormInput, FormSelect, FormTextarea } from './ui/FormElements';
+import { FormInput, FormSelect } from './ui/FormElements';
 import MonthSelect from './ui/MonthSelect';
-import AuditLogs from './Settings/AuditLogs.tsx';
+import AuditLogs from './Settings/AuditLogs';
 import api from '../services/api';
-
-import { Member } from '../types';
+import { Skeleton } from './ui/Skeleton';
+import { checkUserPermission } from '../utils/permissions';
 
 interface BackupEntry {
-    key: string;
-    filename: string;
-    size: number;
-    sizeKB: string;
-    lastModified: string;
-    age: string;
-    type: 'daily' | 'monthly' | 'manual';
+  key: string;
+  filename: string;
+  size: number;
+  sizeKB: string;
+  lastModified: string;
+  age: string;
+  type: 'daily' | 'monthly' | 'manual';
 }
 
 interface SettingsProps {
-    currentUser: UserType | null;
-    lang: Language;
+  currentUser: UserType | null;
+  lang: Language;
 }
 
-const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
-    const { systemUsers, members, updateMember, updateUser, updateUserPassword, deleteUser, settings, updateSettings } = useGlobalState();
-    const [activeTab, setActiveTab] = useState<'General' | 'Financial' | 'System' | 'Users' | 'Profiles' | 'Audit' | 'Backup'>('General');
-    const [selectedAuditUser, setSelectedAuditUser] = useState<string | null>(null);
-    const [selectedMemberProfile, setSelectedMemberProfile] = useState<Member | null>(null);
-    const [memberFormData, setMemberFormData] = useState<Partial<Member>>({});
-    const [newPassword, setNewPassword] = useState<string>('');
-    const [processingId, setProcessingId] = useState<string | null>(null);
+export const Settings: React.FC<SettingsProps> = ({ currentUser, lang }) => {
+  const {
+    systemUsers,
+    members,
+    updateMember,
+    updateUser,
+    updateUserPassword,
+    deleteUser,
+    settings,
+    updateSettings,
+  } = useGlobalState();
 
-    // Local state for settings forms
-    const [financialConfig, setFinancialConfig] = useState({
-        fiscalYearStart: 'July',
-        fiscalYearEnd: 'June',
-        baseCurrency: '',
-        taxRate: 15.0,
-        accountingMethod: 'Cash',
-        shareValueBdt: 1000,
-        isShareValueLocked: false,
-        withdrawalLimitPercent: 25,
-        withdrawalNoticeDays: 30,
-        maxWithdrawalPerRequest: 100000,
-        statutoryReservePercent: 10,
-    });
+  // 4 Primary Unified Tabs
+  const [activeTab, setActiveTab] = useState<'CONFIGURATIONS' | 'PROFILES' | 'USERS_PERMISSIONS' | 'AUDIT_BACKUPS'>('CONFIGURATIONS');
+  const [backupSubTab, setBackupSubTab] = useState<'AUDIT' | 'LOCAL_BACKUP' | 'CLOUD_BACKUP'>('AUDIT');
 
-    const [systemConfig, setSystemConfig] = useState({
-        language: 'English',
-        refreshInterval: 'Real-time',
-        theme: 'System Default',
-        dateFormat: 'DD/MM/YYYY',
-        isMaintenanceMode: false
-    });
+  // Processing state
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (settings) {
-            if (settings.financial) setFinancialConfig({ ...financialConfig, ...settings.financial });
-            if (settings.system) setSystemConfig({ ...systemConfig, ...settings.system });
-        }
-    }, [settings]);
+  // Toast
+  const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
+    isVisible: false,
+    message: '',
+    type: 'success',
+  });
 
-    // Refresh settings from backend when Financial tab is opened (to get latest lock status)
-    useEffect(() => {
-        if (activeTab === 'Financial') {
-            const refreshSettings = async () => {
-                try {
-                    const { data } = await api.get('/settings');
-                    if (data.financial) {
-                        setFinancialConfig(prev => {
-                            const updated = { ...prev, ...data.financial };
-                            return updated;
-                        });
-                    }
-                    if (data.system) setSystemConfig(prev => ({ ...prev, ...data.system }));
-                } catch (error) {
-                    console.error('[Settings] Failed to refresh settings:', error);
-                }
-            };
-            refreshSettings();
-        }
-    }, [activeTab]);
+  const showNotification = (message: string, type: ToastType = 'success') => {
+    setToast({ isVisible: true, message, type });
+  };
 
-    // Batch permission management
-    const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-    const [pendingPermissions, setPendingPermissions] = useState<Map<string, Map<AppScreen, AccessLevel>>>(new Map());
-    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  // ----------------------------------------------------
+  // Tab 1: System Setups & Configurations State
+  // ----------------------------------------------------
+  const [organizationConfig, setOrganizationConfig] = useState({
+    companyName: 'InvestWise',
+    companyTagline: 'Enterprise Investment Management',
+    companyAddress: '',
+    companyEmail: '',
+    companyPhone: '',
+    companyWebsite: '',
+    companyRegNo: '',
+  });
 
-    // Backup & Restore state
-    const [isBackingUp, setIsBackingUp] = useState(false);
-    const [isRestoring, setIsRestoring] = useState(false);
-    const [backupFile, setBackupFile] = useState<File | null>(null);
-    const [cloudBackups, setCloudBackups] = useState<BackupEntry[]>([]);
-    const [isLoadingCloudBackups, setIsLoadingCloudBackups] = useState(false);
-    const [selectedCloudBackup, setSelectedCloudBackup] = useState<string | null>(null);
-    const [isCloudRestoring, setIsCloudRestoring] = useState(false);
-    const [backupType, setBackupType] = useState<'daily' | 'monthly'>('daily');
+  const [financialConfig, setFinancialConfig] = useState({
+    fiscalYearStart: 'July',
+    fiscalYearEnd: 'June',
+    baseCurrency: 'BDT',
+    taxRate: 15.0,
+    accountingMethod: 'Accrual',
+    shareValueBdt: 1000,
+    isShareValueLocked: false,
+    withdrawalLimitPercent: 80,
+    withdrawalNoticeDays: 30,
+    maxWithdrawalPerRequest: 100000,
+    statutoryReservePercent: 10,
+  });
 
-    const [toast, setToast] = useState<{ isVisible: boolean; message: string; type: ToastType }>({
-        isVisible: false,
-        message: '',
-        type: 'success',
-    });
+  const [governanceConfig, setGovernanceConfig] = useState<{
+    monthlyMeetingDay: number;
+    depositDueDate: number;
+    gracePeriodDays: number;
+    meetingTypes: string[];
+    penaltyRules: Array<{
+      tier: number;
+      title: string;
+      type: string;
+      deductionAmount?: number;
+      isPercentage?: boolean;
+    }>;
+  }>({
+    monthlyMeetingDay: 5,
+    depositDueDate: 10,
+    gracePeriodDays: 3,
+    meetingTypes: ['FOUNDING_MEMBER', 'SHAREHOLDER', 'INVESTOR', 'GENERAL'],
+    penaltyRules: [
+      { tier: 1, title: '1st Offense: Verbal Warning', type: 'VERBAL_WARNING', deductionAmount: 0, isPercentage: false },
+      { tier: 2, title: '2nd Offense: Minor Fine', type: 'FUND_DEDUCTION', deductionAmount: 50, isPercentage: false },
+      { tier: 3, title: '3rd Offense: Major Fine', type: 'FUND_DEDUCTION', deductionAmount: 200, isPercentage: false },
+      { tier: 4, title: '4th Offense: Suspension & Fine', type: 'SUSPENSION', deductionAmount: 500, isPercentage: false },
+    ],
+  });
 
-    const currencyOptions = [
-        'BDT',
-        'USD',
-        'EUR',
-        'GBP',
-        'INR',
-        'PKR',
-        'SAR',
-        'AED',
-    ].map(code => ({ value: code, label: code }));
+  const [systemConfig, setSystemConfig] = useState({
+    language: 'English',
+    refreshInterval: 'Real-time',
+    theme: 'System Default',
+    dateFormat: 'DD/MM/YYYY',
+    isMaintenanceMode: false,
+  });
 
-    const showNotification = (message: string, type: ToastType = 'success') => {
-        setToast({ isVisible: true, message, type });
-    };
+  // Sync settings when loaded
+  useEffect(() => {
+    if (settings) {
+      if (settings.organization) {
+        setOrganizationConfig((prev) => ({ ...prev, ...settings.organization }));
+      } else if (settings.companyName) {
+        setOrganizationConfig((prev) => ({
+          ...prev,
+          companyName: settings.companyName || 'InvestWise',
+          companyTagline: settings.companyTagline || 'Enterprise Investment Management',
+          companyAddress: settings.companyAddress || '',
+          companyEmail: settings.companyEmail || '',
+          companyPhone: settings.companyPhone || '',
+          companyWebsite: settings.companyWebsite || '',
+          companyRegNo: settings.companyRegNo || '',
+        }));
+      }
+      if (settings.financial) setFinancialConfig((prev) => ({ ...prev, ...settings.financial }));
+      if (settings.governance) setGovernanceConfig((prev) => ({ ...prev, ...settings.governance }));
+      if (settings.system) setSystemConfig((prev) => ({ ...prev, ...settings.system }));
+    }
+  }, [settings]);
 
-    // Backup & Restore functions
-    const handleDownloadBackup = async () => {
-        setIsBackingUp(true);
-        try {
-            const response = await api.get('/backup/download', { responseType: 'blob' });
+  // Refresh settings from server
+  const refreshServerSettings = async () => {
+    try {
+      setProcessingId('refresh');
+      const { data } = await api.get('/settings');
+      if (data.organization) setOrganizationConfig((prev) => ({ ...prev, ...data.organization }));
+      if (data.financial) setFinancialConfig((prev) => ({ ...prev, ...data.financial }));
+      if (data.governance) setGovernanceConfig((prev) => ({ ...prev, ...data.governance }));
+      if (data.system) setSystemConfig((prev) => ({ ...prev, ...data.system }));
+      showNotification('Settings synchronized from database.');
+    } catch (err) {
+      showNotification('Failed to fetch settings', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-            // Create download link
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            link.setAttribute('download', `investwise-backup-${timestamp}.json`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
+  // Save Handlers for Tab 1
+  const handleSaveOrganization = async () => {
+    try {
+      setProcessingId('organization-save');
+      await updateSettings({ organization: organizationConfig });
+      showNotification('Company & organization profile updated successfully across the platform.');
+      const { data } = await api.get('/settings');
+      if (data.organization) setOrganizationConfig((prev) => ({ ...prev, ...data.organization }));
+    } catch (error: any) {
+      showNotification(error.response?.data?.message || error.message || 'Failed to save organization profile', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-            showNotification('Backup downloaded successfully', 'success');
-        } catch (error: any) {
-            console.error('Backup failed:', error);
-            showNotification(error.response?.data?.message || 'Backup failed', 'error');
-        } finally {
-            setIsBackingUp(false);
-        }
-    };
+  const handleSaveFinancial = async () => {
+    try {
+      setProcessingId('financial-save');
+      await updateSettings({ financial: financialConfig });
+      showNotification('Fiscal & financial rules saved successfully.');
+      const { data } = await api.get('/settings');
+      if (data.financial) setFinancialConfig((prev) => ({ ...prev, ...data.financial }));
+    } catch (error: any) {
+      showNotification(error.response?.data?.message || error.message || 'Failed to save financial settings', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-    const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file) {
-            if (!file.name.endsWith('.json')) {
-                showNotification('Please select a valid JSON backup file', 'error');
-                return;
-            }
-            setBackupFile(file);
-            showNotification(`Selected: ${file.name}`, 'success');
-        }
-    };
+  const handleSaveGovernance = async () => {
+    try {
+      setProcessingId('governance-save');
+      await updateSettings({ governance: governanceConfig });
+      showNotification('Governance & meeting policies saved successfully.');
+      const { data } = await api.get('/settings');
+      if (data.governance) setGovernanceConfig((prev) => ({ ...prev, ...data.governance }));
+    } catch (error: any) {
+      showNotification(error.response?.data?.message || error.message || 'Failed to save governance settings', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-    const handleRestoreBackup = async () => {
-        if (!backupFile) {
-            showNotification('Please select a backup file first', 'error');
-            return;
-        }
+  const handleSaveSystem = async () => {
+    try {
+      setProcessingId('system-save');
+      await updateSettings({ system: systemConfig });
+      showNotification('System preferences saved successfully.');
+    } catch (error: any) {
+      showNotification('Failed to save system settings', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-        if (!window.confirm('WARNING: This will overwrite all existing data. Are you sure?')) {
-            return;
-        }
+  // ----------------------------------------------------
+  // Tab 2: Member Profiles State
+  // ----------------------------------------------------
+  const [selectedMemberId, setSelectedMemberId] = useState<string>('');
+  const [memberProfileForm, setMemberProfileForm] = useState<Partial<Member>>({});
 
-        setIsRestoring(true);
-        try {
-            const formData = new FormData();
-            formData.append('backup', backupFile);
+  useEffect(() => {
+    if (!selectedMemberId && members.length > 0) {
+      setSelectedMemberId(members[0].id);
+      setMemberProfileForm(members[0]);
+    }
+  }, [members, selectedMemberId]);
 
-            await api.post('/backup/restore', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+  const handleSelectMember = (id: string) => {
+    setSelectedMemberId(id);
+    const m = members.find((item) => item.id === id);
+    if (m) setMemberProfileForm(m);
+  };
 
-            showNotification('Backup restored successfully! Refreshing...', 'success');
-            setBackupFile(null);
+  const handleSaveMemberProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMemberId) return;
 
-            // Reload page to refresh all data
-            setTimeout(() => window.location.reload(), 2000);
-        } catch (error: any) {
-            console.error('Restore failed:', error);
-            showNotification(error.response?.data?.message || 'Restore failed', 'error');
-        } finally {
-            setIsRestoring(false);
-        }
-    };
+    try {
+      setProcessingId('profile-save');
+      await updateMember(memberProfileForm as Member);
+      showNotification(`Profile for ${memberProfileForm.name || 'member'} updated successfully.`);
+    } catch (err: any) {
+      showNotification('Failed to update member profile', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-    // Cloudflare R2 Backup Functions
-    const loadCloudBackups = async () => {
-        setIsLoadingCloudBackups(true);
-        try {
-            const response = await api.get('/backup/list');
-            if (response.data.success) {
-                setCloudBackups(response.data.backups);
-            }
-        } catch (error: any) {
-            console.error('Failed to load cloud backups:', error);
-            showNotification('Failed to load cloud backups', 'error');
-        } finally {
-            setIsLoadingCloudBackups(false);
-        }
-    };
+  // ----------------------------------------------------
+  // Tab 3: Users & Permissions State
+  // ----------------------------------------------------
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [pendingPermissions, setPendingPermissions] = useState<Map<string, Map<AppScreen, AccessLevel>>>(new Map());
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [newPassword, setNewPassword] = useState<string>('');
 
-    const handleCloudBackup = async (type: 'daily' | 'monthly' = 'daily') => {
-        setIsBackingUp(true);
-        try {
-            const response = await api.post('/backup/manual', { type });
+  // Add User Modal State
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({
+    name: '',
+    email: '',
+    role: 'Member' as UserType['role'],
+    password: '',
+  });
 
-            if (response.data.status === 'success') {
-                showNotification(`Cloud backup created successfully (${response.data.duration}s)`, 'success');
-                await loadCloudBackups(); // Refresh the list
-            } else {
-                showNotification('Cloud backup failed', 'error');
-            }
-        } catch (error: any) {
-            console.error('Cloud backup failed:', error);
-            showNotification(error.response?.data?.error || 'Cloud backup failed', 'error');
-        } finally {
-            setIsBackingUp(false);
-        }
-    };
+  useEffect(() => {
+    if (!selectedUserId && systemUsers.length > 0) {
+      setSelectedUserId(systemUsers[0].id);
+    }
+  }, [systemUsers, selectedUserId]);
 
-    const handleCloudRestore = async (backupKey: string) => {
-        if (!window.confirm('WARNING: This will overwrite ALL existing data with the cloud backup. Are you sure?')) {
-            return;
-        }
+  const allModules: AppScreen[] = [
+    AppScreen.DASHBOARD,
+    AppScreen.MEMBERS,
+    AppScreen.MEETINGS,
+    AppScreen.GOVERNANCE,
+    AppScreen.DEPOSITS,
+    AppScreen.REQUEST_DEPOSIT,
+    AppScreen.TRANSACTIONS,
+    AppScreen.DIVIDENDS,
+    AppScreen.EXPENSES,
+    AppScreen.PROJECT_MANAGEMENT,
+    AppScreen.FUNDS_MANAGEMENT,
+    AppScreen.ANALYSIS,
+    AppScreen.REPORTS,
+    AppScreen.GOALS,
+    AppScreen.SETTINGS,
+  ];
 
-        setIsCloudRestoring(true);
-        setSelectedCloudBackup(backupKey);
-        try {
-            const response = await api.post('/backup/restore', {
-                backupKey,
-                confirm: true
-            });
+  const handlePermissionChange = (userId: string, screen: AppScreen, level: AccessLevel) => {
+    const userPendingMap = pendingPermissions.get(userId) || new Map();
+    userPendingMap.set(screen, level);
+    setPendingPermissions(new Map(pendingPermissions.set(userId, userPendingMap)));
+    setHasUnsavedChanges(true);
+  };
 
-            if (response.data.status === 'success') {
-                showNotification(`Cloud backup restored successfully (${response.data.duration}s). Refreshing...`, 'success');
-                setTimeout(() => window.location.reload(), 2000);
-            } else {
-                showNotification('Cloud restore failed', 'error');
-            }
-        } catch (error: any) {
-            console.error('Cloud restore failed:', error);
-            showNotification(error.response?.data?.error || 'Cloud restore failed', 'error');
-        } finally {
-            setIsCloudRestoring(false);
-            setSelectedCloudBackup(null);
-        }
-    };
+  const getEffectivePermission = (userId: string, screen: AppScreen): AccessLevel => {
+    const userPending = pendingPermissions.get(userId);
+    if (userPending?.has(screen)) {
+      return userPending.get(screen)!;
+    }
+    const user = systemUsers.find((u) => u.id === userId);
+    return (user?.permissions as any)?.[screen] || AccessLevel.NONE;
+  };
 
-    // Load cloud backups when tab is opened
-    useEffect(() => {
-        if (activeTab === 'Backup' && cloudBackups.length === 0) {
-            loadCloudBackups();
-        }
-    }, [activeTab]);
+  const handleSaveAllPermissions = async () => {
+    if (!hasUnsavedChanges || !selectedUserId) return;
 
-    const handleUpdateMemberProfile = async () => {
-        if (!selectedMemberProfile || !selectedMemberProfile.id) return;
+    const userPending = pendingPermissions.get(selectedUserId);
+    if (!userPending || userPending.size === 0) return;
 
-        // In a real scenario, we'd have a specific backend endpoint for "Extended Profile" or just use updateMember
-        // For now, we assume updateMember handles the fields we have.
-        // We are simulating "Additional Info" which might not be in the Member type yet.
-        // The user asked to "add details". I will assume standard updateMember works for now.
+    try {
+      const userToUpdate = systemUsers.find((u) => u.id === selectedUserId);
+      if (!userToUpdate) return;
 
-        try {
-            setProcessingId('profile-save');
-            await updateMember({ ...selectedMemberProfile, ...memberFormData } as Member);
-            showNotification(`Extended profile for ${selectedMemberProfile.name} updated.`);
-            setSelectedMemberProfile(null);
-        } catch (error) {
-            showNotification("Failed to update profile", "error");
-        } finally {
-            setProcessingId(null);
-        }
-    };
+      const currentPermissions = { ...(userToUpdate.permissions || {}) };
+      for (const [screen, level] of userPending.entries()) {
+        currentPermissions[screen] = level;
+      }
 
-    const handleSaveFinancial = async () => {
-        try {
-            setProcessingId('financial-save');
-            await updateSettings({ financial: financialConfig });
-            showNotification("Fiscal configuration saved successfully.");
-            // Refresh to get latest lock status
-            const { data } = await api.get('/settings');
-            if (data.financial) setFinancialConfig(prev => ({ ...prev, ...data.financial }));
-        } catch (error: any) {
-            const errorMsg = error.response?.data?.message || error.message || "Failed to save financial settings";
-            showNotification(errorMsg, "error");
-            // Refresh to get latest state
-            const { data } = await api.get('/settings').catch(() => ({ data: {} }));
-            if (data.financial) setFinancialConfig(prev => ({ ...prev, ...data.financial }));
-        } finally {
-            setProcessingId(null);
-        }
-    };
+      setProcessingId('batch-save');
+      await updateUser(selectedUserId, { permissions: currentPermissions });
 
-    const handleSaveSystem = async () => {
-        try {
-            setProcessingId('system-save');
-            await updateSettings({ system: systemConfig });
-            showNotification("System preferences saved successfully.");
-        } catch (error) {
-            showNotification("Failed to save system settings", "error");
-        } finally {
-            setProcessingId(null);
-        }
-    };
+      pendingPermissions.delete(selectedUserId);
+      setPendingPermissions(new Map(pendingPermissions));
+      setHasUnsavedChanges(false);
 
-    const handleSelectMember = (member: Member) => {
-        setSelectedMemberProfile(member);
-        setMemberFormData({
-            phone: member.phone,
-            email: member.email,
-            // potential new fields: address, nominee, etc. 
-        });
-    };
+      showNotification('User permissions updated successfully');
+    } catch (e) {
+      showNotification('Failed to update permissions', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-    // Local permission change (doesn't save immediately)
-    const handlePermissionChange = (userId: string, screen: AppScreen, level: AccessLevel) => {
-        const userPendingMap = pendingPermissions.get(userId) || new Map();
-        userPendingMap.set(screen, level);
-        setPendingPermissions(new Map(pendingPermissions.set(userId, userPendingMap)));
-        setHasUnsavedChanges(true);
-    };
+  const handleResetPassword = async (userId: string) => {
+    if (!newPassword || newPassword.length < 8) {
+      showNotification('Password must be at least 8 characters', 'error');
+      return;
+    }
 
-    // Batch save all pending permissions
-    const handleSaveAllPermissions = async () => {
-        if (!hasUnsavedChanges || !selectedUserId) return;
+    try {
+      setProcessingId(`reset-${userId}`);
+      await updateUserPassword(userId, newPassword);
+      setNewPassword('');
+      showNotification('User password updated successfully.');
+    } catch (e) {
+      showNotification('Failed to reset password', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-        const userPending = pendingPermissions.get(selectedUserId);
-        if (!userPending || userPending.size === 0) return;
+  const handleDeleteUser = async (userId: string) => {
+    if (!window.confirm('Are you sure you want to remove this user account?')) return;
+    try {
+      setProcessingId(`delete-${userId}`);
+      await deleteUser(userId);
+      showNotification('User account removed');
+      if (selectedUserId === userId) {
+        setSelectedUserId(systemUsers.find((u) => u.id !== userId)?.id || null);
+      }
+    } catch (err) {
+      showNotification('Failed to remove user', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-        try {
-            const userToUpdate = systemUsers.find(u => u.id === selectedUserId);
-            if (!userToUpdate) return;
+  // ----------------------------------------------------
+  // Tab 4: Audit & Backups State
+  // ----------------------------------------------------
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [backupFile, setBackupFile] = useState<File | null>(null);
+  const [cloudBackups, setCloudBackups] = useState<BackupEntry[]>([]);
+  const [isLoadingCloudBackups, setIsLoadingCloudBackups] = useState(false);
 
-            const currentPermissions = userToUpdate.permissions instanceof Map
-                ? Object.fromEntries(userToUpdate.permissions)
-                : (userToUpdate.permissions || {});
+  const handleDownloadBackup = async () => {
+    setIsBackingUp(true);
+    try {
+      const response = await api.get('/backup/download', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      link.setAttribute('download', `investwise-backup-${timestamp}.json`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showNotification('Database backup downloaded successfully');
+    } catch (error: any) {
+      showNotification('Failed to download backup', 'error');
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
 
-            const updatedPermissions = { ...currentPermissions };
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.json')) {
+        showNotification('Please select a valid JSON backup file', 'error');
+        return;
+      }
+      setBackupFile(file);
+      showNotification(`Selected: ${file.name}`);
+    }
+  };
 
-            // Merge pending changes
-            for (const [screen, level] of userPending.entries()) {
-                updatedPermissions[screen] = level;
-            }
+  const handleRestoreBackup = async () => {
+    if (!backupFile) {
+      showNotification('Please choose a JSON backup file first', 'error');
+      return;
+    }
+    if (!window.confirm('WARNING: This will overwrite existing database records with the backup file. Proceed?')) {
+      return;
+    }
 
-            setProcessingId('batch-save');
-            await updateUser(selectedUserId, { permissions: updatedPermissions });
+    setIsRestoring(true);
+    try {
+      const formData = new FormData();
+      formData.append('backup', backupFile);
+      await api.post('/backup/restore', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      showNotification('Backup restored successfully! Refreshing...');
+      setBackupFile(null);
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (error: any) {
+      showNotification(error.response?.data?.message || 'Restore failed', 'error');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
-            // Clear pending changes
-            pendingPermissions.delete(selectedUserId);
-            setPendingPermissions(new Map(pendingPermissions));
-            setHasUnsavedChanges(false);
+  const loadCloudBackups = async () => {
+    setIsLoadingCloudBackups(true);
+    try {
+      const response = await api.get('/backup/list');
+      if (response.data.success) {
+        setCloudBackups(response.data.backups || []);
+      }
+    } catch (error) {
+      // Cloud backup optional
+    } finally {
+      setIsLoadingCloudBackups(false);
+    }
+  };
 
-            showNotification(`Permissions updated successfully for user`);
-        } catch (e) {
-            showNotification("Failed to update permissions", "error");
-        } finally {
-            setProcessingId(null);
-        }
-    };
+  const handleCloudBackup = async (type: 'daily' | 'monthly' = 'daily') => {
+    setIsBackingUp(true);
+    try {
+      const response = await api.post('/backup/manual', { type });
+      if (response.data.status === 'success') {
+        showNotification(`Cloud backup created successfully (${response.data.duration}s)`);
+        await loadCloudBackups();
+      }
+    } catch (error: any) {
+      showNotification(error.response?.data?.error || 'Cloud backup failed', 'error');
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
 
-    // Cancel pending changes
-    const handleCancelChanges = () => {
-        if (!selectedUserId) return;
-        pendingPermissions.delete(selectedUserId);
-        setPendingPermissions(new Map(pendingPermissions));
-        setHasUnsavedChanges(false);
-    };
+  useEffect(() => {
+    if (activeTab === 'AUDIT_BACKUPS' && backupSubTab === 'CLOUD_BACKUP') {
+      loadCloudBackups();
+    }
+  }, [activeTab, backupSubTab]);
 
-    // Get effective permission (pending or current)
-    const getEffectivePermission = (userId: string, screen: AppScreen): AccessLevel => {
-        const userPending = pendingPermissions.get(userId);
-        if (userPending?.has(screen)) {
-            return userPending.get(screen)!;
-        }
-        const user = systemUsers.find(u => u.id === userId);
-        return user?.permissions[screen] || AccessLevel.NONE;
-    };
+  const isAdmin = useMemo(() => {
+    return currentUser?.role === 'Admin' || currentUser?.role === 'Administrator';
+  }, [currentUser]);
 
-    // Check if permission is pending
-    const isPending = (userId: string, screen: AppScreen): boolean => {
-        return pendingPermissions.get(userId)?.has(screen) || false;
-    };
+  useEffect(() => {
+    if (!isAdmin && activeTab !== 'CONFIGURATIONS') {
+      setActiveTab('CONFIGURATIONS');
+    }
+  }, [isAdmin, activeTab]);
 
-    const handleResetPassword = async (userId: string) => {
-        if (currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE) {
-            showNotification("Insufficient privileges to reset credentials", "error");
-            return;
-        }
-        if (!newPassword || newPassword.length < 6) {
-            showNotification("Please enter a valid password (min 6 chars).", "error");
-            return;
-        }
+  const canWriteSettings = useMemo(() => {
+    return checkUserPermission(currentUser, AppScreen.SETTINGS, AccessLevel.WRITE);
+  }, [currentUser]);
 
-        const resetId = `reset-${userId}`;
-        try {
-            setProcessingId(resetId);
-            await updateUserPassword(userId, newPassword);
-            setNewPassword('');
-            showNotification("Credentials updated successfully.");
-        } catch (e) {
-            showNotification("Failed to reset password", "error");
-        } finally {
-            setProcessingId(null);
-        }
-    };
+  return (
+    <div className="space-y-6">
+      <Toast
+        isVisible={toast.isVisible}
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast({ ...toast, isVisible: false })}
+      />
 
-    const tabItems = [
-        { id: 'General', label: 'Identity', icon: <User size={18} /> },
-        { id: 'Users', label: 'Team Access', icon: <Users size={18} /> },
-        { id: 'Profiles', label: 'Member Profiles', icon: <Database size={18} /> },
-        { id: 'Financial', label: 'Fiscal Config', icon: <CreditCard size={18} /> },
-        { id: 'System', label: 'Preferences', icon: <Sliders size={18} /> },
-        { id: 'Audit', label: 'Audit Logs', icon: <CheckCircle2 size={18} /> },
-        { id: 'Backup', label: 'Backup & Restore', icon: <HardDrive size={18} /> },
-    ];
-
-    const modulesToConfigure = [
-        AppScreen.DASHBOARD,
-        AppScreen.MEMBERS,
-        AppScreen.DEPOSITS,
-        AppScreen.REQUEST_DEPOSIT,
-        AppScreen.PROJECT_MANAGEMENT,
-        AppScreen.EXPENSES,
-        AppScreen.FUNDS_MANAGEMENT,
-        AppScreen.DIVIDENDS,
-        AppScreen.ANALYSIS,
-        AppScreen.REPORTS,
-        AppScreen.SETTINGS
-    ];
-
-    return (
-        <div className="compact-screen space-y-10 animate-in fade-in duration-500">
-            <Toast isVisible={toast.isVisible} message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, isVisible: false })} />
-
-            <div className="flex items-end justify-between px-2">
-                <div>
-                    <nav className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2 uppercase tracking-widest">
-                        <span>{t('nav.strategy', lang)}</span>
-                        <span className="opacity-30">/</span>
-                        <span className="text-brand">{t('nav.settings', lang)}</span>
-                    </nav>
-                    <h1 className="text-4xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('nav.settings', lang)}</h1>
-                </div>
+      {/* Top Banner */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-blue-600 text-white shadow-sm">
+              <SettingsIcon className="w-6 h-6" />
             </div>
-
-            <div className="flex flex-col lg:flex-row gap-10">
-                <div className="lg:w-80 space-y-4">
-                    <div className="bg-white dark:bg-[#1A221D] p-4 rounded-[3rem] card-shadow border border-gray-100 dark:border-white/5 space-y-2">
-                        {tabItems.filter(item => {
-                            const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Administrator';
-                            if (item.id === 'Audit' && !isAdmin) return false;
-                            if (item.id === 'Users' && !isAdmin) return false;
-                            if (item.id === 'Profiles' && !isAdmin) return false;
-                            if (item.id === 'Backup' && !isAdmin) return false;
-                            return true;
-                        }).map((item) => (
-                            <button
-                                key={item.id}
-                                onClick={() => setActiveTab(item.id as any)}
-                                className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === item.id
-                                    ? 'bg-dark dark:bg-brand text-white dark:text-dark shadow-xl'
-                                    : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-dark dark:hover:text-white'
-                                    }`}
-                            >
-                                {item.icon}
-                                {item.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="flex-1">
-                    {activeTab === 'General' && currentUser && (
-                        <div className="bg-white dark:bg-[#1A221D] p-12 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5 animate-in slide-in-from-bottom-4 duration-500">
-                            <div className="flex flex-col md:flex-row gap-12">
-                                <div className="flex flex-col items-center gap-6">
-                                    <img src={currentUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}`} className="w-48 h-48 rounded-[4rem] border-8 border-gray-50 dark:border-[#111814] shadow-2xl" alt="" />
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Active System ID: #{currentUser.id?.split('-')?.[0] || currentUser.id}</p>
-                                </div>
-                                <div className="flex-1 space-y-8">
-                                    <div className="grid grid-cols-2 gap-6">
-                                        <FormInput
-                                            label="Full Name"
-                                            defaultValue={currentUser.name}
-                                        />
-                                        <FormInput
-                                            label="Role"
-                                            value={currentUser.role}
-                                            readOnly
-                                            className="text-gray-400 cursor-not-allowed"
-                                        />
-                                    </div>
-                                    <FormInput
-                                        label="Primary Identity Terminal (Email)"
-                                        defaultValue={currentUser.email}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'Users' && (
-                        <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-                            {/* Header */}
-                            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-[#0D1410] dark:via-[#111814] dark:to-[#0D1410] p-12 rounded-[4rem] border-2 border-slate-700 dark:border-white/10 relative overflow-hidden shadow-2xl">
-                                {/* Tech Grid Background */}
-                                <div className="absolute inset-0 opacity-5">
-                                    <div className="absolute inset-0" style={{
-                                        backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-                                        backgroundSize: '40px 40px'
-                                    }}></div>
-                                </div>
-
-                                <div className="relative flex justify-between items-start">
-                                    <div>
-                                        <div className="flex items-center gap-4 mb-4">
-                                            <div className="p-4 bg-brand rounded-2xl shadow-2xl shadow-brand/40">
-                                                <ShieldCheck size={32} strokeWidth={3} className="text-dark" />
-                                            </div>
-                                            <div>
-                                                <h3 className="text-4xl font-black text-white uppercase tracking-tighter leading-none mb-2">System Authorization</h3>
-                                                <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Mission Control • Permission Matrix</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="px-6 py-2 bg-emerald-500/20 border-2 border-emerald-500/30 rounded-xl mb-2">
-                                            <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Active Users</p>
-                                            <p className="text-3xl font-black text-emerald-300 tracking-tighter">{systemUsers.length}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* User Cards Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {systemUsers.map(user => (
-                                    <button
-                                        key={user.id}
-                                        onClick={() => {
-                                            setSelectedUserId(selectedUserId === user.id ? null : user.id);
-                                            setSelectedAuditUser(null);
-                                        }}
-                                        className={`p-8 rounded-[2.5rem] border-2 transition-all text-left group ${selectedUserId === user.id
-                                            ? 'bg-brand/10 border-brand scale-105 shadow-2xl shadow-brand/20'
-                                            : 'bg-white dark:bg-[#1A221D] border-gray-200 dark:border-white/10 hover:border-brand/50 hover:shadow-xl'
-                                            }`}
-                                    >
-                                        <div className="flex items-start gap-4 mb-4">
-                                            <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`} className="w-16 h-16 rounded-2xl shadow-lg" alt="" />
-                                            <div className="flex-1">
-                                                <p className="font-black text-dark dark:text-white uppercase tracking-tight text-lg leading-none mb-2">{user.name}</p>
-                                                <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{user.email}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-white/10">
-                                            <span className={`px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest ${user.role === 'Admin' || user.role === 'Administrator' ? 'bg-rose-500/20 text-rose-500 border border-rose-500/30' :
-                                                user.role === 'Manager' ? 'bg-blue-500/20 text-blue-500 border border-blue-500/30' :
-                                                    'bg-gray-500/20 text-gray-500 border border-gray-500/30'
-                                                }`}>{user.role}</span>
-                                            <ChevronRight className={`transition-transform ${selectedUserId === user.id ? 'rotate-90 text-brand' : 'text-gray-400'}`} size={20} />
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Permission Matrix (Shows when user selected) */}
-                            {selectedUserId && (() => {
-                                const user = systemUsers.find(u => u.id === selectedUserId);
-                                if (!user) return null;
-
-                                return (
-                                    <div className="bg-white dark:bg-[#1A221D] p-10 rounded-[4rem] border border-gray-200 dark:border-white/10 shadow-2xl animate-in slide-in-from-bottom-6 duration-500">
-                                        <div className="flex items-center justify-between mb-8">
-                                            <div className="flex items-center gap-4">
-                                                <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`} className="w-12 h-12 rounded-xl shadow-lg" alt="" />
-                                                <div>
-                                                    <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{user.name}</h4>
-                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Configuring Access Permissions</p>
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={() => setSelectedUserId(null)}
-                                                className="p-3 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-xl transition-all"
-                                            >
-                                                <X size={20} className="text-gray-600 dark:text-gray-400" />
-                                            </button>
-                                        </div>
-
-                                        {/* Permission Grid */}
-                                        <div className="space-y-3">
-                                            {modulesToConfigure.map(module => {
-                                                const currentLevel = getEffectivePermission(user.id, module);
-                                                const isChanged = isPending(user.id, module);
-
-                                                return (
-                                                    <div
-                                                        key={module}
-                                                        className={`p-5 rounded-2xl border-2 transition-all ${isChanged
-                                                            ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-400 dark:border-amber-500/50'
-                                                            : 'bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10'
-                                                            }`}
-                                                    >
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex-1">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className={`w-2 h-2 rounded-full ${isChanged ? 'bg-amber-500 animate-pulse' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
-                                                                    <p className="text-xs font-black text-dark dark:text-white uppercase tracking-wider">
-                                                                        {module.replace(/_/g, ' ')}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex gap-2">
-                                                                {[
-                                                                    { level: AccessLevel.NONE, label: 'NONE', color: 'gray' },
-                                                                    { level: AccessLevel.READ, label: 'READ', color: 'blue' },
-                                                                    { level: AccessLevel.WRITE, label: 'WRITE', color: 'emerald' }
-                                                                ].map(({ level, label, color }) => (
-                                                                    <button
-                                                                        key={level}
-                                                                        disabled={currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE}
-                                                                        onClick={() => handlePermissionChange(user.id, module, level)}
-                                                                        className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed ${currentLevel === level
-                                                                            ? color === 'gray' ? 'bg-gray-600 text-white shadow-lg scale-105' :
-                                                                                color === 'blue' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30 scale-105' :
-                                                                                    'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 scale-105'
-                                                                            : color === 'gray' ? 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700' :
-                                                                                color === 'blue' ? 'bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-500/20' :
-                                                                                    'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-500/20'
-                                                                            }`}
-                                                                    >
-                                                                        {label}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-
-                                        {/* Password Reset Section */}
-                                        <div className="mt-10 pt-10 border-t border-gray-200 dark:border-white/10">
-                                            <h5 className="text-[11px] font-black text-gray-500 uppercase tracking-widest mb-4">Security Credentials</h5>
-                                            <div className="flex gap-4">
-                                                <input
-                                                    disabled={currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE}
-                                                    type="password"
-                                                    value={newPassword}
-                                                    onChange={(e) => setNewPassword(e.target.value)}
-                                                    placeholder={currentUser.permissions[AppScreen.SETTINGS] === AccessLevel.WRITE ? "New password..." : "Read-only"}
-                                                    className="flex-1 bg-gray-100 dark:bg-dark px-6 py-4 rounded-2xl border-2 border-transparent focus:border-brand outline-none font-bold text-dark dark:text-white disabled:opacity-50"
-                                                />
-                                                <button
-                                                    disabled={currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE}
-                                                    onClick={() => handleResetPassword(user.id)}
-                                                    className="bg-dark dark:bg-brand text-white dark:text-dark px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
-                                                >
-                                                    {processingId === `reset-${user.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Key size={14} />}
-                                                    {processingId === `reset-${user.id}` ? 'Resetting...' : 'Reset'}
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {/* Revoke Access */}
-                                        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-white/10 flex justify-between items-center">
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Last Login</p>
-                                                <p className="text-xs font-bold text-dark dark:text-white uppercase">{user.lastLogin}</p>
-                                            </div>
-                                            <button
-                                                disabled={currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE || !!processingId}
-                                                onClick={async () => {
-                                                    if (currentUser.permissions[AppScreen.SETTINGS] !== AccessLevel.WRITE) return;
-                                                    if (window.confirm(`Revoke access for ${user.name}?`)) {
-                                                        try {
-                                                            setProcessingId(`revoke-${user.id}`);
-                                                            await deleteUser(user.id);
-                                                            showNotification(`Access revoked for ${user.name}`);
-                                                            setSelectedUserId(null);
-                                                        } catch (e) {
-                                                            showNotification("Failed to revoke access", "error");
-                                                        } finally {
-                                                            setProcessingId(null);
-                                                        }
-                                                    }
-                                                }}
-                                                className="flex items-center gap-2 px-6 py-3 bg-rose-500/10 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 border-rose-500/20 hover:bg-rose-500 hover:text-white disabled:opacity-50 disabled:hover:bg-rose-500/10 disabled:hover:text-rose-500"
-                                            >
-                                                {processingId === `revoke-${user.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                                                {processingId === `revoke-${user.id}` ? 'Revoking...' : 'Revoke Access'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-
-                            {/* Sticky Save Bar */}
-                            {hasUnsavedChanges && selectedUserId && (
-                                <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-8 duration-500">
-                                    <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 dark:from-[#111814] dark:via-[#0D1410] dark:to-[#111814] px-10 py-6 rounded-[3rem] border-2 border-amber-500 shadow-2xl shadow-amber-500/30 flex items-center gap-8">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse"></div>
-                                            <div>
-                                                <p className="text-white font-black text-sm uppercase tracking-tight leading-none">Unsaved Changes</p>
-                                                <p className="text-[9px] font-bold text-amber-400 uppercase tracking-widest mt-1">
-                                                    {pendingPermissions.get(selectedUserId)?.size || 0} permission(s) modified
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className="h-10 w-px bg-white/20"></div>
-                                        <div className="flex gap-3">
-                                            <button
-                                                onClick={handleCancelChanges}
-                                                className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                onClick={handleSaveAllPermissions}
-                                                disabled={processingId === 'batch-save'}
-                                                className="px-10 py-3 bg-brand hover:scale-105 active:scale-95 text-dark rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-brand/40 flex items-center gap-2 disabled:opacity-50"
-                                            >
-                                                {processingId === 'batch-save' ? (
-                                                    <>
-                                                        <RefreshCw size={16} className="animate-spin" />
-                                                        Saving...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Save size={16} />
-                                                        Save Permissions
-                                                    </>
-                                                )}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-
-
-                    {activeTab === 'Financial' && (
-                        <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-                            <div className="bg-white dark:bg-[#1A221D] p-12 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5">
-                                <div className="flex justify-between items-start mb-10">
-                                    <div>
-                                        <h3 className="text-3xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none mb-3">Fiscal Config</h3>
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Financial Year & Currency Standards</p>
-                                    </div>
-                                    <div className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl shadow-2xl shadow-emerald-500/20">
-                                        <CreditCard size={24} strokeWidth={3} />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <MonthSelect
-                                        label="Fiscal Year Start"
-                                        lang={lang}
-                                        value={financialConfig.fiscalYearStart}
-                                        valueMode="english-name"
-                                        onChange={(value) => setFinancialConfig({ ...financialConfig, fiscalYearStart: value })}
-                                    />
-                                    <FormSelect
-                                        label="Base Currency"
-                                        value={financialConfig.baseCurrency}
-                                        onChange={(e) => setFinancialConfig({ ...financialConfig, baseCurrency: e.target.value })}
-                                        options={currencyOptions}
-                                    />
-                                    <FormInput
-                                        label="Default Tax/VAT Rate (%)"
-                                        value={financialConfig.taxRate.toString()}
-                                        onChange={(e) => setFinancialConfig({ ...financialConfig, taxRate: parseFloat(e.target.value) || 0 })}
-                                        type="number"
-                                    />
-                                    <FormSelect
-                                        label="Accounting Method"
-                                        options={['Accrual', 'Cash'].map(v => ({ value: v, label: v }))}
-                                        value={financialConfig.accountingMethod}
-                                        onChange={(e) => setFinancialConfig({ ...financialConfig, accountingMethod: e.target.value })}
-                                    />
-                                    <MonthSelect
-                                        label="Fiscal Year End"
-                                        lang={lang}
-                                        value={financialConfig.fiscalYearEnd}
-                                        valueMode="english-name"
-                                        onChange={(value) => setFinancialConfig({ ...financialConfig, fiscalYearEnd: value })}
-                                    />
-                                    <FormInput
-                                        label="Withdrawal Limit (% of contribution)"
-                                        value={financialConfig.withdrawalLimitPercent.toString()}
-                                        onChange={(e) => setFinancialConfig({ ...financialConfig, withdrawalLimitPercent: parseFloat(e.target.value) || 0 })}
-                                        type="number"
-                                    />
-                                    <FormInput
-                                        label="Withdrawal Notice Period (days)"
-                                        value={financialConfig.withdrawalNoticeDays.toString()}
-                                        onChange={(e) => setFinancialConfig({ ...financialConfig, withdrawalNoticeDays: parseInt(e.target.value) || 0 })}
-                                        type="number"
-                                    />
-                                    <FormInput
-                                        label="Max Withdrawal Per Request"
-                                        value={financialConfig.maxWithdrawalPerRequest.toString()}
-                                        onChange={(e) => setFinancialConfig({ ...financialConfig, maxWithdrawalPerRequest: parseFloat(e.target.value) || 0 })}
-                                        type="number"
-                                    />
-                                    <FormInput
-                                        label="Statutory Reserve (%)"
-                                        value={financialConfig.statutoryReservePercent.toString()}
-                                        onChange={(e) => setFinancialConfig({ ...financialConfig, statutoryReservePercent: parseFloat(e.target.value) || 0 })}
-                                        type="number"
-                                    />
-                                    <div className="md:col-span-2">
-                                        <div className="relative">
-                                            <FormInput
-                                                label={`Share Value (${financialConfig.baseCurrency || 'BDT'} per Share)`}
-                                                value={financialConfig.shareValueBdt.toString()}
-                                                onChange={(e) => setFinancialConfig({ ...financialConfig, shareValueBdt: parseInt(e.target.value) || 1000 })}
-                                                type="number"
-                                                disabled={financialConfig.isShareValueLocked}
-                                            />
-                                            {financialConfig.isShareValueLocked && (
-                                                <div className="absolute right-4 top-[50%] translate-y-[-50%] flex items-center gap-2 text-amber-500">
-                                                    <Lock size={16} />
-                                                    <span className="text-[10px] font-black uppercase tracking-widest">Locked Permanently</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                        {financialConfig.isShareValueLocked && (
-                                            <p className="mt-2 text-[10px] font-bold text-amber-500/80 uppercase tracking-wide">
-                                                Share value is locked because transactions exist. This cannot be changed anymore.
-                                            </p>
-                                        )}
-                                        {!financialConfig.isShareValueLocked && (
-                                            <p className="mt-2 text-[10px] font-bold text-gray-400 uppercase tracking-wide">
-                                                ℹ Once you create transactions, this value will be permanently locked.
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="mt-8 pt-6 border-t border-gray-100 dark:border-white/5 flex justify-end">
-                                    <button
-                                        className="bg-brand text-dark px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-transform shadow-xl disabled:opacity-50"
-                                        onClick={handleSaveFinancial}
-                                        disabled={processingId === 'financial-save'}
-                                    >
-                                        {processingId === 'financial-save' ? 'Saving...' : 'Save Configuration'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'System' && (
-                        <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-                            <div className="bg-white dark:bg-[#1A221D] p-12 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5">
-                                <div className="flex justify-between items-start mb-10">
-                                    <div>
-                                        <h3 className="text-3xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none mb-3">System Preferences</h3>
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Environment & Localization</p>
-                                    </div>
-                                    <div className="p-4 bg-blue-500/10 text-blue-500 rounded-2xl shadow-2xl shadow-blue-500/20">
-                                        <Sliders size={24} strokeWidth={3} />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <FormSelect
-                                        label="Interface Language"
-                                        options={['English', 'Bengali'].map(v => ({ value: v, label: v }))}
-                                        value={systemConfig.language}
-                                        onChange={(e) => setSystemConfig({ ...systemConfig, language: e.target.value })}
-                                    />
-                                    <FormSelect
-                                        label="Data Refresh Interval"
-                                        options={['Real-time', '1 Minute', '5 Minutes', 'Manual'].map(v => ({ value: v, label: v }))}
-                                        value={systemConfig.refreshInterval}
-                                        onChange={(e) => setSystemConfig({ ...systemConfig, refreshInterval: e.target.value })}
-                                    />
-                                    <FormSelect
-                                        label="Theme Preference"
-                                        options={['System Default', 'Dark Mode', 'Light Mode'].map(v => ({ value: v, label: v }))}
-                                        value={systemConfig.theme}
-                                        onChange={(e) => setSystemConfig({ ...systemConfig, theme: e.target.value })}
-                                    />
-                                    <FormSelect
-                                        label="Date Format"
-                                        options={['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'].map(v => ({ value: v, label: v }))}
-                                        value={systemConfig.dateFormat}
-                                        onChange={(e) => setSystemConfig({ ...systemConfig, dateFormat: e.target.value })}
-                                    />
-                                </div>
-
-                                <div className="mt-8 pt-6 border-t border-gray-100 dark:border-white/5 flex justify-end">
-                                    <button
-                                        className="bg-brand text-dark px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-transform shadow-xl disabled:opacity-50"
-                                        onClick={handleSaveSystem}
-                                        disabled={processingId === 'system-save'}
-                                    >
-                                        {processingId === 'system-save' ? 'Saving...' : 'Save Preferences'}
-                                    </button>
-                                </div>
-
-                                <div className="mt-10 pt-10 border-t border-gray-100 dark:border-white/5">
-                                    <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-6">Maintenance Operations</h4>
-                                    <div className="flex gap-4">
-                                        <button className="flex items-center gap-3 px-6 py-4 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-2xl transition-all">
-                                            <RefreshCw size={16} />
-                                            <span className="text-[10px] font-black uppercase tracking-widest">Clear App Cache</span>
-                                        </button>
-                                        <button className="flex items-center gap-3 px-6 py-4 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-rose-500 rounded-2xl transition-all">
-                                            <Activity size={16} />
-                                            <span className="text-[10px] font-black uppercase tracking-widest">Restart Services</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'Profiles' && (
-                        <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-                            <div className="bg-white dark:bg-[#1A221D] p-12 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5">
-                                <div className="flex justify-between items-start mb-10">
-                                    <div>
-                                        <h3 className="text-3xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none mb-3">Partner Profiles</h3>
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Extended KYC & Data Management (Admin Only)</p>
-                                    </div>
-                                    <div className="p-4 bg-purple-500/10 text-purple-500 rounded-2xl shadow-2xl shadow-purple-500/20">
-                                        <Database size={24} strokeWidth={3} />
-                                    </div>
-                                </div>
-
-                                {!selectedMemberProfile ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {members.map(member => (
-                                            <div key={member.id} onClick={() => handleSelectMember(member)} className="p-6 bg-gray-50 dark:bg-[#111814] rounded-[2.5rem] border border-gray-100 dark:border-white/5 cursor-pointer hover:bg-white dark:hover:bg-white/5 hover:scale-[1.02] transition-all group">
-                                                <div className="flex items-center gap-5">
-                                                    <img src={member.avatar || `https://ui-avatars.com/api/?name=${member.name}`} className="w-16 h-16 rounded-[1.5rem] grayscale group-hover:grayscale-0 transition-all" alt="" />
-                                                    <div>
-                                                        <p className="font-black text-dark dark:text-white text-lg leading-none mb-1 group-hover:text-brand transition-colors">{member.name}</p>
-                                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">#{member.memberId}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="animate-in slide-in-from-right-4 duration-300">
-                                        <button onClick={() => setSelectedMemberProfile(null)} className="mb-8 flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-dark dark:hover:text-white transition-colors">
-                                            <ChevronRight className="rotate-180" size={14} /> Back to Directory
-                                        </button>
-
-                                        <div className="flex flex-col xl:flex-row gap-10">
-                                            <div className="xl:w-80 flex flex-col items-center text-center space-y-6">
-                                                <div className="relative group cursor-pointer">
-                                                    <img src={selectedMemberProfile.avatar || `https://ui-avatars.com/api/?name=${selectedMemberProfile.name}`} className="w-64 h-64 rounded-[3rem] object-cover shadow-2xl" alt="" />
-                                                    <div className="absolute inset-0 bg-black/50 rounded-[3rem] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                                                        <p className="text-white text-xs font-black uppercase tracking-widest">Change Photo</p>
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tight">{selectedMemberProfile.name}</h4>
-                                                    <p className="text-[10px] font-black text-brand uppercase tracking-widest mt-1">{selectedMemberProfile.role}</p>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex-1 space-y-8">
-                                                <div className="grid grid-cols-2 gap-8">
-                                                    <FormInput
-                                                        label="Legal Name"
-                                                        value={memberFormData.name || selectedMemberProfile.name}
-                                                        onChange={e => setMemberFormData({ ...memberFormData, name: e.target.value })}
-                                                    />
-                                                    <FormInput
-                                                        label="Email Address"
-                                                        value={memberFormData.email || selectedMemberProfile.email}
-                                                        onChange={e => setMemberFormData({ ...memberFormData, email: e.target.value })}
-                                                    />
-                                                    <FormInput
-                                                        label="Phone Contact"
-                                                        value={memberFormData.phone || selectedMemberProfile.phone}
-                                                        onChange={e => setMemberFormData({ ...memberFormData, phone: e.target.value })}
-                                                    />
-                                                    <FormInput
-                                                        label="National ID / Passport"
-                                                        placeholder="Add ID Number..."
-                                                    />
-                                                </div>
-                                                <FormTextarea
-                                                    label="Residential Address"
-                                                    placeholder="Add full address..."
-                                                    className="h-32 resize-none"
-                                                />
-                                                <FormInput
-                                                    label="Nominee Details"
-                                                    placeholder="Nominee Name & Relation..."
-                                                />
-
-                                                <div className="flex justify-end pt-6 border-t border-gray-100 dark:border-white/5">
-                                                    <button
-                                                        disabled={!!processingId}
-                                                        onClick={handleUpdateMemberProfile}
-                                                        className={`bg-dark dark:bg-brand text-white dark:text-dark px-10 py-5 rounded-[2.5rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3 ${processingId ? 'opacity-70 cursor-wait' : ''}`}
-                                                    >
-                                                        {processingId === 'profile-save' ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />} {processingId === 'profile-save' ? 'Saving...' : 'Save Profile'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-
-
-                    {activeTab === 'Audit' && (
-                        <AuditLogs lang={lang} currentUser={currentUser} />
-                    )}
-
-                    {activeTab === 'Backup' && (
-                        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
-                            {/* Header */}
-                            <div className="bg-white dark:bg-[#1A221D] p-6 rounded-3xl card-shadow border border-gray-100 dark:border-white/5">
-                                <div className="flex items-center gap-4 mb-2">
-                                    <div className="w-12 h-12 bg-brand/10 dark:bg-brand rounded-2xl flex items-center justify-center text-brand dark:text-dark shadow-inner">
-                                        <Cloud size={24} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-xl font-black dark:text-white">Cloud Backup & Restore</h3>
-                                        <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-1">Cloudflare R2 Storage • Automated Daily at 2 AM</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Manual Cloud Backup */}
-                            <div className="bg-white dark:bg-[#1A221D] p-6 rounded-3xl card-shadow border border-gray-100 dark:border-white/5">
-                                <div className="flex items-center gap-3 mb-6">
-                                    <Cloud className="text-brand" size={20} />
-                                    <h4 className="font-black dark:text-white uppercase tracking-wide">Create Manual Cloud Backup</h4>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                    <div className="bg-gray-50 dark:bg-white/5 p-6 rounded-2xl border border-gray-100 dark:border-white/5">
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <Calendar className="text-brand" size={18} />
-                                            <h5 className="font-black dark:text-white text-sm">Daily Backup</h5>
-                                        </div>
-                                        <p className="text-xs font-bold text-gray-400 mb-4">
-                                            Create a daily-type backup. Auto-deleted after 30 days.
-                                        </p>
-                                        <button
-                                            onClick={() => handleCloudBackup('daily')}
-                                            disabled={isBackingUp}
-                                            className="w-full bg-dark dark:bg-brand text-white dark:text-dark py-3 rounded-xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                        >
-                                            {isBackingUp ? (
-                                                <>
-                                                    <RefreshCw className="animate-spin" size={16} />
-                                                    Creating...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Cloud size={16} />
-                                                    Create Daily Backup
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
-
-                                    <div className="bg-gray-50 dark:bg-white/5 p-6 rounded-2xl border border-gray-100 dark:border-white/5">
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <Calendar className="text-brand" size={18} />
-                                            <h5 className="font-black dark:text-white text-sm">Monthly Backup</h5>
-                                        </div>
-                                        <p className="text-xs font-bold text-gray-400 mb-4">
-                                            Create a monthly-type backup. Kept permanently unless manually deleted.
-                                        </p>
-                                        <button
-                                            onClick={() => handleCloudBackup('monthly')}
-                                            disabled={isBackingUp}
-                                            className="w-full bg-dark dark:bg-brand text-white dark:text-dark py-3 rounded-xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                        >
-                                            {isBackingUp ? (
-                                                <>
-                                                    <RefreshCw className="animate-spin" size={16} />
-                                                    Creating...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Cloud size={16} />
-                                                    Create Monthly Backup
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Local Backup Section */}
-                                <div className="border-t border-gray-200 dark:border-white/10 pt-6">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <Download className="text-brand" size={18} />
-                                        <h5 className="font-black dark:text-white text-sm">Local Backup & Restore</h5>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <button
-                                            onClick={handleDownloadBackup}
-                                            disabled={isBackingUp}
-                                            className="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 py-3 rounded-xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-dark dark:text-white"
-                                        >
-                                            {isBackingUp ? (
-                                                <>
-                                                    <RefreshCw className="animate-spin" size={16} />
-                                                    Creating...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Download size={16} />
-                                                    Download Local Backup
-                                                </>
-                                            )}
-                                        </button>
-
-                                        <label className="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 py-3 rounded-xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer text-dark dark:text-white">
-                                            <Upload size={16} />
-                                            Upload Local Restore
-                                            <input
-                                                type="file"
-                                                accept=".json"
-                                                onChange={handleFileSelect}
-                                                className="hidden"
-                                            />
-                                        </label>
-                                    </div>
-
-                                    {backupFile && (
-                                        <div className="mt-4 bg-brand/10 border border-brand/20 p-4 rounded-xl flex items-center justify-between">
-                                            <div>
-                                                <p className="text-xs font-black text-brand">Selected: {backupFile.name}</p>
-                                                <p className="text-[10px] font-bold text-gray-400 mt-1">
-                                                    Size: {(backupFile.size / 1024).toFixed(2)} KB
-                                                </p>
-                                            </div>
-                                            <button
-                                                onClick={handleRestoreBackup}
-                                                disabled={isRestoring}
-                                                className="bg-brand dark:bg-dark text-dark dark:text-brand px-6 py-2 rounded-lg font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
-                                            >
-                                                {isRestoring ? (
-                                                    <>
-                                                        <RefreshCw className="animate-spin inline mr-2" size={14} />
-                                                        Restoring...
-                                                    </>
-                                                ) : (
-                                                    'Restore Now'
-                                                )}
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Cloud Backup List */}
-                            <div className="bg-white dark:bg-[#1A221D] p-6 rounded-3xl card-shadow border border-gray-100 dark:border-white/5">
-                                <div className="flex items-center justify-between mb-6">
-                                    <div className="flex items-center gap-3">
-                                        <List className="text-brand" size={20} />
-                                        <h4 className="font-black dark:text-white uppercase tracking-wide">Cloud Backup History</h4>
-                                        <span className="bg-brand/10 text-brand px-3 py-1 rounded-full text-xs font-black">
-                                            {cloudBackups.length} backups
-                                        </span>
-                                    </div>
-                                    <button
-                                        onClick={loadCloudBackups}
-                                        disabled={isLoadingCloudBackups}
-                                        className="text-gray-400 hover:text-brand transition-colors disabled:opacity-50"
-                                    >
-                                        <RefreshCw size={18} className={isLoadingCloudBackups ? 'animate-spin' : ''} />
-                                    </button>
-                                </div>
-
-                                {isLoadingCloudBackups ? (
-                                    <div className="flex items-center justify-center py-12">
-                                        <RefreshCw className="animate-spin text-brand" size={32} />
-                                        <p className="ml-4 text-sm font-bold text-gray-400">Loading backups...</p>
-                                    </div>
-                                ) : cloudBackups.length === 0 ? (
-                                    <div className="text-center py-12">
-                                        <Cloud className="mx-auto mb-4 text-gray-300 dark:text-gray-600" size={48} />
-                                        <p className="text-sm font-bold text-gray-400">No cloud backups found</p>
-                                        <p className="text-xs text-gray-400 mt-2">Create your first backup above</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
-                                        {cloudBackups.map((backup, index) => (
-                                            <div
-                                                key={index}
-                                                className={`p-4 rounded-xl border transition-all ${selectedCloudBackup === backup.key
-                                                        ? 'bg-brand/10 border-brand/30'
-                                                        : 'bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/5 hover:border-brand/20'
-                                                    }`}
-                                            >
-                                                <div className="flex items-start justify-between">
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center gap-3 mb-2">
-                                                            <div className={`w-2 h-2 rounded-full ${backup.type === 'monthly' ? 'bg-purple-500' : 'bg-brand'
-                                                                }`}></div>
-                                                            <p className="text-sm font-black text-dark dark:text-white">
-                                                                {backup.filename}
-                                                            </p>
-                                                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${backup.type === 'monthly'
-                                                                    ? 'bg-purple-500/10 text-purple-500'
-                                                                    : 'bg-brand/10 text-brand'
-                                                                }`}>
-                                                                {backup.type}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-4 ml-5">
-                                                            <div className="flex items-center gap-1.5">
-                                                                <HardDrive size={12} className="text-gray-400" />
-                                                                <span className="text-xs font-bold text-gray-400">{backup.sizeKB} KB</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <Clock size={12} className="text-gray-400" />
-                                                                <span className="text-xs font-bold text-gray-400">{backup.age}</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => handleCloudRestore(backup.key)}
-                                                        disabled={isCloudRestoring}
-                                                        className={`px-4 py-2 rounded-lg font-black uppercase tracking-widest text-xs transition-all disabled:opacity-50 ${selectedCloudBackup === backup.key
-                                                                ? 'bg-brand text-dark hover:bg-brand/90'
-                                                                : 'bg-dark dark:bg-white/10 text-white dark:text-white hover:bg-dark/90'
-                                                            }`}
-                                                    >
-                                                        {isCloudRestoring && selectedCloudBackup === backup.key ? (
-                                                            <>
-                                                                <RefreshCw className="animate-spin inline mr-1" size={12} />
-                                                                Restoring
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <Upload size={12} className="inline mr-1" />
-                                                                Restore
-                                                            </>
-                                                        )}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Important Notes */}
-                            <div className="bg-amber-500/10 border border-amber-500/20 p-6 rounded-2xl">
-                                <div className="flex items-start gap-4">
-                                    <AlertTriangle className="text-amber-500 flex-shrink-0 mt-1" size={20} />
-                                    <div>
-                                        <h5 className="font-black text-amber-500 mb-3">Important Information</h5>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <h6 className="text-xs font-black text-gray-400 uppercase tracking-wide mb-2">Cloud Backups</h6>
-                                                <ul className="text-xs font-bold text-gray-400 space-y-1.5 list-disc list-inside">
-                                                    <li>Stored securely on Cloudflare R2</li>
-                                                    <li>Daily backups auto-delete after 30 days</li>
-                                                    <li>Monthly backups kept permanently</li>
-                                                    <li>Compressed with gzip (~90% smaller)</li>
-                                                    <li>MD5 checksum verification</li>
-                                                </ul>
-                                            </div>
-                                            <div>
-                                                <h6 className="text-xs font-black text-gray-400 uppercase tracking-wide mb-2">Restore Warnings</h6>
-                                                <ul className="text-xs font-bold text-gray-400 space-y-1.5 list-disc list-inside">
-                                                    <li>Restoring replaces ALL current data</li>
-                                                    <li>Cannot be undone - download backup first</li>
-                                                    <li>Includes: members, transactions, projects, funds, settings</li>
-                                                    <li>Page reloads automatically after restore</li>
-                                                    <li>Always verify backup before restoring</li>
-                                                </ul>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
+            <div>
+              <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                {t('nav.settings', lang)} & System Configuration
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                {isAdmin
+                  ? 'Financial Parameters, Meeting Schedules, 4-Tier Disciplinary Policy, Member Profiles, Roles & Security'
+                  : 'Company Information & Official Organization Profile'}
+              </p>
             </div>
+          </div>
         </div>
-    );
+
+        <div className="flex items-center gap-3">
+          {!canWriteSettings && (
+            <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold shadow-xs">
+              <Lock className="w-3.5 h-3.5" />
+              <span>Read-Only Mode</span>
+            </div>
+          )}
+          <button
+            onClick={refreshServerSettings}
+            disabled={processingId === 'refresh'}
+            className="p-2.5 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 rounded-xl transition-colors"
+            title="Refresh Settings"
+          >
+            <RefreshCw className={`w-4 h-4 ${processingId === 'refresh' ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Unified Tab Navigation */}
+      {isAdmin ? (
+        <div className="flex border-b border-slate-200 dark:border-slate-700 gap-2 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('CONFIGURATIONS')}
+            className={`pb-3 px-4 text-xs font-extrabold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'CONFIGURATIONS'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+            }`}
+          >
+            <Sliders className="w-4 h-4" />
+            1. System Setups & Configurations
+          </button>
+
+          <button
+            onClick={() => setActiveTab('PROFILES')}
+            className={`pb-3 px-4 text-xs font-extrabold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'PROFILES'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            2. Member Profiles Management
+          </button>
+
+          <button
+            onClick={() => setActiveTab('USERS_PERMISSIONS')}
+            className={`pb-3 px-4 text-xs font-extrabold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'USERS_PERMISSIONS'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            3. Team & Access Control Matrix
+          </button>
+
+          <button
+            onClick={() => setActiveTab('AUDIT_BACKUPS')}
+            className={`pb-3 px-4 text-xs font-extrabold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'AUDIT_BACKUPS'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            4. Audit Logs & Database Backups
+          </button>
+        </div>
+      ) : (
+        <div className="flex border-b border-slate-200 dark:border-slate-700 gap-2">
+          <div className="pb-3 px-4 text-xs font-extrabold uppercase tracking-wider border-b-2 border-blue-600 text-blue-600 dark:text-blue-400 flex items-center gap-2">
+            <Building2 className="w-4 h-4" />
+            Organization Profile
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 1: SYSTEM SETUPS & CONFIGURATIONS (ALL CATEGORIZED) */}
+      {/* ========================================================= */}
+      {activeTab === 'CONFIGURATIONS' && (
+        <div className="space-y-6">
+          {/* Organization Profile */}
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Organization Profile
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Manage company name, legal registration, and contact information.
+                  </p>
+                </div>
+              </div>
+
+              {canWriteSettings ? (
+                <button
+                  onClick={handleSaveOrganization}
+                  disabled={processingId === 'organization-save'}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all shrink-0"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {processingId === 'organization-save' ? 'Saving...' : 'Save Profile'}
+                </button>
+              ) : (
+                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900">
+                  <Lock className="w-3 h-3" /> Read Only
+                </span>
+              )}
+            </div>
+
+            {/* Form Input Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Company / Organization Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  disabled={!canWriteSettings}
+                  value={organizationConfig.companyName}
+                  onChange={(e) => setOrganizationConfig({ ...organizationConfig, companyName: e.target.value })}
+                  placeholder="e.g. InvestWise Capital"
+                  className={`w-full px-3 py-2 border rounded-lg font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Corporate Tagline / Slogan
+                </label>
+                <input
+                  type="text"
+                  disabled={!canWriteSettings}
+                  value={organizationConfig.companyTagline}
+                  onChange={(e) => setOrganizationConfig({ ...organizationConfig, companyTagline: e.target.value })}
+                  placeholder="e.g. Enterprise Investment Management"
+                  className={`w-full px-3 py-2 border rounded-lg font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Registration / Tax / License No
+                </label>
+                <input
+                  type="text"
+                  disabled={!canWriteSettings}
+                  value={organizationConfig.companyRegNo}
+                  onChange={(e) => setOrganizationConfig({ ...organizationConfig, companyRegNo: e.target.value })}
+                  placeholder="e.g. REG-2026-90812"
+                  className={`w-full px-3 py-2 border rounded-lg font-medium font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Official Email Address
+                </label>
+                <input
+                  type="email"
+                  disabled={!canWriteSettings}
+                  value={organizationConfig.companyEmail}
+                  onChange={(e) => setOrganizationConfig({ ...organizationConfig, companyEmail: e.target.value })}
+                  placeholder="e.g. info@company.com"
+                  className={`w-full px-3 py-2 border rounded-lg font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Official Phone / Hotline
+                </label>
+                <input
+                  type="text"
+                  disabled={!canWriteSettings}
+                  value={organizationConfig.companyPhone}
+                  onChange={(e) => setOrganizationConfig({ ...organizationConfig, companyPhone: e.target.value })}
+                  placeholder="e.g. +880 1700-000000"
+                  className={`w-full px-3 py-2 border rounded-lg font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Official Website URL
+                </label>
+                <input
+                  type="text"
+                  disabled={!canWriteSettings}
+                  value={organizationConfig.companyWebsite}
+                  onChange={(e) => setOrganizationConfig({ ...organizationConfig, companyWebsite: e.target.value })}
+                  placeholder="e.g. https://investwise.local"
+                  className={`w-full px-3 py-2 border rounded-lg font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Headquarters / Physical Office Address
+                </label>
+                <input
+                  type="text"
+                  disabled={!canWriteSettings}
+                  value={organizationConfig.companyAddress}
+                  onChange={(e) => setOrganizationConfig({ ...organizationConfig, companyAddress: e.target.value })}
+                  placeholder="e.g. Level 7, Financial Plaza, Corporate Avenue, Dhaka 1212"
+                  className={`w-full px-3 py-2 border rounded-lg font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white'
+                  }`}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Admin Only Configuration Sections */}
+          {isAdmin && (
+            <>
+              {/* 1. Fiscal & Financial Rules */}
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-blue-600" />
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                      1. Financial & Capital Rules
+                    </h3>
+                  </div>
+                  {canWriteSettings ? (
+                    <button
+                      onClick={handleSaveFinancial}
+                      disabled={processingId === 'financial-save'}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {processingId === 'financial-save' ? 'Saving...' : 'Save Financial Rules'}
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900">
+                      <Lock className="w-3 h-3" /> Read Only
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Base Currency</label>
+                    <select
+                      disabled={!canWriteSettings}
+                      value={financialConfig.baseCurrency}
+                      onChange={(e) => setFinancialConfig({ ...financialConfig, baseCurrency: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    >
+                      <option value="BDT">BDT - Bangladeshi Taka</option>
+                      <option value="USD">USD - US Dollar</option>
+                      <option value="EUR">EUR - Euro</option>
+                      <option value="GBP">GBP - British Pound</option>
+                      <option value="SAR">SAR - Saudi Riyal</option>
+                      <option value="AED">AED - UAE Dirham</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Accounting Method</label>
+                    <select
+                      disabled={!canWriteSettings}
+                      value={financialConfig.accountingMethod}
+                      onChange={(e) => setFinancialConfig({ ...financialConfig, accountingMethod: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    >
+                      <option value="Accrual">Accrual Basis</option>
+                      <option value="Cash">Cash Basis</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bold text-slate-700 dark:text-slate-300">Share Value ({financialConfig.baseCurrency})</label>
+                      {(financialConfig.isShareValueLocked || !canWriteSettings) && (
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">
+                          <Lock className="w-3 h-3" /> Locked
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      disabled={!canWriteSettings || financialConfig.isShareValueLocked}
+                      value={financialConfig.shareValueBdt}
+                      onChange={(e) => setFinancialConfig({ ...financialConfig, shareValueBdt: parseFloat(e.target.value) || 0 })}
+                      className={`w-full px-3 py-2 border rounded-lg font-bold dark:text-white ${
+                        !canWriteSettings || financialConfig.isShareValueLocked
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-400 cursor-not-allowed border-slate-200 dark:border-slate-800'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Fiscal Year Start Month</label>
+                    <MonthSelect
+                      value={financialConfig.fiscalYearStart}
+                      onChange={(val) => setFinancialConfig({ ...financialConfig, fiscalYearStart: val })}
+                      lang={lang}
+                      disabled={!canWriteSettings}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Statutory Reserve (%)</label>
+                    <input
+                      type="number"
+                      disabled={!canWriteSettings}
+                      min={0}
+                      max={100}
+                      value={financialConfig.statutoryReservePercent}
+                      onChange={(e) => setFinancialConfig({ ...financialConfig, statutoryReservePercent: parseFloat(e.target.value) || 0 })}
+                      className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Corporate Tax Rate (%)</label>
+                    <input
+                      type="number"
+                      disabled={!canWriteSettings}
+                      min={0}
+                      max={100}
+                      value={financialConfig.taxRate}
+                      onChange={(e) => setFinancialConfig({ ...financialConfig, taxRate: parseFloat(e.target.value) || 0 })}
+                      className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Withdrawal Notice (Days)</label>
+                    <input
+                      type="number"
+                      disabled={!canWriteSettings}
+                      min={0}
+                      value={financialConfig.withdrawalNoticeDays}
+                      onChange={(e) => setFinancialConfig({ ...financialConfig, withdrawalNoticeDays: parseInt(e.target.value, 10) || 0 })}
+                      className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Max Withdrawal Per Request ({financialConfig.baseCurrency})</label>
+                    <input
+                      type="number"
+                      disabled={!canWriteSettings}
+                      min={0}
+                      value={financialConfig.maxWithdrawalPerRequest}
+                      onChange={(e) => setFinancialConfig({ ...financialConfig, maxWithdrawalPerRequest: parseFloat(e.target.value) || 0 })}
+                      className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Governance & Meeting Schedules */}
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-indigo-600" />
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                      2. Governance & Meeting Schedules
+                    </h3>
+                  </div>
+                  {canWriteSettings ? (
+                    <button
+                      onClick={handleSaveGovernance}
+                      disabled={processingId === 'governance-save'}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {processingId === 'governance-save' ? 'Saving...' : 'Save Meeting Policy'}
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900">
+                      <Lock className="w-3 h-3" /> Read Only
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Monthly Recurring Meeting Day (1–28)
+                    </label>
+                    <input
+                      type="number"
+                      disabled={!canWriteSettings}
+                      min={1}
+                      max={28}
+                      value={governanceConfig.monthlyMeetingDay}
+                      onChange={(e) => setGovernanceConfig({ ...governanceConfig, monthlyMeetingDay: parseInt(e.target.value, 10) || 1 })}
+                      className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">Scheduled on day {governanceConfig.monthlyMeetingDay} of every month</span>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Monthly Deposit Due Deadline Day (1–28)
+                    </label>
+                    <input
+                      type="number"
+                      disabled={!canWriteSettings}
+                      min={1}
+                      max={28}
+                      value={governanceConfig.depositDueDate}
+                      onChange={(e) => setGovernanceConfig({ ...governanceConfig, depositDueDate: parseInt(e.target.value, 10) || 1 })}
+                      className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">Members must submit monthly deposits by day {governanceConfig.depositDueDate}</span>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Deposit Grace Period (Days)
+                    </label>
+                    <input
+                      type="number"
+                      disabled={!canWriteSettings}
+                      min={0}
+                      max={15}
+                      value={governanceConfig.gracePeriodDays}
+                      onChange={(e) => setGovernanceConfig({ ...governanceConfig, gracePeriodDays: parseInt(e.target.value, 10) || 0 })}
+                      className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">Grace window before deposit is flagged late</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. 4-Tier Escalating Disciplinary Policy */}
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-5 h-5 text-rose-600" />
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                      3. 4-Tier Escalating Disciplinary Policy
+                    </h3>
+                  </div>
+                  {canWriteSettings ? (
+                    <button
+                      onClick={handleSaveGovernance}
+                      disabled={processingId === 'governance-save'}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {processingId === 'governance-save' ? 'Saving...' : 'Save Penalty Policy'}
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900">
+                      <Lock className="w-3 h-3" /> Read Only
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  {governanceConfig.penaltyRules.map((rule, idx) => (
+                    <div
+                      key={rule.tier}
+                      className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-slate-900 dark:text-white text-xs">
+                          Tier {rule.tier}: {rule.title}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
+                          {rule.type}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Fine Amount ({financialConfig.baseCurrency})</label>
+                          <input
+                            type="number"
+                            disabled={!canWriteSettings}
+                            min={0}
+                            value={rule.deductionAmount ?? 0}
+                            onChange={(e) => {
+                              const updated = [...governanceConfig.penaltyRules];
+                              updated[idx] = { ...updated[idx], deductionAmount: parseFloat(e.target.value) || 0 };
+                              setGovernanceConfig({ ...governanceConfig, penaltyRules: updated });
+                            }}
+                            className={`w-full px-2.5 py-1.5 border rounded text-xs font-bold ${
+                              !canWriteSettings
+                                ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 dark:text-white'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Deduction Type</label>
+                          <select
+                            disabled={!canWriteSettings}
+                            value={rule.type}
+                            onChange={(e) => {
+                              const updated = [...governanceConfig.penaltyRules];
+                              updated[idx] = { ...updated[idx], type: e.target.value };
+                              setGovernanceConfig({ ...governanceConfig, penaltyRules: updated });
+                            }}
+                            className={`w-full px-2.5 py-1.5 border rounded text-xs ${
+                              !canWriteSettings
+                                ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 dark:text-white'
+                            }`}
+                          >
+                            <option value="VERBAL_WARNING">Verbal Warning</option>
+                            <option value="FUND_DEDUCTION">Fund Deduction</option>
+                            <option value="SUSPENSION">Suspension & Fine</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 4. System Preferences & Localization */}
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-teal-600" />
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                      4. System Preferences & Localization
+                    </h3>
+                  </div>
+                  {canWriteSettings ? (
+                    <button
+                      onClick={handleSaveSystem}
+                      disabled={processingId === 'system-save'}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {processingId === 'system-save' ? 'Saving...' : 'Save Preferences'}
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900">
+                      <Lock className="w-3 h-3" /> Read Only
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">System Language</label>
+                    <select
+                      disabled={!canWriteSettings}
+                      value={systemConfig.language}
+                      onChange={(e) => setSystemConfig({ ...systemConfig, language: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-lg ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    >
+                      <option value="English">English</option>
+                      <option value="Bengali">Bengali (বাংলা)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Date Display Format</label>
+                    <select
+                      disabled={!canWriteSettings}
+                      value={systemConfig.dateFormat}
+                      onChange={(e) => setSystemConfig({ ...systemConfig, dateFormat: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-lg ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    >
+                      <option value="DD/MM/YYYY">DD/MM/YYYY (e.g. 15/08/2026)</option>
+                      <option value="MM/DD/YYYY">MM/DD/YYYY (e.g. 08/15/2026)</option>
+                      <option value="YYYY-MM-DD">YYYY-MM-DD (ISO)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Real-Time Refresh Interval</label>
+                    <select
+                      disabled={!canWriteSettings}
+                      value={systemConfig.refreshInterval}
+                      onChange={(e) => setSystemConfig({ ...systemConfig, refreshInterval: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-lg ${
+                        !canWriteSettings
+                          ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                      }`}
+                    >
+                      <option value="Real-time">Real-time (Active Sync)</option>
+                      <option value="30s">Every 30 Seconds</option>
+                      <option value="1m">Every 1 Minute</option>
+                      <option value="5m">Every 5 Minutes</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 2: MEMBER PROFILES MANAGEMENT */}
+      {/* ========================================================= */}
+      {isAdmin && activeTab === 'PROFILES' && (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-700 pb-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Member Extended Profile Records</h3>
+              <p className="text-xs text-slate-500">View and update contact, address, NID, and nominee registration records.</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Select Member:</label>
+              <select
+                value={selectedMemberId}
+                onChange={(e) => handleSelectMember(e.target.value)}
+                className="px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold dark:text-white"
+              >
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.memberId || 'ID'}) - {m.role}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveMemberProfile} className="space-y-4 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Full Name</label>
+                <input
+                  type="text"
+                  disabled={!canWriteSettings}
+                  value={memberProfileForm.name || ''}
+                  onChange={(e) => setMemberProfileForm({ ...memberProfileForm, name: e.target.value })}
+                  className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  disabled={!canWriteSettings}
+                  value={memberProfileForm.phone || ''}
+                  onChange={(e) => setMemberProfileForm({ ...memberProfileForm, phone: e.target.value })}
+                  className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Email Address</label>
+                <input
+                  type="email"
+                  disabled={!canWriteSettings}
+                  value={memberProfileForm.email || ''}
+                  onChange={(e) => setMemberProfileForm({ ...memberProfileForm, email: e.target.value })}
+                  className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Father's / Guardian's Name</label>
+                <input
+                  type="text"
+                  disabled={!canWriteSettings}
+                  value={memberProfileForm.fatherName || ''}
+                  onChange={(e) => setMemberProfileForm({ ...memberProfileForm, fatherName: e.target.value })}
+                  className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">NID / Passport Number</label>
+                <input
+                  type="text"
+                  disabled={!canWriteSettings}
+                  value={memberProfileForm.nidOrPassport || ''}
+                  onChange={(e) => setMemberProfileForm({ ...memberProfileForm, nidOrPassport: e.target.value })}
+                  className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Residential Address</label>
+                <input
+                  type="text"
+                  disabled={!canWriteSettings}
+                  value={memberProfileForm.address || ''}
+                  onChange={(e) => setMemberProfileForm({ ...memberProfileForm, address: e.target.value })}
+                  className={`w-full px-3 py-2 border rounded-lg font-medium ${
+                    !canWriteSettings
+                      ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* Nominee Sub-Card */}
+            <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3 mt-4">
+              <h4 className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider">
+                Nominee & Beneficiary Information
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="font-bold text-slate-600 dark:text-slate-400 block mb-1">Nominee Name</label>
+                  <input
+                    type="text"
+                    disabled={!canWriteSettings}
+                    value={memberProfileForm.nomineeName || ''}
+                    onChange={(e) => setMemberProfileForm({ ...memberProfileForm, nomineeName: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded text-xs ${
+                      !canWriteSettings
+                        ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 dark:text-white'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-600 dark:text-slate-400 block mb-1">Relation</label>
+                  <input
+                    type="text"
+                    disabled={!canWriteSettings}
+                    value={memberProfileForm.nomineeRelation || ''}
+                    onChange={(e) => setMemberProfileForm({ ...memberProfileForm, nomineeRelation: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded text-xs ${
+                      !canWriteSettings
+                        ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 dark:text-white'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-600 dark:text-slate-400 block mb-1">Nominee NID / Passport</label>
+                  <input
+                    type="text"
+                    disabled={!canWriteSettings}
+                    value={memberProfileForm.nomineeNidOrPassport || ''}
+                    onChange={(e) => setMemberProfileForm({ ...memberProfileForm, nomineeNidOrPassport: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded text-xs ${
+                      !canWriteSettings
+                        ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 dark:text-white'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-600 dark:text-slate-400 block mb-1">Nominee Phone</label>
+                  <input
+                    type="text"
+                    disabled={!canWriteSettings}
+                    value={memberProfileForm.nomineePhone || ''}
+                    onChange={(e) => setMemberProfileForm({ ...memberProfileForm, nomineePhone: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded text-xs ${
+                      !canWriteSettings
+                        ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 dark:text-white'
+                    }`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {canWriteSettings ? (
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={processingId === 'profile-save'}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {processingId === 'profile-save' ? 'Saving...' : 'Save Profile Changes'}
+                </button>
+              </div>
+            ) : (
+              <div className="flex justify-end pt-2">
+                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900">
+                  <Lock className="w-3 h-3" /> Read-Only Mode (Profile changes restricted)
+                </span>
+              </div>
+            )}
+          </form>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 3: TEAM & ACCESS CONTROL MATRIX */}
+      {/* ========================================================= */}
+      {isAdmin && activeTab === 'USERS_PERMISSIONS' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* User List Panel */}
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  System Accounts ({systemUsers.length})
+                </h3>
+              </div>
+
+              <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {systemUsers.map((u) => {
+                  const isSelected = selectedUserId === u.id;
+                  return (
+                    <div
+                      key={u.id}
+                      onClick={() => setSelectedUserId(u.id)}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                        isSelected
+                          ? 'border-blue-600 bg-blue-50/40 dark:bg-blue-900/20 shadow-sm'
+                          : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
+                          {u.name?.charAt(0) || 'U'}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">{u.name}</p>
+                          <span className="text-[10px] text-slate-400">{u.email}</span>
+                        </div>
+                      </div>
+
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                        {u.role}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Permissions Matrix & Reset Tool */}
+            <div className="lg:col-span-2 space-y-5">
+              {selectedUserId && (
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700 pb-3">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                        Screen Access Matrix: {systemUsers.find((u) => u.id === selectedUserId)?.name}
+                      </h3>
+                      <p className="text-xs text-slate-400">Configure read / write authorization per screen module.</p>
+                    </div>
+
+                    {canWriteSettings && hasUnsavedChanges && (
+                      <button
+                        onClick={handleSaveAllPermissions}
+                        disabled={processingId === 'batch-save'}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        {processingId === 'batch-save' ? 'Saving...' : 'Save Permissions'}
+                      </button>
+                    )}
+
+                    {!canWriteSettings && (
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900">
+                        <Lock className="w-3 h-3" /> Read Only
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Permissions Grid Table */}
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden text-xs">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold uppercase text-[10px]">
+                        <tr>
+                          <th className="p-3">Module Screen</th>
+                          <th className="p-3 text-right">Access Level Authorization</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                        {allModules.map((screen) => {
+                          const currentLevel = getEffectivePermission(selectedUserId, screen);
+
+                          return (
+                            <tr key={screen} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20">
+                              <td className="p-3 font-semibold text-slate-800 dark:text-slate-200">
+                                {screen.replace(/_/g, ' ')}
+                              </td>
+                              <td className="p-3 text-right">
+                                <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-50 dark:bg-slate-900">
+                                  <button
+                                    type="button"
+                                    disabled={!canWriteSettings}
+                                    onClick={() => handlePermissionChange(selectedUserId, screen, AccessLevel.NONE)}
+                                    className={`px-2.5 py-1 rounded text-[10px] font-bold transition-all ${
+                                      currentLevel === AccessLevel.NONE
+                                        ? 'bg-rose-600 text-white shadow-sm'
+                                        : !canWriteSettings
+                                        ? 'text-slate-400 opacity-60 cursor-not-allowed'
+                                        : 'text-slate-400 hover:text-slate-600'
+                                    }`}
+                                  >
+                                    None
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={!canWriteSettings}
+                                    onClick={() => handlePermissionChange(selectedUserId, screen, AccessLevel.READ)}
+                                    className={`px-2.5 py-1 rounded text-[10px] font-bold transition-all ${
+                                      currentLevel === AccessLevel.READ
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : !canWriteSettings
+                                        ? 'text-slate-400 opacity-60 cursor-not-allowed'
+                                        : 'text-slate-400 hover:text-slate-600'
+                                    }`}
+                                  >
+                                    Read Only
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={!canWriteSettings}
+                                    onClick={() => handlePermissionChange(selectedUserId, screen, AccessLevel.WRITE)}
+                                    className={`px-2.5 py-1 rounded text-[10px] font-bold transition-all ${
+                                      currentLevel === AccessLevel.WRITE
+                                        ? 'bg-emerald-600 text-white shadow-sm'
+                                        : !canWriteSettings
+                                        ? 'text-slate-400 opacity-60 cursor-not-allowed'
+                                        : 'text-slate-400 hover:text-slate-600'
+                                    }`}
+                                  >
+                                    Read & Write
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Password Reset Section */}
+                  <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex-1">
+                      <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Set New User Password</label>
+                      <input
+                        type="password"
+                        disabled={!canWriteSettings}
+                        placeholder={canWriteSettings ? "Enter minimum 8 characters..." : "Password change restricted"}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className={`w-full px-3 py-2 border rounded text-xs ${
+                          !canWriteSettings
+                            ? 'bg-slate-100 dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                            : 'bg-white dark:bg-slate-800 border dark:text-white'
+                        }`}
+                      />
+                    </div>
+                    {canWriteSettings ? (
+                      <button
+                        onClick={() => handleResetPassword(selectedUserId)}
+                        disabled={processingId === `reset-${selectedUserId}`}
+                        className="px-3.5 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 text-white rounded font-bold self-end sm:self-auto"
+                      >
+                        {processingId === `reset-${selectedUserId}` ? 'Updating...' : 'Update Password'}
+                      </button>
+                    ) : (
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 self-end sm:self-auto px-3 py-2">
+                        <Lock className="w-3 h-3" /> Password Change Restricted
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 4: AUDIT LOGS & DISASTER RECOVERY */}
+      {/* ========================================================= */}
+      {isAdmin && activeTab === 'AUDIT_BACKUPS' && (
+        <div className="space-y-6">
+          {/* Sub Tab Navigation */}
+          <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
+            <button
+              onClick={() => setBackupSubTab('AUDIT')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                backupSubTab === 'AUDIT'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              Security Audit Trail
+            </button>
+            <button
+              onClick={() => setBackupSubTab('LOCAL_BACKUP')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                backupSubTab === 'LOCAL_BACKUP'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              Database JSON Export & Restore
+            </button>
+            <button
+              onClick={() => setBackupSubTab('CLOUD_BACKUP')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                backupSubTab === 'CLOUD_BACKUP'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              Cloudflare R2 Cloud Backup
+            </button>
+          </div>
+
+          {backupSubTab === 'AUDIT' && (
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <AuditLogs lang={lang} currentUser={currentUser} />
+            </div>
+          )}
+
+          {backupSubTab === 'LOCAL_BACKUP' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4 text-xs">
+                <div className="flex items-center gap-2 border-b pb-3">
+                  <Download className="w-5 h-5 text-blue-600" />
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Export Local JSON Snapshot</h3>
+                </div>
+                <p className="text-slate-500">
+                  Generate a complete encrypted snapshot of members, meetings, penalties, funds, transactions, and system settings.
+                </p>
+                <button
+                  onClick={handleDownloadBackup}
+                  disabled={isBackingUp}
+                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  {isBackingUp ? 'Generating Snapshot...' : 'Download JSON Backup'}
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4 text-xs">
+                <div className="flex items-center gap-2 border-b pb-3">
+                  <Upload className="w-5 h-5 text-rose-600" />
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Restore from JSON Snapshot</h3>
+                </div>
+                <p className="text-slate-500">
+                  Upload a previously exported `.json` snapshot file to restore system records.
+                </p>
+                <input
+                  type="file"
+                  accept=".json"
+                  disabled={!canWriteSettings}
+                  onChange={handleFileSelect}
+                  className={`w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-100 dark:file:bg-slate-700 file:text-slate-700 dark:file:text-slate-200 hover:file:bg-slate-200 ${
+                    !canWriteSettings ? 'cursor-not-allowed opacity-60' : ''
+                  }`}
+                />
+                {canWriteSettings ? (
+                  <button
+                    onClick={handleRestoreBackup}
+                    disabled={isRestoring || !backupFile}
+                    className={`px-4 py-2.5 text-white rounded-lg font-bold flex items-center gap-2 ${
+                      backupFile ? 'bg-rose-600 hover:bg-rose-700' : 'bg-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <Upload className="w-4 h-4" />
+                    {isRestoring ? 'Restoring Records...' : 'Execute Database Restore'}
+                  </button>
+                ) : (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5" /> Database restore requires Write authorization.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {backupSubTab === 'CLOUD_BACKUP' && (
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4 text-xs">
+              <div className="flex items-center justify-between border-b pb-3">
+                <div className="flex items-center gap-2">
+                  <Cloud className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Cloudflare R2 Automated Storage</h3>
+                </div>
+                {canWriteSettings && (
+                  <button
+                    onClick={() => handleCloudBackup('daily')}
+                    disabled={isBackingUp}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold"
+                  >
+                    {isBackingUp ? 'Triggering...' : 'Trigger Cloud Backup'}
+                  </button>
+                )}
+              </div>
+              <p className="text-slate-500">
+                Off-site automated storage repository. Cloud snapshots are automatically retained and rotated on daily/monthly schedules.
+              </p>
+
+              {isLoadingCloudBackups ? (
+                <div className="space-y-2 py-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={`cb-skel-${i}`} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg flex justify-between items-center">
+                      <div className="space-y-1 flex-1">
+                        <Skeleton width="60%" height="0.875rem" />
+                        <Skeleton width="30%" height="0.65rem" />
+                      </div>
+                      <Skeleton width="3.5rem" height="1.25rem" borderRadius="9999px" />
+                    </div>
+                  ))}
+                </div>
+              ) : cloudBackups.length === 0 ? (
+                <p className="text-slate-400 py-4">No cloud backup archives logged yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {cloudBackups.map((cb) => (
+                    <div key={cb.key} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg flex justify-between items-center">
+                      <div>
+                        <span className="font-bold text-slate-900 dark:text-white">{cb.filename}</span>
+                        <span className="text-[10px] text-slate-400 block">{cb.sizeKB} KB • {cb.lastModified}</span>
+                      </div>
+                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px]">
+                        {cb.type}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default Settings;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, X, User, CheckSquare, Square, Edit2, Trash2, Loader2, RefreshCw, Download, Upload, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Plus, Search, Filter, X, User, CheckSquare, Square, Edit2, Trash2, Loader2, RefreshCw, Download, Upload, ArrowUp, ArrowDown, ArrowUpDown, Printer } from 'lucide-react';
 // Dynamically imported: import * as XLSX from 'xlsx';
 import { Deposit, AccessLevel, AppScreen } from '../types';
 import { Table, TableColumn } from './ui/Table';
@@ -7,7 +7,7 @@ import Toast, { ToastType } from './Toast';
 import { useGlobalState } from '../context/GlobalStateContext';
 import { financeService } from '../services/api';
 import ExportMenu from './ExportMenu';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, formatDate } from '../utils/formatters';
 import { Language, t } from '../i18n/translations';
 import ActionDialog from './ActionDialog';
 import { ModalForm, FormInput, FormSelect } from './ui/FormElements';
@@ -19,6 +19,8 @@ import MonthPickerField from './ui/MonthPickerField';
 import MonthSelect from './ui/MonthSelect';
 import { getCurrentMonthYearLabel, getMonthYearLabel, monthYearLabelToDateInput, getMonthIndex, localizeMonthYearLabel, parseYearMonthValue } from '../utils/months';
 import { resolveMemberIdentity } from '../utils/memberLookup';
+import { generateDepositReceipt, VoucherDocument } from '../utils/voucherGenerator';
+import PrintableReceiptModal from './ui/PrintableReceiptModal';
 
 
 
@@ -27,9 +29,11 @@ interface DepositsProps {
 }
 
 const Deposits: React.FC<DepositsProps> = ({ lang }) => {
-    const { deposits: globalDeposits, members: globalMembers, funds, refreshTransactions, currentUser, settings, currencyCode } = useGlobalState();
+    const { deposits: globalDeposits = [], members: globalMembers = [], funds = [], refreshTransactions, currentUser, settings, currencyCode } = useGlobalState();
     const SHARE_WORTH = settings?.financial?.shareValueBdt || 1000;
-    const [deposits, setDeposits] = useState<Deposit[]>([]);
+    const safeDeposits = Array.isArray(globalDeposits) ? globalDeposits : [];
+    const safeMembers = Array.isArray(globalMembers) ? globalMembers : [];
+    const [deposits, setDeposits] = useState<Deposit[]>(() => safeDeposits.slice(0, 10));
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [searchQuery, setSearchQuery] = useState('');
@@ -42,13 +46,20 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
         totalInflow: number;
         totalMonthly: number;
         meta?: any;
-    }>({ total: 0, pages: 0, totalInflow: 0, totalMonthly: 0 });
-    const [loading, setLoading] = useState(true);
+    }>(() => ({
+        total: safeDeposits.length,
+        pages: Math.ceil(safeDeposits.length / 10) || 1,
+        totalInflow: 0,
+        totalMonthly: 0,
+    }));
+    const [loading, setLoading] = useState(() => safeDeposits.length === 0);
 
-    const activeMembers = globalMembers.filter(m => m.status === 'active');
+    const activeMembers = safeMembers.filter(m => m.status === 'active');
     const [refreshing, setRefreshing] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isFixingDates, setIsFixingDates] = useState(false);
+    const [selectedVoucher, setSelectedVoucher] = useState<VoucherDocument | null>(null);
+    const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
     const handleFixDates = async () => {
         if (!window.confirm("This will scan ALL deposits and correct the Transaction Date to coincide with the 1st of the month (for non-current months). This ensures analytics accuracy. Continue?")) return;
@@ -134,7 +145,9 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
     };
 
     const fetchPaginatedDeposits = async (page: number, limit: number, search: string, field: string, sort: string, order: 'asc' | 'desc') => {
-        setLoading(true);
+        if (deposits.length === 0) {
+            setLoading(true);
+        }
         try {
             const response = await financeService.getTransactions({
                 page,
@@ -149,18 +162,38 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
             // Map Transactions to Deposits (handling normalization for UI)
             const mapped = response.data.map((t: any) => {
                 const memberIdentity = resolveMemberIdentity(t.memberId, globalMembers);
-                const fallbackMember = globalMembers.find(m => m.id === t.memberMongoId || m.memberId === t.memberDisplayId);
+                const fallbackMember = globalMembers.find(m => m.id === t.memberMongoId || m.memberId === t.memberDisplayId || m.id === t.memberId);
                 const rawFundId = typeof t.fundId === 'object' && t.fundId ? (t.fundId._id || t.fundId.id) : (t.fundId || '');
                 const matchedFund = funds.find(f => f.id === rawFundId || (f as any)._id === rawFundId);
                 const resolvedFundName = (t.fundName && !t.fundName.includes('-'))
                     ? t.fundName
                     : (t.fundId?.name || matchedFund?.name || 'General Fund');
 
+                // Accurately resolve Partner ID (e.g. MEM-001 or IW-001)
+                const resolvedPartnerId = t.memberDisplayId || 
+                    t.partnerId ||
+                    t.memberCode ||
+                    fallbackMember?.memberId || 
+                    memberIdentity.memberDisplayId || 
+                    (typeof t.memberId === 'object' && t.memberId ? t.memberId.memberId : undefined) ||
+                    (typeof t.memberId === 'string' && (t.memberId.startsWith('MEM') || t.memberId.startsWith('IW') || !t.memberId.includes('-')) ? t.memberId : undefined) ||
+                    'N/A';
+
+                const resolvedPartnerName = t.memberName || 
+                    t.partnerName ||
+                    fallbackMember?.name || 
+                    memberIdentity.memberName || 
+                    t.member || 
+                    'N/A';
+
                 return {
                     id: t._id || t.id,
-                    memberId: t.memberDisplayId || fallbackMember?.memberId || memberIdentity.memberDisplayId, // Display ID
-                    memberMongoId: t.memberMongoId || fallbackMember?.id || memberIdentity.memberMongoId, // Database ID
-                    memberName: t.memberName || fallbackMember?.name || memberIdentity.memberName,
+                    partnerId: resolvedPartnerId,
+                    memberCode: resolvedPartnerId,
+                    memberDisplayId: resolvedPartnerId,
+                    memberId: resolvedPartnerId, // Display ID
+                    memberMongoId: t.memberMongoId || fallbackMember?.id || memberIdentity.memberMongoId || (typeof t.memberId === 'string' ? t.memberId : t.memberId?.id), // Database ID
+                    memberName: resolvedPartnerName,
                     amount: t.amount,
                     date: new Date(t.date).toLocaleDateString(),
                     status: t.status,
@@ -170,6 +203,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                     fundId: rawFundId, // Capture fund ID
                     fundName: resolvedFundName, // Capture actual fund Name
                     depositMethod: t.depositMethod || 'Cash', // Capture Method
+                    referenceNumber: t.referenceNumber || t.id,
                     createdAt: t.createdAt ? new Date(t.createdAt).toLocaleDateString() : new Date(t.date).toLocaleDateString(),
                     updatedAt: t.updatedAt && t.updatedAt !== t.createdAt ? new Date(t.updatedAt).toLocaleDateString() : undefined
                 };
@@ -795,32 +829,48 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
             header: t('transactions.actions', lang),
             align: 'right',
             render: (dep) => (
-                <PermissionGuard screen={AppScreen.DEPOSITS} requiredLevel={AccessLevel.WRITE}>
-                    <div className="flex justify-end gap-3 transition-all">
+                    <div className="flex justify-end gap-2 transition-all">
                         <button
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleDeleteClick(dep.id, dep.memberName);
+                                const voucher = generateDepositReceipt(dep, globalMembers, funds, currencyCode);
+                                setSelectedVoucher(voucher);
+                                setIsReceiptModalOpen(true);
                             }}
-                            disabled={!!processingId}
-                            className={`p-3 rounded-2xl shadow-xl border transition-all ${processingId === dep.id ? 'bg-red-50 border-red-100 cursor-wait' : 'bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30'}`}
+                            title="Print Money Receipt"
+                            className="p-3 rounded-2xl shadow-xl border bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-500/30 transition-all"
                         >
-                            {processingId === dep.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
+                            <Printer size={16} />
                         </button>
 
-                        <button
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleOpenModal(dep);
-                            }}
-                            className="p-3 rounded-2xl shadow-xl border bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-brand hover:border-brand/30 transition-all"
-                        >
-                            <Edit2 size={16} />
-                        </button>
+                        <PermissionGuard screen={AppScreen.DEPOSITS} requiredLevel={AccessLevel.WRITE}>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleDeleteClick(dep.id, dep.memberName);
+                                    }}
+                                    disabled={!!processingId}
+                                    className={`p-3 rounded-2xl shadow-xl border transition-all ${processingId === dep.id ? 'bg-red-50 border-red-100 cursor-wait' : 'bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-red-500 hover:border-red-500/30'}`}
+                                >
+                                    {processingId === dep.id ? <Loader2 size={16} className="animate-spin text-red-500" /> : <Trash2 size={16} />}
+                                </button>
+
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleOpenModal(dep);
+                                    }}
+                                    className="p-3 rounded-2xl shadow-xl border bg-white dark:bg-[#111814] border-gray-100 dark:border-white/5 text-gray-500 hover:text-brand hover:border-brand/30 transition-all"
+                                >
+                                    <Edit2 size={16} />
+                                </button>
+                            </div>
+                        </PermissionGuard>
                     </div>
-                </PermissionGuard>
             )
         }
     ];
@@ -864,29 +914,39 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
-                    <button
-                        onClick={handleFixDates}
-                        disabled={isFixingDates}
-                        className="hidden md:flex items-center gap-2 px-5 py-3 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
-                    >
-                        {isFixingDates ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-                        Sync Dates
-                    </button>
                     <ExportMenu
                         data={deposits}
                         columns={[
-                            { header: 'ID', key: 'id' },
-                            { header: t('transactions.date', lang), key: 'date', format: (d: any) => new Date(d.date).toLocaleDateString() },
-                            { header: t('nav.members', lang), key: 'memberName' },
-                            { header: t('deposits.monthPeriod', lang), key: 'depositMonth' },
-                            { header: t('deposits.shares', lang), key: 'shareNumber' },
-                            { header: t('deposits.shares', lang), key: 'shareNumber' },
-                            { header: `${t('deposits.amountCurrency', lang)} (${currencyCode})`, key: 'amount', format: (d: any) => d.amount.toLocaleString() },
-                            { header: 'Method', key: 'depositMethod' },
-                            { header: t('funds.fundName', lang), key: 'fundName' },
-                            { header: 'Created At', key: 'createdAt' },
-                            { header: 'Updated At', key: 'updatedAt' },
-                            { header: t('transactions.status', lang), key: 'status' }
+                            { 
+                                header: t('nav.members', lang) || 'Partner Name', 
+                                key: 'memberName', 
+                                format: (d: any) => {
+                                    if (d.memberName && d.memberName !== 'N/A') return d.memberName;
+                                    const match = globalMembers.find(m => m.id === d.memberMongoId || m.id === d.memberId || m.memberId === d.memberId || m.memberId === d.memberCode || m.memberId === d.partnerId);
+                                    return match?.name || d.memberName || 'N/A';
+                                } 
+                            },
+                            { 
+                                header: 'Partner ID', 
+                                key: 'partnerId', 
+                                format: (d: any) => {
+                                    if (d.partnerId && d.partnerId !== 'N/A') return d.partnerId;
+                                    if (d.memberCode && d.memberCode !== 'N/A') return d.memberCode;
+                                    if (d.memberDisplayId && d.memberDisplayId !== 'N/A') return d.memberDisplayId;
+                                    const match = globalMembers.find(m => m.id === d.memberMongoId || m.id === d.memberId || m.name === d.memberName);
+                                    if (match?.memberId) return match.memberId;
+                                    if (typeof d.memberId === 'string' && d.memberId && !d.memberId.includes('-')) return d.memberId;
+                                    return d.memberId || 'N/A';
+                                } 
+                            },
+                            { header: t('transactions.date', lang) || 'Date', key: 'date', format: (d: any) => d.date ? formatDate(d.date) : 'N/A' },
+                            { header: 'Reference', key: 'referenceNumber', format: (d: any) => d.referenceNumber || d.id || 'N/A' },
+                            { header: t('deposits.monthPeriod', lang) || 'Month Period', key: 'depositMonth', format: (d: any) => d.depositMonth || 'N/A' },
+                            { header: t('deposits.shares', lang) || 'Shares', key: 'shareNumber', format: (d: any) => d.shareNumber ?? 0 },
+                            { header: `${t('deposits.amountCurrency', lang) || 'Amount'} (${currencyCode})`, key: 'amount', format: (d: any) => Number(d.amount || 0).toLocaleString() },
+                            { header: 'Payment Method', key: 'depositMethod', format: (d: any) => d.depositMethod || 'N/A' },
+                            { header: t('funds.fundName', lang) || 'Fund Name', key: 'fundName', format: (d: any) => d.fundName || d.fundId?.name || (funds.find(f => f.id === d.fundId)?.name) || 'General Fund' },
+                            { header: t('transactions.status', lang) || 'Status', key: 'status', format: (d: any) => d.status || 'Completed' }
                         ]}
                         fileName={`deposits_${new Date().toISOString().split('T')[0]}`}
                         title={t('deposits.capitalInflowReport', lang)}
@@ -895,6 +955,14 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                     />
                     <PermissionGuard screen={AppScreen.DEPOSITS} requiredLevel={AccessLevel.WRITE}>
                         <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleFixDates}
+                                disabled={isFixingDates}
+                                className="hidden md:flex items-center gap-2 px-5 py-3 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                            >
+                                {isFixingDates ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                                Sync Dates
+                            </button>
                             <button
                                 onClick={() => {
                                     const defaultFund = funds.find(f => (f.type === 'DEPOSIT' || f.type === 'Primary') && f.status !== 'ARCHIVED');
@@ -979,7 +1047,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                         placeholder={t('deposits.selectFund', lang)}
                         options={funds.filter(f => (f.type === 'DEPOSIT' || f.type === 'Primary' || f.type === 'OTHER') && f.status !== 'ARCHIVED').map(f => ({
                             value: f.id,
-                            label: `${f.name} (${f.balance.toLocaleString()} ${f.currency || currencyCode})`
+                            label: `${f.name} (${(parseFloat(String(f.balance || 0)) || 0).toLocaleString()} ${f.currency || currencyCode})`
                         }))}
                         icon={<CheckSquare size={18} />}
                         required
@@ -1196,7 +1264,7 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                                     onChange={e => setBulkFundId(e.target.value)}
                                     options={funds.filter(f => (f.type === 'DEPOSIT' || f.type === 'Primary') && f.status !== 'ARCHIVED').map(f => ({
                                         value: f.id,
-                                        label: `${f.name} (${formatCurrency(f.balance)})`
+                                        label: `${f.name} (${formatCurrency(parseFloat(String(f.balance || 0)) || 0, true, currencyCode)})`
                                     }))}
                                     required
                                 />
@@ -1357,7 +1425,13 @@ const Deposits: React.FC<DepositsProps> = ({ lang }) => {
                     </ModalForm>
                 )
             }
-        </div >
+
+            <PrintableReceiptModal
+                isOpen={isReceiptModalOpen}
+                onClose={() => setIsReceiptModalOpen(false)}
+                voucher={selectedVoucher}
+            />
+        </div>
     );
 };
 

@@ -11,7 +11,7 @@ const features = [
       </svg>
     ),
     title: 'Immutable Ledger',
-    desc: 'Every entry is locked the moment it\'s recorded. Edit history lives on — auditors love us, fraudsters hate us.',
+    desc: 'Every financial entry is permanently locked upon approval. Complete audit trails and edit logs ensure institutional compliance.',
     tag: 'Precision',
     tagColor: 'text-brand bg-brand/[0.08]',
     accent: '#2563EB',
@@ -26,7 +26,7 @@ const features = [
       </svg>
     ),
     title: 'Project Intelligence',
-    desc: 'Visual dashboards per project. Know exactly how much each venture has earned, spent, and owes — in real time.',
+    desc: 'Real-time project financials tracking capital deployment, operational revenue, and stakeholder yields.',
     tag: 'Visibility',
     tagColor: 'text-emerald-600 bg-emerald-500/[0.08]',
     accent: '#10b981',
@@ -38,8 +38,8 @@ const features = [
         <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
-    title: 'Role-Based Vault',
-    desc: 'Partners see their slice. Admins see everything. Sensitive financials stay behind granular, enterprise-grade access walls.',
+    title: 'Role-Based Access',
+    desc: 'Granular permissions ensure partners, fund managers, and auditors access only their authorized accounts and reports.',
     tag: 'Security',
     tagColor: 'text-violet-600 bg-violet-500/[0.08]',
     accent: '#8b5cf6',
@@ -50,8 +50,8 @@ const features = [
         <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       </svg>
     ),
-    title: 'Auto Dividends',
-    desc: 'Set it once, collect forever. Dividend splits run automatically based on ownership percentages — no manual math needed.',
+    title: 'Dividend Distribution',
+    desc: 'Automated profit distribution computed according to verified partner shareholdings and statutory reserve rules.',
     tag: 'Automation',
     tagColor: 'text-amber-600 bg-amber-500/[0.08]',
     accent: '#f59e0b',
@@ -63,8 +63,8 @@ const features = [
         <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
-    title: 'Deposit Tracking',
-    desc: 'Track who paid, when, and how much — with proof. Payment requests, reminders, and reconciliation in one place.',
+    title: 'Deposit Management',
+    desc: 'Streamlined deposit recording, payment verification, and automated printable money receipts with QR authentication.',
     tag: 'Finance',
     tagColor: 'text-rose-600 bg-rose-500/[0.08]',
     accent: '#f43f5e',
@@ -75,9 +75,9 @@ const features = [
         <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1v12zM4 22v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
-    title: 'Multi-Partner Scale',
-    desc: 'From 2 co-founders to 200 stakeholders. Ownership splits, profit sharing, and voting — built to grow with you.',
-    tag: 'Scale',
+    title: 'Syndicate Governance',
+    desc: 'Comprehensive meeting management, attendance tracking, governance voting, and partner resolution records.',
+    tag: 'Governance',
     tagColor: 'text-cyan-600 bg-cyan-500/[0.08]',
     accent: '#06b6d4',
   },

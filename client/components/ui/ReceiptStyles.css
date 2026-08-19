@@ -1,0 +1,66 @@
+/* ==========================================================================
+   PRINTABLE FINANCIAL RECEIPT & VOUCHER STYLES
+   Optimized for physical printer output & browser print preview
+   ========================================================================== */
+
+@media print {
+  /* Reset root containers so printing is never clipped */
+  html,
+  body,
+  #root,
+  .h-screen,
+  main {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: static !important;
+  }
+
+  /* Hide screen-only elements */
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+
+  /* Force background colors and borders to print accurately */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm 15mm 10mm 15mm;
+  }
+
+  #printable-voucher-root {
+    display: block !important;
+    visibility: visible !important;
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 24px !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+  }
+
+  #printable-voucher-root * {
+    visibility: visible !important;
+  }
+
+  .page-break-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

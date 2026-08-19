@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, AlertCircle, WifiOff, XCircle, Loader2, ArrowRight } from "lucide-react";
 import { User as UserType } from "../types";
@@ -54,21 +54,63 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     return true;
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault(); setError(null);
+  const handleLogin = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setError(null);
     if (!validate()) return;
     setIsLoading(true);
+
     try {
       const data = await authService.login(identifier.trim(), password);
-      setTimeout(() => { onLogin(data); navigate(from, { replace: true }); }, 200);
+      onLogin(data);
+      navigate(from, { replace: true });
     } catch (err: any) {
-      setIsLoading(false); triggerShake();
-      if (isNetworkError(err)) setError({ type: "network", message: "Connection failed", details: "Unable to reach the server. Check your internet connection." });
-      else if (err.response?.status === 401) setError({ type: "credentials", message: "Invalid credentials", details: "The email or password you entered is incorrect." });
-      else if (err.response?.status === 429) setError({ type: "server", message: "Too many attempts", details: "Please wait a few minutes and try again." });
-      else if (err.response?.status === 403) setError({ type: "server", message: "Access denied", details: "Your account has been suspended." });
-      else if (err.response?.status >= 500) setError({ type: "server", message: "Server error", details: "Something went wrong. Please try again later." });
-      else setError({ type: "server", message: err.response?.data?.message || "Authentication failed", details: "An unexpected error occurred." });
+      setIsLoading(false);
+      triggerShake();
+
+      const status = err.response?.status;
+      const serverMessage = err.response?.data?.message;
+
+      if (isNetworkError(err)) {
+        setError({
+          type: "network",
+          message: "Connection failed",
+          details: "Unable to reach the server. Please check your internet connection."
+        });
+      } else if (status === 401) {
+        setError({
+          type: "credentials",
+          message: "Invalid credentials",
+          details: serverMessage || "The email or password you entered is incorrect. Please try again."
+        });
+      } else if (status === 429) {
+        setError({
+          type: "server",
+          message: "Too many attempts",
+          details: serverMessage || "Too many login attempts. Please wait a few minutes before trying again."
+        });
+      } else if (status === 403) {
+        setError({
+          type: "server",
+          message: "Access denied",
+          details: serverMessage || "Your account has been deactivated or suspended."
+        });
+      } else if (status >= 500) {
+        setError({
+          type: "server",
+          message: "Server error",
+          details: "An unexpected server error occurred. Please try again later."
+        });
+      } else {
+        setError({
+          type: "server",
+          message: serverMessage || "Authentication failed",
+          details: "Please check your credentials and try again."
+        });
+      }
     }
   };
 
@@ -232,8 +274,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               ))}
             </div>
             <div className="flex justify-between mt-1.5">
-              {["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"].map((m) => (
-                <span key={m} className="text-[8px] text-gray-700">{m}</span>
+              {["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"].map((m, i) => (
+                <span key={i} className="text-[8px] text-gray-700">{m}</span>
               ))}
             </div>
           </div>

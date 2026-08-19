@@ -1,7 +1,8 @@
-
 export enum AppScreen {
  DASHBOARD = 'DASHBOARD',
  MEMBERS = 'MEMBERS',
+ MEETINGS = 'MEETINGS',
+ GOVERNANCE = 'GOVERNANCE',
  DEPOSITS = 'DEPOSITS',
  REQUEST_DEPOSIT = 'REQUEST_DEPOSIT',
  TRANSACTIONS = 'TRANSACTIONS',
@@ -47,9 +48,11 @@ export interface Member {
  shares: number;
  totalContributed: number;
  successfulDepositTotal?: number;
+ warningCount?: number;
+ performanceScore?: number;
  lastActive: string;
  avatar: string;
- status: 'active' | 'pending' | 'inactive';
+ status: 'active' | 'pending' | 'inactive' | 'suspended';
  hasUserAccess?: boolean;
  nidOrPassport?: string;
  fatherName?: string;
@@ -206,16 +209,139 @@ export interface InsightData {
 }
 
 export interface Goal {
- _id: string; // MongoDB ID
- user: string;
- title: string;
- description?: string;
- targetAmount: number;
- currentAmount: number;
- deadline?: string;
- status: 'In Progress' | 'Achieved' | 'Cancelled';
- type: 'Savings' | 'Investment' | 'Other';
- linkedProject?: string;
- createdAt: string;
- updatedAt: string;
+  _id: string; // MongoDB ID
+  user: string;
+  title: string;
+  description?: string;
+  targetAmount: number;
+  currentAmount: number;
+  deadline?: string;
+  status: 'In Progress' | 'Achieved' | 'Cancelled';
+  type: 'Savings' | 'Investment' | 'Other';
+  linkedProject?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MeetingAttendee {
+  id: string;
+  memberId: string;
+  attendanceStatus: 'PRESENT' | 'ABSENT' | 'EXCUSED';
+  depositStatus: 'PAID_ON_TIME' | 'PAID_LATE' | 'PENDING';
+  notes?: string;
+  name?: string;
+  displayId?: string;
+  email?: string;
+  role?: string;
+  shares?: number;
+  avatar?: string;
+  warningCount?: number;
+  performanceScore?: number;
+}
+
+export interface Meeting {
+  id: string;
+  title: string;
+  meetingDate: string;
+  meetingType: string;
+  location?: string;
+  agenda?: string;
+  notes?: string;
+  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  conductedBy?: string;
+  startedAt?: string;
+  completedAt?: string;
+  totalAttendees?: number;
+  presentCount?: number;
+  absentCount?: number;
+  excusedCount?: number;
+  attendees?: MeetingAttendee[];
+  penalties?: MemberPenalty[];
+  stats?: {
+    total: number;
+    present: number;
+    absent: number;
+    excused: number;
+    attendanceRate: number;
+    penaltiesIssuedCount: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemberPenalty {
+  id: string;
+  memberId: string;
+  meetingId?: string;
+  tier: 1 | 2 | 3 | 4;
+  title: string;
+  type: 'VERBAL_WARNING' | 'FUND_DEDUCTION' | 'SUSPENSION';
+  deductionAmount: number;
+  isPercentage: boolean;
+  calculatedDeduction: number;
+  transactionId?: string;
+  fundId?: string;
+  status: 'ACTIVE' | 'WAIVED' | 'RESOLVED';
+  reason: string;
+  issuedBy?: string;
+  issuedAt: string;
+  waivedBy?: string;
+  waivedAt?: string;
+  waiveReason?: string;
+  memberName?: string;
+  memberDisplayId?: string;
+  memberEmail?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PerformanceBreakdown {
+  memberId: string;
+  name: string;
+  overallScore: number;
+  grade: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
+  depositMetrics: {
+    score: number;
+    weight: number;
+    evaluatedMonths: number;
+    onTimeMonths: number;
+    lateMonths: number;
+    missedMonths: number;
+  };
+  attendanceMetrics: {
+    score: number;
+    weight: number;
+    totalCompletedMeetings: number;
+    presentCount: number;
+    excusedCount: number;
+    absentCount: number;
+  };
+  penaltyMetrics: {
+    activePenaltiesCount: number;
+    totalDeductionPoints: number;
+    tierBreakdown: { tier1: number; tier2: number; tier3: number; tier4: number };
+  };
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  id: string;
+  name: string;
+  memberId: string;
+  email: string;
+  role: string;
+  shares: number;
+  avatar: string;
+  warningCount: number;
+  performanceScore: number;
+  grade: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
+  status: string;
+}
+
+export interface PenaltyRuleConfig {
+  tier: number;
+  title: string;
+  type: 'VERBAL_WARNING' | 'FUND_DEDUCTION' | 'SUSPENSION';
+  deductionAmount?: number;
+  isPercentage?: boolean;
 }

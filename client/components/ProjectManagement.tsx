@@ -1,10 +1,10 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
- Plus, MoreHorizontal, Briefcase, Users, Calendar, ArrowUpRight,
- ArrowDownLeft, Filter, Search, X, CheckCircle2, TrendingUp,
- TrendingDown, DollarSign, PieChart as PieChartIcon, Activity,
- Edit2, Trash2, CheckCircle, Clock, AlertTriangle, RefreshCw, Info, Lock
+  Plus, MoreHorizontal, Briefcase, Users, Calendar, ArrowUpRight,
+  ArrowDownLeft, Filter, Search, X, CheckCircle2, TrendingUp,
+  TrendingDown, DollarSign, PieChart as PieChartIcon, Activity,
+  Edit2, Trash2, CheckCircle, Clock, AlertTriangle, RefreshCw, Info, Lock, Printer
 } from 'lucide-react';
 import { Project, Member, ProjectMemberParticipation, Transaction, ProjectUpdateRecord, AccessLevel, AppScreen } from '../types';
 import ActionDialog, { ActionDialogProps } from './ActionDialog';
@@ -25,6 +25,9 @@ import { InlineTopForm } from './ui/InlineTopForm';
 import PermissionGuard from './PermissionGuard';
 import { usePermission } from '../hooks/usePermission';
 import ProjectTransactionMaster from './ProjectTransactionMaster';
+import { ProjectCardSkeleton } from './ui/Skeleton';
+import { generateProjectCertificate, VoucherDocument } from '../utils/voucherGenerator';
+import PrintableReceiptModal from './ui/PrintableReceiptModal';
 
 const SHARE_VALUE = 1000;
 
@@ -37,8 +40,9 @@ interface ProjectManagementProps {
 const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  const navigate = useNavigate();
  const {
- projects: globalProjects,
- members: globalMembers,
+ projects: globalProjects = [],
+ members: globalMembers = [],
+ funds = [],
  addProject,
  updateProject,
  addProjectUpdate,
@@ -50,8 +54,13 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  currencyCode
  } = useGlobalState();
 
- const activeMembers = globalMembers.filter(m => m.status === 'active');
+ const [selectedVoucher, setSelectedVoucher] = useState<VoucherDocument | null>(null);
+ const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+ const safeProjects = Array.isArray(globalProjects) ? globalProjects : [];
+ const safeMembers = Array.isArray(globalMembers) ? globalMembers : [];
+ const activeMembers = safeMembers.filter(m => m.status === 'active');
  const hasWritePermission = usePermission(AppScreen.PROJECT_MANAGEMENT, AccessLevel.WRITE);
+ const hasDividendPermission = usePermission(AppScreen.DIVIDENDS, AccessLevel.WRITE);
  const [refreshing, setRefreshing] = useState(false);
  const [currentPage, setCurrentPage] = useState(1);
  const [searchQuery, setSearchQuery] = useState('');
@@ -60,12 +69,18 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  data: Project[];
  total: number;
  pages: number;
- }>({ data: [], total: 0, pages: 0 });
- const [loading, setLoading] = useState(true);
+ }>(() => ({
+    data: safeProjects.slice(0, 10),
+    total: safeProjects.length,
+    pages: Math.ceil(safeProjects.length / 10) || 1,
+  }));
+ const [loading, setLoading] = useState(() => safeProjects.length === 0);
  const [isSubmitting, setIsSubmitting] = useState(false);
 
  const fetchPaginatedProjects = async (page: number, search: string, limit: number) => {
- setLoading(true);
+ if (paginatedProjects.data.length === 0) {
+      setLoading(true);
+    }
  try {
  const result = await projectService.getAll({ page, limit, search });
  setPaginatedProjects({
@@ -95,6 +110,10 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  const [isModalOpen, setIsModalOpen] = useState(false);
  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+ const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+ const [selectedHealth, setSelectedHealth] = useState<string>('ALL');
+ const [simulatedProfit, setSimulatedProfit] = useState<number>(100000);
+ const [isSimulatorActive, setIsSimulatorActive] = useState<boolean>(false);
 
  // Dialog State
  const [dialog, setDialog] = useState<{
@@ -246,23 +265,23 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  setIsModalOpen(false);
  };
 
- const handleEditClick = (project: Project) => {
- setIsEditMode(true);
- setEditingProjectId(project.id);
- setNewProject({
- title: project.title,
- category: project.category,
- description: project.description,
- budget: project.budget.toString(),
- expectedRoi: project.expectedRoi.toString(),
- health: project.health,
- startDate: project.startDate.split('T')[0],
- projectFundHandler: project.projectFundHandler || '',
- });
- setParticipationList(project.involvedMembers || []);
- setIsModalOpen(true);
- setOpenMenuId(null);
- };
+  const handleEditClick = (project: Project) => {
+    setIsEditMode(true);
+    setEditingProjectId(project.id);
+    setNewProject({
+      title: project.title || '',
+      category: project.category || 'Real Estate',
+      description: project.description || '',
+      budget: (project.budget ?? 0).toString(),
+      expectedRoi: (project.expectedRoi ?? 0).toString(),
+      health: project.health || 'Stable',
+      startDate: project.startDate ? project.startDate.split('T')[0] : new Date().toISOString().split('T')[0],
+      projectFundHandler: project.projectFundHandler || '',
+    });
+    setParticipationList(project.involvedMembers || []);
+    setIsModalOpen(true);
+    setOpenMenuId(null);
+  };
 
  const handleReviewCreate = (e: React.FormEvent) => {
  e.preventDefault();
@@ -363,11 +382,11 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  if (!selectedProject) return null;
 
  // Prefer pre-aggregated fields from backend for enterprise accuracy
- const totalEarnings = selectedProject.totalEarnings || selectedProject.updates
+ const totalEarnings = selectedProject.totalEarnings || (selectedProject.updates || [])
  .filter(u => u.type === 'Earning')
  .reduce((acc, curr) => acc + curr.amount, 0);
 
- const totalExpenses = selectedProject.totalExpenses || selectedProject.updates
+ const totalExpenses = selectedProject.totalExpenses || (selectedProject.updates || [])
  .filter(u => u.type === 'Expense')
  .reduce((acc, curr) => acc + curr.amount, 0);
 
@@ -378,6 +397,18 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
 
  return { totalEarnings, totalExpenses, profit: netProfit, roi };
  }, [selectedProject]);
+
+ const portfolioStats = useMemo(() => {
+    const totalProjects = safeProjects.length;
+    const activeProjects = safeProjects.filter(p => p.status === 'In Progress' || p.status === 'Review').length;
+    const totalBudget = safeProjects.reduce((sum, p) => sum + (p.budget || 0), 0);
+    const totalInvested = safeProjects.reduce((sum, p) => sum + (p.initialInvestment || 0), 0);
+    const avgRoi = totalProjects > 0
+      ? safeProjects.reduce((sum, p) => sum + (p.expectedRoi || 0), 0) / totalProjects
+      : 0;
+
+    return { totalProjects, activeProjects, totalBudget, totalInvested, avgRoi };
+  }, [safeProjects]);
 
  const catKeyMap: Record<string, string> = {
  'Real Estate': 'realEstate',
@@ -413,6 +444,33 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  default: return <Clock size={12} />;
  }
  };
+
+  const getProjectPhase = (status: Project['status'], updatesCount: number) => {
+    if (status === 'Completed') return { step: 4, name: 'Divestment & Payout', label: 'Phase 4' };
+    if (updatesCount > 0) return { step: 3, name: 'Active Yield & Cashflow', label: 'Phase 3' };
+    if (status === 'In Progress') return { step: 2, name: 'Asset Deployment', label: 'Phase 2' };
+    return { step: 1, name: 'Capital Intake', label: 'Phase 1' };
+  };
+
+  const filteredPortfolioProjects = useMemo(() => {
+    return safeProjects.filter((p) => {
+      const title = p?.title || '';
+      const desc = p?.description || '';
+      const cat = p?.category || '';
+      const q = (searchQuery || '').toLowerCase();
+
+      const matchesSearch = !q ||
+        title.toLowerCase().includes(q) ||
+        desc.toLowerCase().includes(q) ||
+        cat.toLowerCase().includes(q);
+
+      const matchesCat = selectedCategory === 'ALL' || cat === selectedCategory;
+      const projectHealth = p?.health || 'Stable';
+      const matchesHealth = selectedHealth === 'ALL' || projectHealth === selectedHealth;
+
+      return matchesSearch && matchesCat && matchesHealth;
+    });
+  }, [safeProjects, searchQuery, selectedCategory, selectedHealth]);
 
  const capitalFlowColumns: TableColumn<Project>[] = [
  {
@@ -542,21 +600,23 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  </div>
  </div>
  <div className="flex items-center gap-4">
- <ExportMenu
- data={globalProjects}
- columns={[
- { header: 'ID', key: 'id' },
- { header: t('projects.projectIdentifier', lang), key: 'title' },
- { header: t('projects.auditStatus', lang), key: 'status' },
- { header: `${t('projects.plannedBudget', lang)} (${currencyCode})`, key: 'budget', format: (p: any) => p.budget.toLocaleString() },
- { header: t('projects.performanceMargin', lang), key: 'expectedRoi', format: (p: any) => `${p.expectedRoi}%` },
- { header: t('projects.date', lang), key: 'startDate' }
- ]}
- fileName={`projects_${new Date().toISOString().split('T')[0]}`}
- title="Project Portfolio Report"
- lang={lang}
- targetId="projects-snapshot-target"
- />
+          <ExportMenu
+            data={globalProjects}
+            columns={[
+              { header: t('projects.projectIdentifier', lang) || 'Project Name', key: 'title', format: (p: any) => p.title || p.name || 'N/A' },
+              { header: t('projects.category', lang) || 'Category', key: 'category', format: (p: any) => p.category || 'General' },
+              { header: t('projects.auditStatus', lang) || 'Status', key: 'status', format: (p: any) => p.status || 'Active' },
+              { header: `${t('projects.plannedBudget', lang) || 'Planned Budget'} (${currencyCode})`, key: 'budget', format: (p: any) => Number(p.budget || 0).toLocaleString() },
+              { header: `Spent (${currencyCode})`, key: 'spent', format: (p: any) => Number(p.spent || 0).toLocaleString() },
+              { header: `Revenue (${currencyCode})`, key: 'revenue', format: (p: any) => Number(p.revenue || 0).toLocaleString() },
+              { header: t('projects.performanceMargin', lang) || 'Expected ROI', key: 'expectedRoi', format: (p: any) => `${p.expectedRoi ?? 0}%` },
+              { header: t('projects.date', lang) || 'Start Date', key: 'startDate', format: (p: any) => p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A' }
+            ]}
+            fileName={`projects_${new Date().toISOString().split('T')[0]}`}
+            title="Project Portfolio Report"
+            lang={lang}
+            targetId="projects-snapshot-target"
+          />
  <PermissionGuard screen={AppScreen.PROJECT_MANAGEMENT} requiredLevel={AccessLevel.WRITE}>
  <div className="flex items-center gap-3">
  <button
@@ -570,202 +630,307 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  </div>
  </div>
 
- {/* Navigation Tabs */}
- <div id="projects-snapshot-target" className="space-y-10">
- <div className="bg-white/50 dark:bg-white/5 rounded-[2.5rem] p-2 backdrop-blur-xl border border-gray-100 dark:border-white/5 flex items-center gap-6 justify-between mb-8">
- <div className="flex gap-4">
- {(['Portfolio', 'Capital Flow', 'Project Transactions', 'Performance'] as TabType[]).map((tab) => {
- const tabKey = tab.split(' ').map((word, i) => i === 0 ? word.toLowerCase() : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join('');
- return (
- <button
- key={tab}
- onClick={() => setActiveTab(tab)}
- className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab
- ? 'bg-dark dark:bg-brand text-white dark:text-dark shadow-xl'
- : 'text-gray-500 hover:text-dark dark:hover:text-white'
- }`}
- >
- {t(`projects.${tabKey}`, lang)}
- </button>
- );
- })}
- </div>
+      {/* TOP SUMMARY METRICS & NAVIGATION */}
+      <div id="projects-snapshot-target" className="space-y-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <SummaryMetricCard
+            label="Total Portfolio Capital"
+            value={formatCurrency(portfolioStats.totalBudget, true, currencyCode)}
+            note={`${portfolioStats.totalProjects} Projects`}
+            variant="dark"
+          />
+          <SummaryMetricCard
+            label="Active Ventures"
+            value={portfolioStats.activeProjects}
+            note="Active Ventures"
+          />
+          <SummaryMetricCard
+            label="Total Capital Invested"
+            value={formatCurrency(portfolioStats.totalInvested, true, currencyCode)}
+            note="Allocated Funds"
+          />
+          <SummaryMetricCard
+            label="Projected Portfolio Margin"
+            value={`${portfolioStats.avgRoi.toFixed(1)}%`}
+            note="Expected Return"
+          />
+        </div>
 
- <div className="pr-4 hidden md:block">
- <SearchBar
- onSearch={(q) => {
- setSearchQuery(q);
- setCurrentPage(1);
- }}
- placeholder={t('members.filterPlaceholder', lang)}
- />
- </div>
- </div>
+        {/* NAVIGATION TABS, SEARCH & ADVANCED FILTERS */}
+        <div className="bg-white dark:bg-[#1A221D] rounded-[3rem] card-shadow border border-gray-100 dark:border-white/5 overflow-hidden transition-colors duration-300">
+          <div className="px-8 py-5 border-b border-gray-50 dark:border-white/5 flex flex-col lg:flex-row items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2 p-1 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5">
+              {(['Portfolio', 'Capital Flow', 'Project Transactions', 'Performance'] as TabType[]).map((tab) => {
+                const tabKey = tab.split(' ').map((word, i) => i === 0 ? word.toLowerCase() : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join('');
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                      activeTab === tab
+                        ? 'bg-dark dark:bg-brand text-white dark:text-dark shadow-md'
+                        : 'text-gray-500 hover:text-dark dark:hover:text-white'
+                    }`}
+                  >
+                    {t(`projects.${tabKey}`, lang)}
+                  </button>
+                );
+              })}
+            </div>
 
- {/* Tab Content */}
- <main className="min-h-[500px]">
- {activeTab === 'Portfolio' && (
- <div className="space-y-10">
- <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
- {loading ? (
- <div className="col-span-full h-96 flex flex-col items-center justify-center text-center p-10">
- <RefreshCw className="animate-spin text-brand mb-4" size={48} strokeWidth={3} />
- <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Loading projects...</p>
- </div>
- ) : paginatedProjects.data.length === 0 ? (
- <div className="col-span-full h-96 flex flex-col items-center justify-center text-center p-10 bg-white/5 border border-dashed border-gray-300 dark:border-white/10 rounded-[4rem]">
- <Briefcase size={48} className="text-gray-400 mb-4 opacity-50" />
- <h3 className="text-xl font-black text-gray-500">{t('projects.noProjects', lang)}</h3>
- <p className="text-xs text-gray-400 mt-2">Try adjusting your search filters</p>
- </div>
- ) : (
- paginatedProjects.data.map(project => (
- <div key={project.id} className="bg-white dark:bg-[#1A221D] p-10 rounded-[4rem] card-shadow border border-gray-50 dark:border-white/5 transition-all hover:-translate-y-2 group relative">
- <div className="flex justify-between items-start mb-8">
- <div className="flex gap-2">
- <span className={`text-[9px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest flex items-center gap-1.5 ${getStatusColor(project.status, project.health)}`}>
- {getStatusIcon(project.status, project.health)}
- {t(`common.${statusKeyMap[project.status] || 'inProgress'}`, lang)}
- </span>
- {project.health !== 'Stable' && (
- <span className={`text-[9px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest flex items-center gap-1.5 ${project.health === 'Critical' ? 'bg-rose-500/20 text-rose-500' : 'bg-amber-500/20 text-amber-500'}`}>
- {t(`common.${project.health === 'At Risk' ? 'atRisk' : project.health.toLowerCase()}`, lang)}
- </span>
- )}
- </div>
- <div className="relative">
- <button
- onClick={() => setOpenMenuId(openMenuId === project.id ? null : project.id)}
- className="text-gray-600 dark:text-gray-300 hover:text-dark dark:hover:text-brand p-2 rounded-xl transition-all hover:bg-gray-50 dark:hover:bg-white/5"
- >
- <MoreHorizontal size={24} />
- </button>
- {openMenuId === project.id && (
- <div ref={menuRef} className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-dark rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 z-20 overflow-hidden animate-in slide-in-from-top-2 duration-200">
- <div className="p-2 space-y-1">
- {currentUser?.permissions[AppScreen.PROJECT_MANAGEMENT] === AccessLevel.WRITE && (
- <>
- <button
- onClick={() => project.updates.length === 0 ? handleEditClick(project) : showNotification("Structural Lock: Purge operational updates before editing.", "warning")}
- className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${project.updates.length === 0 ? 'hover:bg-brand/10 text-dark dark:text-brand' : 'opacity-40 cursor-not-allowed text-gray-400'}`}
- >
- <div className="flex items-center gap-3 font-bold text-xs"><Edit2 size={14} /> {t('common.edit', lang)}</div>
- {project.updates.length > 0 && <Lock size={12} />}
- </button>
- <button onClick={() => handleStatusChange(project, 'Completed')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-xs font-bold text-emerald-600 transition-all">
- <CheckCircle size={14} /> {t('projects.markCompleted', lang)}
- </button>
- <button onClick={() => handleStatusChange(project, 'Review')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-500/10 text-xs font-bold text-amber-600 transition-all">
- <AlertTriangle size={14} /> {t('projects.sendReview', lang)}
- </button>
- <button onClick={() => handleStatusChange(project, 'In Progress')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-brand/10 text-xs font-bold text-dark dark:text-brand transition-all">
- <Clock size={14} /> {t('projects.reactivate', lang)}
- </button>
- </>
- )}
- {currentUser?.permissions[AppScreen.DIVIDENDS] === AccessLevel.WRITE && (
- <button onClick={() => navigate(`/dividends?projectId=${project.id}`)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-brand/10 text-xs font-bold text-dark dark:text-brand transition-all">
- <TrendingUp size={14} /> {t('projects.profitSettlement', lang)}
- </button>
- )}
- {currentUser?.permissions[AppScreen.PROJECT_MANAGEMENT] === AccessLevel.WRITE && (
- <>
- <div className="h-px bg-gray-100 dark:bg-white/5 my-1" />
- <button
- onClick={() => project.updates.length === 0 ? handleDeleteClick(project.id) : showNotification("Termination Lock: Purge operational updates before deleting.", "warning")}
- className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${project.updates.length === 0 ? 'hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-600' : 'opacity-40 cursor-not-allowed text-gray-400'}`}
- >
- <div className="flex items-center gap-3 font-bold text-xs"><Trash2 size={14} /> {t('projects.deleteProject', lang)}</div>
- {project.updates.length > 0 && <Lock size={12} />}
- </button>
- </>
- )}
- </div>
- </div>
- )}
- </div>
- </div>
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 p-1 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5 text-[10px] font-bold overflow-x-auto max-w-full">
+                {['ALL', 'Real Estate', 'Technology', 'Energy', 'Farming'].map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${
+                      selectedCategory === cat
+                        ? 'bg-brand text-dark shadow-sm'
+                        : 'text-gray-500 hover:text-dark dark:hover:text-white'
+                    }`}
+                  >
+                    {cat === 'ALL' ? 'All Sectors' : cat}
+                  </button>
+                ))}
+              </div>
 
- <div className="mb-6">
- <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{t(`common.${catKeyMap[project.category] || 'realEstate'}`, lang)}</p>
- <h3 className="text-3xl font-black text-dark dark:text-white mb-2 leading-[0.9] tracking-tighter group-hover:text-brand transition-colors">{project.title}</h3>
- </div>
+              <div className="w-full sm:w-64">
+                <SearchBar
+                  onSearch={(q) => {
+                    setSearchQuery(q);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Search projects..."
+                />
+              </div>
+            </div>
+          </div>
+        </div>
 
- <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-8 line-clamp-2 leading-relaxed">{project.description}</p>
+        {/* Tab Content */}
+        <main className="min-h-[500px]">
+          {activeTab === 'Portfolio' && (
+            <div className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {loading ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <ProjectCardSkeleton key={`proj-skel-${i}`} />
+                  ))
+                ) : filteredPortfolioProjects.length === 0 ? (
+                  <div className="col-span-full h-80 flex flex-col items-center justify-center text-center p-10 bg-white/5 border border-dashed border-gray-300 dark:border-white/10 rounded-[3rem]">
+                    <Briefcase size={44} className="text-gray-400 mb-3 opacity-50" />
+                    <h3 className="text-lg font-black text-gray-500">{t('projects.noProjects', lang)}</h3>
+                    <p className="text-xs text-gray-400 mt-1">Try adjusting your sector filters or search query</p>
+                  </div>
+                ) : (
+                  filteredPortfolioProjects.map((project, pIdx) => {
+                    const phaseInfo = getProjectPhase(project.status, (project.updates?.length || 0));
+                    return (
+                      <div key={project.id || (project as any)._id || `portfolio-proj-${pIdx}`} className="bg-white dark:bg-[#1A221D] p-7 rounded-[2.5rem] card-shadow border border-gray-100 dark:border-white/5 transition-all hover:-translate-y-1 group relative flex flex-col justify-between">
+                        <div>
+                          {/* Header: Badges & Menu */}
+                          <div className="flex justify-between items-start mb-5">
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 ${getStatusColor(project.status, project.health)}`}>
+                                {getStatusIcon(project.status, project.health)}
+                                {t(`common.${statusKeyMap[project.status] || 'inProgress'}`, lang)}
+                              </span>
+                              {Boolean(project.health && project.health !== 'Stable') && (
+                                <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 ${project.health === 'Critical' ? 'bg-rose-500/20 text-rose-500' : 'bg-amber-500/20 text-amber-500'}`}>
+                                  {project.health === 'At Risk' ? t('common.atRisk', lang) : project.health === 'Critical' ? (t('common.critical', lang) || 'Critical') : project.health}
+                                </span>
+                              )}
+                              <span className="text-[9px] font-bold px-2 py-1 bg-gray-50 dark:bg-white/5 text-gray-500 dark:text-gray-400 rounded-full uppercase tracking-wider border border-gray-100 dark:border-white/5">
+                                {project.category}
+                              </span>
+                            </div>
+                            <div className="relative">
+                              <button
+                                onClick={() => setOpenMenuId(openMenuId === project.id ? null : project.id)}
+                                className="text-gray-500 dark:text-gray-400 hover:text-dark dark:hover:text-brand p-1.5 rounded-xl transition-all hover:bg-gray-50 dark:hover:bg-white/5"
+                              >
+                                <MoreHorizontal size={18} />
+                              </button>
+                              {openMenuId === project.id && (
+                                <div ref={menuRef} className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-dark rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 z-20 overflow-hidden animate-in slide-in-from-top-2 duration-200">
+                                  <div className="p-2 space-y-1">
+                                    {hasWritePermission && (
+                                      <>
+                                        <button
+                                          onClick={() => (project.updates?.length || 0) === 0 ? handleEditClick(project) : showNotification("Structural Lock: Purge operational updates before editing.", "warning")}
+                                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${(project.updates?.length || 0) === 0 ? 'hover:bg-brand/10 text-dark dark:text-brand' : 'opacity-40 cursor-not-allowed text-gray-400'}`}
+                                        >
+                                          <div className="flex items-center gap-2 font-bold text-xs"><Edit2 size={13} /> {t('common.edit', lang)}</div>
+                                          {(project.updates?.length || 0) > 0 && <Lock size={11} />}
+                                        </button>
+                                        <button onClick={() => handleStatusChange(project, 'Completed')} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-xs font-bold text-emerald-600 transition-all">
+                                          <CheckCircle size={13} /> {t('projects.markCompleted', lang)}
+                                        </button>
+                                        <button onClick={() => handleStatusChange(project, 'Review')} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-500/10 text-xs font-bold text-amber-600 transition-all">
+                                          <AlertTriangle size={13} /> {t('projects.sendReview', lang)}
+                                        </button>
+                                        <button onClick={() => handleStatusChange(project, 'In Progress')} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-brand/10 text-xs font-bold text-dark dark:text-brand transition-all">
+                                          <Clock size={13} /> {t('projects.reactivate', lang)}
+                                        </button>
+                                      </>
+                                    )}
+                                    {hasDividendPermission && (
+                                      <button onClick={() => navigate(`/dividends?projectId=${project.id}`)} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-brand/10 text-xs font-bold text-dark dark:text-brand transition-all">
+                                        <TrendingUp size={13} /> {t('projects.profitSettlement', lang)}
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => {
+                                        const cert = generateProjectCertificate(project, funds, currencyCode);
+                                        setSelectedVoucher(cert);
+                                        setIsReceiptModalOpen(true);
+                                        setOpenMenuId(null);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-500/10 text-xs font-bold text-blue-600 dark:text-blue-400 transition-all"
+                                    >
+                                      <Printer size={13} /> Print Statement
+                                    </button>
+                                    {hasWritePermission && (
+                                      <>
+                                        <div className="h-px bg-gray-100 dark:bg-white/5 my-1" />
+                                        <button
+                                          onClick={() => (project.updates?.length || 0) === 0 ? handleDeleteClick(project.id) : showNotification("Termination Lock: Purge operational updates before deleting.", "warning")}
+                                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${(project.updates?.length || 0) === 0 ? 'hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-600' : 'opacity-40 cursor-not-allowed text-gray-400'}`}
+                                        >
+                                          <div className="flex items-center gap-2 font-bold text-xs"><Trash2 size={13} /> {t('projects.deleteProject', lang)}</div>
+                                          {(project.updates?.length || 0) > 0 && <Lock size={11} />}
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
 
- <div className="space-y-8">
- <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-[#111814] rounded-[2.5rem] border border-gray-100 dark:border-white/5 transition-all group-hover:bg-brand group-hover:border-brand shadow-inner">
- <div>
- <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 group-hover:text-dark/60">{t('projects.currentAllocation', lang)}</p>
- <p className={`font-black text-dark dark:text-white group-hover:text-dark tracking-tighter transition-colors flex-wrap ${formatCurrency(project.currentFundBalance).length > 14 ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl'}`}>
- {formatCurrency(project.currentFundBalance)}
- </p>
- </div>
- <Briefcase className="text-gray-300 dark:text-gray-700 group-hover:text-dark/40 transition-colors" size={32} />
- </div>
+                          {/* Title & Description */}
+                          <div className="mb-4">
+                            <h3 className="text-xl font-black text-dark dark:text-white mb-1.5 leading-tight tracking-tight group-hover:text-brand transition-colors">
+                              {project.title}
+                            </h3>
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
+                              {project.description}
+                            </p>
+                          </div>
 
- <div className="flex items-center justify-between">
- <div className="flex items-center gap-3">
- <div className="flex -space-x-3">
- {(project.involvedMembers || []).slice(0, 3).map((m, i) => {
- const currentMember = activeMembers.find(mem => mem.memberId === m.memberId);
- const displayName = currentMember?.name || m.memberName;
- return (
- <Avatar
- key={`${m.memberId || i}-${i}`}
- name={displayName}
- size="sm"
- className="-ml-3 first:ml-0 border-2 border-white dark:border-[#1A221D] shadow-lg"
- />
- );
- })}
- {(project.involvedMembers || []).length > 3 && (
- <div className="w-9 h-9 rounded-full border-2 border-white dark:border-[#1A221D] bg-gray-100 dark:bg-white/5 flex items-center justify-center text-[9px] font-black dark:text-white shadow-lg">
- +{(project.involvedMembers || []).length - 3}
- </div>
- )}
- </div>
- <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{t('projects.equityStake', lang)}</span>
- </div>
- <div className="flex flex-col items-end">
- <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{t('projects.growth', lang)}</p>
- <div className="flex items-center gap-1 text-emerald-500 font-black text-xs">
- {project.initialInvestment > 0 ? (
- <> <TrendingUp size={12} /> {((project.currentFundBalance / project.initialInvestment - 1) * 100).toFixed(1)}% </>
- ) : (
- <span>N/A</span>
- )}
- </div>
- </div>
- </div>
- </div>
- </div>
- ))
- )}
- </div>
- <Pagination
- currentPage={currentPage}
- totalPages={paginatedProjects.pages}
- onPageChange={setCurrentPage}
- rowsPerPage={rowsPerPage}
- onRowsPerPageChange={(newLimit) => {
- setRowsPerPage(newLimit);
- setCurrentPage(1);
- }}
- />
- </div>
- )}
+                          {/* Milestone Phase Roadmap */}
+                          <div className="py-2.5 px-3.5 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5 mb-4 space-y-1.5">
+                            <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-wider text-gray-400">
+                              <span>Lifecycle Phase</span>
+                              <span className="text-brand font-bold">{phaseInfo.name}</span>
+                            </div>
+                            <div className="grid grid-cols-4 gap-1.5 items-center pt-0.5">
+                              {[
+                                { step: 1, label: 'Intake' },
+                                { step: 2, label: 'Deploy' },
+                                { step: 3, label: 'Yield' },
+                                { step: 4, label: 'Payout' },
+                              ].map((ph) => {
+                                const isReached = phaseInfo.step >= ph.step;
+                                const isCurrent = phaseInfo.step === ph.step;
+                                return (
+                                  <div key={ph.step} className="space-y-1">
+                                    <div
+                                      className={`h-1.5 rounded-full transition-all ${
+                                        isReached
+                                          ? isCurrent
+                                            ? 'bg-brand'
+                                            : 'bg-brand/60'
+                                          : 'bg-gray-200 dark:bg-white/10'
+                                      }`}
+                                    />
+                                    <p className={`text-[8px] font-bold text-center tracking-tight truncate ${
+                                      isReached ? 'text-dark dark:text-white' : 'text-gray-400'
+                                    }`}>
+                                      {ph.label}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
 
- {activeTab === 'Capital Flow' && (
- <div className="bg-white dark:bg-[#1A221D] rounded-[4rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5 animate-in slide-in-from-bottom-4 duration-500">
- <Table
- data={globalProjects}
- columns={capitalFlowColumns}
- rowKey={(p) => p.id}
- emptyMessage={<div className="text-gray-400 font-bold uppercase tracking-widest text-xs px-10 py-8">{t('projects.noProjects', lang)}</div>}
- />
- </div>
- )}
+                          {/* Capital Allocation Card */}
+                          <div className="flex items-center justify-between p-3.5 bg-gray-50 dark:bg-[#111814] rounded-2xl border border-gray-100 dark:border-white/5 mb-4">
+                            <div>
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{t('projects.currentAllocation', lang)}</p>
+                              <p className="text-lg font-black text-dark dark:text-white font-mono tracking-tight">
+                                {formatCurrency(project.currentFundBalance, true, currencyCode)}
+                              </p>
+                            </div>
+                            <Briefcase className="text-gray-300 dark:border-white/5" size={20} />
+                          </div>
+                        </div>
+
+                        {/* Footer: Stakeholder Count & Margin */}
+                        <div className="pt-3 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="flex -space-x-1.5">
+                              {(project.involvedMembers || []).slice(0, 3).map((m, i) => {
+                                const currentMember = activeMembers.find(mem => mem.memberId === m.memberId);
+                                const displayName = currentMember?.name || m.memberName;
+                                return (
+                                  <Avatar
+                                    key={`${m.memberId || i}-${i}`}
+                                    name={displayName}
+                                    size="sm"
+                                    className="border border-white dark:border-[#1A221D] shadow-sm"
+                                  />
+                                );
+                              })}
+                              {(project.involvedMembers || []).length > 3 && (
+                                <div className="w-6 h-6 rounded-full border border-white dark:border-[#1A221D] bg-gray-100 dark:bg-white/5 flex items-center justify-center text-[8px] font-black dark:text-white">
+                                  +{(project.involvedMembers || []).length - 3}
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">
+                              {(project.involvedMembers || []).length} Partner{(project.involvedMembers || []).length === 1 ? '' : 's'}
+                            </span>
+                          </div>
+
+                          <div className="text-right">
+                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Target ROI</p>
+                            <span className="text-xs font-black text-emerald-500 font-mono">
+                              +{project.expectedRoi || 0}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              <Pagination
+                currentPage={currentPage}
+                totalPages={paginatedProjects.pages}
+                onPageChange={setCurrentPage}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={(newLimit) => {
+                  setRowsPerPage(newLimit);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
+          )}
+
+          {activeTab === 'Capital Flow' && (
+            <div className="bg-white dark:bg-[#1A221D] rounded-[4rem] card-shadow overflow-hidden border border-gray-100 dark:border-white/5 animate-in slide-in-from-bottom-4 duration-500">
+              <Table
+                data={globalProjects}
+                columns={capitalFlowColumns}
+                rowKey={(p, idx) => p.id || (p as any)._id || `cap-flow-${idx}`}
+                emptyMessage={<div className="text-gray-400 font-bold uppercase tracking-widest text-xs px-10 py-8">{t('projects.noProjects', lang)}</div>}
+              />
+            </div>
+          )}
 
  {activeTab === 'Project Transactions' && (
  <div className="space-y-10 animate-in fade-in duration-500">
@@ -786,322 +951,405 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ lang }) => {
  </PermissionGuard>
  </div>
 
- <div className="bg-white dark:bg-[#1A221D] rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5 overflow-hidden flex flex-col">
- <div className="p-10 border-b border-gray-50 dark:border-white/5 flex items-center justify-between bg-gray-50/30 dark:bg-white/5">
- <div className="flex items-center gap-4">
- <div className="bg-brand p-4 rounded-2xl shadow-xl shadow-brand/20">
- <Activity className="text-dark" size={24} strokeWidth={3} />
- </div>
- <div>
- <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('projects.ventureActivities', lang) || 'Project Activities'}</h4>
- <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-2">{t('projects.auditTrailDesc', lang) || 'Audit trail of all earnings and expenses'}</p>
- </div>
- </div>
- </div>
- <div className="flex-1 overflow-y-auto max-h-[700px] no-scrollbar">
- <Table
- data={globalProjects.flatMap(p => p.updates.map(u => ({ ...u, projectTitle: p.title, projectId: p.id, _id: (u as any)._id }))).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())}
- columns={projectTransactionsColumns}
- rowKey={(update, idx) => `${update.projectId}-${idx}`}
- emptyMessage={<div className="text-gray-400 font-bold uppercase tracking-widest text-xs px-10 py-8">No project transactions found</div>}
- />
- </div>
- </div>
- </div>
- )}
+        <div className="bg-white dark:bg-[#1A221D] rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5 overflow-hidden flex flex-col">
+          <div className="p-10 border-b border-gray-50 dark:border-white/5 flex items-center justify-between bg-gray-50/30 dark:bg-white/5">
+            <div className="flex items-center gap-4">
+              <div className="bg-brand p-4 rounded-2xl shadow-xl shadow-brand/20">
+                <Activity className="text-dark" size={24} strokeWidth={3} />
+              </div>
+              <div>
+                <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter leading-none">{t('projects.ventureActivities', lang) || 'Project Activities'}</h4>
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-2">{t('projects.auditTrailDesc', lang) || 'Audit trail of all earnings and expenses'}</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto max-h-[700px] no-scrollbar">
+            <Table
+              data={safeProjects.flatMap(p => (p.updates || []).map(u => ({ ...u, projectTitle: p.title, projectId: p.id, _id: (u as any)._id }))).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())}
+              columns={projectTransactionsColumns}
+              rowKey={(update, idx) => (update as any)._id || (update as any).id || `${update.projectId || 'tx'}-${idx}`}
+              emptyMessage={<div className="text-gray-400 font-bold uppercase tracking-widest text-xs px-10 py-8">No project transactions found</div>}
+            />
+          </div>
+        </div>
+      </div>
+    )}
 
- {activeTab === 'Performance' && (
- <div className="space-y-10 animate-in slide-in-from-bottom-8 duration-700">
- <div className="flex items-center gap-6 p-1 bg-white/50 dark:bg-white/5 rounded-[2.5rem] border border-gray-100 dark:border-white/5 max-w-fit mx-auto shadow-inner overflow-x-auto">
- {globalProjects.map(p => (
- <button
- key={p.id}
- onClick={() => setSelectedProjectId(p.id)}
- className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedProjectId === p.id
- ? 'bg-dark dark:bg-brand text-white dark:text-dark shadow-2xl scale-105'
- : 'text-gray-500 hover:text-dark dark:hover:text-white'
- }`}
- >
- {p.title}
- </button>
- ))}
- </div>
+    {activeTab === 'Performance' && (
+      <div className="space-y-10 animate-in slide-in-from-bottom-8 duration-700">
+        <div className="flex items-center gap-6 p-1 bg-white/50 dark:bg-white/5 rounded-[2.5rem] border border-gray-100 dark:border-white/5 max-w-fit mx-auto shadow-inner overflow-x-auto">
+          {safeProjects.map((p, pIdx) => (
+            <button
+              key={p.id || (p as any)._id || `perf-proj-${pIdx}`}
+              onClick={() => setSelectedProjectId(p.id)}
+              className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                selectedProjectId === p.id
+                  ? 'bg-dark dark:bg-brand text-white dark:text-dark shadow-2xl scale-105'
+                  : 'text-gray-500 hover:text-dark dark:hover:text-white'
+              }`}
+            >
+              {p.title}
+            </button>
+          ))}
+        </div>
 
- {selectedProject && analytics ? (
- <div className="animate-in slide-in-from-bottom-4 duration-500">
- <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
- <SummaryMetricCard
- label={t('projects.initialInvestment', lang)}
- value={formatCurrency(selectedProject.initialInvestment)}
- />
- <SummaryMetricCard
- label={t('projects.cumulativeRevenue', lang)}
- value={formatCurrency(analytics.totalEarnings)}
- valueClassName="text-emerald-500"
- />
- <SummaryMetricCard
- label={t('projects.operatingOverhead', lang)}
- value={formatCurrency(analytics.totalExpenses)}
- valueClassName="text-rose-500"
- />
- <SummaryMetricCard
- label={t('projects.performanceMargin', lang)}
- value={`${analytics.roi.toFixed(1)}%`}
- icon={analytics.profit >= 0 ? <TrendingUp size={22} strokeWidth={3} className="text-emerald-500" /> : <TrendingDown size={22} strokeWidth={3} className="text-rose-500" />}
- className={analytics.profit >= 0 ? 'bg-brand/10 border border-brand/30 text-dark dark:text-brand' : 'bg-rose-500/10 border border-rose-500/30 text-rose-600'}
- labelClassName={analytics.profit >= 0 ? 'text-brand' : 'text-rose-500'}
- valueClassName={analytics.profit >= 0 ? 'text-dark dark:text-brand' : 'text-rose-600'}
- />
- </div>
+        {selectedProject && analytics ? (
+          <div className="animate-in slide-in-from-bottom-4 duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+              <SummaryMetricCard
+                label={t('projects.initialInvestment', lang)}
+                value={formatCurrency(selectedProject.initialInvestment, true, currencyCode)}
+              />
+              <SummaryMetricCard
+                label={t('projects.cumulativeRevenue', lang)}
+                value={formatCurrency(analytics.totalEarnings, true, currencyCode)}
+                valueClassName="text-emerald-500"
+              />
+              <SummaryMetricCard
+                label={t('projects.operatingOverhead', lang)}
+                value={formatCurrency(analytics.totalExpenses, true, currencyCode)}
+                valueClassName="text-rose-500"
+              />
+              <SummaryMetricCard
+                label={t('projects.performanceMargin', lang)}
+                value={`${analytics.roi.toFixed(1)}%`}
+                icon={analytics.profit >= 0 ? <TrendingUp size={22} strokeWidth={3} className="text-emerald-500" /> : <TrendingDown size={22} strokeWidth={3} className="text-rose-500" />}
+                className={analytics.profit >= 0 ? 'bg-brand/10 border border-brand/30 text-dark dark:text-brand' : 'bg-rose-500/10 border border-rose-500/30 text-rose-600'}
+                labelClassName={analytics.profit >= 0 ? 'text-brand' : 'text-rose-500'}
+                valueClassName={analytics.profit >= 0 ? 'text-dark dark:text-brand' : 'text-rose-600'}
+              />
+            </div>
 
- <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
- <div className="bg-white dark:bg-[#1A221D] p-12 rounded-[4rem] card-shadow border border-gray-100 dark:border-white/5">
- <div className="flex items-center justify-between mb-10">
- <h4 className="text-2xl font-black text-dark dark:text-white uppercase tracking-tighter flex items-center gap-4">
- <Users className="text-brand" size={28} /> {t('projects.equityParticipation', lang)}
- </h4>
- <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{currencyCode}</span>
- </div>
- <div className="space-y-6">
- {selectedProject.involvedMembers.map((m) => {
- const participationPercent = (m.sharesInvested / selectedProject.totalShares) * 100;
- const partnerProfit = (analytics.profit * participationPercent) / 100;
- return (
- <div key={m.memberId} className="p-8 bg-gray-50 dark:bg-[#111814] rounded-[2.5rem] border border-gray-100 dark:border-white/5 flex items-center justify-between transition-all hover:translate-x-2 group">
- <div>
- <p className="font-black text-dark dark:text-white text-xl leading-none mb-1 group-hover:text-brand transition-colors">{m.memberName}</p>
- <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{m.sharesInvested} {t('dashboard.trust', lang)} ({participationPercent.toFixed(1)}%)</p>
- </div>
- <div className="text-right">
- <p className={`text-2xl font-black tracking-tighter ${partnerProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
- {partnerProfit >= 0 ? '+' : ''}{formatCurrency(partnerProfit)}
- </p>
- <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t('projects.netEntitlement', lang)}</p>
- </div>
- </div>
- );
- })}
- </div>
- </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+              <div className="bg-white dark:bg-[#1A221D] p-8 sm:p-10 rounded-[3rem] card-shadow border border-gray-100 dark:border-white/5 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100 dark:border-white/5">
+                  <div>
+                    <h4 className="text-xl font-black text-dark dark:text-white uppercase tracking-tight flex items-center gap-2.5">
+                      <Users className="text-brand" size={22} /> {t('projects.equityParticipation', lang)}
+                    </h4>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
+                      {isSimulatorActive ? 'Simulated Distribution' : 'Actual Net Entitlements'}
+                    </p>
+                  </div>
 
- <div className="bg-dark p-14 rounded-[4rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative overflow-hidden group">
- <div className="absolute top-0 right-0 p-32 bg-brand/5 rounded-full -mr-20 -mt-20 blur-3xl group-hover:scale-125 transition-transform duration-[2s]"></div>
- <div className="absolute bottom-0 left-0 p-32 bg-brand/5 rounded-full -ml-20 -mb-20 blur-3xl"></div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setIsSimulatorActive(!isSimulatorActive);
+                        if (!isSimulatorActive) setSimulatedProfit(analytics.profit > 0 ? analytics.profit * 1.5 : 100000);
+                      }}
+                      className={`px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                        isSimulatorActive
+                          ? 'bg-brand text-dark shadow-md'
+                          : 'bg-gray-100 dark:bg-white/5 text-gray-500 hover:text-dark dark:hover:text-white'
+                      }`}
+                    >
+                      <Activity size={12} /> {isSimulatorActive ? 'Simulation Active' : 'Simulate Profit'}
+                    </button>
+                  </div>
+                </div>
 
- <div className="relative z-10 h-full flex flex-col justify-between">
- <div>
- <div className="inline-block px-5 py-2 bg-brand/10 border border-brand/20 rounded-full mb-8">
- <p className="text-[10px] font-black text-brand uppercase tracking-[0.4em]">Project Analytics v2.6</p>
- </div>
- <h4 className="text-5xl font-black text-white uppercase tracking-tighter leading-[0.8] mb-8">{t('projects.stratIntel', lang)}</h4>
- <p className="text-white/40 text-base font-medium leading-relaxed max-w-sm mb-12">
- Performance tracking indicates that "{selectedProject.title}" is operating within {analytics.roi >= 15 ? 'optimal efficiency ranges' : 'standard fiscal parameters'}. Reserve capital is currently {selectedProject.currentFundBalance > selectedProject.initialInvestment * 0.2 ? 'sufficient' : 'strained'}.
- </p>
- </div>
- <div className="pt-12 border-t border-white/10 flex items-center justify-between">
- <div>
- <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">{t('projects.ventureReserve', lang)}</p>
- <p className="text-4xl font-black text-white tracking-tighter leading-none">
- {formatCurrency(selectedProject.currentFundBalance)}
- </p>
- </div>
- <div className="w-20 h-20 rounded-[2.5rem] bg-brand flex items-center justify-center text-dark shadow-2xl shadow-brand/20 hover:scale-110 active:scale-95 transition-all cursor-pointer">
- <PieChartIcon size={32} strokeWidth={3} />
- </div>
- </div>
- </div>
- </div>
- </div>
- </div>
- ) : (
- <div className="text-center p-10">
- <p className="text-gray-400">{t('projects.selectProjectPerf', lang)}</p>
- </div>
- )}
- </div>
- )}
- </main>
- </div>
+                {isSimulatorActive && (
+                  <div className="p-4 bg-brand/5 border border-brand/20 rounded-2xl space-y-3 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-brand">Target Net Profit Simulation</span>
+                      <span className="text-sm font-black font-mono text-dark dark:text-brand">
+                        {formatCurrency(simulatedProfit, true, currencyCode)}
+                      </span>
+                    </div>
 
- {/* CREATE PROJECT TOP OVERLAY FORM */}
- <InlineTopForm
- isOpen={isModalOpen}
- onClose={resetForm}
- title={isEditMode ? t('common.edit', lang) : t('projects.newPlan', lang)}
- subtitle={isEditMode ? "Structural Audit & Modification" : t('projects.ventureCapital', lang)}
- onSubmit={handleReviewCreate}
- submitLabel={isEditMode ? "Verify & Save Updates" : t('projects.launchVenture', lang)}
- loading={isSubmitting}
- >
- <div className="space-y-8">
- <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
- <FormInput
- label={t('projects.projectIdentifier', lang)}
- value={newProject.title}
- onChange={e => setNewProject({ ...newProject, title: e.target.value })}
- placeholder={t('projects.titlePlaceholder', lang)}
- required
- />
- <FormSelect
- label={t('projects.sectorClassification', lang)}
- value={newProject.category}
- onChange={e => setNewProject({ ...newProject, category: e.target.value })}
- options={Object.keys(catKeyMap).map(cat => ({
- value: cat,
- label: t(`common.${catKeyMap[cat]}`, lang)
- }))}
- required
- />
- <FormInput
- label={t('projects.plannedBudget', lang)}
- type="number"
- value={newProject.budget}
- onChange={e => setNewProject({ ...newProject, budget: e.target.value })}
- placeholder="0.00"
- />
- </div>
+                    <input
+                      type="range"
+                      min="10000"
+                      max="1000000"
+                      step="10000"
+                      value={simulatedProfit}
+                      onChange={(e) => setSimulatedProfit(Number(e.target.value))}
+                      className="w-full h-1.5 bg-gray-200 dark:bg-white/10 rounded-lg appearance-none cursor-pointer accent-brand"
+                    />
 
- <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
- <FormInput
- label={t('projects.targetRoi', lang)}
- type="number"
- value={newProject.expectedRoi}
- onChange={e => setNewProject({ ...newProject, expectedRoi: e.target.value })}
- placeholder="%"
- />
- <FormSelect
- label={t('projects.initialRiskProfile', lang)}
- value={newProject.health}
- onChange={e => setNewProject({ ...newProject, health: e.target.value as any })}
- options={[
- { value: "Stable", label: t('common.stable', lang) },
- { value: "At Risk", label: t('common.atRisk', lang) },
- { value: "Critical", label: t('common.critical', lang) }
- ]}
- required
- />
- <FormInput
- label={t('projects.kickoffDate', lang)}
- type="date"
- value={newProject.startDate}
- onChange={e => setNewProject({ ...newProject, startDate: e.target.value })}
- required
- />
- <FormInput
- label={t('projects.fundHandler', lang)}
- value={newProject.projectFundHandler}
- onChange={e => setNewProject({ ...newProject, projectFundHandler: e.target.value })}
- required
- />
- </div>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {[50000, 100000, 250000, 500000].map((val) => (
+                        <button
+                          key={val}
+                          onClick={() => setSimulatedProfit(val)}
+                          className={`px-2.5 py-1 rounded-lg text-[9px] font-bold font-mono transition-all ${
+                            simulatedProfit === val
+                              ? 'bg-brand text-dark'
+                              : 'bg-white dark:bg-white/10 text-gray-500 hover:text-dark dark:hover:text-white'
+                          }`}
+                        >
+                          +{val.toLocaleString()}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setSimulatedProfit(analytics.profit)}
+                        className="px-2.5 py-1 rounded-lg text-[9px] font-bold bg-white dark:bg-white/10 text-gray-500 hover:text-dark dark:hover:text-white transition-all ml-auto"
+                      >
+                        Reset Actual
+                      </button>
+                    </div>
+                  </div>
+                )}
 
- <FormTextarea
- label={t('projects.strategicObjective', lang)}
- value={newProject.description}
- onChange={e => setNewProject({ ...newProject, description: e.target.value })}
- placeholder={t('projects.goalPlaceholder', lang)}
- required
- className="h-24 resize-none"
- />
+                <div className="space-y-3 max-h-[380px] overflow-y-auto no-scrollbar pr-1">
+                  {(selectedProject.involvedMembers || []).length === 0 ? (
+                    <div className="text-gray-400 font-bold uppercase tracking-widest text-xs py-8 text-center">
+                      No equity participation records found
+                    </div>
+                  ) : (
+                    (selectedProject.involvedMembers || []).map((m, mIdx) => {
+                      const participationPercent = selectedProject.totalShares > 0
+                        ? (m.sharesInvested / selectedProject.totalShares) * 100
+                        : 0;
+                      const effectiveProfit = isSimulatorActive ? simulatedProfit : analytics.profit;
+                      const partnerProfit = (effectiveProfit * participationPercent) / 100;
+                      return (
+                        <div key={m.memberId ? `${m.memberId}-${mIdx}` : `equity-mem-${mIdx}`} className="p-4 bg-gray-50 dark:bg-[#111814] rounded-2xl border border-gray-100 dark:border-white/5 flex items-center justify-between transition-all hover:translate-x-1 group">
+                          <div>
+                            <p className="font-bold text-dark dark:text-white text-sm leading-none mb-1 group-hover:text-brand transition-colors">{m.memberName}</p>
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{m.sharesInvested} Units ({participationPercent.toFixed(1)}%)</p>
+                          </div>
+                          <div className="text-right">
+                            <p className={`text-base font-black font-mono tracking-tight ${partnerProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                              {partnerProfit >= 0 ? '+' : ''}{formatCurrency(partnerProfit, true, currencyCode)}
+                            </p>
+                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">{isSimulatorActive ? 'Projected Share' : t('projects.netEntitlement', lang)}</p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
 
- {/* Stakeholder Participation Builder */}
- <div className="p-8 bg-gray-50 dark:bg-[#111814] rounded-3xl border border-gray-100 dark:border-white/5">
- <h4 className="text-sm font-black text-dark dark:text-white uppercase tracking-widest mb-6 flex items-center gap-2">
- <Users size={16} className="text-brand" /> {t('projects.stakeholderEquity', lang)}
- </h4>
+              <div className="bg-dark p-8 sm:p-12 rounded-[3rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative overflow-hidden group flex flex-col justify-between">
+                <div className="absolute top-0 right-0 p-32 bg-brand/5 rounded-full -mr-20 -mt-20 blur-3xl group-hover:scale-125 transition-transform duration-[2s]"></div>
+                <div className="absolute bottom-0 left-0 p-32 bg-brand/5 rounded-full -ml-20 -mb-20 blur-3xl"></div>
 
- <div className="flex flex-col sm:flex-row gap-4 mb-6">
- <FormSelect
- label={t('projects.memberLabel', lang)}
- value={tempMemberId}
- onChange={e => setTempMemberId(e.target.value)}
- options={activeMembers.map(m => ({
- value: m.id || m.memberId,
- label: m.name
- }))}
- className="flex-[2]"
- />
- <FormInput
- label={t('projects.sharesLabel', lang)}
- type="number"
- value={tempShares}
- onChange={e => setTempShares(e.target.value)}
- className="flex-1"
- />
- <div className="flex items-end">
- <button
- type="button"
- onClick={handleAddParticipation}
- className="bg-brand text-dark p-4 rounded-2xl hover:scale-105 active:scale-95 transition-all mb-0.5"
- >
- <Plus size={20} />
- </button>
- </div>
- </div>
+                <div className="relative z-10 space-y-6">
+                  <div className="inline-block px-4 py-1.5 bg-brand/10 border border-brand/20 rounded-full">
+                    <p className="text-[9px] font-black text-brand uppercase tracking-[0.3em]">Executive Charter v2.6</p>
+                  </div>
+                  <h4 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter leading-tight">{t('projects.stratIntel', lang)}</h4>
+                  <p className="text-white/50 text-sm font-medium leading-relaxed max-w-md">
+                    Performance monitoring confirms that <strong className="text-white">"{selectedProject.title}"</strong> is operating with a target return of <strong className="text-brand">{selectedProject.expectedRoi || 0}%</strong>. Capital reserve status is currently <span className={selectedProject.currentFundBalance > selectedProject.initialInvestment * 0.2 ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>{selectedProject.currentFundBalance > selectedProject.initialInvestment * 0.2 ? 'Secure & Operational' : 'Under Monitoring'}</span>.
+                  </p>
+                </div>
 
- {participationList.length > 0 && (
- <div className="space-y-3 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
- {participationList.map((p, idx) => (
- <div key={idx} className="flex justify-between items-center bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-100 dark:border-white/5">
- <div>
- <p className="text-xs font-black text-dark dark:text-white uppercase">{p.memberName}</p>
- <p className="text-[10px] font-bold text-gray-400">ID: {p.memberId}</p>
- </div>
- <div className="flex items-center gap-4">
- <span className="text-xs font-black text-brand">{p.sharesInvested} {t('projects.units', lang)}</span>
- <button
- type="button"
- onClick={() => setParticipationList(participationList.filter((_, i) => i !== idx))}
- className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 p-2 rounded-xl transition-all"
- >
- <X size={14} />
- </button>
- </div>
- </div>
- ))}
- </div>
- )}
+                <div className="relative z-10 pt-8 border-t border-white/10 flex items-center justify-between mt-8">
+                  <div>
+                    <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">{t('projects.ventureReserve', lang)}</p>
+                    <p className="text-3xl font-black text-white font-mono tracking-tighter leading-none">
+                      {formatCurrency(selectedProject.currentFundBalance, true, currencyCode)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const cert = generateProjectCertificate(selectedProject, funds, currencyCode);
+                      setSelectedVoucher(cert);
+                      setIsReceiptModalOpen(true);
+                    }}
+                    className="px-5 py-3 rounded-2xl bg-brand text-dark font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-xl shadow-brand/20 hover:scale-105 active:scale-95 transition-all"
+                  >
+                    <Printer size={14} strokeWidth={3} /> Brief Statement
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center p-10">
+            <p className="text-gray-400">{t('projects.selectProjectPerf', lang)}</p>
+          </div>
+        )}
+      </div>
+    )}
+  </main>
+</div>
 
- {participationList.length > 0 && (
- <div className="mt-6 pt-6 border-t border-gray-200 dark:border-white/10 flex justify-between items-center">
- <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t('projects.totalSeedCapital', lang)}</p>
- <div className="text-right">
- <p className="text-xl font-black text-dark dark:text-white tracking-tighter">
- {currencyCode} {(participationList.reduce((acc, p) => acc + p.sharesInvested, 0) * SHARE_VALUE).toLocaleString()}
- </p>
- <p className="text-[9px] font-black text-brand uppercase tracking-widest">
- {participationList.reduce((acc, p) => acc + p.sharesInvested, 0)} {t('dashboard.trust', lang)}
- </p>
- </div>
- </div>
- )}
- </div>
- </div>
- </InlineTopForm>
+<InlineTopForm
+  isOpen={isModalOpen}
+  onClose={resetForm}
+  title={isEditMode ? t('common.edit', lang) : t('projects.newPlan', lang)}
+  subtitle={isEditMode ? "Structural Audit & Modification" : t('projects.ventureCapital', lang)}
+  onSubmit={handleReviewCreate}
+  submitLabel={isEditMode ? "Verify & Save Updates" : t('projects.launchVenture', lang)}
+  loading={isSubmitting}
+>
+  <div className="space-y-8">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <FormInput
+        label={t('projects.projectIdentifier', lang)}
+        value={newProject.title}
+        onChange={e => setNewProject({ ...newProject, title: e.target.value })}
+        placeholder={t('projects.titlePlaceholder', lang)}
+        required
+      />
+      <FormSelect
+        label={t('projects.sectorClassification', lang)}
+        value={newProject.category}
+        onChange={e => setNewProject({ ...newProject, category: e.target.value })}
+        options={Object.keys(catKeyMap).map(cat => ({
+          value: cat,
+          label: t(`common.${catKeyMap[cat]}`, lang)
+        }))}
+        required
+      />
+      <FormInput
+        label={t('projects.plannedBudget', lang)}
+        type="number"
+        value={newProject.budget}
+        onChange={e => setNewProject({ ...newProject, budget: e.target.value })}
+        placeholder="0.00"
+      />
+    </div>
 
- <ProjectTransactionMaster
- lang={lang}
- isOpen={isMasterTxModalOpen}
- onClose={() => setIsMasterTxModalOpen(false)}
- onSuccess={() => {
- fetchPaginatedProjects(currentPage, searchQuery, rowsPerPage);
- handleRefresh();
- }}
- initialProjectId={selectedProjectId || undefined}
- />
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <FormInput
+        label={t('projects.targetRoi', lang)}
+        type="number"
+        value={newProject.expectedRoi}
+        onChange={e => setNewProject({ ...newProject, expectedRoi: e.target.value })}
+        placeholder="%"
+      />
+      <FormSelect
+        label={t('projects.initialRiskProfile', lang)}
+        value={newProject.health}
+        onChange={e => setNewProject({ ...newProject, health: e.target.value as any })}
+        options={[
+          { value: "Stable", label: t('common.stable', lang) },
+          { value: "At Risk", label: t('common.atRisk', lang) },
+          { value: "Critical", label: t('common.critical', lang) }
+        ]}
+        required
+      />
+      <FormInput
+        label={t('projects.kickoffDate', lang)}
+        type="date"
+        value={newProject.startDate}
+        onChange={e => setNewProject({ ...newProject, startDate: e.target.value })}
+        required
+      />
+      <FormInput
+        label={t('projects.fundHandler', lang)}
+        value={newProject.projectFundHandler}
+        onChange={e => setNewProject({ ...newProject, projectFundHandler: e.target.value })}
+        required
+      />
+    </div>
 
- <ActionDialog
- isOpen={dialog.isOpen}
- type={dialog.type || 'confirm'}
- title={dialog.title}
- message={dialog.message}
- onConfirm={dialog.onConfirm}
- onClose={closeDialog}
- details={dialog.details}
- loading={isSubmitting}
- />
- </div>
- );
+    <FormTextarea
+      label={t('projects.strategicObjective', lang)}
+      value={newProject.description}
+      onChange={e => setNewProject({ ...newProject, description: e.target.value })}
+      placeholder={t('projects.goalPlaceholder', lang)}
+      required
+      className="h-24 resize-none"
+    />
+
+    <div className="p-8 bg-gray-50 dark:bg-[#111814] rounded-3xl border border-gray-100 dark:border-white/5">
+      <h4 className="text-sm font-black text-dark dark:text-white uppercase tracking-widest mb-6 flex items-center gap-2">
+        <Users size={16} className="text-brand" /> {t('projects.stakeholderEquity', lang)}
+      </h4>
+
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <FormSelect
+          label={t('projects.memberLabel', lang)}
+          value={tempMemberId}
+          onChange={e => setTempMemberId(e.target.value)}
+          options={activeMembers.map(m => ({
+            value: m.id || m.memberId,
+            label: m.name
+          }))}
+          className="flex-[2]"
+        />
+        <FormInput
+          label={t('projects.sharesLabel', lang)}
+          type="number"
+          value={tempShares}
+          onChange={e => setTempShares(e.target.value)}
+          className="flex-1"
+        />
+        <div className="flex items-end">
+          <button
+            type="button"
+            onClick={handleAddParticipation}
+            className="bg-brand text-dark p-4 rounded-2xl hover:scale-105 active:scale-95 transition-all mb-0.5"
+          >
+            <Plus size={20} />
+          </button>
+        </div>
+      </div>
+
+      {participationList.length > 0 && (
+        <div className="space-y-3 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+          {participationList.map((p, idx) => (
+            <div key={idx} className="flex justify-between items-center bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-100 dark:border-white/5">
+              <div>
+                <p className="text-xs font-black text-dark dark:text-white uppercase">{p.memberName}</p>
+                <p className="text-[10px] font-bold text-gray-400">ID: {p.memberId}</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-xs font-black text-brand">{p.sharesInvested} {t('projects.units', lang)}</span>
+                <button
+                  type="button"
+                  onClick={() => setParticipationList(participationList.filter((_, i) => i !== idx))}
+                  className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 p-2 rounded-xl transition-all"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {participationList.length > 0 && (
+        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-white/10 flex justify-between items-center">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t('projects.totalSeedCapital', lang)}</p>
+          <div className="text-right">
+            <p className="text-xl font-black text-dark dark:text-white tracking-tighter">
+              {currencyCode} {(participationList.reduce((acc, p) => acc + p.sharesInvested, 0) * SHARE_VALUE).toLocaleString()}
+            </p>
+            <p className="text-[9px] font-black text-brand uppercase tracking-widest">
+              {participationList.reduce((acc, p) => acc + p.sharesInvested, 0)} {t('dashboard.trust', lang)}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+</InlineTopForm>
+
+<ProjectTransactionMaster
+  lang={lang}
+  isOpen={isMasterTxModalOpen}
+  onClose={() => setIsMasterTxModalOpen(false)}
+  onSuccess={() => {
+    fetchPaginatedProjects(currentPage, searchQuery, rowsPerPage);
+    handleRefresh();
+  }}
+  initialProjectId={selectedProjectId || undefined}
+/>
+
+<ActionDialog
+  isOpen={dialog.isOpen}
+  type={dialog.type || 'confirm'}
+  title={dialog.title}
+  message={dialog.message}
+  onConfirm={dialog.onConfirm}
+  onClose={closeDialog}
+  details={dialog.details}
+  loading={isSubmitting}
+/>
+<PrintableReceiptModal
+  isOpen={isReceiptModalOpen}
+  onClose={() => setIsReceiptModalOpen(false)}
+  voucher={selectedVoucher}
+/>
+</div>
+);
 };
 
 export default ProjectManagement;

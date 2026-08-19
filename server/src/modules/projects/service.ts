@@ -198,21 +198,21 @@ export async function listProjects(queryParams: Record<string, string | undefine
   const sortCol = (SORT_COLUMN_MAP[sortBy] as typeof schema.projects.createdAt) ?? schema.projects.createdAt;
   const orderBy = sortOrder === 'asc' ? asc(sortCol) : desc(sortCol);
 
-  // Count
-  const [countResult] = await db
-    .select({ count: drizzleCount() })
-    .from(schema.projects)
-    .where(whereClause);
+  // Count & Paginated Data in parallel
+  const [[countResult], projects] = await Promise.all([
+    db
+      .select({ count: drizzleCount() })
+      .from(schema.projects)
+      .where(whereClause),
+    db
+      .select()
+      .from(schema.projects)
+      .where(whereClause)
+      .orderBy(orderBy)
+      .limit(limit)
+      .offset(skip),
+  ]);
   const total = Number(countResult?.count ?? 0);
-
-  // Data
-  const projects = await db
-    .select()
-    .from(schema.projects)
-    .where(whereClause)
-    .orderBy(orderBy)
-    .limit(limit)
-    .offset(skip);
 
   return formatPaginatedResponse(projects, page, limit, total);
 }
@@ -430,6 +430,12 @@ export async function updateProject(
           );
         }
 
+        if (delta < 0 && projectFundBalance < Math.abs(delta)) {
+          throw new ConflictError(
+            `Cannot reduce initial investment by ${Math.abs(delta)} BDT: project only has ${projectFundBalance.toFixed(2)} BDT remaining in unspent liquidity.`,
+          );
+        }
+
         const newPrimaryBalance = delta > 0
           ? primaryBalance - delta
           : primaryBalance + Math.abs(delta);
@@ -630,7 +636,7 @@ export async function addProjectUpdate(
 
     // Determine current fund balance for this project
     let balanceBefore = Number(project.currentFundBalance ?? 0);
-    let fundId: string | null = project.linkedFundId;
+    const fundId: string | null = project.linkedFundId;
 
     if (fundId) {
       const [fund] = await tx
@@ -741,7 +747,7 @@ export async function editProjectUpdate(
     const delta = newImpact - oldImpact;
 
     // Get current fund balance
-    let fundId = project.linkedFundId;
+    const fundId = project.linkedFundId;
     let balanceBefore = Number(project.currentFundBalance ?? 0);
     if (fundId) {
       const [fund] = await tx

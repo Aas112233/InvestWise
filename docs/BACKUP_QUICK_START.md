@@ -1,6 +1,6 @@
-# 🚀 Quick Start: InvestWise Backups
+#  Quick Start: InvestWise Backups
 
-## 1️⃣ **SETUP (5 minutes)**
+## 1 **SETUP (5 minutes)**
 
 ### Cloudflare R2:
 ```
@@ -31,7 +31,7 @@ vercel --prod
 
 ---
 
-## 2️⃣ **API ENDPOINTS**
+## 2 **API ENDPOINTS**
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -42,7 +42,7 @@ vercel --prod
 
 ---
 
-## 3️⃣ **COMMANDS**
+## 3 **COMMANDS**
 
 ```bash
 # Local backup
@@ -59,24 +59,24 @@ curl -X POST https://your-app.vercel.app/api/backup/restore \
 
 ---
 
-## 4️⃣ **BACKUP SCHEDULE**
+## 4 **BACKUP SCHEDULE**
 
-⏰ **Daily at 2:00 AM** (Vercel Cron)  
-📦 **Retention:** 30 days  
-☁️ **Storage:** Cloudflare R2  
-🔔 **Notifications:** Discord/Slack webhook  
+ **Daily at 2:00 AM** (Vercel Cron)  
+ **Retention:** 30 days  
+ **Storage:** Cloudflare R2  
+ **Notifications:** Discord/Slack webhook  
 
 ---
 
-## 5️⃣ **WHAT'S BACKED UP**
+## 5 **WHAT'S BACKED UP**
 
-✅ members  
-✅ transactions  
-✅ projects  
-✅ funds  
-✅ users  
-✅ systemSettings  
-✅ auditLogs  
+[OK] members  
+[OK] transactions  
+[OK] projects  
+[OK] funds  
+[OK] users  
+[OK] systemSettings  
+[OK] auditLogs  
 
 ---
 

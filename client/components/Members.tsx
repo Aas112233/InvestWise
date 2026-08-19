@@ -33,7 +33,7 @@ interface MembersProps {
 }
 
 const Members: React.FC<MembersProps> = ({ lang }) => {
-    const { members, addMember, updateMember, deleteMember, addSystemUser, onboardMember, systemUsers, refreshMembers, currentUser, updateUserPassword, currencyCode } = useGlobalState();
+    const { members = [], addMember, updateMember, deleteMember, addSystemUser, onboardMember, systemUsers = [], refreshMembers, currentUser, updateUserPassword, currencyCode } = useGlobalState();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [createUserAccess, setCreateUserAccess] = useState(false);
@@ -43,17 +43,24 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortBy, setSortBy] = useState('name');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const safeMembers = Array.isArray(members) ? members : [];
     const [paginatedMembers, setPaginatedMembers] = useState<{
         data: Member[];
         total: number;
         pages: number;
         meta?: any;
-    }>({ data: [], total: 0, pages: 0 });
-    const [loading, setLoading] = useState(true);
+    }>(() => ({
+        data: safeMembers.slice(0, 10),
+        total: safeMembers.length,
+        pages: Math.ceil(safeMembers.length / 10) || 1,
+    }));
+    const [loading, setLoading] = useState(() => safeMembers.length === 0);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const fetchPaginatedMembers = async (page: number, search: string, limit: number, sort: string, order: 'asc' | 'desc') => {
-        setLoading(true);
+        if (paginatedMembers.data.length === 0) {
+            setLoading(true);
+        }
         try {
             const response = await memberService.getAll({ page, limit, search, sortBy: sort, sortOrder: order });
             setPaginatedMembers({
@@ -263,7 +270,7 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                         : t('members.onboarded', lang).replace('{name}', data.name)
                 );
             } else {
-                // Standard Update (Profile Only - Financials are immutable here)
+                // Standard Update (Profile & System Access)
                 const updatedMember: any = {
                     id: editingMember.id,
                     name: data.name,
@@ -271,6 +278,8 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                     email: data.email,
                     role: data.role,
                     hasUserAccess: data.createUserAccess,
+                    password: data.password ? data.password : undefined,
+                    userRole: data.userRole || 'Investor',
                     nidOrPassport: data.nidOrPassport,
                     fatherName: data.fatherName,
                     address: data.address,
@@ -280,18 +289,6 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                     nomineePhone: data.nomineePhone
                 };
                 await updateMember(updatedMember);
-
-                // Handle System Access & Password Update
-                const linkedUser = systemUsers.find(u => u.memberId === editingMember.memberId);
-                if (data.createUserAccess && data.password && linkedUser) {
-                    try {
-                        await updateUserPassword(linkedUser.id, data.password);
-                    } catch (pwErr) {
-                        console.error("Failed to update password during member edit", pwErr);
-                        showNotification("Member updated, but password reset failed", "warning");
-                    }
-                }
-
                 showNotification(t('members.updated', lang).replace('{name}', data.name));
             }
 
@@ -379,6 +376,8 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
     };
 
     const totalPool = members.reduce((acc, m) => acc + (m.successfulDepositTotal || 0), 0);
+    const userRole = (currentUser?.role || '').toLowerCase();
+    const canViewSensitiveData = userRole === 'admin' || userRole === 'manager';
 
     const tableColumns: TableColumn<Member>[] = [
         {
@@ -405,18 +404,20 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                                     {member.role || 'Normal Shareholder'}
                                 </span>
                             </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                {member.nidOrPassport && (
-                                    <span className="text-[9px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700">
-                                        NID: {member.nidOrPassport}
-                                    </span>
-                                )}
-                                {member.fatherName && (
-                                    <span className="text-[9px] text-gray-400 dark:text-gray-500">
-                                        F/N: {member.fatherName}
-                                    </span>
-                                )}
-                            </div>
+                            {canViewSensitiveData && (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {member.nidOrPassport && (
+                                        <span className="text-[9px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700">
+                                            NID: {member.nidOrPassport}
+                                        </span>
+                                    )}
+                                    {member.fatherName && (
+                                        <span className="text-[9px] text-gray-400 dark:text-gray-500">
+                                            F/N: {member.fatherName}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
@@ -434,57 +435,59 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                 </div>
             )
         },
-        {
-            key: 'phone',
-            header: 'Contact & Address',
-            cellClassName: 'text-xs text-slate-650 dark:text-gray-300',
-            render: (member) => (
-                <div className="flex flex-col space-y-0.5">
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs">{member.phone || 'No phone'}</span>
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500">{member.email}</span>
-                    {member.address && (
-                        <span className="text-[9px] text-slate-450 dark:text-slate-400 flex items-center gap-1 max-w-[180px]" title={member.address}>
-                            <MapPin size={10} className="text-slate-400 shrink-0" />
-                            <span className="truncate">{member.address}</span>
-                        </span>
-                    )}
-                </div>
-            )
-        },
-        {
-            key: 'nomineeName',
-            header: 'Nominee Beneficiary',
-            render: (member) => (
-                member.nomineeName ? (
+        ...(canViewSensitiveData ? [
+            {
+                key: 'phone' as const,
+                header: 'Contact & Address',
+                cellClassName: 'text-xs text-slate-650 dark:text-gray-300',
+                render: (member: Member) => (
                     <div className="flex flex-col space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">{member.nomineeName}</span>
-                            {member.nomineeRelation && (
-                                <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50">
-                                    {member.nomineeRelation}
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-2 text-[10px] text-gray-400 dark:text-gray-500">
-                            {member.nomineePhone && (
-                                <span className="flex items-center gap-1">
-                                    <Phone size={10} className="text-slate-400 shrink-0" />
-                                    {member.nomineePhone}
-                                </span>
-                            )}
-                            {member.nomineeNidOrPassport && (
-                                <span className="flex items-center gap-1">
-                                    <CreditCard size={10} className="text-slate-400 shrink-0" />
-                                    {member.nomineeNidOrPassport}
-                                </span>
-                            )}
-                        </div>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs">{member.phone || 'No phone'}</span>
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{member.email}</span>
+                        {member.address && (
+                            <span className="text-[9px] text-slate-450 dark:text-slate-400 flex items-center gap-1 max-w-[180px]" title={member.address}>
+                                <MapPin size={10} className="text-slate-400 shrink-0" />
+                                <span className="truncate">{member.address}</span>
+                            </span>
+                        )}
                     </div>
-                ) : (
-                    <span className="text-[10px] italic text-gray-400 dark:text-gray-600">Unspecified</span>
                 )
-            )
-        },
+            },
+            {
+                key: 'nomineeName' as const,
+                header: 'Nominee Beneficiary',
+                render: (member: Member) => (
+                    member.nomineeName ? (
+                        <div className="flex flex-col space-y-0.5">
+                            <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">{member.nomineeName}</span>
+                                {member.nomineeRelation && (
+                                    <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50">
+                                        {member.nomineeRelation}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-gray-400 dark:text-gray-500">
+                                {member.nomineePhone && (
+                                    <span className="flex items-center gap-1">
+                                        <Phone size={10} className="text-slate-400 shrink-0" />
+                                        {member.nomineePhone}
+                                    </span>
+                                )}
+                                {member.nomineeNidOrPassport && (
+                                    <span className="flex items-center gap-1">
+                                        <CreditCard size={10} className="text-slate-400 shrink-0" />
+                                        {member.nomineeNidOrPassport}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <span className="text-[10px] italic text-gray-400 dark:text-gray-600">Unspecified</span>
+                    )
+                )
+            }
+        ] : []),
         {
             key: 'shares',
             header: `${t('members.shares', lang)} & Equity`,
@@ -607,13 +610,18 @@ const Members: React.FC<MembersProps> = ({ lang }) => {
                     <ExportMenu
                         data={members}
                         columns={[
-                            { header: t('members.memberId', lang), key: 'memberId' },
-                            { header: t('members.name', lang), key: 'name' },
-                            { header: t('members.phone', lang), key: 'phone' },
-                            { header: t('members.role', lang), key: 'role' },
-                            { header: t('members.shares', lang), key: 'shares' },
-                            { header: `${t('members.totalContribution', lang)} (${currencyCode})`, key: 'successfulDepositTotal', format: (m: any) => (m.successfulDepositTotal || 0).toLocaleString() },
-                            { header: t('members.access', lang), key: 'hasUserAccess', format: (m: any) => m.hasUserAccess ? (lang === 'bn' ? 'হ্যাঁ' : 'Yes') : (lang === 'bn' ? 'না' : 'No') }
+                            { header: t('members.name', lang) || 'Partner Name', key: 'name', format: (m: any) => m.name || 'N/A' },
+                            { header: t('members.memberId', lang) || 'Partner ID', key: 'memberId', format: (m: any) => m.memberId || 'N/A' },
+                            ...(canViewSensitiveData ? [
+                                { header: t('members.phone', lang) || 'Phone', key: 'phone', format: (m: any) => m.phone || 'N/A' },
+                                { header: 'Address', key: 'address', format: (m: any) => m.address || 'N/A' },
+                                { header: 'Nominee Name', key: 'nomineeName', format: (m: any) => m.nomineeName || 'N/A' },
+                                { header: 'Nominee Relation', key: 'nomineeRelation', format: (m: any) => m.nomineeRelation || 'N/A' },
+                            ] : []),
+                            { header: t('members.role', lang) || 'Role', key: 'role', format: (m: any) => m.role || 'Member' },
+                            { header: t('members.shares', lang) || 'Shares', key: 'shares', format: (m: any) => m.shares ?? 0 },
+                            { header: `${t('members.totalContribution', lang) || 'Total Contribution'} (${currencyCode})`, key: 'successfulDepositTotal', format: (m: any) => Number(m.successfulDepositTotal || 0).toLocaleString() },
+                            { header: t('members.access', lang) || 'System Access', key: 'hasUserAccess', format: (m: any) => m.hasUserAccess ? (lang === 'bn' ? 'হ্যাঁ' : 'Active') : (lang === 'bn' ? 'না' : 'Inactive') }
                         ]}
                         fileName={`members_${new Date().toISOString().split('T')[0]}`}
                         title="Stakeholder Register"

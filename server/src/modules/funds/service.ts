@@ -27,11 +27,9 @@ export interface UpdateFundData {
   type?: 'DEPOSIT' | 'PRIMARY' | 'PROJECT' | 'OTHER';
   description?: string;
   status?: 'ACTIVE' | 'INACTIVE' | 'CLOSED';
-  balance?: number;
   currency?: string;
   handlingOfficer?: string;
   accountNumber?: string;
-  initialBalance?: number;
   linkedProjectId?: string;
 }
 

@@ -7,7 +7,7 @@ export type ToastType = 'success' | 'error' | 'warning';
 interface ToastProps {
  message: string;
  type: ToastType;
- isVisible: boolean;
+ isVisible?: boolean;
  onClose: () => void;
 }
 
@@ -66,7 +66,7 @@ const unregisterToast = (id: string) => {
  flushToastQueue();
 };
 
-const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
+const Toast: React.FC<ToastProps> = ({ message, type, isVisible = true, onClose }) => {
  const toastIdRef = useRef(`toast-${Math.random().toString(36).slice(2, 11)}`);
  const [displayState, setDisplayState] = useState({ isActive: false, index: -1 });
 

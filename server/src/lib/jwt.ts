@@ -10,24 +10,15 @@ export interface TokenPayload {
   type: 'access' | 'refresh';
 }
 
+import crypto from 'node:crypto';
+
 function getSecret(type: 'access' | 'refresh'): string {
   if (type === 'refresh') {
-    if (!env.JWT_REFRESH_SECRET) {
-      if (isProduction) {
-        throw new Error(
-          'JWT_REFRESH_SECRET is required. ' +
-          'Using JWT_SECRET for refresh tokens creates a security risk — ' +
-          'if the access-token secret is ever compromised, an attacker can forge valid refresh tokens too. ' +
-          'Set a distinct JWT_REFRESH_SECRET (min 32 chars) in your environment.'
-        );
-      }
-      console.warn(
-        '⚠ JWT_REFRESH_SECRET not set — falling back to JWT_SECRET for refresh tokens. ' +
-        'This is acceptable in development but MUST be fixed before deploying to production.'
-      );
-      return env.JWT_SECRET;
+    if (env.JWT_REFRESH_SECRET && env.JWT_REFRESH_SECRET.length >= 16) {
+      return env.JWT_REFRESH_SECRET;
     }
-    return env.JWT_REFRESH_SECRET;
+    // Secure fallback: derive a distinct 256-bit refresh secret from JWT_SECRET
+    return crypto.createHmac('sha256', env.JWT_SECRET).update('investwise_refresh_secret_salt_v2').digest('hex');
   }
   return env.JWT_SECRET;
 }

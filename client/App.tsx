@@ -4,10 +4,11 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocat
 import { User, AppScreen, AccessLevel } from './types';
 import { Language } from './i18n/translations';
 import { GlobalStateProvider } from './context/GlobalStateContext';
-import { Sparkles } from 'lucide-react';
+import { Brain } from 'lucide-react';
 import { authService, isNetworkError } from './services/api';
 import ConnectionBanner from './components/ConnectionBanner';
 import ErrorBoundary from './components/ErrorBoundary';
+import ComponentErrorBoundary from './components/ComponentErrorBoundary';
 import SessionTimeoutDialog from './components/SessionTimeoutDialog';
 import { useInactivityTimeout } from './hooks/useInactivityTimeout';
 
@@ -27,6 +28,7 @@ import DataRefreshWrapper from './components/DataRefreshWrapper';
 const LandingPage = React.lazy(() => import('./components/landing/LandingPage'));
 const Dashboard = React.lazy(() => import('./components/Dashboard'));
 const Members = React.lazy(() => import('./components/Members'));
+const MeetingPerformanceHub = React.lazy(() => import('./components/MeetingPerformanceHub'));
 const Deposits = React.lazy(() => import('./components/Deposits'));
 const RequestDeposit = React.lazy(() => import('./components/RequestDeposit'));
 const ProjectManagement = React.lazy(() => import('./components/ProjectManagement'));
@@ -70,7 +72,9 @@ const AppLayout = ({ children, user, lang, isDarkMode, toggleTheme, setLang, onL
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="max-w-[1600px] mx-auto pb-10">
             <DataRefreshWrapper>
-              {children}
+              <ComponentErrorBoundary>
+                {children}
+              </ComponentErrorBoundary>
             </DataRefreshWrapper>
           </div>
         </main>
@@ -79,11 +83,11 @@ const AppLayout = ({ children, user, lang, isDarkMode, toggleTheme, setLang, onL
           <>
             <button
               onClick={() => setIsAISidebarOpen(true)}
-              className="fixed bottom-6 right-6 px-4 py-2 bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded shadow-md flex items-center gap-2 hover:shadow-lg transition-all z-[90]"
-              aria-label="Open AI Advisor"
+              className="fixed bottom-6 right-6 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md flex items-center gap-2 hover:shadow-lg transition-all z-[90]"
+              aria-label="Financial Assistant"
             >
-              <Sparkles size={16} strokeWidth={2} />
-              <span className="text-xs font-medium">AI Advisor</span>
+              <Brain size={16} strokeWidth={2} />
+              <span className="text-xs font-semibold">Financial Assistant</span>
             </button>
 
             <AIAdvisorSidebar
@@ -118,20 +122,13 @@ const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => voi
 
  // Handle logout with session extension
  const handleExtendSession = async () => {
- try {
- // Refresh the token to extend session
- const userInfo = localStorage.getItem('userInfo');
- if (userInfo) {
- const { refreshToken } = JSON.parse(userInfo);
- if (refreshToken) {
- await authService.refreshToken(refreshToken);
- }
- }
- extendSession();
- } catch (error) {
- console.error('Failed to extend session:', error);
- timeoutLogout();
- }
+   try {
+     await authService.refreshToken();
+     extendSession();
+   } catch (error) {
+     console.error('Failed to extend session:', error);
+     timeoutLogout();
+   }
  };
 
  useEffect(() => {
@@ -172,11 +169,10 @@ const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => voi
  document.documentElement.setAttribute('lang', lang);
  }, [lang]);
 
- const handleLogin = (loggedUser: User) => {
- setUser(loggedUser);
- localStorage.setItem('userInfo', JSON.stringify(loggedUser));
- // Redirection is now handled by Login.tsx
- };
+  const handleLogin = (loggedUser: User) => {
+    setUser(loggedUser);
+    localStorage.setItem('userInfo', JSON.stringify(loggedUser));
+  };
 
  const handleLogout = () => {
  localStorage.removeItem('userInfo');
@@ -225,6 +221,18 @@ const AppContent: React.FC<{ user: User | null; setUser: (u: User | null) => voi
  <Members lang={lang} />
  </ProtectedRoute>
  } />
+
+  <Route path="/meetings" element={
+  <ProtectedRoute user={user} requiredScreen={AppScreen.MEETINGS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+  <MeetingPerformanceHub lang={lang} currentUser={user} defaultTab="MEETINGS" />
+  </ProtectedRoute>
+  } />
+
+  <Route path="/governance" element={
+  <ProtectedRoute user={user} requiredScreen={AppScreen.GOVERNANCE} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>
+  <MeetingPerformanceHub lang={lang} currentUser={user} defaultTab="LEADERBOARD" />
+  </ProtectedRoute>
+  } />
 
  <Route path="/goals" element={
  <ProtectedRoute user={user} requiredScreen={AppScreen.GOALS} appShell={(props) => <AppLayout {...props} user={user} lang={lang} isDarkMode={isDarkMode} toggleTheme={toggleTheme} setLang={setLang} onLogout={handleLogout} />} forbiddenComponent={<Forbidden />}>

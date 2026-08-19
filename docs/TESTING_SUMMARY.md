@@ -92,7 +92,7 @@ console.log('DEBUG addDeposit body:', req.body);
 | **Environment Security** | 100% | 100% | 0% |
 | **Code Quality** | 85% | 95% | +10% |
 
-**Overall Score: 78% → 87%** ⬆ **+9 points**
+**Overall Score: 78% → 87%**  **+9 points**
 
 ---
 

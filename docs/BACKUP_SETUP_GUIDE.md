@@ -1,23 +1,23 @@
-# 🚀 InvestWise Automated Backup System
+#  InvestWise Automated Backup System
 
 Automated daily backups to **Cloudflare R2** with Vercel Cron Jobs.
 
 ---
 
-## 📋 **FEATURES**
+##  **FEATURES**
 
-✅ **Automated Daily Backups** - Runs at 2:00 AM via Vercel Cron  
-✅ **Cloudflare R2 Storage** - Zero egress fees, S3-compatible  
-✅ **Compression** - ~90% size reduction with gzip  
-✅ **Verification** - MD5 checksum validation  
-✅ **Auto-Cleanup** - Keeps last 30 days, deletes older  
-✅ **Manual Backups** - Trigger on-demand via API  
-✅ **Restore** - Full database restore from any backup  
-✅ **Notifications** - Slack/Discord webhook on failure  
+[OK] **Automated Daily Backups** - Runs at 2:00 AM via Vercel Cron  
+[OK] **Cloudflare R2 Storage** - Zero egress fees, S3-compatible  
+[OK] **Compression** - ~90% size reduction with gzip  
+[OK] **Verification** - MD5 checksum validation  
+[OK] **Auto-Cleanup** - Keeps last 30 days, deletes older  
+[OK] **Manual Backups** - Trigger on-demand via API  
+[OK] **Restore** - Full database restore from any backup  
+[OK] **Notifications** - Slack/Discord webhook on failure  
 
 ---
 
-## 🛠️ **SETUP GUIDE**
+##  **SETUP GUIDE**
 
 ### **Step 1: Create Cloudflare R2 Bucket**
 
@@ -90,7 +90,7 @@ Vercel will automatically:
 
 ---
 
-## 📁 **BACKUP STRUCTURE**
+##  **BACKUP STRUCTURE**
 
 ```
 investwise-backups/
@@ -105,17 +105,17 @@ investwise-backups/
 ```
 
 **Backed Up Collections:**
-- ✅ `members` - Member details, shares, contributions
-- ✅ `transactions` - All deposits, expenses, earnings
-- ✅ `projects` - Project details, investments, ROI
-- ✅ `funds` - Fund balances and types
-- ✅ `users` - User accounts, permissions
-- ✅ `systemSettings` - Share value, config
-- ✅ `auditLogs` - Audit trail (optional)
+- [OK] `members` - Member details, shares, contributions
+- [OK] `transactions` - All deposits, expenses, earnings
+- [OK] `projects` - Project details, investments, ROI
+- [OK] `funds` - Fund balances and types
+- [OK] `users` - User accounts, permissions
+- [OK] `systemSettings` - Share value, config
+- [OK] `auditLogs` - Audit trail (optional)
 
 ---
 
-## 🚀 **USAGE**
+##  **USAGE**
 
 ### **Manual Backup (Local)**
 
@@ -140,7 +140,7 @@ curl https://your-app.vercel.app/api/backup/list
 
 ### **Restore from Backup**
 
-⚠️ **WARNING: This overwrites existing data!**
+[WARN] **WARNING: This overwrites existing data!**
 
 ```bash
 curl -X POST https://your-app.vercel.app/api/backup/restore \
@@ -153,7 +153,7 @@ curl -X POST https://your-app.vercel.app/api/backup/restore \
 
 ---
 
-## 🔔 **NOTIFICATIONS**
+##  **NOTIFICATIONS**
 
 ### **Discord Webhook:**
 
@@ -170,17 +170,17 @@ curl -X POST https://your-app.vercel.app/api/backup/restore \
 
 ---
 
-## 🔒 **SECURITY**
+##  **SECURITY**
 
-- ✅ R2 credentials stored in Vercel env (encrypted)
-- ✅ Cron job verification with `CRON_SECRET`
-- ✅ Backup files are compressed (not human-readable)
-- ✅ Soft deletes preserve audit trail
-- ✅ No credentials in code or logs
+- [OK] R2 credentials stored in Vercel env (encrypted)
+- [OK] Cron job verification with `CRON_SECRET`
+- [OK] Backup files are compressed (not human-readable)
+- [OK] Soft deletes preserve audit trail
+- [OK] No credentials in code or logs
 
 ---
 
-## 📊 **MONITORING**
+##  **MONITORING**
 
 ### **View Backup Logs:**
 
@@ -203,7 +203,7 @@ Typical sizes (compressed):
 
 ---
 
-## 🔄 **BACKUP SCHEDULE**
+##  **BACKUP SCHEDULE**
 
 | Type | Schedule | Retention | Cleanup |
 |------|----------|-----------|---------|
@@ -213,7 +213,7 @@ Typical sizes (compressed):
 
 ---
 
-## 🆘 **TROUBLESHOOTING**
+##  **TROUBLESHOOTING**
 
 ### **Error: "R2 client not initialized"**
 
@@ -249,7 +249,7 @@ cat server/.env | grep R2_
 
 ---
 
-## 💡 **TIPS**
+##  **TIPS**
 
 1. **Test restores monthly** - Ensure backups are restorable
 2. **Monitor notifications** - Don't ignore failure alerts
@@ -259,7 +259,7 @@ cat server/.env | grep R2_
 
 ---
 
-## 📞 **SUPPORT**
+##  **SUPPORT**
 
 For issues or questions:
 - Check Vercel logs: Dashboard > Logs

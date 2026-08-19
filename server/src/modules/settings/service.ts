@@ -13,26 +13,70 @@ interface ShareValueStatus {
   transactionCount: number;
 }
 
+function formatSettingsResponse(settings: any): Record<string, unknown> {
+  if (!settings) return {};
+  return {
+    ...settings,
+    organization: {
+      companyName: settings.companyName || 'InvestWise',
+      companyTagline: settings.companyTagline || 'Enterprise Investment Management',
+      companyAddress: settings.companyAddress || '',
+      companyEmail: settings.companyEmail || '',
+      companyPhone: settings.companyPhone || '',
+      companyWebsite: settings.companyWebsite || '',
+      companyRegNo: settings.companyRegNo || '',
+    },
+    financial: {
+      fiscalYearStart: settings.fiscalYearStart || 'July',
+      fiscalYearEnd: settings.fiscalYearEnd || 'June',
+      baseCurrency: settings.baseCurrency || '',
+      taxRate: Number(settings.taxRate || 15.0),
+      accountingMethod: settings.accountingMethod || 'Cash',
+      shareValueBdt: Number(settings.shareValueBdt || 1000),
+      isShareValueLocked: Boolean(settings.isShareValueLocked),
+      withdrawalLimitPercent: Number(settings.withdrawalLimitPercent || 25),
+      withdrawalNoticeDays: Number(settings.withdrawalNoticeDays || 30),
+      maxWithdrawalPerRequest: Number(settings.maxWithdrawalPerRequest || 100000),
+      statutoryReservePercent: Number(settings.statutoryReservePercent || 10),
+      lastFiscalCloseDate: settings.lastFiscalCloseDate,
+    },
+    governance: {
+      monthlyMeetingDay: settings.monthlyMeetingDay || 5,
+      depositDueDate: settings.depositDueDate || 10,
+      gracePeriodDays: settings.gracePeriodDays || 3,
+      meetingTypes: settings.meetingTypes,
+      penaltyRules: settings.penaltyRules,
+    },
+    system: {
+      language: settings.language || 'English',
+      refreshInterval: settings.refreshInterval || 'Real-time',
+      theme: settings.theme || 'System Default',
+      dateFormat: settings.dateFormat || 'DD/MM/YYYY',
+      isMaintenanceMode: Boolean(settings.isMaintenanceMode),
+    },
+  };
+}
+
 /**
  * Retrieve the singleton system settings row.
  * Creates a default row if none exists yet.
  */
 export async function getSettings(): Promise<Record<string, unknown>> {
-  // Auto-lock share value if transactions exist (enforced on every read before caching)
-  await checkAndAutoLockShareValue();
-
   return cache.getOrSet(
     SETTINGS_CACHE_KEY,
     async () => {
+      // Auto-lock share value if transactions exist
+      await checkAndAutoLockShareValue();
+
       const db = getDb();
       const [settings] = await db.select().from(systemSettings).limit(1);
 
       if (!settings) {
         const [created] = await db.insert(systemSettings).values({}).returning();
-        return created;
+        return formatSettingsResponse(created);
       }
 
-      return settings;
+      return formatSettingsResponse(settings);
     },
     SETTINGS_CACHE_TTL,
   );
@@ -52,6 +96,31 @@ export async function updateSettings(data: UpdateSettingsInput): Promise<Record<
   }
 
   const updateData: Record<string, unknown> = {};
+
+  // Flatten organization group
+  if (data.organization) {
+    if (data.organization.companyName !== undefined) {
+      updateData.companyName = data.organization.companyName;
+    }
+    if (data.organization.companyTagline !== undefined) {
+      updateData.companyTagline = data.organization.companyTagline;
+    }
+    if (data.organization.companyAddress !== undefined) {
+      updateData.companyAddress = data.organization.companyAddress;
+    }
+    if (data.organization.companyEmail !== undefined) {
+      updateData.companyEmail = data.organization.companyEmail;
+    }
+    if (data.organization.companyPhone !== undefined) {
+      updateData.companyPhone = data.organization.companyPhone;
+    }
+    if (data.organization.companyWebsite !== undefined) {
+      updateData.companyWebsite = data.organization.companyWebsite;
+    }
+    if (data.organization.companyRegNo !== undefined) {
+      updateData.companyRegNo = data.organization.companyRegNo;
+    }
+  }
 
   // Flatten financial group
   if (data.financial) {
@@ -112,8 +181,27 @@ export async function updateSettings(data: UpdateSettingsInput): Promise<Record<
     }
   }
 
+  // Flatten governance group
+  if (data.governance) {
+    if (data.governance.monthlyMeetingDay !== undefined) {
+      updateData.monthlyMeetingDay = data.governance.monthlyMeetingDay;
+    }
+    if (data.governance.depositDueDate !== undefined) {
+      updateData.depositDueDate = data.governance.depositDueDate;
+    }
+    if (data.governance.gracePeriodDays !== undefined) {
+      updateData.gracePeriodDays = data.governance.gracePeriodDays;
+    }
+    if (data.governance.meetingTypes !== undefined) {
+      updateData.meetingTypes = data.governance.meetingTypes;
+    }
+    if (data.governance.penaltyRules !== undefined) {
+      updateData.penaltyRules = data.governance.penaltyRules;
+    }
+  }
+
   if (Object.keys(updateData).length === 0) {
-    return current;
+    return formatSettingsResponse(current);
   }
 
   updateData.updatedAt = new Date();
@@ -126,7 +214,7 @@ export async function updateSettings(data: UpdateSettingsInput): Promise<Record<
 
   // Invalidate settings cache so next request fetches fresh data
   cache.del(SETTINGS_CACHE_KEY);
-  return updated;
+  return formatSettingsResponse(updated);
 }
 
 /**
