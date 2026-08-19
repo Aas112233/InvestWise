@@ -310,7 +310,7 @@ align: 'right',
   onClick={(e) => {
   e.preventDefault();
   e.stopPropagation();
-  const voucher = generateExpenseVoucher(exp, globalProjects, globalFunds, currencyCode);
+  const voucher = generateExpenseVoucher(exp, globalFunds, globalProjects, currencyCode);
   setSelectedVoucher(voucher);
   setIsReceiptModalOpen(true);
   }}

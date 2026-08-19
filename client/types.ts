@@ -35,6 +35,7 @@ export interface User {
  avatar: string;
  lastLogin: string;
  permissions: UserPermissions;
+ status?: 'active' | 'pending' | 'inactive' | 'suspended' | string;
  password?: string; // Only used for mock auth simulation
 }
 
@@ -56,6 +57,8 @@ export interface Member {
  hasUserAccess?: boolean;
  nidOrPassport?: string;
  fatherName?: string;
+ motherName?: string;
+ spouseName?: string;
  address?: string;
  nomineeName?: string;
  nomineeRelation?: string;
@@ -81,125 +84,144 @@ export interface ProjectUpdateRecord {
 }
 
 export interface Project {
- id: string;
- title: string;
- category: string;
- description: string;
- initialInvestment: number;
- budget: number;
- expectedRoi: number;
- totalShares: number;
- involvedMembers: ProjectMemberParticipation[];
- status: 'In Progress' | 'Completed' | 'Review';
- health: 'Stable' | 'At Risk' | 'Critical';
- startDate: string;
- completionDate?: string;
- projectFundHandler: string;
- linkedFundId?: string;
- currentFundBalance: number;
- totalEarnings: number;
- totalExpenses: number;
- updates: ProjectUpdateRecord[];
- projectedReturn?: string;
+  id: string;
+  title: string;
+  name?: string;
+  category: string;
+  description: string;
+  initialInvestment: number;
+  budget: number;
+  expectedRoi: number;
+  totalShares: number;
+  involvedMembers: ProjectMemberParticipation[];
+  status: 'In Progress' | 'Completed' | 'Review';
+  health: 'Stable' | 'At Risk' | 'Critical';
+  startDate: string;
+  completionDate?: string;
+  projectFundHandler: string;
+  manager?: string;
+  linkedFundId?: string;
+  sourceFundId?: string;
+  currentFundBalance: number;
+  totalEarnings: number;
+  totalExpenses: number;
+  updates: ProjectUpdateRecord[];
+  projectedReturn?: string;
 }
 
 export interface Fund {
- id: string;
- name: string;
- accountNumber?: string;
- type: 'DEPOSIT' | 'PROJECT' | 'OTHER' | 'Primary' | 'Reserve';
- status: 'ACTIVE' | 'ARCHIVED';
- balance: number;
- currency: string;
- linkedProjectId?: string;
- description: string;
- handlingOfficer?: string;
- lastUpdated: string;
- lastReconciledAt?: string;
- reconciliationStatus?: 'VERIFIED' | 'DISCREPANCY' | 'PENDING';
- isSystemAsset?: boolean;
+  id: string;
+  name: string;
+  accountNumber?: string;
+  type: 'DEPOSIT' | 'PROJECT' | 'OTHER' | 'Primary' | 'Reserve';
+  status: 'ACTIVE' | 'ARCHIVED';
+  balance: number;
+  currency: string;
+  linkedProjectId?: string;
+  description: string;
+  handlingOfficer?: string;
+  lastUpdated: string;
+  lastReconciledAt?: string;
+  reconciliationStatus?: 'VERIFIED' | 'DISCREPANCY' | 'PENDING';
+  isSystemAsset?: boolean;
 }
 
 export interface FundTransfer {
- id: string;
- sourceFundId: string;
- targetFundId: string;
- amount: number;
- date: string;
- reason: string;
- authorizedBy: string;
+  id: string;
+  sourceFundId: string;
+  targetFundId: string;
+  amount: number;
+  date: string;
+  reason: string;
+  authorizedBy: string;
 }
 
 export interface Deposit {
- id: string;
- memberId: string;
- memberDisplayId?: string;
- memberName: string;
- shareNumber: number;
- amount: number;
- depositMonth: string;
- cashierName: string;
- status: 'Completed' | 'Pending' | 'Flagged' | 'Processing';
- date: string;
- fundId?: string;
- fundName?: string;
- depositMethod?: 'Cash' | 'Bank' | 'Mobile Banking' | 'Check' | 'Other';
- createdAt?: string;
- updatedAt?: string;
+  id: string;
+  _id?: string;
+  memberId: string;
+  memberMongoId?: string;
+  memberDisplayId?: string;
+  memberName: string;
+  shareNumber: number;
+  amount: number;
+  depositMonth: string;
+  cashierName: string;
+  status: 'Completed' | 'Pending' | 'Flagged' | 'Processing';
+  date: string;
+  description?: string;
+  fundId?: string;
+  fundName?: string;
+  depositMethod?: 'Cash' | 'Bank' | 'Mobile Banking' | 'Check' | 'Other';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Transaction {
- id: string;
- date: string;
- type: 'Deposit' | 'Withdrawal' | 'Investment' | 'Expense' | 'Earning' | 'Dividend' | 'Equity-Transfer' | 'Adjustment' | 'Transfer';
- amount: number;
- member?: string;
- memberId?: string;
- memberDisplayId?: string;
- projectId?: string;
- description: string;
- status: 'Success' | 'Processing' | 'Failed' | 'Completed';
- depositMethod?: 'Cash' | 'Bank' | 'Mobile Banking' | 'Check' | 'Other';
- balanceBefore?: number;
- balanceAfter?: number;
+  id: string;
+  date: string;
+  type: 'Deposit' | 'Withdrawal' | 'Investment' | 'Expense' | 'Earning' | 'Dividend' | 'Equity-Transfer' | 'Adjustment' | 'Transfer' | 'Project-Disbursement';
+  amount: number;
+  member?: string;
+  memberId?: string;
+  memberDisplayId?: string;
+  memberName?: string;
+  fundId?: string;
+  fundName?: string;
+  depositMonth?: string;
+  paymentMethod?: string;
+  notes?: string;
+  handlingOfficer?: string;
+  projectId?: string;
+  description: string;
+  status: 'Success' | 'Processing' | 'Failed' | 'Completed';
+  depositMethod?: 'Cash' | 'Bank' | 'Mobile Banking' | 'Check' | 'Other';
+  balanceBefore?: number;
+  balanceAfter?: number;
 }
 
 export interface DividendDistribution {
- id: string;
- type: 'Project' | 'Global';
- targetId?: string; // Project ID if type is Project
- totalAmount: number;
- distributedAt: string;
- recipients: {
- memberId: string;
- shares: number;
- amount: number;
- }[];
+  id: string;
+  type: 'Project' | 'Global';
+  targetId?: string; // Project ID if type is Project
+  totalAmount: number;
+  distributedAt: string;
+  recipients: {
+  memberId: string;
+  shares: number;
+  amount: number;
+  }[];
 }
 
 export interface EquityTransfer {
- fromMemberId: string;
- transfers: {
- toMemberId: string;
- amount: number;
- shares: number;
- }[];
- reason: string;
- date: string;
+  fromMemberId: string;
+  transfers: {
+  toMemberId: string;
+  amount: number;
+  shares: number;
+  }[];
+  reason: string;
+  date: string;
 }
 
 export interface Expense {
- id: string;
- memberId: string;
- memberDisplayId?: string;
- memberName: string;
- projectId?: string;
- projectName?: string;
- amount: number;
- category: string;
- reason: string;
- date: string;
- sourceFund: string;
+  id: string;
+  memberId: string;
+  memberDisplayId?: string;
+  memberName: string;
+  projectId?: string;
+  projectName?: string;
+  amount: number;
+  category: string;
+  reason: string;
+  description?: string;
+  notes?: string;
+  claimant?: string;
+  status?: string;
+  paymentMethod?: string;
+  date: string;
+  sourceFund: string;
+  sourceFundId?: string;
 }
 
 export interface InsightData {
