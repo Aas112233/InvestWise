@@ -26,10 +26,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install PostgreSQL Client & AWS CLI
+      - name: Install PostgreSQL Client
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y postgresql-client awscli
+          sudo apt-get install -y postgresql-client
 
       - name: Download Backup from Cloudflare R2
         env:
