@@ -72,6 +72,7 @@ interface GlobalState {
   funds: Fund[];
   systemUsers: User[];
   currentUser: User | null;
+  user: User | null;
   settings: SystemSettings | null;
   currencyCode: string;
   companyName: string;
@@ -904,7 +905,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode; user: Us
 
   return (
     <GlobalStateContext.Provider value={{
-      members, projects, deposits, expenses, funds, systemUsers, transactions, currentUser: user,
+      members, projects, deposits, expenses, funds, systemUsers, transactions, currentUser: user, user,
       settings,
       currencyCode,
       companyName,
