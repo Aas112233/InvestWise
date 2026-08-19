@@ -3,7 +3,8 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
     "outDir": "dist",
     "rootDir": "src",
     "strict": true,
@@ -23,5 +24,15 @@
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "src/__tests__"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/__tests__",
+    "src/db/init-db.ts",
+    "src/db/inspect-db.ts",
+    "src/db/push-schema-direct.ts",
+    "src/db/recalc-runner.ts",
+    "src/db/seed-3year-history.ts",
+    "src/db/verify-complete-math.ts"
+  ]
 }
