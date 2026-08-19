@@ -1,5 +1,5 @@
 # =====================================
-# INVESTWISE CLIENT - GITIGNORE
+# INVESTWISE SERVER - GITIGNORE
 # =====================================
 
 # Dependencies
@@ -9,7 +9,6 @@ node_modules/
 
 # Build Outputs
 dist/
-dist-ssr/
 build/
 *.tsbuildinfo
 
@@ -36,6 +35,14 @@ pnpm-debug.log*
 # Testing & Coverage
 coverage/
 .nyc_output/
+
+# SSL Certificates & Keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
 
 # IDE & Editors
 .vscode/*
