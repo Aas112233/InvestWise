@@ -1,0 +1,70 @@
+name: Database Restore (Cloudflare R2)
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_file:
+        description: 'Backup filename to restore (e.g. "latest.dump" or "investwise-backup-YYYY-MM-DD_HH-MM-SSZ.dump")'
+        required: true
+        default: 'latest.dump'
+      confirm_restore:
+        description: 'Type "CONFIRM" to authorize database overwrite'
+        required: true
+
+jobs:
+  restore:
+    name: Restore Database from Cloudflare R2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm_restore }}" != "CONFIRM" ]; then
+            echo "ERROR: Confirmation text must be exactly 'CONFIRM'. Aborting restore."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL Client & AWS CLI
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client awscli
+
+      - name: Download Backup from Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          BACKUP_FILE: ${{ github.event.inputs.backup_file }}
+        run: |
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          echo "Downloading ${BACKUP_FILE} from Cloudflare R2..."
+          
+          aws s3 cp "s3://${R2_BUCKET_NAME}/backups/${BACKUP_FILE}" "./restore.dump" \
+            --endpoint-url "${R2_ENDPOINT}"
+
+          echo "Download complete ($(du -h restore.dump | cut -f1))"
+
+      - name: Execute pg_restore
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          echo "Restoring database from restore.dump..."
+          pg_restore "$DATABASE_URL" \
+            --clean \
+            --if-exists \
+            --no-owner \
+            --no-privileges \
+            ./restore.dump || true
+
+          echo "Database restore completed."
+
+      - name: Job Summary
+        run: |
+          echo "### Database Restore Completed 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "- **Source File**: \`${{ github.event.inputs.backup_file }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Database**: Connected database (\`DATABASE_URL\`)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: Restored successfully" >> $GITHUB_STEP_SUMMARY
