@@ -449,37 +449,11 @@ export async function getAuthContext(request: NextRequest): Promise<{
   tenantId: string | null;
   error?: NextResponse;
 }> {
-  const userId = request.headers.get('x-user-id');
-  if (userId) {
-    const role = normalizeRole(request.headers.get('x-user-role') || 'Member');
-    const tenantId = request.headers.get('x-tenant-id');
-    const email = request.headers.get('x-user-email') || '';
-    const permissionsHeader = request.headers.get('x-user-permissions');
-    let permissions: Record<string, string> = {};
-    if (permissionsHeader) {
-      try {
-        permissions = JSON.parse(permissionsHeader);
-      } catch {}
-    }
-    return {
-      user: {
-        id: userId,
-        tenantId,
-        name: request.headers.get('x-user-name') || '',
-        email,
-        role,
-        status: 'active',
-        permissions,
-        lastLogin: null,
-        avatar: null,
-        memberId: request.headers.get('x-user-member-id') || null,
-        createdAt: '',
-        updatedAt: '',
-      },
-      tenantId,
-    };
-  }
-
+  // ponytail: no trusted-upstream identity path. A previous x-user-* header
+  // branch returned a fully-privileged user with no JWT verification; nothing
+  // in the repo ever set those headers, so any external caller could forge
+  // SuperAdmin. Deleted outright — if a gateway is ever introduced it must
+  // present a signed internal JWT verified here, never bare headers.
   const { user, tenant, error } = await authenticateRequest(request);
   if (error) {
     return { user: null, tenantId: null, error };
