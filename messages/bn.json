@@ -58,6 +58,7 @@
     "noData": "কোন তথ্য পাওয়া যায়নি",
     "update": "আপডেট করুন",
     "preview": "প্রিভিউ দেখুন",
+    "continue": "Continue",
     "hidePreview": "প্রিভিউ লুকান",
     "all": "সব",
     "printReceipt": "রসিদ প্রিন্ট করুন",
@@ -1492,7 +1493,18 @@
         "userStatus": "অবস্থা",
         "userJoined": "যোগদানের তারিখ",
         "userActions": "পদক্ষেপ"
-      }
+      },
+      "onboardTitle": "টেনেন্ট অনবোর্ড করুন",
+      "onboardDesc": "এক ধাপে টেনেন্ট, অ্যাডমিন লগইন, সেটিংস এবং ১৪ দিনের ট্রায়াল তৈরি করে।",
+      "adminName": "অ্যাডমিন নাম",
+      "adminEmail": "অ্যাডমিন ইমেইল",
+      "adminPassword": "অ্যাডমিন পাসওয়ার্ড",
+      "onboarded": "টেনেন্ট অনবোর্ড হয়েছে",
+      "onboardFailed": "অনবোর্ডিং ব্যর্থ হয়েছে",
+      "fieldSlug": "স্লাগ",
+      "fieldName": "নাম",
+      "fieldPlan": "প্ল্যান",
+      "fieldMaxUsers": "সর্বোচ্চ ব্যবহারকারী"
     },
     "billing": {
       "title": "বিলিং ও সাবস্ক্রিপশন",
@@ -1504,7 +1516,23 @@
       "empty": "কোন সাবস্ক্রিপশন পাওয়া যায়নি",
       "updated": "সাবস্ক্রিপশন আপডেট হয়েছে",
       "updateFailed": "আপডেট ব্যর্থ হয়েছে",
-      "confirmTitle": "সাবস্ক্রিপশন স্ট্যাটাস পরিবর্তন করবেন?"
+      "confirmTitle": "সাবস্ক্রিপশন স্ট্যাটাস পরিবর্তন করবেন?",
+      "actions": "Actions",
+      "history": "History",
+      "mrr": "MRR (active)",
+      "activeSubs": "Active",
+      "trials": "Trials",
+      "attention": "Needs attention",
+      "loadFailed": "Could not load billing data",
+      "trialEnds": "Trial ends",
+      "selectStatus": "Select status…",
+      "selectPlan": "Select plan…",
+      "planHint": "Empty keeps the current plan.",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why is this changing? (recorded in the audit log)",
+      "noHistory": "No subscription changes recorded yet",
+      "historyFailed": "Could not load history",
+      "changedBy": "Changed by"
     },
     "impersonate": {
       "title": "ব্যবহারকারী অনুকরণ করুন",

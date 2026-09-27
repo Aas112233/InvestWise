@@ -52,6 +52,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: rows.map((r) => ({ ...r, userCount: userCounts[r.tenantId] ?? 0 })),
+      plans: await db
+        .select({
+          id: subscriptionPlans.id,
+          slug: subscriptionPlans.slug,
+          name: subscriptionPlans.name,
+          priceMonthly: subscriptionPlans.priceMonthly,
+          maxUsers: subscriptionPlans.maxUsers,
+          isActive: subscriptionPlans.isActive,
+        })
+        .from(subscriptionPlans)
+        .orderBy(desc(subscriptionPlans.createdAt)),
     });
   } catch (error: unknown) {
     console.error('[BILLING VIEW ERROR]', error);

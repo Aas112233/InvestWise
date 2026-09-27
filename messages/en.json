@@ -58,6 +58,7 @@
     "noData": "No Data Available",
     "update": "Update",
     "preview": "Preview",
+    "continue": "Continue",
     "hidePreview": "Hide Preview",
     "all": "All",
     "printReceipt": "Print Receipt",
@@ -1492,7 +1493,18 @@
         "userStatus": "Status",
         "userJoined": "Joined",
         "userActions": "Action"
-      }
+      },
+      "onboardTitle": "Onboard tenant",
+      "onboardDesc": "Creates the tenant, its admin login, settings and a 14-day trial in one step.",
+      "adminName": "Admin name",
+      "adminEmail": "Admin email",
+      "adminPassword": "Admin password",
+      "onboarded": "Tenant onboarded",
+      "onboardFailed": "Onboarding failed",
+      "fieldSlug": "Slug",
+      "fieldName": "Name",
+      "fieldPlan": "Plan",
+      "fieldMaxUsers": "Max users"
     },
     "billing": {
       "title": "Billing & Subscriptions",
@@ -1504,7 +1516,23 @@
       "empty": "No subscriptions found",
       "updated": "Subscription updated",
       "updateFailed": "Update failed",
-      "confirmTitle": "Change subscription status?"
+      "confirmTitle": "Change subscription status?",
+      "actions": "Actions",
+      "history": "History",
+      "mrr": "MRR (active)",
+      "activeSubs": "Active",
+      "trials": "Trials",
+      "attention": "Needs attention",
+      "loadFailed": "Could not load billing data",
+      "trialEnds": "Trial ends",
+      "selectStatus": "Select status…",
+      "selectPlan": "Select plan…",
+      "planHint": "Empty keeps the current plan.",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why is this changing? (recorded in the audit log)",
+      "noHistory": "No subscription changes recorded yet",
+      "historyFailed": "Could not load history",
+      "changedBy": "Changed by"
     },
     "impersonate": {
       "title": "Impersonate User",
