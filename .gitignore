@@ -179,6 +179,8 @@ docs/*_CONFIGURATION.md
 *.sqlite3
 *.db
 *.sql
+!db/migrations/**/*.sql
+!server/drizzle/**/*.sql
 mongod.lock
 data/db/
 
