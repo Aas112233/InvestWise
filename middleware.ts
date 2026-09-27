@@ -27,26 +27,35 @@ const PUBLIC_PATHS = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Defense in depth for the deleted x-user-* identity branch
+  // (lib/middleware/auth.ts): strip any client-supplied identity headers so a
+  // reintroduced trust-headers path can never be fed from the internet.
+  const cleanHeaders = new Headers(request.headers);
+  for (const h of ['x-user-id', 'x-user-role', 'x-tenant-id', 'x-user-email', 'x-user-permissions', 'x-user-name', 'x-user-member-id']) {
+    cleanHeaders.delete(h);
+  }
+  const forward = () => NextResponse.next({ request: { headers: cleanHeaders } });
+
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/static') ||
     pathname.startsWith('/favicon') ||
     pathname.includes('.')
   ) {
-    return NextResponse.next();
+    return forward();
   }
 
   const isPublic = PUBLIC_PATHS.some(
     (path) => pathname === path || pathname.startsWith(path + '/'),
   );
   if (isPublic) {
-    return NextResponse.next();
+    return forward();
   }
 
   // APIs: presence check only (historic behavior); route handlers verify.
   if (pathname.startsWith('/api/')) {
     if (request.cookies.has(ACCESS_COOKIE)) {
-      return NextResponse.next();
+      return forward();
     }
     return NextResponse.json(
       { success: false, message: 'Authentication required', code: 'UNAUTHORIZED' },
@@ -76,7 +85,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/subscription/inactive', request.url));
   }
 
-  return NextResponse.next();
+  return forward();
 }
 
 export const config = {
