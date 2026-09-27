@@ -103,11 +103,13 @@ export async function handleUpdateFund(request: NextRequest, id: string) {
 
 export async function handleListProjects(request: NextRequest) {
   try {
-    await requireSession();
+    // Fail-closed tenant resolution: platform operators must use /api/admin.
+    const user = await requireSession();
+    const tenantId = requireTenant(user);
     const url = new URL(request.url);
     const fundId = url.searchParams.get('fundId') || undefined;
     const status = url.searchParams.get('status') || undefined;
-    const result = await projectsService.listProjects({ fundId, status });
+    const result = await projectsService.listProjects({ fundId, status }, tenantId);
     return Response.json(result);
   } catch (err) {
     return errorResponse(err);

@@ -4,10 +4,13 @@ import { projects } from '../../db/schema/index.js';
 
 /** Projects read service — supports Fund → Project cascading selectors (§5). */
 
-export async function listProjects(query?: { status?: string; fundId?: string }) {
+export async function listProjects(query?: { status?: string; fundId?: string }, tenantId?: string) {
   const db = getDb();
 
   const conditions = [];
+  // Tenant predicate first and unconditional when known: without it this is
+  // a platform-wide full scan (SEV-002), and the dashboard calls it on load.
+  if (tenantId) conditions.push(eq(projects.tenantId, tenantId));
   if (query?.status) conditions.push(eq(projects.status, query.status));
   if (query?.fundId) conditions.push(eq(projects.linkedFundId, query.fundId));
 
