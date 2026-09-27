@@ -7,6 +7,7 @@ import { logAudit } from '@/lib/utils/audit';
 import { normalizeEmail } from '@/lib/utils/types';
 import { AppError, AuthError, ForbiddenError, ConflictError, ValidationError } from '@/lib/utils/errors';
 import { getAuthContext } from '@/lib/middleware/auth';
+import { requireTenant } from '@/lib/tenant';
 import { normalizeRole, isSuperAdminRole } from '@/lib/roles';
 
 const USER_SELECT = {
@@ -65,13 +66,16 @@ function toUserResponse(row: Record<string, unknown>) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { user: authUser, error } = await getAuthContext(request);
+    const { user: authUser, tenantId, error } = await getAuthContext(request);
     if (error || !authUser) {
       return error || NextResponse.json(
         { success: false, message: 'Authentication required', code: 'UNAUTHORIZED' },
         { status: 401 }
       );
     }
+    // Fail closed (SEV-005): a user without tenant context must never mint
+    // tenant-less accounts — NULL tenantId disables every tenant filter.
+    const callerTenantId = requireTenant(tenantId, authUser);
     const userId = authUser.id;
     const callerRole = normalizeRole(authUser.role);
 
@@ -125,6 +129,7 @@ export async function POST(request: NextRequest) {
     const [created] = await db
       .insert(users)
       .values({
+        tenantId: callerTenantId,
         name,
         email: normalizedEmail,
         password: hashed,

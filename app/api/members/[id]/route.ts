@@ -2,16 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { members, transactions } from '@/db/schema/index';
 import { eq, and, desc, count, sql, or } from 'drizzle-orm';
-import { getAuthContext, requirePermission } from '@/lib/middleware/auth';
+import { getAuthContext, requirePermission, type AuthenticatedUser } from '@/lib/middleware/auth';
+import { requireTenant } from '@/lib/tenant';
 import { logAudit } from '@/lib/utils/audit';
 import { normalizeEmail } from '@/lib/utils/types';
 import { NotFoundError, ValidationError, ConflictError, ForbiddenError, LockedError } from '@/lib/utils/errors';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function tenantScope(tenantId: string | null): ReturnType<typeof sql> | undefined {
-  if (!tenantId) return undefined;
-  return sql`${members.tenantId} = ${tenantId}`;
+function tenantScope(tenantId: string | null, user: AuthenticatedUser): ReturnType<typeof sql> {
+  // Fail closed (C5/SEV-005): a null tenant must 403 via requireTenant —
+  // returning undefined here silently disabled every tenant filter.
+  return sql`${members.tenantId} = ${requireTenant(tenantId, user)}`;
 }
 
 function errJson(err: unknown, fallback: string) {
@@ -39,15 +41,15 @@ export async function GET(
     const { id } = await params;
     const db = getDb();
     const idMatch = UUID_RE.test(id) ? or(eq(members.id, id), eq(members.memberId, id)) : eq(members.memberId, id);
-    const scope = tenantScope(user.tenantId);
+    const scope = tenantScope(user.tenantId, user);
     const [member] = await db
       .select()
       .from(members)
-      .where(scope ? and(idMatch, scope) : idMatch)
+      .where(and(idMatch, scope))
       .limit(1);
     if (!member) throw new NotFoundError('Member');
 
-    const depositScope = user.tenantId ? sql`${transactions.tenantId} = ${user.tenantId}` : undefined;
+    const depositScope = sql`${transactions.tenantId} = ${requireTenant(user.tenantId, user)}`;
     const deposits = await db
       .select({
         id: transactions.id,
@@ -66,7 +68,7 @@ export async function GET(
           eq(transactions.memberId, member.id),
           eq(transactions.type, 'Deposit'),
           eq(transactions.isDeleted, false),
-          ...(depositScope ? [depositScope] : []),
+          depositScope,
         ),
       )
       .orderBy(desc(transactions.date))
@@ -101,11 +103,11 @@ export async function PUT(
     const { id } = await params;
     const db = getDb();
     const idMatch = UUID_RE.test(id) ? or(eq(members.id, id), eq(members.memberId, id)) : eq(members.memberId, id);
-    const scope = tenantScope(user.tenantId);
+    const scope = tenantScope(user.tenantId, user);
     const [existing] = await db
       .select({ id: members.id })
       .from(members)
-      .where(scope ? and(idMatch, scope) : idMatch)
+      .where(and(idMatch, scope))
       .limit(1);
     if (!existing) throw new NotFoundError('Member');
 
@@ -199,11 +201,11 @@ export async function DELETE(
     const { id } = await params;
     const db = getDb();
     const idMatch = UUID_RE.test(id) ? or(eq(members.id, id), eq(members.memberId, id)) : eq(members.memberId, id);
-    const scope = tenantScope(user.tenantId);
+    const scope = tenantScope(user.tenantId, user);
     const [existing] = await db
       .select({ id: members.id, name: members.name })
       .from(members)
-      .where(scope ? and(idMatch, scope) : idMatch)
+      .where(and(idMatch, scope))
       .limit(1);
     if (!existing) throw new NotFoundError('Member');
 
