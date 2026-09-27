@@ -16,12 +16,12 @@ export const getTransactions = asyncHandler(async (req: Request, res: Response) 
 });
 
 export const addDeposit = asyncHandler(async (req: Request, res: Response) => {
-  const result = await financeService.addDeposit(req.body, req.user!.id, req.user!.name);
+  const result = await financeService.addDeposit(req.body, req.user!.id, req.user!.name, req.user);
   res.status(201).json(result);
 });
 
 export const editDeposit = asyncHandler(async (req: Request, res: Response) => {
-  const result = await financeService.editDeposit(req.params.id as string, req.body, req.user!.id, req.user!.name);
+  const result = await financeService.editDeposit(req.params.id as string, req.body, req.user!.id, req.user!.name, req.user);
   res.json(result);
 });
 
@@ -47,7 +47,7 @@ export const addEarning = asyncHandler(async (req: Request, res: Response) => {
 
 export const deleteTransaction = asyncHandler(async (req: Request, res: Response) => {
   const reason = req.body?.reason;
-  const result = await financeService.deleteTransaction(req.params.id as string, req.user!.id, req.user!.name, reason);
+  const result = await financeService.deleteTransaction(req.params.id as string, req.user!.id, req.user!.name, reason, req.user);
   res.json(result);
 });
 

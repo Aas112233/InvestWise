@@ -8,12 +8,12 @@ const router = Router();
 
 router
   .route('/')
-  .get(protect, requirePermission('FUNDS_MANAGEMENT', 'READ'), getFunds)
+  .get(protect, getFunds)
   .post(protect, requirePermission('FUNDS_MANAGEMENT', 'WRITE'), validate(createFundSchema), createFund);
 
 router
   .route('/:id')
-  .get(protect, requirePermission('FUNDS_MANAGEMENT', 'READ'), getFundById)
+  .get(protect, getFundById)
   .put(protect, requirePermission('FUNDS_MANAGEMENT', 'WRITE'), validate(updateFundSchema), updateFund);
 
 export { router as fundRouter };

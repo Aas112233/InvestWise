@@ -146,7 +146,6 @@ import { reportsRouter } from './modules/reports/routes.js';
 import backupRouter from './modules/backup/routes.js';
 import { arrearsRouter } from './modules/arrears/routes.js';
 import { fiscalRouter } from './modules/fiscal/routes.js';
-import { aiRouter } from './modules/ai/routes.js';
 import { meetingsRouter } from './modules/meetings/routes.js';
 import { governanceRouter } from './modules/governance/routes.js';
 
@@ -164,7 +163,6 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/backup', backupRouter);
 app.use('/api/arrears', arrearsRouter);
 app.use('/api/fiscal', fiscalRouter);
-app.use('/api/ai', aiRouter);
 app.use('/api/meetings', meetingsRouter);
 app.use('/api/governance', governanceRouter);
 

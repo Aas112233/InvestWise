@@ -17,3 +17,4 @@ export { profitAllocations } from './profit_allocations.js';
 export { meetings } from './meetings.js';
 export { meetingAttendees } from './meeting_attendees.js';
 export { memberPenalties } from './member_penalties.js';
+export { tenants, DEFAULT_TENANT_SLUG, type Tenant } from './tenants.js';

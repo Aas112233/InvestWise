@@ -1,8 +1,10 @@
 import { pgTable, uuid, varchar, integer, decimal, boolean, timestamp, index } from 'drizzle-orm/pg-core';
+import { tenants } from './tenants.js';
 import { users } from './users.js';
 
 export const members = pgTable('members', {
   id: uuid('id').defaultRandom().primaryKey(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
   memberId: varchar('member_id', { length: 50 }).unique().notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }).unique().notNull(),
@@ -37,6 +39,7 @@ export const members = pgTable('members', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  index('idx_members_tenant').on(table.tenantId),
   index('idx_members_status_name').on(table.status, table.name),
   index('idx_members_email_status').on(table.email, table.status),
   index('idx_members_name').on(table.name),
@@ -44,3 +47,5 @@ export const members = pgTable('members', {
   index('idx_members_role_status').on(table.role, table.status),
   index('idx_members_created_at').on(table.createdAt),
 ]);
+
+export type Member = typeof members.$inferSelect;

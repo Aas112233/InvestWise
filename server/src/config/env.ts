@@ -14,7 +14,6 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().optional(),
   CORS_ORIGINS: z.string().optional(),
   VERCEL: z.string().optional(),
-  LONGCAT_API_KEY: z.string().optional(),
   BACKUP_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   CRON_SECRET: z.string().optional(),
   NOTIFICATION_WEBHOOK_URL: z.string().url().optional(),

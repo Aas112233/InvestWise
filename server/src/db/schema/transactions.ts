@@ -1,4 +1,5 @@
 import { pgTable, uuid, varchar, text, decimal, boolean, timestamp, index } from 'drizzle-orm/pg-core';
+import { tenants } from './tenants.js';
 import { members } from './members.js';
 import { projects } from './projects.js';
 import { funds } from './funds.js';
@@ -6,6 +7,7 @@ import { users } from './users.js';
 
 export const transactions = pgTable('transactions', {
   id: uuid('id').defaultRandom().primaryKey(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
   type: varchar('type', { length: 50 }).notNull(),
   amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
   description: text('description').notNull(),
@@ -30,6 +32,9 @@ export const transactions = pgTable('transactions', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  index('idx_trans_tenant_date').on(
+    table.tenantId, table.date.desc(),
+  ),
   index('idx_trans_member_type_status_deleted_date').on(
     table.memberId, table.type, table.status, table.isDeleted, table.date.desc(),
   ),
@@ -50,3 +55,5 @@ export const transactions = pgTable('transactions', {
     table.date.desc(), table.status, table.isDeleted,
   ),
 ]);
+
+export type Transaction = typeof transactions.$inferSelect;

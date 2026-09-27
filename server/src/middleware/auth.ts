@@ -8,6 +8,7 @@ import { COOKIE_NAMES } from '../lib/cookies.js';
 import { AuthError, ForbiddenError } from '../shared/errors.js';
 import { asyncHandler } from '../shared/asyncHandler.js';
 import { cache } from '../lib/cache.js';
+import { normalizeRole, roleBaselineGrant, type Role } from '../shared/roles.js';
 
 // Cache parsed user records by userId for 60 seconds to avoid a DB round-trip
 // on every authenticated request. JWT verification (fast crypto) still runs.
@@ -75,26 +76,11 @@ async function isBlacklisted(token: string): Promise<boolean> {
 }
 
 /**
- * Unified role taxonomy.
- *
- * Admins & Managers have full authorization. All other roles map to the
- * "Member" access tier (read/write governed by per-screen permissions).
- *
- * Role aliases acknowledged in the schema but treated as Member-equivalent:
- *   Administrator → Admin, Audit/Investor/Associate Member → Member
+ * Unified role taxonomy (RBAC): SuperAdmin, Admin, Manager, Auditor, Member.
+ * Legacy role strings normalize via lib/roles.ts — numeric access levels
+ * were removed. Mirrors lib/roles.ts 1:1.
  */
-type Role = 'Admin' | 'Administrator' | 'Manager' | 'Member' | 'Audit' | 'Investor' | 'Associate Member';
 type PermissionLevel = 'READ' | 'WRITE';
-
-/** Effective access tier for guard middleware. */
-type EffectiveRole = 'Admin' | 'Manager' | 'Member';
-
-/** Map any registered role to its effective access tier. */
-function effectiveRole(role: string): EffectiveRole {
-  if (role === 'Admin' || role === 'Administrator') return 'Admin';
-  if (role === 'Manager') return 'Manager';
-  return 'Member';
-}
 
 /**
  * Authenticate user via HttpOnly cookie or Bearer JWT token.
@@ -173,7 +159,7 @@ export const protect = asyncHandler(async (req: Request, _res: Response, next: N
 
   req.user = {
     ...user,
-    role: user.role || 'Member',
+    role: normalizeRole(user.role),
     status: user.status || 'active',
     permissions,
     lastLogin: user.lastLogin?.toString() || null,
@@ -191,10 +177,11 @@ export const protect = asyncHandler(async (req: Request, _res: Response, next: N
 });
 
 /**
- * Require Admin role (or Administrator alias).
+ * Require Admin role (platform SuperAdmins pass everywhere).
  */
 export function admin(req: Request, _res: Response, next: NextFunction): void {
-  if (effectiveRole(req.user?.role || '') !== 'Admin') {
+  const role = normalizeRole(req.user?.role || '');
+  if (role !== 'Admin' && role !== 'SuperAdmin') {
     throw new ForbiddenError('Admin access required');
   }
   next();
@@ -204,20 +191,20 @@ export function admin(req: Request, _res: Response, next: NextFunction): void {
  * Require Admin or Manager role.
  */
 export function managerOrAdmin(req: Request, _res: Response, next: NextFunction): void {
-  const er = effectiveRole(req.user?.role || '');
-  if (er !== 'Admin' && er !== 'Manager') {
+  const role = normalizeRole(req.user?.role || '');
+  if (role !== 'Admin' && role !== 'SuperAdmin' && role !== 'Manager') {
     throw new ForbiddenError('Admin or Manager access required');
   }
   next();
 }
 
 /**
- * Require specific effective role(s).
+ * Require specific role(s).
  */
-export function requireRole(...roles: EffectiveRole[]) {
+export function requireRole(...roles: Role[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
-    const er = effectiveRole(req.user?.role || '');
-    if (!req.user || !roles.includes(er)) {
+    const role = normalizeRole(req.user?.role || '');
+    if (!req.user || !roles.includes(role)) {
       throw new ForbiddenError(`Requires one of: ${roles.join(', ')}`);
     }
     next();
@@ -226,8 +213,8 @@ export function requireRole(...roles: EffectiveRole[]) {
 
 /**
  * Evaluate whether a user has the required permission for a screen.
- * Resolves super roles (Admin/Administrator), explicit JSONB permissions,
- * and role-based operational defaults.
+ * Role-based (mirrors lib/permissions.ts 1:1): normalized role baseline plus
+ * explicit JSONB overrides; SuperAdmin/Admin bypass overrides.
  */
 export function hasScreenPermission(
   user: { role?: string; permissions?: Record<string, string> } | null | undefined,
@@ -236,58 +223,52 @@ export function hasScreenPermission(
 ): boolean {
   if (!user) return false;
 
-  const role = user.role || 'Member';
-  // Super Admin & Admin have unconditional WRITE & READ across every screen
-  if (role === 'Admin' || role === 'Administrator') {
+  const role = normalizeRole(user.role);
+
+  // SuperAdmin/Admin have unconditional WRITE & READ everywhere
+  if (role === 'SuperAdmin' || role === 'Admin') {
     return true;
   }
 
-  // Explicit user permission takes highest precedence (with parent fallback)
-  let explicit = user.permissions?.[screen];
-  if (!explicit) {
-    if (screen === 'MEETINGS' || screen === 'GOVERNANCE') {
-      explicit = user.permissions?.['MEMBERS'];
-    } else if (screen === 'REQUEST_DEPOSIT' || screen === 'TRANSACTIONS') {
-      explicit = user.permissions?.['DEPOSITS'];
-    }
-  }
-
+  // Explicit user permission takes highest precedence
+  const explicit = user.permissions?.[screen];
   if (explicit === 'WRITE') return true;
   if (explicit === 'READ' && requiredLevel === 'READ') return true;
   if (explicit === 'NONE') return false;
 
-  // Role defaults when no explicit override is set for this screen
-  if (role === 'Manager') {
-    // Managers have full operational WRITE on everything except SETTINGS
-    if (screen === 'SETTINGS') return false;
-    return true;
+  // Parent fallback only when no explicit override
+  if (!explicit) {
+    if (screen === 'MEETINGS' || screen === 'GOVERNANCE') {
+      const parent = user.permissions?.['MEMBERS'];
+      if (parent === 'WRITE') return true;
+      if (parent === 'READ' && requiredLevel === 'READ') return true;
+      if (parent === 'NONE') return false;
+    } else if (screen === 'TRANSACTIONS') {
+      const parent = user.permissions?.['DEPOSITS'];
+      if (parent === 'WRITE') return true;
+      if (parent === 'READ' && requiredLevel === 'READ') return true;
+      if (parent === 'NONE') return false;
+    }
   }
 
-  if (role === 'Audit') {
-    // Auditors have read-only access to financial/operational data
-    return requiredLevel === 'READ';
-  }
-
-  if (role === 'Investor') {
-    const investorReadScreens = [
-      'DASHBOARD',
-      'DEPOSITS',
-      'PROJECT_MANAGEMENT',
-      'ANALYSIS',
-      'REPORTS',
-      'GOALS',
-      'TRANSACTIONS',
-    ];
-    return investorReadScreens.includes(screen) && requiredLevel === 'READ';
-  }
-
-  if (role === 'Member' || role === 'Associate Member') {
-    if (screen === 'REQUEST_DEPOSIT') return true;
-    const memberReadScreens = ['DASHBOARD', 'DEPOSITS', 'GOALS'];
-    return memberReadScreens.includes(screen) && requiredLevel === 'READ';
-  }
+  // Role baseline (Manager: write except SETTINGS; Auditor: read-only;
+  // Member: level-2 read set + REQUEST_DEPOSIT write)
+  const baseline = roleBaselineGrant(role, screen);
+  if (baseline === 'WRITE') return true;
+  if (baseline === 'READ') return requiredLevel === 'READ';
 
   return false;
+}
+
+/**
+ * Check if user has permission for at least one of the listed screens.
+ */
+export function hasAnyScreenPermission(
+  user: { role?: string; permissions?: Record<string, string> } | null | undefined,
+  screens: string[],
+  requiredLevel: PermissionLevel = 'WRITE',
+): boolean {
+  return screens.some((s) => hasScreenPermission(user, s, requiredLevel));
 }
 
 /**
@@ -306,3 +287,46 @@ export function requirePermission(screen: string, level: PermissionLevel) {
     next();
   };
 }
+
+/**
+ * Require at least one of the specified screen permissions.
+ */
+export function requireAnyPermission(screens: string[], level: PermissionLevel) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      throw new AuthError('Authentication required');
+    }
+
+    if (!hasAnyScreenPermission(req.user, screens, level)) {
+      throw new ForbiddenError(`${level === 'WRITE' ? 'Write' : 'Read'} permission required for: ${screens.join(' or ')}`);
+    }
+
+    next();
+  };
+}
+
+/**
+ * Middleware for POST /api/finance/deposits:
+ * - If status === 'Pending' (or pending request), user needs either REQUEST_DEPOSIT (WRITE) or DEPOSITS (WRITE).
+ * - If status !== 'Pending', user strictly needs DEPOSITS (WRITE).
+ */
+export function requireDepositWritePermission(req: Request, _res: Response, next: NextFunction): void {
+  if (!req.user) {
+    throw new AuthError('Authentication required');
+  }
+
+  const status = String(req.body?.status || '').toLowerCase();
+  const isPendingRequest = status === 'pending' || req.originalUrl.includes('request');
+  if (isPendingRequest) {
+    if (!hasAnyScreenPermission(req.user, ['REQUEST_DEPOSIT', 'DEPOSITS'], 'WRITE')) {
+      throw new ForbiddenError('Write permission required for: REQUEST_DEPOSIT or DEPOSITS');
+    }
+  } else {
+    if (!hasScreenPermission(req.user, 'DEPOSITS', 'WRITE')) {
+      throw new ForbiddenError('Write permission required for: DEPOSITS');
+    }
+  }
+
+  next();
+}
+

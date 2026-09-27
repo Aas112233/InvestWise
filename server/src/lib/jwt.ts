@@ -1,5 +1,4 @@
 import jwt from 'jsonwebtoken';
-import { env, isProduction } from '../config/env.js';
 import { AuthError } from '../shared/errors.js';
 
 const ACCESS_TOKEN_EXPIRY = '15m';
@@ -10,21 +9,24 @@ export interface TokenPayload {
   type: 'access' | 'refresh';
 }
 
-import crypto from 'node:crypto';
+export const COOKIE_NAMES = {
+  ACCESS_TOKEN: 'accessToken',
+  REFRESH_TOKEN: 'refreshToken',
+} as const;
 
 function getSecret(type: 'access' | 'refresh'): string {
+  const base = process.env.JWT_SECRET;
+  if (!base) throw new AuthError('Server authentication is not configured', 'SERVER_MISCONFIGURED');
   if (type === 'refresh') {
-    if (env.JWT_REFRESH_SECRET && env.JWT_REFRESH_SECRET.length >= 16) {
-      return env.JWT_REFRESH_SECRET;
-    }
-    // Secure fallback: derive a distinct 256-bit refresh secret from JWT_SECRET
-    return crypto.createHmac('sha256', env.JWT_SECRET).update('investwise_refresh_secret_salt_v2').digest('hex');
+    const explicit = process.env.JWT_REFRESH_SECRET;
+    if (explicit && explicit.length >= 16) return explicit;
+    return jwt.sign({ salt: 'investwise_refresh_secret_salt_v2' }, base);
   }
-  return env.JWT_SECRET;
+  return base;
 }
 
 export function generateAccessToken(userId: string): string {
-  return jwt.sign({ id: userId, type: 'access' } satisfies TokenPayload, env.JWT_SECRET, {
+  return jwt.sign({ id: userId, type: 'access' } satisfies TokenPayload, getSecret('access'), {
     expiresIn: ACCESS_TOKEN_EXPIRY,
   });
 }
@@ -33,13 +35,6 @@ export function generateRefreshToken(userId: string): string {
   return jwt.sign({ id: userId, type: 'refresh' } satisfies TokenPayload, getSecret('refresh'), {
     expiresIn: REFRESH_TOKEN_EXPIRY,
   });
-}
-
-export function generateTokenPair(userId: string): { accessToken: string; refreshToken: string } {
-  return {
-    accessToken: generateAccessToken(userId),
-    refreshToken: generateRefreshToken(userId),
-  };
 }
 
 export function verifyToken(token: string, type: 'access' | 'refresh'): TokenPayload {
@@ -54,9 +49,6 @@ export function verifyToken(token: string, type: 'access' | 'refresh'): TokenPay
     if (error instanceof jwt.TokenExpiredError) {
       throw new AuthError('Token has expired', 'TOKEN_EXPIRED');
     }
-    if (error instanceof jwt.JsonWebTokenError) {
-      throw new AuthError('Invalid token', 'INVALID_TOKEN');
-    }
-    throw new AuthError('Token verification failed', 'TOKEN_INVALID');
+    throw new AuthError('Invalid token', 'INVALID_TOKEN');
   }
 }

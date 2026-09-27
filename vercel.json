@@ -1,21 +1,3 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "server/api/index.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "server/api/index.js"
-    }
-  ],
-  "crons": [
-    {
-      "path": "/api/backup/cron",
-      "schedule": "0 2 * * *"
-    }
-  ]
+  "framework": "nextjs"
 }

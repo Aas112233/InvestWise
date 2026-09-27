@@ -18,7 +18,7 @@ export const updateSettingsSchema = z.object({
       baseCurrency: z.string().max(10).optional(),
       taxRate: z.number().min(0).max(100).optional(),
       accountingMethod: z.enum(['Cash', 'Accrual']).optional(),
-      shareValueBdt: z.number().min(0).optional(),
+      shareValueBdt: z.number().positive().optional(),
       isShareValueLocked: z.boolean().optional(),
       withdrawalLimitPercent: z.number().min(0).max(100).optional(),
       withdrawalNoticeDays: z.number().int().min(0).max(365).optional(),

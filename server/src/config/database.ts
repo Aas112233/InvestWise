@@ -4,11 +4,12 @@ import { env, isServerless } from '../config/env.js';
 import * as schema from '../db/schema/index.js';
 
 const poolOptions = {
-  max: 15,              // Optimal concurrent connection pool for Supabase PgBouncer pooler
-  idle_timeout: 20,     // Close idle connections cleanly before Supabase server drops them
-  connect_timeout: 30,  // 30s timeout allows sufficient headroom for international TLS handshakes
-  max_lifetime: 60 * 15, // 15 min connection lifetime rotation
+  max: 10,              // Optimal concurrent connection pool for Supabase PgBouncer pooler
+  idle_timeout: 4,      // 4s idle timeout proactively cycles stale sockets before Supabase drops them
+  connect_timeout: 10,  // 10s fast fail on stale sockets
+  max_lifetime: 60 * 3, // 3 min connection lifetime rotation
   prepare: false,       // Required for Supabase transaction-mode pooler (port 6543)
+  fetch_types: false,   // Prevents unnecessary pg_type queries over transaction pooler
   debug: false,
 };
 
@@ -34,6 +35,8 @@ export async function connectDB(): Promise<typeof db> {
       await sql`SELECT 1`;
       
       // Auto-migrate critical schema columns if needed
+      // (access_level was removed in the RBAC migration — roles are canonical;
+      // do NOT re-add the column here.)
       try {
         await sql`ALTER TABLE global_stats_trends ADD COLUMN IF NOT EXISTS deposit numeric(15, 2) DEFAULT '0'`;
         await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS mother_name varchar(255)`;

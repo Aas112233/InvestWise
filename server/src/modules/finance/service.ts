@@ -1,89 +1,153 @@
-import { getDb, getSql } from '../../config/database.js';
-import { transactions, funds, members, projects, projectUpdates, auditLogs, deletedRecords, users } from '../../db/schema/index.js';
-import type { SQL } from 'drizzle-orm';
 import { eq, and, or, desc, asc, count, ilike, inArray, gte, lte, sql, aliasedTable } from 'drizzle-orm';
-import { AppError, NotFoundError, ConflictError } from '../../shared/errors.js';
-import { getPaginationParams, formatPaginatedResponse } from '../../shared/types.js';
-import { isValidUUID } from '../../shared/utils.js';
-import type { DepositInput, ExpenseInput, EarningInput, TransferInput, DividendInput, EquityTransferInput, BulkDepositInput } from './validation.js';
+import { getDb, getSql } from '../../lib/db.js';
+import {
+  transactions,
+  funds,
+  members,
+  projects,
+  projectUpdates,
+  auditLogs,
+  deletedRecords,
+  users,
+} from '../../db/schema/index.js';
+import type { SQL } from 'drizzle-orm';
+import {
+  AppError,
+  NotFoundError,
+  ConflictError,
+  ForbiddenError,
+} from '../../shared/errors.js';
+import { getPaginationParams, formatPaginatedResponse, requireTenant, type SessionUser } from '../../middleware/api.js';
+import {
+  parsePositiveAmount,
+  splitDividendByShares,
+  fromCents,
+  toCents,
+  parseDepositMonthToIso,
+} from '@/lib/money';
+import { assertIntegralShares } from '@/lib/shares';
+
+/**
+ * Core financial engine — 1:1 behavioral port of the Express finance service
+ * with the §12 money discipline made explicit:
+ *  - amounts validated as positive integer cents (amount > 0),
+ *  - balance mutations in SQL numeric(15,2) arithmetic (never float),
+ *  - soft delete only (isDeleted + deletedBy + deletionReason + archive),
+ *  - idempotent batch reference numbers for bulk deposits/dividend runs.
+ */
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const DEPOSIT_MONTH_INDEX: Record<string, number> = {
-  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
-  'জানুয়ারি': 0, 'ফেব্রুয়ারি': 1, 'মার্চ': 2, 'এপ্রিল': 3, 'মে': 4, 'জুন': 5,
-  'জুলাই': 6, 'আগস্ট': 7, 'সেপ্টেম্বর': 8, 'অক্টোবর': 9, 'নভেম্বর': 10, 'ডিসেম্বর': 11,
-};
+/** Format integer cents as a decimal(15,2) string for the DB boundary. */
+const fmt = (cents: number) => fromCents(cents);
 
-/** Convert Bengali digits (০-৯) to ASCII digits. */
-function normalizeBanglaDigits(value: string = ''): string {
-  return value.replace(/[০-৯]/g, (digit) => String('০১২৩৪৫৬৭৮৯'.indexOf(digit)));
+/** Number cast helper for SQL-summed values (display only). */
+function toNum(val: unknown): number {
+  const n = Number(val);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function isValidUUID(value: string): boolean {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value);
 }
 
 /** Escape special regex characters. */
-function escapeRegex(value: string = ''): string {
+function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/**
- * Create a case-insensitive regex tolerant of separators between characters.
- * "MEMBER" => "M[-_\\s]*E[-_\\s]*M[-_\\s]*B[-_\\s]*E[-_\\s]*R"
- */
+/** Case-insensitive flexible member-id regex ("MEM BER" matches "M-EM-BER"). */
 function buildFlexibleMemberIdRegex(search: string): string | null {
   const compact = search.replace(/[\s\-_]+/g, '').trim();
   if (!compact) return null;
   return compact.split('').map((ch) => escapeRegex(ch)).join('[-_\\s]*');
 }
 
-/** Parse a deposit-month label (e.g. "January 2024" or "জানুয়ারি ২০২৪"). */
-function parseDepositMonthLabel(depositMonth: string): Date | null {
-  if (!depositMonth) return null;
-  const normalized = normalizeBanglaDigits(depositMonth).trim();
-  const parts = normalized.split(/\s+/);
-  if (parts.length < 2) return null;
-  const year = Number(parts[parts.length - 1]);
-  const label = parts.slice(0, -1).join(' ').toLowerCase();
-  const monthIndex = DEPOSIT_MONTH_INDEX[label];
-  if (monthIndex === undefined || Number.isNaN(year) || year < 1900) return null;
-  return new Date(Date.UTC(year, monthIndex, 1));
-}
-
-/**
- * Resolve the effective deposit date.
- * Prefers depositMonth label; falls back to explicit date; then first of current month.
- */
+/** Resolve the effective deposit date (money received) from date/month label. */
 function resolveDepositDate(date?: string | null, depositMonth?: string | null): Date {
-  const fromMonth = depositMonth ? parseDepositMonthLabel(depositMonth) : null;
-  if (fromMonth) return fromMonth;
-
   if (date) {
     const parsed = new Date(date);
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
-
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1);
+  const iso = parseDepositMonthToIso(depositMonth);
+  if (iso) return new Date(`${iso}T00:00:00.000Z`);
+  return new Date();
 }
 
-/** Format an amount as a decimal(15,2) string. */
-function fmtAmount(n: number): string {
-  return n.toFixed(2);
+interface DepositInput {
+  memberId: string;
+  amount: number | string;
+  fundId: string;
+  description?: string | null;
+  date?: string | null;
+  status?: 'Completed' | 'Processing' | 'Pending' | null;
+  cashierName?: string | null;
+  depositMethod?: string | null;
+  depositMonth?: string | null;
 }
 
-/** Number cast helper for SQL-summed values. */
-function toNum(val: unknown): number {
-  const n = Number(val);
-  return Number.isFinite(n) ? n : 0;
+interface ExpenseInput {
+  amount: number | string;
+  fundId: string;
+  description?: string | null;
+  category?: string | null;
+  date?: string | null;
+  memberId?: string | null;
+  projectId?: string | null;
 }
+
+interface EarningInput {
+  amount: number | string;
+  fundId: string;
+  projectId?: string | null;
+  description?: string | null;
+  category?: string | null;
+  date?: string | null;
+}
+
+interface TransferInput {
+  sourceFundId: string;
+  targetFundId: string;
+  amount: number | string;
+  description?: string;
+}
+
+interface DividendInput {
+  type: 'Global' | 'Project';
+  amount: number | string;
+  projectId?: string | null;
+  sourceFundId?: string | null;
+  description?: string | null;
+}
+
+interface EquityTransferInput {
+  fromMemberId: string;
+  transfers: Array<{ toMemberId: string; amount?: number; shares: number }>;
+  reason: string;
+}
+
+interface BulkDepositInput {
+  fundId: string;
+  commonMonth?: string;
+  cashierName?: string;
+  depositMethod?: string;
+  deposits: Array<{
+    memberId: string;
+    amount: number | string;
+    depositMonth?: string;
+    date?: string;
+  }>;
+}
+
+export type { DepositInput, ExpenseInput, EarningInput, TransferInput, DividendInput, EquityTransferInput, BulkDepositInput };
 
 // ---------------------------------------------------------------------------
-// 1. getTransactions — Paginated list with totals
+// 1. getTransactions — Paginated ledger with totals
 // ---------------------------------------------------------------------------
 
-export async function getTransactions(query: Record<string, string | undefined>) {
+export async function getTransactions(query: Record<string, string | undefined>, tenantId: string) {
   const db = getDb();
   const { page, limit, skip, sortBy: sortByParam } = getPaginationParams(query, {
     sortBy: 'date',
@@ -97,10 +161,12 @@ export async function getTransactions(query: Record<string, string | undefined>)
 
   const conditions: (SQL | undefined)[] = [];
 
-  // --- deleted filter ----------------------------------------------------
+  // Soft-delete filter — deleted rows never appear in the ledger.
   conditions.push(eq(transactions.isDeleted, false));
+  // Tenant isolation — every ledger row belongs to one tenant.
+  conditions.push(eq(transactions.tenantId, tenantId));
 
-  // --- search ------------------------------------------------------------
+  // --- search -------------------------------------------------------------
   if (search) {
     if (searchField === 'amount') {
       const num = Number(search);
@@ -113,12 +179,12 @@ export async function getTransactions(query: Record<string, string | undefined>)
       }
     } else if (searchField === 'memberId') {
       const flexible = buildFlexibleMemberIdRegex(search);
-      const memberConds: ReturnType<typeof or>[] = [ilike(members.memberId, `%${search}%`)];
+      const memberConds: (SQL | undefined)[] = [ilike(members.memberId, `%${search}%`)];
       if (flexible) memberConds.push(sql`${members.memberId} ~* ${flexible}`);
       const matchingMembers = await db
         .select({ id: members.id })
         .from(members)
-        .where(or(...memberConds));
+        .where(and(eq(members.tenantId, tenantId), or(...memberConds)));
 
       if (matchingMembers.length > 0) {
         conditions.push(inArray(transactions.memberId, matchingMembers.map((m) => m.id)));
@@ -129,8 +195,7 @@ export async function getTransactions(query: Record<string, string | undefined>)
       const matchingMembers = await db
         .select({ id: members.id })
         .from(members)
-        .where(ilike(members.name, `%${search}%`));
-
+        .where(and(eq(members.tenantId, tenantId), ilike(members.name, `%${search}%`)));
       if (matchingMembers.length > 0) {
         conditions.push(inArray(transactions.memberId, matchingMembers.map((m) => m.id)));
       } else {
@@ -140,8 +205,7 @@ export async function getTransactions(query: Record<string, string | undefined>)
       const matchingFunds = await db
         .select({ id: funds.id })
         .from(funds)
-        .where(ilike(funds.name, `%${search}%`));
-
+        .where(and(eq(funds.tenantId, tenantId), ilike(funds.name, `%${search}%`)));
       if (matchingFunds.length > 0) {
         conditions.push(inArray(transactions.fundId, matchingFunds.map((f) => f.id)));
       } else {
@@ -155,25 +219,24 @@ export async function getTransactions(query: Record<string, string | undefined>)
           .select({ id: members.id })
           .from(members)
           .where(
-            or(
-              ilike(members.name, `%${search}%`),
-              ilike(members.memberId, `%${search}%`),
-              ...(flexible ? [sql`${members.memberId} ~* ${flexible}`] : []),
+            and(
+              eq(members.tenantId, tenantId),
+              or(
+                ilike(members.name, `%${search}%`),
+                ilike(members.memberId, `%${search}%`),
+                ...(flexible ? [sql`${members.memberId} ~* ${flexible}`] : []),
+              ),
             ),
           ),
-        db
-          .select({ id: funds.id })
-          .from(funds)
-          .where(ilike(funds.name, `%${search}%`)),
+        db.select({ id: funds.id }).from(funds).where(and(eq(funds.tenantId, tenantId), ilike(funds.name, `%${search}%`))),
       ]);
 
-      const orConds: ReturnType<typeof sql>[] = [
+      const orConds: (SQL | undefined)[] = [
         ilike(transactions.type, `%${search}%`),
         ilike(transactions.description, `%${search}%`),
         ilike(transactions.status, `%${search}%`),
         ilike(transactions.referenceNumber, `%${search}%`),
       ];
-
       if (memberMatches.length > 0) {
         orConds.push(inArray(transactions.memberId, memberMatches.map((m) => m.id)));
       }
@@ -181,43 +244,19 @@ export async function getTransactions(query: Record<string, string | undefined>)
         orConds.push(inArray(transactions.fundId, fundMatches.map((f) => f.id)));
       }
       const searchNum = Number(search);
-      if (!Number.isNaN(searchNum)) {
-        orConds.push(eq(transactions.amount, String(searchNum)));
-      }
-      if (isValidUUID(search)) {
-        orConds.push(eq(transactions.id, search));
-      }
+      if (!Number.isNaN(searchNum)) orConds.push(eq(transactions.amount, String(searchNum)));
+      if (isValidUUID(search)) orConds.push(eq(transactions.id, search));
 
       conditions.push(or(...orConds));
     }
   }
 
-  // --- type filter -------------------------------------------------------
-  if (query.type) {
-    conditions.push(eq(transactions.type, query.type));
-  }
+  if (query.type) conditions.push(eq(transactions.type, query.type));
+  if (query.status) conditions.push(eq(transactions.status, query.status));
+  if (query.projectId) conditions.push(eq(transactions.projectId, query.projectId));
+  if (query.memberId) conditions.push(eq(transactions.memberId, query.memberId));
+  if (query.fundId) conditions.push(eq(transactions.fundId, query.fundId));
 
-  // --- status filter -----------------------------------------------------
-  if (query.status) {
-    conditions.push(eq(transactions.status, query.status));
-  }
-
-  // --- project filter ----------------------------------------------------
-  if (query.projectId) {
-    conditions.push(eq(transactions.projectId, query.projectId));
-  }
-
-  // --- member filter -----------------------------------------------------
-  if (query.memberId) {
-    conditions.push(eq(transactions.memberId, query.memberId));
-  }
-
-  // --- fund filter -------------------------------------------------------
-  if (query.fundId) {
-    conditions.push(eq(transactions.fundId, query.fundId));
-  }
-
-  // --- date range filter -------------------------------------------------
   if (query.startDate) {
     conditions.push(sql`${transactions.date} >= ${new Date(query.startDate).toISOString()}::timestamptz`);
   }
@@ -226,11 +265,9 @@ export async function getTransactions(query: Record<string, string | undefined>)
     end.setHours(23, 59, 59, 999);
     conditions.push(sql`${transactions.date} <= ${end.toISOString()}::timestamptz`);
   }
-
-  // --- month + year filter -----------------------------------------------
   if (query.month && query.year) {
-    const month = parseInt(query.month, 10);
-    const year = parseInt(query.year, 10);
+    const month = Number.parseInt(query.month, 10);
+    const year = Number.parseInt(query.year, 10);
     if (!Number.isNaN(month) && !Number.isNaN(year)) {
       const start = new Date(year, month - 1, 1);
       conditions.push(sql`${transactions.date} >= ${start.toISOString()}::timestamptz`);
@@ -238,7 +275,6 @@ export async function getTransactions(query: Record<string, string | undefined>)
     }
   }
 
-  // --- sorting -----------------------------------------------------------
   const sortFieldMap: Record<string, unknown> = {
     date: transactions.date,
     amount: transactions.amount,
@@ -252,33 +288,27 @@ export async function getTransactions(query: Record<string, string | undefined>)
     createdAt: transactions.createdAt,
     updatedAt: transactions.updatedAt,
   };
-  const sortColumn = (sortFieldMap[sortBy] as any) || transactions.date;
-  const orderBy = sortOrder === 'asc' ? [asc(sortColumn)] : [desc(sortColumn)];
+  const sortColumn = (sortFieldMap[sortBy] as typeof transactions.date) || transactions.date;
+  const orderBy =
+    sortOrder === 'asc'
+      ? [asc(sortColumn), asc(transactions.createdAt)]
+      : [desc(sortColumn), desc(transactions.createdAt)];
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   const authorizer = aliasedTable(users, 'txn_authorizer');
   const creator = aliasedTable(users, 'txn_creator');
 
-  // --- totals (inflow / outflow / monthly) --------------------------------
-  const totalsConditions: (SQL | undefined)[] = [];
-  if (conditions.length > 0) {
-    for (const c of conditions) {
-      totalsConditions.push(c);
-    }
-  }
-  totalsConditions.push(inArray(transactions.status, ['Completed', 'Processing']));
-
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  // Execute Count, Paginated Rows, and Financial Totals in Parallel (single network roundtrip)
+  const totalsConditions: (SQL | undefined)[] = [];
+  for (const c of conditions) totalsConditions.push(c);
+  totalsConditions.push(inArray(transactions.status, ['Completed', 'Processing']));
+
   const [[totalResult], rows, [totalsRow]] = await Promise.all([
-    db
-      .select({ count: count() })
-      .from(transactions)
-      .where(whereClause),
+    db.select({ count: count() }).from(transactions).where(whereClause),
     db
       .select({
         id: transactions.id,
@@ -304,7 +334,6 @@ export async function getTransactions(query: Record<string, string | undefined>)
         projectName: projects.title,
         authorizedByName: authorizer.name,
         createdByName: creator.name,
-        referenceNumberOut: transactions.referenceNumber,
         createdAt: transactions.createdAt,
         updatedAt: transactions.updatedAt,
       })
@@ -358,76 +387,111 @@ export async function getTransactions(query: Record<string, string | undefined>)
 // 2. addDeposit
 // ---------------------------------------------------------------------------
 
-export async function addDeposit(data: DepositInput, userId: string, userName: string) {
+export async function addDeposit(
+  data: DepositInput,
+  user: SessionUser,
+) {
+  const tenantId = requireTenant(user);
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [fund] = await tx.select().from(funds).where(eq(funds.id, data.fundId)).for('update').limit(1);
+    let targetMemberId = data.memberId;
+    const isPrivileged = user.role === 'Admin' || user.role === 'Administrator' || user.role === 'Manager';
+
+    // Non-privileged users always deposit for themselves (request flow).
+    if (!isPrivileged) {
+      const conds: (SQL | undefined)[] = [eq(members.userId, user.id)];
+      if (user.memberId) {
+        if (isValidUUID(user.memberId)) conds.push(eq(members.id, user.memberId));
+        conds.push(eq(members.memberId, user.memberId));
+      }
+      if (user.email) conds.push(ilike(members.email, user.email));
+
+      const validConditions = conds.filter(Boolean) as SQL[];
+      if (validConditions.length > 0) {
+        const matching = await tx
+          .select()
+          .from(members)
+          .where(and(eq(members.tenantId, tenantId), or(...validConditions)))
+          .limit(1);
+        if (matching.length > 0) {
+          const first = matching[0];
+          if (first) targetMemberId = first.id;
+        }
+      }
+    }
+
+    const [fund] = await tx.select().from(funds).where(and(eq(funds.id, data.fundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
     if (!fund) throw new NotFoundError('Fund');
-    const [member] = await tx.select().from(members).where(eq(members.id, data.memberId)).for('update').limit(1);
+    const [member] = await tx.select().from(members).where(and(eq(members.id, targetMemberId), eq(members.tenantId, tenantId))).for('update').limit(1);
     if (!member) throw new NotFoundError('Member');
 
-    const amount = Number(data.amount);
-    const depositDate = resolveDepositDate(data.date, data.depositMonth);
+    // amount > 0 enforced in cents (§12)
+    const amountCents = parsePositiveAmount(data.amount);
+
     const status = data.status || 'Completed';
     const isCompleted = status === 'Completed';
-    const balanceBefore = toNum(fund.balance);
+    const balanceBeforeCents = toCents(fund.balance ?? '0');
 
     const [txn] = await tx
       .insert(transactions)
       .values({
+        tenantId,
         type: 'Deposit',
-        amount: fmtAmount(amount),
+        amount: fmt(amountCents),
         description: data.description || '',
-        memberId: data.memberId,
+        memberId: targetMemberId,
         fundId: data.fundId,
-        date: depositDate,
+        date: resolveDepositDate(data.date, data.depositMonth),
         status,
-        authorizedBy: userId,
-        createdBy: userId,
-        updatedBy: userId,
-        handlingOfficer: userName || data.cashierName || 'System',
+        authorizedBy: user.id,
+        createdBy: user.id,
+        updatedBy: user.id,
+        handlingOfficer: user.name || data.cashierName || 'System',
         depositMethod: data.depositMethod || 'Cash',
-        balanceBefore: fmtAmount(balanceBefore),
-        balanceAfter: isCompleted ? fmtAmount(balanceBefore + amount) : fmtAmount(balanceBefore),
+        balanceBefore: fmt(balanceBeforeCents),
+        balanceAfter: isCompleted ? fmt(balanceBeforeCents + amountCents) : fmt(balanceBeforeCents),
       })
       .returning();
+    if (!txn) throw new AppError('Failed to record deposit', 500);
 
     if (isCompleted) {
       await tx
         .update(funds)
         .set({
-          balance: sql<string>`(${funds.balance}::numeric + ${amount})::numeric(15,2)`,
+          balance: sql`(${funds.balance}::numeric + ${amountCents / 100})::numeric(15,2)`,
           updatedAt: new Date(),
         })
         .where(eq(funds.id, data.fundId));
 
+      const billingPeriodIso =
+        parseDepositMonthToIso(data.depositMonth || data.description || '') ||
+        (txn.date ? new Date(txn.date).toISOString().slice(0, 10) : null);
       await tx
         .update(members)
         .set({
-          totalContributed: sql<string>`(${members.totalContributed}::numeric + ${amount})::numeric(15,2)`,
-          lastDepositMonth: depositDate.toISOString().slice(0, 7),
+          totalContributed: sql`(${members.totalContributed}::numeric + ${amountCents / 100})::numeric(15,2)`,
+          lastDepositMonth: billingPeriodIso ? billingPeriodIso.slice(0, 7) : null,
           updatedAt: new Date(),
         })
-        .where(eq(members.id, data.memberId));
+        .where(eq(members.id, targetMemberId));
     }
 
-    // Audit
     await tx.insert(auditLogs).values({
-      userId,
-      userName,
+      userId: user.id,
+      userName: user.name,
       action: 'ADD_DEPOSIT',
       resourceType: 'Transaction',
       resourceId: txn.id,
-      details: { amount, fundId: data.fundId, memberId: data.memberId, status },
+      details: { amount: amountCents / 100, fundId: data.fundId, memberId: targetMemberId, status },
       status: 'SUCCESS',
     });
 
     return {
       ...txn,
-      amount: toNum(txn.amount),
-      balanceBefore: txn.balanceBefore ? toNum(txn.balanceBefore) : null,
-      balanceAfter: txn.balanceAfter ? toNum(txn.balanceAfter) : null,
+      amount: amountCents / 100,
+      balanceBefore: balanceBeforeCents / 100,
+      balanceAfter: (isCompleted ? balanceBeforeCents + amountCents : balanceBeforeCents) / 100,
     };
   });
 }
@@ -436,44 +500,61 @@ export async function addDeposit(data: DepositInput, userId: string, userName: s
 // 3. editDeposit
 // ---------------------------------------------------------------------------
 
-export async function editDeposit(id: string, data: DepositInput, userId: string, userName: string) {
+export async function editDeposit(id: string, data: DepositInput, user: SessionUser) {
+  const tenantId = requireTenant(user);
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [existing] = await tx.select().from(transactions).where(eq(transactions.id, id)).for('update').limit(1);
+    const [existing] = await tx.select().from(transactions).where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId))).for('update').limit(1);
     if (!existing) throw new NotFoundError('Transaction');
     if (existing.type !== 'Deposit') throw new AppError('Transaction is not a deposit', 400, 'INVALID_TYPE');
 
-    const oldAmount = toNum(existing.amount);
+    const isPrivileged =
+      user.role === 'Admin' ||
+      user.role === 'Administrator' ||
+      user.role === 'Manager' ||
+      user.permissions?.['DEPOSITS'] === 'WRITE';
+    if (!isPrivileged) {
+      const [userMember] = await tx
+        .select({ id: members.id, memberId: members.memberId })
+        .from(members)
+        .where(and(eq(members.tenantId, tenantId), or(eq(members.userId, user.id), eq(members.id, user.memberId || ''))))
+        .limit(1);
+
+      const userMemberId = userMember?.id || user.memberId;
+      const isOwner = (userMemberId && existing.memberId === userMemberId) || existing.createdBy === user.id;
+      if (!isOwner) throw new ForbiddenError('You can only edit your own deposit request');
+      if (data.memberId && userMemberId && data.memberId !== userMemberId && data.memberId !== existing.memberId) {
+        throw new ForbiddenError('You cannot reassign a deposit request to another member');
+      }
+    }
+
+    const oldAmountCents = toCents(existing.amount);
     const oldFundId = existing.fundId!;
     const oldMemberId = existing.memberId!;
     const wasCompleted = existing.status === 'Completed' || existing.status === 'Success';
 
-    const newAmount = Number(data.amount);
+    const newAmountCents = parsePositiveAmount(data.amount);
     const newFundId = data.fundId;
     const newMemberId = data.memberId;
-    const newStatus = data.status || existing.status;
+    const newStatus = data.status || existing.status || 'Completed';
     const isNowCompleted = newStatus === 'Success' || newStatus === 'Completed';
 
     // 1. Revert old financial impact
     if (wasCompleted) {
-      const [oldFund] = await tx.select().from(funds).where(eq(funds.id, oldFundId)).for('update').limit(1);
+      const [oldFund] = await tx.select().from(funds).where(and(eq(funds.id, oldFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
       if (oldFund) {
         await tx
           .update(funds)
-          .set({
-            balance: sql<string>`(${funds.balance}::numeric - ${oldAmount})::numeric(15,2)`,
-            updatedAt: new Date(),
-          })
+          .set({ balance: sql`(${funds.balance}::numeric - ${oldAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
           .where(eq(funds.id, oldFundId));
       }
-
-      const [oldMember] = await tx.select().from(members).where(eq(members.id, oldMemberId)).for('update').limit(1);
+      const [oldMember] = await tx.select().from(members).where(and(eq(members.id, oldMemberId), eq(members.tenantId, tenantId))).for('update').limit(1);
       if (oldMember) {
         await tx
           .update(members)
           .set({
-            totalContributed: sql<string>`GREATEST(0, (${members.totalContributed}::numeric - ${oldAmount}))::numeric(15,2)`,
+            totalContributed: sql`GREATEST(0, (${members.totalContributed}::numeric - ${oldAmountCents / 100}))::numeric(15,2)`,
             updatedAt: new Date(),
           })
           .where(eq(members.id, oldMemberId));
@@ -482,26 +563,18 @@ export async function editDeposit(id: string, data: DepositInput, userId: string
 
     // 2. Apply new financial impact
     if (isNowCompleted) {
-      const [newFund] = await tx.select().from(funds).where(eq(funds.id, newFundId)).for('update').limit(1);
-      if (!newFund) throw new NotFoundError(`Target fund`);
-
+      const [newFund] = await tx.select().from(funds).where(and(eq(funds.id, newFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
+      if (!newFund) throw new NotFoundError('Target fund');
       await tx
         .update(funds)
-        .set({
-          balance: sql<string>`(${funds.balance}::numeric + ${newAmount})::numeric(15,2)`,
-          updatedAt: new Date(),
-        })
+        .set({ balance: sql`(${funds.balance}::numeric + ${newAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
         .where(eq(funds.id, newFundId));
 
-      const [newMember] = await tx.select().from(members).where(eq(members.id, newMemberId)).for('update').limit(1);
+      const [newMember] = await tx.select().from(members).where(and(eq(members.id, newMemberId), eq(members.tenantId, tenantId))).for('update').limit(1);
       if (!newMember) throw new NotFoundError('Member');
-
       await tx
         .update(members)
-        .set({
-          totalContributed: sql<string>`(${members.totalContributed}::numeric + ${newAmount})::numeric(15,2)`,
-          updatedAt: new Date(),
-        })
+        .set({ totalContributed: sql`(${members.totalContributed}::numeric + ${newAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
         .where(eq(members.id, newMemberId));
     }
 
@@ -511,37 +584,37 @@ export async function editDeposit(id: string, data: DepositInput, userId: string
     const [updated] = await tx
       .update(transactions)
       .set({
-        amount: fmtAmount(newAmount),
+        amount: fmt(newAmountCents),
         fundId: newFundId,
         memberId: newMemberId,
         description: data.description || existing.description || '',
         date: depositDate,
         status: newStatus,
         depositMethod: data.depositMethod || existing.depositMethod,
-        handlingOfficer: userName || data.cashierName || existing.handlingOfficer || 'System',
-        updatedBy: userId,
+        handlingOfficer: user.name || data.cashierName || existing.handlingOfficer || 'System',
+        updatedBy: user.id,
         updatedAt: new Date(),
       })
       .where(eq(transactions.id, id))
       .returning();
+    if (!updated) throw new NotFoundError('Transaction');
 
-    // 4. Audit log
     await tx.insert(auditLogs).values({
-      userId,
-      userName,
+      userId: user.id,
+      userName: user.name,
       action: 'EDIT_DEPOSIT',
       resourceType: 'Transaction',
       resourceId: id,
       details: {
-        previous: { amount: oldAmount, fundId: oldFundId, memberId: oldMemberId, status: existing.status },
-        current: { amount: newAmount, fundId: newFundId, memberId: newMemberId, status: newStatus },
+        previous: { amount: oldAmountCents / 100, fundId: oldFundId, memberId: oldMemberId, status: existing.status },
+        current: { amount: newAmountCents / 100, fundId: newFundId, memberId: newMemberId, status: newStatus },
       },
       status: 'SUCCESS',
     });
 
     return {
       ...updated,
-      amount: toNum(updated.amount),
+      amount: newAmountCents / 100,
       balanceBefore: updated.balanceBefore ? toNum(updated.balanceBefore) : null,
       balanceAfter: updated.balanceAfter ? toNum(updated.balanceAfter) : null,
     };
@@ -552,11 +625,12 @@ export async function editDeposit(id: string, data: DepositInput, userId: string
 // 4. approveDeposit
 // ---------------------------------------------------------------------------
 
-export async function approveDeposit(id: string, userId: string, userName: string) {
+export async function approveDeposit(id: string, user: SessionUser) {
+  const tenantId = requireTenant(user);
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [txn] = await tx.select().from(transactions).where(eq(transactions.id, id)).for('update').limit(1);
+    const [txn] = await tx.select().from(transactions).where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId))).for('update').limit(1);
     if (!txn) throw new NotFoundError('Transaction');
     if (txn.status === 'Success' || txn.status === 'Completed') {
       throw new ConflictError('Transaction already approved');
@@ -565,53 +639,43 @@ export async function approveDeposit(id: string, userId: string, userName: strin
 
     const fundId = txn.fundId!;
     const memberId = txn.memberId!;
-    const [fund] = await tx.select().from(funds).where(eq(funds.id, fundId)).for('update').limit(1);
+    const [fund] = await tx.select().from(funds).where(and(eq(funds.id, fundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
     if (!fund) throw new NotFoundError('Fund');
-    const [member] = await tx.select().from(members).where(eq(members.id, memberId)).for('update').limit(1);
+    const [member] = await tx.select().from(members).where(and(eq(members.id, memberId), eq(members.tenantId, tenantId))).for('update').limit(1);
     if (!member) throw new NotFoundError('Member');
 
-    const txnAmount = toNum(txn.amount);
+    const txnCents = toCents(txn.amount);
 
     await tx
       .update(funds)
-      .set({
-        balance: sql<string>`(${funds.balance}::numeric + ${txnAmount})::numeric(15,2)`,
-        updatedAt: new Date(),
-      })
+      .set({ balance: sql`(${funds.balance}::numeric + ${txnCents / 100})::numeric(15,2)`, updatedAt: new Date() })
       .where(eq(funds.id, fundId));
 
     await tx
       .update(members)
-      .set({
-        totalContributed: sql<string>`(${members.totalContributed}::numeric + ${txnAmount})::numeric(15,2)`,
-        updatedAt: new Date(),
-      })
+      .set({ totalContributed: sql`(${members.totalContributed}::numeric + ${txnCents / 100})::numeric(15,2)`, updatedAt: new Date() })
       .where(eq(members.id, memberId));
 
     const [updated] = await tx
       .update(transactions)
-      .set({
-        status: 'Completed',
-        authorizedBy: userId,
-        updatedBy: userId,
-        updatedAt: new Date(),
-      })
+      .set({ status: 'Completed', authorizedBy: user.id, updatedBy: user.id, updatedAt: new Date() })
       .where(eq(transactions.id, id))
       .returning();
+    if (!updated) throw new NotFoundError('Transaction');
 
     await tx.insert(auditLogs).values({
-      userId,
-      userName,
+      userId: user.id,
+      userName: user.name,
       action: 'APPROVE_DEPOSIT',
       resourceType: 'Transaction',
       resourceId: id,
-      details: { amount: txnAmount, previousStatus: txn.status, newStatus: 'Completed' },
+      details: { amount: txnCents / 100, previousStatus: txn.status, newStatus: 'Completed' },
       status: 'SUCCESS',
     });
 
     return {
       ...updated,
-      amount: toNum(updated.amount),
+      amount: txnCents / 100,
       balanceBefore: updated.balanceBefore ? toNum(updated.balanceBefore) : null,
       balanceAfter: updated.balanceAfter ? toNum(updated.balanceAfter) : null,
     };
@@ -622,49 +686,55 @@ export async function approveDeposit(id: string, userId: string, userName: strin
 // 5. addExpense
 // ---------------------------------------------------------------------------
 
-export async function addExpense(data: ExpenseInput, userId: string, userName: string) {
+export async function addExpense(data: ExpenseInput, user: SessionUser) {
+  const tenantId = requireTenant(user);
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const fund = await tx.select().from(funds).where(eq(funds.id, data.fundId)).for('update').limit(1).then((r) => r[0]);
+    const [fund] = await tx.select().from(funds).where(and(eq(funds.id, data.fundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
     if (!fund) throw new NotFoundError('Source Fund');
 
     const projectId = data.projectId || null;
-    const amount = Number(data.amount);
+    const amountCents = parsePositiveAmount(data.amount);
     let projectRef: typeof projects.$inferSelect | null = null;
-    let balanceBefore = toNum(fund.balance);
+    let balanceBeforeCents = toCents(fund.balance ?? '0');
 
-    // --- Project integrity checks ------------------------------------------
     if (projectId) {
-      projectRef = await tx.select().from(projects).where(eq(projects.id, projectId)).for('update').limit(1).then((r) => r[0]);
+      projectRef = (await tx.select().from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).for('update').limit(1))[0] ?? null;
       if (!projectRef) throw new NotFoundError('Project');
       if (projectRef.linkedFundId && projectRef.linkedFundId !== data.fundId) {
-        throw new AppError('Transactions for this project must be routed through its dedicated project fund.', 400, 'LINKED_FUND_MISMATCH');
+        throw new AppError(
+          'Transactions for this project must be routed through its dedicated project fund.',
+          400,
+          'LINKED_FUND_MISMATCH',
+        );
       }
-      balanceBefore = toNum(projectRef.currentFundBalance);
+      balanceBeforeCents = toCents(projectRef.currentFundBalance ?? '0');
     }
 
-    // Prevent using PROJECT-type funds for non-project expenses
     if (!projectId && fund.type === 'PROJECT') {
-      throw new AppError('Project-specific funds cannot be used for general expenses. Please select a project first.', 400, 'PROJECT_FUND_RESTRICTION');
+      throw new AppError(
+        'Project-specific funds cannot be used for general expenses. Please select a project first.',
+        400,
+        'PROJECT_FUND_RESTRICTION',
+      );
     }
 
-    if (toNum(fund.balance) < amount) {
+    if (toCents(fund.balance ?? '0') < amountCents) {
       throw new AppError(`Insufficient balance in ${fund.name}`, 400, 'INSUFFICIENT_BALANCE');
     }
 
     let description = data.description || '';
 
-    // --- Apply Project Impact ----------------------------------------------
     if (projectId && projectRef) {
-      const projBalanceBefore = toNum(projectRef.currentFundBalance);
-      const newProjectBalance = projBalanceBefore - amount;
+      const projBalanceBeforeCents = toCents(projectRef.currentFundBalance ?? '0');
+      const newProjectBalanceCents = projBalanceBeforeCents - amountCents;
 
       await tx
         .update(projects)
         .set({
-          currentFundBalance: sql<string>`(${projects.currentFundBalance}::numeric - ${amount})::numeric(15,2)`,
-          totalExpenses: sql<string>`(${projects.totalExpenses}::numeric + ${amount})::numeric(15,2)`,
+          currentFundBalance: sql`(${projects.currentFundBalance}::numeric - ${amountCents / 100})::numeric(15,2)`,
+          totalExpenses: sql`(${projects.totalExpenses}::numeric + ${amountCents / 100})::numeric(15,2)`,
           updatedAt: new Date(),
         })
         .where(eq(projects.id, projectId));
@@ -672,11 +742,11 @@ export async function addExpense(data: ExpenseInput, userId: string, userName: s
       await tx.insert(projectUpdates).values({
         projectId,
         type: 'Expense',
-        amount: fmtAmount(amount),
+        amount: fmt(amountCents),
         description: description || 'Expense',
         date: data.date ? new Date(data.date) : new Date(),
-        balanceBefore: fmtAmount(projBalanceBefore),
-        balanceAfter: fmtAmount(newProjectBalance),
+        balanceBefore: fmt(projBalanceBeforeCents),
+        balanceAfter: fmt(newProjectBalanceCents),
       });
 
       if (description && !description.includes(`[${projectRef.title}]`)) {
@@ -684,30 +754,28 @@ export async function addExpense(data: ExpenseInput, userId: string, userName: s
       }
     }
 
-    // --- Update Fund -------------------------------------------------------
-    const newFundBalance = toNum(fund.balance) - amount;
+    const newFundBalanceCents = toCents(fund.balance ?? '0') - amountCents;
     await tx
       .update(funds)
-      .set({
-        balance: sql<string>`(${funds.balance}::numeric - ${amount})::numeric(15,2)`,
-        updatedAt: new Date(),
-      })
+      .set({ balance: sql`(${funds.balance}::numeric - ${amountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
       .where(eq(funds.id, data.fundId));
 
-    // Resolve balanceAfter for transaction record
     let balanceAfter: string;
     if (projectId) {
-      const p = await tx.select({ bal: projects.currentFundBalance }).from(projects).where(eq(projects.id, projectId)).limit(1).then((r) => r[0]);
-      balanceAfter = p?.bal || fmtAmount(newFundBalance);
+      const p = (
+        await tx.select({ bal: projects.currentFundBalance }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1)
+      )[0];
+      balanceAfter = p?.bal || fmt(newFundBalanceCents);
     } else {
-      balanceAfter = fmtAmount(newFundBalance);
+      balanceAfter = fmt(newFundBalanceCents);
     }
 
     const [txn] = await tx
       .insert(transactions)
       .values({
+        tenantId,
         type: 'Expense',
-        amount: fmtAmount(amount),
+        amount: fmt(amountCents),
         description,
         category: data.category || 'Operational',
         fundId: data.fundId,
@@ -715,31 +783,31 @@ export async function addExpense(data: ExpenseInput, userId: string, userName: s
         memberId: data.memberId || null,
         date: data.date ? new Date(data.date) : new Date(),
         status: 'Completed',
-        authorizedBy: userId,
-        createdBy: userId,
-        updatedBy: userId,
-        handlingOfficer: userName,
-        balanceBefore: fmtAmount(balanceBefore),
+        authorizedBy: user.id,
+        createdBy: user.id,
+        updatedBy: user.id,
+        handlingOfficer: user.name,
+        balanceBefore: fmt(balanceBeforeCents),
         balanceAfter,
       })
       .returning();
+    if (!txn) throw new AppError('Failed to record expense', 500);
 
-    // --- Audit -------------------------------------------------------------
     await tx.insert(auditLogs).values({
-      userId,
-      userName,
+      userId: user.id,
+      userName: user.name,
       action: 'ADD_EXPENSE',
       resourceType: 'Transaction',
       resourceId: txn.id,
-      details: { amount, fundId: data.fundId, projectId, category: data.category },
+      details: { amount: amountCents / 100, fundId: data.fundId, projectId, category: data.category },
       status: 'SUCCESS',
     });
 
     return {
       ...txn,
-      amount: toNum(txn.amount),
-      balanceBefore: txn.balanceBefore ? toNum(txn.balanceBefore) : null,
-      balanceAfter: txn.balanceAfter ? toNum(txn.balanceAfter) : null,
+      amount: amountCents / 100,
+      balanceBefore: balanceBeforeCents / 100,
+      balanceAfter: toNum(balanceAfter),
     };
   });
 }
@@ -748,64 +816,65 @@ export async function addExpense(data: ExpenseInput, userId: string, userName: s
 // 6. editExpense
 // ---------------------------------------------------------------------------
 
-export async function editExpense(id: string, data: ExpenseInput, userId: string, userName: string) {
+export async function editExpense(id: string, data: ExpenseInput, user: SessionUser) {
+  const tenantId = requireTenant(user);
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [existing] = await tx.select().from(transactions).where(eq(transactions.id, id)).for('update').limit(1);
+    const [existing] = await tx.select().from(transactions).where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId))).for('update').limit(1);
     if (!existing) throw new NotFoundError('Transaction');
     if (existing.type !== 'Expense') throw new AppError('Transaction is not an expense', 400, 'INVALID_TYPE');
 
-    const oldAmount = toNum(existing.amount);
+    const oldAmountCents = toCents(existing.amount);
     const oldFundId = existing.fundId!;
     const oldProjectId = existing.projectId;
-    const newAmount = Number(data.amount);
+    const newAmountCents = parsePositiveAmount(data.amount);
     const newFundId = data.fundId;
     const newProjectId = data.projectId || null;
     let description = data.description || existing.description || '';
 
     // 1. Revert old impact
     if (oldProjectId) {
-      const [proj] = await tx.select().from(projects).where(eq(projects.id, oldProjectId)).for('update').limit(1);
+      const [proj] = await tx.select().from(projects).where(and(eq(projects.id, oldProjectId), eq(projects.tenantId, tenantId))).for('update').limit(1);
       if (proj) {
         await tx
           .update(projects)
           .set({
-            currentFundBalance: sql<string>`(${projects.currentFundBalance}::numeric + ${oldAmount})::numeric(15,2)`,
-            totalExpenses: sql<string>`GREATEST(0, (${projects.totalExpenses}::numeric - ${oldAmount}))::numeric(15,2)`,
+            currentFundBalance: sql`(${projects.currentFundBalance}::numeric + ${oldAmountCents / 100})::numeric(15,2)`,
+            totalExpenses: sql`GREATEST(0, (${projects.totalExpenses}::numeric - ${oldAmountCents / 100}))::numeric(15,2)`,
             updatedAt: new Date(),
           })
           .where(eq(projects.id, oldProjectId));
       }
     }
-
-    const [oldFund] = await tx.select().from(funds).where(eq(funds.id, oldFundId)).for('update').limit(1);
+    const [oldFund] = await tx.select().from(funds).where(and(eq(funds.id, oldFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
     if (oldFund) {
       await tx
         .update(funds)
-        .set({
-          balance: sql<string>`(${funds.balance}::numeric + ${oldAmount})::numeric(15,2)`,
-          updatedAt: new Date(),
-        })
+        .set({ balance: sql`(${funds.balance}::numeric + ${oldAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
         .where(eq(funds.id, oldFundId));
     }
 
     // 2. Apply new impact
     if (newProjectId) {
-      const [proj] = await tx.select().from(projects).where(eq(projects.id, newProjectId)).for('update').limit(1);
+      const [proj] = await tx.select().from(projects).where(and(eq(projects.id, newProjectId), eq(projects.tenantId, tenantId))).for('update').limit(1);
       if (!proj) throw new NotFoundError('New project');
       if (proj.linkedFundId && proj.linkedFundId !== newFundId) {
-        throw new AppError('Transactions for this project must be routed through its dedicated project fund.', 400, 'LINKED_FUND_MISMATCH');
+        throw new AppError(
+          'Transactions for this project must be routed through its dedicated project fund.',
+          400,
+          'LINKED_FUND_MISMATCH',
+        );
       }
 
-      const projBalBefore = toNum(proj.currentFundBalance);
-      const newProjectBalance = projBalBefore - newAmount;
+      const projBalBeforeCents = toCents(proj.currentFundBalance ?? '0');
+      const newProjectBalanceCents = projBalBeforeCents - newAmountCents;
 
       await tx
         .update(projects)
         .set({
-          currentFundBalance: sql<string>`(${projects.currentFundBalance}::numeric - ${newAmount})::numeric(15,2)`,
-          totalExpenses: sql<string>`(${projects.totalExpenses}::numeric + ${newAmount})::numeric(15,2)`,
+          currentFundBalance: sql`(${projects.currentFundBalance}::numeric - ${newAmountCents / 100})::numeric(15,2)`,
+          totalExpenses: sql`(${projects.totalExpenses}::numeric + ${newAmountCents / 100})::numeric(15,2)`,
           updatedAt: new Date(),
         })
         .where(eq(projects.id, newProjectId));
@@ -813,11 +882,11 @@ export async function editExpense(id: string, data: ExpenseInput, userId: string
       await tx.insert(projectUpdates).values({
         projectId: newProjectId,
         type: 'Expense',
-        amount: fmtAmount(newAmount),
+        amount: fmt(newAmountCents),
         description: description || 'Expense',
         date: data.date ? new Date(data.date) : new Date(),
-        balanceBefore: fmtAmount(projBalBefore),
-        balanceAfter: fmtAmount(newProjectBalance),
+        balanceBefore: fmt(projBalBeforeCents),
+        balanceAfter: fmt(newProjectBalanceCents),
       });
 
       if (description && !description.includes(`[${proj.title}]`)) {
@@ -825,59 +894,55 @@ export async function editExpense(id: string, data: ExpenseInput, userId: string
       }
     }
 
-    const [newFund] = await tx.select().from(funds).where(eq(funds.id, newFundId)).for('update').limit(1);
+    const [newFund] = await tx.select().from(funds).where(and(eq(funds.id, newFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
     if (!newFund) throw new NotFoundError('Source fund');
 
     if (!newProjectId && newFund.type === 'PROJECT') {
       throw new AppError('Project-specific funds cannot be used for general expenses.', 400, 'PROJECT_FUND_RESTRICTION');
     }
 
-    if (toNum(newFund.balance) < newAmount) {
+    if (toCents(newFund.balance ?? '0') < newAmountCents) {
       throw new AppError(`Insufficient balance in ${newFund.name}`, 400, 'INSUFFICIENT_BALANCE');
     }
 
     await tx
       .update(funds)
-      .set({
-        balance: sql<string>`(${funds.balance}::numeric - ${newAmount})::numeric(15,2)`,
-        updatedAt: new Date(),
-      })
+      .set({ balance: sql`(${funds.balance}::numeric - ${newAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
       .where(eq(funds.id, newFundId));
 
-    // 3. Update transaction record
     const [updated] = await tx
       .update(transactions)
       .set({
-        amount: fmtAmount(newAmount),
+        amount: fmt(newAmountCents),
         fundId: newFundId,
         projectId: newProjectId,
         memberId: data.memberId || existing.memberId,
         description,
         category: data.category || existing.category,
         date: data.date ? new Date(data.date) : existing.date,
-        updatedBy: userId,
+        updatedBy: user.id,
         updatedAt: new Date(),
       })
       .where(eq(transactions.id, id))
       .returning();
+    if (!updated) throw new NotFoundError('Transaction');
 
-    // 4. Audit log
     await tx.insert(auditLogs).values({
-      userId,
-      userName,
+      userId: user.id,
+      userName: user.name,
       action: 'EDIT_EXPENSE',
       resourceType: 'Transaction',
       resourceId: id,
       details: {
-        previous: { amount: oldAmount, fundId: oldFundId, projectId: oldProjectId },
-        current: { amount: newAmount, fundId: newFundId, projectId: newProjectId },
+        previous: { amount: oldAmountCents / 100, fundId: oldFundId, projectId: oldProjectId },
+        current: { amount: newAmountCents / 100, fundId: newFundId, projectId: newProjectId },
       },
       status: 'SUCCESS',
     });
 
     return {
       ...updated,
-      amount: toNum(updated.amount),
+      amount: newAmountCents / 100,
       balanceBefore: updated.balanceBefore ? toNum(updated.balanceBefore) : null,
       balanceAfter: updated.balanceAfter ? toNum(updated.balanceAfter) : null,
     };
@@ -888,48 +953,49 @@ export async function editExpense(id: string, data: ExpenseInput, userId: string
 // 7. addEarning
 // ---------------------------------------------------------------------------
 
-export async function addEarning(data: EarningInput, userId: string, userName: string) {
+export async function addEarning(data: EarningInput, user: SessionUser) {
+  const tenantId = requireTenant(user);
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [fund] = await tx.select().from(funds).where(eq(funds.id, data.fundId)).for('update').limit(1);
+    const [fund] = await tx.select().from(funds).where(and(eq(funds.id, data.fundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
     if (!fund) throw new NotFoundError('Target Fund');
 
-    const amount = Number(data.amount);
+    const amountCents = parsePositiveAmount(data.amount);
     const projectId = data.projectId || null;
-    let balanceBefore = toNum(fund.balance);
+    let balanceBeforeCents = toCents(fund.balance ?? '0');
     let projectRef: typeof projects.$inferSelect | null = null;
 
     if (projectId) {
-      projectRef = await tx.select().from(projects).where(eq(projects.id, projectId)).for('update').limit(1).then((r) => r[0]);
+      projectRef = (await tx.select().from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).for('update').limit(1))[0] ?? null;
       if (!projectRef) throw new NotFoundError('Project');
       if (projectRef.linkedFundId && projectRef.linkedFundId !== data.fundId) {
-        throw new AppError('Transactions for this project must be routed through its dedicated project fund.', 400, 'LINKED_FUND_MISMATCH');
+        throw new AppError(
+          'Transactions for this project must be routed through its dedicated project fund.',
+          400,
+          'LINKED_FUND_MISMATCH',
+        );
       }
-      balanceBefore = toNum(projectRef.currentFundBalance);
+      balanceBeforeCents = toCents(projectRef.currentFundBalance ?? '0');
     }
 
-    // Update fund
     await tx
       .update(funds)
-      .set({
-        balance: sql<string>`(${funds.balance}::numeric + ${amount})::numeric(15,2)`,
-        updatedAt: new Date(),
-      })
+      .set({ balance: sql`(${funds.balance}::numeric + ${amountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
       .where(eq(funds.id, data.fundId));
 
-    const newFundBalance = toNum(fund.balance) + amount;
-    let balanceAfter = fmtAmount(newFundBalance);
+    const newFundBalanceCents = toCents(fund.balance ?? '0') + amountCents;
+    let balanceAfter = fmt(newFundBalanceCents);
 
     if (projectId && projectRef) {
-      const projBalanceBefore = toNum(projectRef.currentFundBalance);
-      const newProjectBalance = projBalanceBefore + amount;
+      const projBalanceBeforeCents = toCents(projectRef.currentFundBalance ?? '0');
+      const newProjectBalanceCents = projBalanceBeforeCents + amountCents;
 
       await tx
         .update(projects)
         .set({
-          currentFundBalance: sql<string>`(${projects.currentFundBalance}::numeric + ${amount})::numeric(15,2)`,
-          totalEarnings: sql<string>`(${projects.totalEarnings}::numeric + ${amount})::numeric(15,2)`,
+          currentFundBalance: sql`(${projects.currentFundBalance}::numeric + ${amountCents / 100})::numeric(15,2)`,
+          totalEarnings: sql`(${projects.totalEarnings}::numeric + ${amountCents / 100})::numeric(15,2)`,
           updatedAt: new Date(),
         })
         .where(eq(projects.id, projectId));
@@ -937,67 +1003,91 @@ export async function addEarning(data: EarningInput, userId: string, userName: s
       await tx.insert(projectUpdates).values({
         projectId,
         type: 'Earning',
-        amount: fmtAmount(amount),
+        amount: fmt(amountCents),
         description: data.description || 'General Earning',
         date: data.date ? new Date(data.date) : new Date(),
-        balanceBefore: fmtAmount(projBalanceBefore),
-        balanceAfter: fmtAmount(newProjectBalance),
+        balanceBefore: fmt(projBalanceBeforeCents),
+        balanceAfter: fmt(newProjectBalanceCents),
       });
 
-      balanceAfter = fmtAmount(newProjectBalance);
+      balanceAfter = fmt(newProjectBalanceCents);
     }
 
     const [txn] = await tx
       .insert(transactions)
       .values({
+        tenantId,
         type: 'Earning',
-        amount: fmtAmount(amount),
+        amount: fmt(amountCents),
         description: data.description || 'General Earning',
         category: data.category || 'Income',
         fundId: data.fundId,
         projectId,
         date: data.date ? new Date(data.date) : new Date(),
         status: 'Completed',
-        authorizedBy: userId,
-        createdBy: userId,
-        updatedBy: userId,
-        handlingOfficer: userName,
-        balanceBefore: fmtAmount(balanceBefore),
+        authorizedBy: user.id,
+        createdBy: user.id,
+        updatedBy: user.id,
+        handlingOfficer: user.name,
+        balanceBefore: fmt(balanceBeforeCents),
         balanceAfter,
       })
       .returning();
+    if (!txn) throw new AppError('Failed to record earning', 500);
 
     await tx.insert(auditLogs).values({
-      userId,
-      userName,
+      userId: user.id,
+      userName: user.name,
       action: 'ADD_EARNING',
       resourceType: 'Transaction',
       resourceId: txn.id,
-      details: { amount, fundId: data.fundId, projectId, category: data.category },
+      details: { amount: amountCents / 100, fundId: data.fundId, projectId, category: data.category },
       status: 'SUCCESS',
     });
 
     return {
       ...txn,
-      amount: toNum(txn.amount),
-      balanceBefore: txn.balanceBefore ? toNum(txn.balanceBefore) : null,
-      balanceAfter: txn.balanceAfter ? toNum(txn.balanceAfter) : null,
+      amount: amountCents / 100,
+      balanceBefore: balanceBeforeCents / 100,
+      balanceAfter: toNum(balanceAfter),
     };
   });
 }
 
 // ---------------------------------------------------------------------------
-// 8. deleteTransaction
+// 8. deleteTransaction — soft delete only (§12)
 // ---------------------------------------------------------------------------
 
-export async function deleteTransaction(id: string, userId: string, userName: string, reason?: string) {
+export async function deleteTransaction(
+  id: string,
+  reason: string | undefined,
+  user: SessionUser,
+) {
+  const tenantId = requireTenant(user);
   const db = getDb();
 
-  const deletedAmount = await db.transaction(async (tx) => {
-    const [txn] = await tx.select().from(transactions).where(eq(transactions.id, id)).limit(1);
+  const deletedAmountCents = await db.transaction(async (tx) => {
+    const [txn] = await tx.select().from(transactions).where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId))).limit(1);
     if (!txn) throw new NotFoundError('Transaction');
 
-    const txnAmount = toNum(txn.amount);
+    const isPrivileged =
+      user.role === 'Admin' ||
+      user.role === 'Administrator' ||
+      user.role === 'Manager' ||
+      user.permissions?.['DEPOSITS'] === 'WRITE';
+    if (!isPrivileged && txn.type === 'Deposit' && txn.status === 'Pending') {
+      const [userMember] = await tx
+        .select({ id: members.id, memberId: members.memberId })
+        .from(members)
+        .where(and(eq(members.tenantId, tenantId), or(eq(members.userId, user.id), eq(members.id, user.memberId || ''))))
+        .limit(1);
+
+      const userMemberId = userMember?.id || user.memberId;
+      const isOwner = (userMemberId && txn.memberId === userMemberId) || txn.createdBy === user.id;
+      if (!isOwner) throw new ForbiddenError('You can only cancel or delete your own deposit request');
+    }
+
+    const txnCents = toCents(txn.amount);
     const txnFundId = txn.fundId;
     const txnProjectId = txn.projectId;
     const txnMemberId = txn.memberId;
@@ -1006,74 +1096,74 @@ export async function deleteTransaction(id: string, userId: string, userName: st
     if (txn.status === 'Success' || txn.status === 'Completed') {
       // 1. Reverse fund balance
       if (txnFundId) {
-        const [fund] = await tx.select().from(funds).where(eq(funds.id, txnFundId)).limit(1);
+        const [fund] = await tx.select().from(funds).where(and(eq(funds.id, txnFundId), eq(funds.tenantId, tenantId))).limit(1);
         if (fund) {
-          let adjusted = toNum(fund.balance);
+          let adjustedCents = toCents(fund.balance ?? '0');
           if (['Deposit', 'Earning', 'Investment'].includes(txn.type)) {
-            adjusted -= txnAmount;
-            const minReserve = Number(fund.minimumBalance ?? 0);
-            if (adjusted < minReserve) {
+            adjustedCents -= txnCents;
+            const minReserveCents = toCents(fund.minimumBalance ?? '0');
+            if (adjustedCents < minReserveCents) {
               throw new AppError(
-                `Cannot delete transaction: reversing ${txnAmount.toFixed(2)} would drop ${fund.name} balance below minimum reserve (${fund.balance} -> ${adjusted.toFixed(2)})`,
+                `Cannot delete transaction: reversing ${(txnCents / 100).toFixed(2)} would drop ${fund.name} balance below minimum reserve (${fund.balance} -> ${fromCents(Math.max(0, adjustedCents))})`,
                 400,
                 'FUND_DEFICIT_PREVENTED',
               );
             }
           } else if (['Withdrawal', 'Expense', 'Dividend'].includes(txn.type)) {
-            adjusted += txnAmount;
+            adjustedCents += txnCents;
           }
           await tx
             .update(funds)
-            .set({ balance: fmtAmount(adjusted), updatedAt: new Date() })
+            .set({ balance: fmt(adjustedCents), updatedAt: new Date() })
             .where(eq(funds.id, txnFundId));
         }
       }
 
-      // 2. Recalculate member totalContributed from remaining deposits (raw SQL subquery)
+      // 2. Recompute member totalContributed from remaining deposits
       if (txnMemberId && txn.type === 'Deposit') {
-        const depositResult = (await tx.execute(
-          sql`
-            SELECT COALESCE(SUM(amount::numeric), 0) as total
-            FROM transactions
-            WHERE member_id = ${txnMemberId}
-              AND type = 'Deposit'
-              AND status IN ('Completed')
-              AND id != ${id}
-          `,
+        const result = (await tx.execute(
+          sql`SELECT COALESCE(SUM(amount::numeric), 0) as total
+              FROM transactions
+              WHERE member_id = ${txnMemberId}
+                AND tenant_id = ${tenantId}
+                AND type = 'Deposit'
+                AND status IN ('Completed')
+                AND is_deleted = false
+                AND id != ${id}`,
         )) as unknown as Array<{ total: string }>;
-        const totalRemaining = toNum(depositResult[0]?.total || 0);
+        const totalRemaining = toNum(result[0]?.total || 0);
         await tx
           .update(members)
-          .set({ totalContributed: fmtAmount(totalRemaining), updatedAt: new Date() })
+          .set({ totalContributed: fromCents(Math.round(totalRemaining * 100)), updatedAt: new Date() })
           .where(eq(members.id, txnMemberId));
       }
 
       // 3. Reverse project tracking
       if (txnProjectId) {
-        const [project] = await tx.select().from(projects).where(eq(projects.id, txnProjectId)).limit(1);
+        const [project] = await tx.select().from(projects).where(and(eq(projects.id, txnProjectId), eq(projects.tenantId, tenantId))).limit(1);
         if (project) {
-          let balAdj = 0;
-          let earnAdj = 0;
-          let expAdj = 0;
+          let balAdjCents = 0;
+          let earnAdjCents = 0;
+          let expAdjCents = 0;
 
           if (txn.type === 'Earning') {
-            balAdj = -txnAmount;
-            earnAdj = -txnAmount;
+            balAdjCents = -txnCents;
+            earnAdjCents = -txnCents;
           } else if (txn.type === 'Expense') {
-            balAdj = txnAmount;
-            expAdj = -txnAmount;
+            balAdjCents = txnCents;
+            expAdjCents = -txnCents;
           } else if (txn.type === 'Investment') {
-            balAdj = -txnAmount;
+            balAdjCents = -txnCents;
           } else if (txn.type === 'Withdrawal') {
-            balAdj = txnAmount;
+            balAdjCents = txnCents;
           }
 
           await tx
             .update(projects)
             .set({
-              currentFundBalance: fmtAmount(toNum(project.currentFundBalance) + balAdj),
-              totalEarnings: fmtAmount(Math.max(0, toNum(project.totalEarnings) + earnAdj)),
-              totalExpenses: fmtAmount(Math.max(0, toNum(project.totalExpenses) + expAdj)),
+              currentFundBalance: fmt(toCents(project.currentFundBalance ?? '0') + balAdjCents),
+              totalEarnings: fmt(Math.max(0, toCents(project.totalEarnings ?? '0') + earnAdjCents)),
+              totalExpenses: fmt(Math.max(0, toCents(project.totalExpenses ?? '0') + expAdjCents)),
               updatedAt: new Date(),
             })
             .where(eq(projects.id, txnProjectId));
@@ -1081,13 +1171,13 @@ export async function deleteTransaction(id: string, userId: string, userName: st
       }
     }
 
-    // 4. Archive to deletedRecords
+    // 4. Archive
     await tx.insert(deletedRecords).values({
       originalId: id,
       collectionName: 'Transaction',
       data: txn as unknown as Record<string, unknown>,
       reason: deletionReason,
-      deletedBy: userId,
+      deletedBy: user.id,
       deletedAt: new Date(),
     });
 
@@ -1097,34 +1187,35 @@ export async function deleteTransaction(id: string, userId: string, userName: st
       .set({
         isDeleted: true,
         deletedAt: new Date(),
-        deletedBy: userId,
+        deletedBy: user.id,
         deletionReason,
         updatedAt: new Date(),
       })
       .where(eq(transactions.id, id));
 
-    // 6. Audit log inside transaction
+    // 6. Audit
     await tx.insert(auditLogs).values({
-      userId,
-      userName,
+      userId: user.id,
+      userName: user.name,
       action: 'DELETE_TRANSACTION',
       resourceType: 'Transaction',
       resourceId: id,
-      details: { originalAmount: txnAmount, reason: deletionReason, type: txn.type },
+      details: { originalAmount: txnCents / 100, reason: deletionReason, type: txn.type },
       status: 'SUCCESS',
     });
 
-    return txnAmount;
+    return txnCents;
   });
 
-  return { deletedAmount, message: 'Transaction deleted permanently and archived to deleted records' };
+  return { deletedAmount: deletedAmountCents / 100, message: 'Transaction deleted and archived to deleted records' };
 }
 
 // ---------------------------------------------------------------------------
-// 9. transferFunds
+// 9. transferFunds — double-entry inter-fund transfer
 // ---------------------------------------------------------------------------
 
-export async function transferFunds(data: TransferInput, userId: string, userName: string) {
+export async function transferFunds(data: TransferInput, user: SessionUser) {
+  const tenantId = requireTenant(user);
   const db = getDb();
 
   if (data.sourceFundId === data.targetFundId) {
@@ -1132,215 +1223,209 @@ export async function transferFunds(data: TransferInput, userId: string, userNam
   }
 
   return db.transaction(async (tx) => {
-    const [sourceFund] = await tx.select().from(funds).where(eq(funds.id, data.sourceFundId)).for('update').limit(1);
-    const [targetFund] = await tx.select().from(funds).where(eq(funds.id, data.targetFundId)).for('update').limit(1);
+    const [sourceFund] = await tx.select().from(funds).where(and(eq(funds.id, data.sourceFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
+    const [targetFund] = await tx.select().from(funds).where(and(eq(funds.id, data.targetFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
     if (!sourceFund) throw new NotFoundError('Source fund');
     if (!targetFund) throw new NotFoundError('Target fund');
 
-    const amount = Number(data.amount);
-    if (toNum(sourceFund.balance) < amount) {
-      throw new AppError(`Insufficient funds in ${sourceFund.name}. Gap: ${(amount - toNum(sourceFund.balance)).toFixed(2)}`, 400, 'INSUFFICIENT_BALANCE');
+    const amountCents = parsePositiveAmount(data.amount);
+    if (toCents(sourceFund.balance ?? '0') < amountCents) {
+      const gap = (amountCents - toCents(sourceFund.balance ?? '0')) / 100;
+      throw new AppError(`Insufficient funds in ${sourceFund.name}. Gap: ${gap.toFixed(2)}`, 400, 'INSUFFICIENT_BALANCE');
     }
 
     // Fund governance: enforce minimum balance reserve
-    const sourceMinBalance = Number(sourceFund.minimumBalance ?? 0);
-    const sourceAfterTransfer = toNum(sourceFund.balance) - amount;
-    if (sourceAfterTransfer < sourceMinBalance) {
+    const sourceMinBalanceCents = toCents(sourceFund.minimumBalance ?? '0');
+    const sourceAfterTransferCents = toCents(sourceFund.balance ?? '0') - amountCents;
+    if (sourceAfterTransferCents < sourceMinBalanceCents) {
       throw new AppError(
-        `Transfer would drop ${sourceFund.name} below its minimum reserve of ${sourceMinBalance.toFixed(2)}`,
-        400, 'MINIMUM_BALANCE',
+        `Transfer would drop ${sourceFund.name} below its minimum reserve of ${fromCents(sourceMinBalanceCents)}`,
+        400,
+        'MINIMUM_BALANCE',
       );
     }
 
-    const sourceBalBefore = toNum(sourceFund.balance);
-    const targetBalBefore = toNum(targetFund.balance);
-    const newSourceBalance = sourceBalBefore - amount;
-    const newTargetBalance = targetBalBefore + amount;
+    const sourceBalBeforeCents = toCents(sourceFund.balance ?? '0');
+    const targetBalBeforeCents = toCents(targetFund.balance ?? '0');
+    const newSourceBalanceCents = sourceBalBeforeCents - amountCents;
+    const newTargetBalanceCents = targetBalBeforeCents + amountCents;
 
-    // Debit source
     await tx
       .update(funds)
-      .set({
-        balance: sql<string>`(${funds.balance}::numeric - ${amount})::numeric(15,2)`,
-        updatedAt: new Date(),
-      })
+      .set({ balance: sql`(${funds.balance}::numeric - ${amountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
       .where(eq(funds.id, data.sourceFundId));
 
-    // Credit target
     await tx
       .update(funds)
-      .set({
-        balance: sql<string>`(${funds.balance}::numeric + ${amount})::numeric(15,2)`,
-        updatedAt: new Date(),
-      })
+      .set({ balance: sql`(${funds.balance}::numeric + ${amountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
       .where(eq(funds.id, data.targetFundId));
 
-    // Withdrawal on source
     const [sourceTx] = await tx
       .insert(transactions)
       .values({
+        tenantId,
         type: 'Withdrawal',
-        amount: fmtAmount(amount),
+        amount: fmt(amountCents),
         description: `[Transfer OUT] to ${targetFund.name}: ${data.description || ''}`,
         fundId: data.sourceFundId,
-        authorizedBy: userId,
-        createdBy: userId,
-        updatedBy: userId,
-        handlingOfficer: userName,
-        balanceBefore: fmtAmount(sourceBalBefore),
-        balanceAfter: fmtAmount(newSourceBalance),
+        authorizedBy: user.id,
+        createdBy: user.id,
+        updatedBy: user.id,
+        handlingOfficer: user.name,
+        balanceBefore: fmt(sourceBalBeforeCents),
+        balanceAfter: fmt(newSourceBalanceCents),
         status: 'Completed',
         date: new Date(),
       })
       .returning();
 
-    // Investment on target
     const [targetTx] = await tx
       .insert(transactions)
       .values({
+        tenantId,
         type: 'Investment',
-        amount: fmtAmount(amount),
+        amount: fmt(amountCents),
         description: `[Transfer IN] from ${sourceFund.name}: ${data.description || ''}`,
         fundId: data.targetFundId,
-        authorizedBy: userId,
-        createdBy: userId,
-        updatedBy: userId,
-        handlingOfficer: userName,
-        balanceBefore: fmtAmount(targetBalBefore),
-        balanceAfter: fmtAmount(newTargetBalance),
+        authorizedBy: user.id,
+        createdBy: user.id,
+        updatedBy: user.id,
+        handlingOfficer: user.name,
+        balanceBefore: fmt(targetBalBeforeCents),
+        balanceAfter: fmt(newTargetBalanceCents),
         status: 'Completed',
         date: new Date(),
       })
       .returning();
+    if (!sourceTx || !targetTx) throw new AppError('Failed to record fund transfer', 500);
 
-    // Audit
     await tx.insert(auditLogs).values({
-      userId,
-      userName,
+      userId: user.id,
+      userName: user.name,
       action: 'FUND_TRANSFER',
       resourceType: 'Fund',
       resourceId: data.targetFundId,
-      details: { amount, source: data.sourceFundId, target: data.targetFundId, sourceTxId: sourceTx.id, targetTxId: targetTx.id },
+      details: {
+        amount: amountCents / 100,
+        source: data.sourceFundId,
+        target: data.targetFundId,
+        sourceTxId: sourceTx.id,
+        targetTxId: targetTx.id,
+      },
       status: 'SUCCESS',
     });
 
     return {
-      sourceTx: {
-        ...sourceTx,
-        amount: toNum(sourceTx.amount),
-        balanceBefore: sourceTx.balanceBefore ? toNum(sourceTx.balanceBefore) : null,
-        balanceAfter: sourceTx.balanceAfter ? toNum(sourceTx.balanceAfter) : null,
-      },
-      targetTx: {
-        ...targetTx,
-        amount: toNum(targetTx.amount),
-        balanceBefore: targetTx.balanceBefore ? toNum(targetTx.balanceBefore) : null,
-        balanceAfter: targetTx.balanceAfter ? toNum(targetTx.balanceAfter) : null,
-      },
+      sourceTx: { ...sourceTx, amount: amountCents / 100 },
+      targetTx: { ...targetTx, amount: amountCents / 100 },
     };
   });
 }
 
 // ---------------------------------------------------------------------------
-// 10. distributeDividends
+// 10. distributeDividends — exact shares-weighted split, idempotent batch
 // ---------------------------------------------------------------------------
 
-interface DividendSummary {
+export interface DividendSummary {
   batchId: string;
   count: number;
   totalDisbursed: number;
   residual: number;
 }
 
-export async function distributeDividends(data: DividendInput, userId: string, userName: string): Promise<DividendSummary> {
+export async function distributeDividends(data: DividendInput, user: SessionUser): Promise<DividendSummary> {
+  const tenantId = requireTenant(user);
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const batchId = `DIV-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-    const amount = Number(data.amount);
+    const batchId = `DIV-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+    const amountCents = parsePositiveAmount(data.amount, { maxCents: 100_000_000 * 100 });
 
     const activeMembers = await tx
       .select()
       .from(members)
-      .where(and(eq(members.status, 'active'), sql`${members.shares} > 0`));
+      .where(and(eq(members.tenantId, tenantId), eq(members.status, 'active'), sql`${members.shares} > 0`));
 
-    const totalActiveShares = activeMembers.reduce((sum, m) => sum + Number(m.shares), 0);
-    if (totalActiveShares === 0) throw new AppError('No active shares available for distribution', 400, 'NO_SHARES');
+    // Exact largest-remainder split in cents — sum(payouts) === disbursement
+    // never exceeds amountCents (verified in lib/money.test.ts).
+    const payouts = splitDividendByShares(
+      amountCents,
+      activeMembers.map((m) => ({ id: m.id, shares: Number(m.shares) })),
+    );
 
-    const ratePerShare = amount / totalActiveShares;
-
-    // Calculate per-member distribution
-    let totalDisbursed = 0;
-    const dividendValues: Array<typeof transactions.$inferInsert> = [];
-
-    for (const member of activeMembers) {
-      const memberReward = Math.floor(Number(member.shares) * ratePerShare * 100) / 100;
-      if (memberReward <= 0) continue;
-      totalDisbursed += memberReward;
-
-      dividendValues.push({
+    const dividendValues: Array<typeof transactions.$inferInsert> = payouts
+      .filter((p) => p.payoutCents > 0)
+      .map((p) => ({
+        tenantId,
         type: 'Dividend',
-        amount: fmtAmount(memberReward),
-        description: data.description || `Dividend Distribution: ${data.type} Settlement [${batchId}]`,
-        memberId: member.id,
+        amount: fmt(p.payoutCents),
+        description:
+          data.description || `Dividend Distribution: ${data.type} Settlement [${batchId}]`,
+        memberId: p.id,
         projectId: data.type === 'Project' ? (data.projectId ?? null) : null,
         fundId: data.type === 'Global' ? (data.sourceFundId ?? null) : null,
         status: 'Completed',
         referenceNumber: batchId,
-        authorizedBy: userId,
-        createdBy: userId,
-        updatedBy: userId,
-        handlingOfficer: userName,
-      });
-    }
+        authorizedBy: user.id,
+        createdBy: user.id,
+        updatedBy: user.id,
+        handlingOfficer: user.name,
+      }));
 
     if (dividendValues.length === 0) {
       throw new AppError('Calculated reward per member is too small for distribution', 400, 'SMALL_DISTRIBUTION');
     }
 
+    const totalDisbursedCents = dividendValues.reduce((sum, v) => sum + toCents(String(v.amount)), 0);
+
     // Deduct from source
     let sourceDisplayName = '';
     if (data.type === 'Project') {
-      const [project] = await tx.select().from(projects).where(eq(projects.id, data.projectId!)).limit(1);
+      const [project] = await tx.select().from(projects).where(and(eq(projects.id, data.projectId!), eq(projects.tenantId, tenantId))).limit(1);
       if (!project) throw new NotFoundError('Project');
-      if (toNum(project.currentFundBalance) < totalDisbursed) {
-        throw new AppError(`Insufficient project balance. Required: ${totalDisbursed}, Available: ${toNum(project.currentFundBalance)}`, 400, 'INSUFFICIENT_BALANCE');
+      if (toCents(project.currentFundBalance ?? '0') < totalDisbursedCents) {
+        throw new AppError(
+          `Insufficient project balance. Required: ${fromCents(totalDisbursedCents)}, Available: ${project.currentFundBalance}`,
+          400,
+          'INSUFFICIENT_BALANCE',
+        );
       }
       await tx
         .update(projects)
-        .set({ currentFundBalance: fmtAmount(toNum(project.currentFundBalance) - totalDisbursed), updatedAt: new Date() })
+        .set({ currentFundBalance: fmt(toCents(project.currentFundBalance ?? '0') - totalDisbursedCents), updatedAt: new Date() })
         .where(eq(projects.id, data.projectId!));
       sourceDisplayName = `Project: ${project.title}`;
     } else {
-      const [fund] = await tx.select().from(funds).where(eq(funds.id, data.sourceFundId!)).limit(1);
+      const [fund] = await tx.select().from(funds).where(and(eq(funds.id, data.sourceFundId!), eq(funds.tenantId, tenantId))).limit(1);
       if (!fund) throw new NotFoundError('Source Fund');
-      if (toNum(fund.balance) < totalDisbursed) {
-        throw new AppError(`Insufficient fund balance. Required: ${totalDisbursed}, Available: ${toNum(fund.balance)}`, 400, 'INSUFFICIENT_BALANCE');
+      if (toCents(fund.balance ?? '0') < totalDisbursedCents) {
+        throw new AppError(
+          `Insufficient fund balance. Required: ${fromCents(totalDisbursedCents)}, Available: ${fund.balance}`,
+          400,
+          'INSUFFICIENT_BALANCE',
+        );
       }
       await tx
         .update(funds)
-        .set({ balance: fmtAmount(toNum(fund.balance) - totalDisbursed), updatedAt: new Date() })
+        .set({ balance: fmt(toCents(fund.balance ?? '0') - totalDisbursedCents), updatedAt: new Date() })
         .where(eq(funds.id, data.sourceFundId!));
       sourceDisplayName = `Fund: ${fund.name}`;
     }
 
-    // Batch insert
     await tx.insert(transactions).values(dividendValues);
 
-    // Audit
     await tx.insert(auditLogs).values({
-      userId,
-      userName,
+      userId: user.id,
+      userName: user.name,
       action: 'DISTRIBUTE_DIVIDENDS',
       resourceType: 'Finance',
       details: {
         batchId,
         type: data.type,
-        requestedAmount: amount,
-        actualDisbursed: totalDisbursed,
-        residual: Math.max(0, amount - totalDisbursed),
-        ratePerShare,
-        totalActiveShares,
+        requestedAmount: amountCents / 100,
+        actualDisbursed: totalDisbursedCents / 100,
+        residual: (amountCents - totalDisbursedCents) / 100,
+        totalActiveShares: activeMembers.reduce((sum, m) => sum + Number(m.shares), 0),
         recipientsCount: dividendValues.length,
         source: sourceDisplayName,
       },
@@ -1350,8 +1435,8 @@ export async function distributeDividends(data: DividendInput, userId: string, u
     return {
       batchId,
       count: dividendValues.length,
-      totalDisbursed,
-      residual: amount - totalDisbursed,
+      totalDisbursed: totalDisbursedCents / 100,
+      residual: (amountCents - totalDisbursedCents) / 100,
     };
   });
 }
@@ -1360,32 +1445,27 @@ export async function distributeDividends(data: DividendInput, userId: string, u
 // 11. transferEquity
 // ---------------------------------------------------------------------------
 
-interface EquityTransferItem {
-  toMemberId: string;
-  amount?: number;
-  shares: number;
-}
-
-export async function transferEquity(data: EquityTransferInput, userId: string, userName: string) {
+export async function transferEquity(data: EquityTransferInput, user: SessionUser) {
+  const tenantId = requireTenant(user);
   const db = getDb();
 
   return db.transaction(async (tx) => {
     const batchId = `EQT-${Date.now()}`;
-    const [sourceMember] = await tx.select().from(members).where(eq(members.id, data.fromMemberId)).limit(1);
+    const [sourceMember] = await tx.select().from(members).where(and(eq(members.id, data.fromMemberId), eq(members.tenantId, tenantId))).limit(1);
     if (!sourceMember) throw new NotFoundError('Source member');
 
-    const transfers: EquityTransferItem[] = data.transfers.map((t) => ({
+    const transfers = data.transfers.map((t) => ({
       toMemberId: t.toMemberId,
-      amount: t.amount ?? 0,
-      shares: t.shares,
+      amountCents: t.amount ? parsePositiveAmount(t.amount) : 0,
+      shares: assertIntegralShares(t.shares, 'transfers.shares'),
     }));
 
-    const totalBeingTransferred = transfers.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+    const totalBeingTransferredCents = transfers.reduce((sum, t) => sum + t.amountCents, 0);
     const totalSharesTransferred = transfers.reduce((sum, t) => sum + Number(t.shares || 0), 0);
 
-    if (totalBeingTransferred > toNum(sourceMember.totalContributed)) {
+    if (totalBeingTransferredCents > toCents(sourceMember.totalContributed ?? '0')) {
       throw new AppError(
-        `Insufficient contribution balance. Transfer: ${totalBeingTransferred}, Owned: ${toNum(sourceMember.totalContributed)}`,
+        `Insufficient contribution balance. Transfer: ${fromCents(totalBeingTransferredCents)}, Owned: ${sourceMember.totalContributed}`,
         400,
         'INSUFFICIENT_BALANCE',
       );
@@ -1405,35 +1485,35 @@ export async function transferEquity(data: EquityTransferInput, userId: string, 
         throw new AppError('Self-transfer of equity is not permitted', 400, 'SELF_TRANSFER');
       }
 
-      const [targetMember] = await tx.select().from(members).where(eq(members.id, t.toMemberId)).limit(1);
-      if (!targetMember) throw new NotFoundError(`Target member`);
+      const [targetMember] = await tx
+        .select()
+        .from(members)
+        .where(and(eq(members.id, t.toMemberId), eq(members.tenantId, tenantId)))
+        .limit(1);
+      if (!targetMember) throw new NotFoundError('Target member');
       if (targetMember.status !== 'active') {
         throw new AppError(`Target member ${targetMember.name} is not active`, 400, 'INACTIVE_TARGET');
       }
 
-      const targetNewContributed = toNum(targetMember.totalContributed) + Number(t.amount);
+      const targetNewContributedCents = toCents(targetMember.totalContributed ?? '0') + t.amountCents;
       const targetNewShares = Number(targetMember.shares) + t.shares;
 
       await tx
         .update(members)
-        .set({
-          totalContributed: fmtAmount(targetNewContributed),
-          shares: targetNewShares,
-          updatedAt: new Date(),
-        })
-        .where(eq(members.id, t.toMemberId));
+        .set({ totalContributed: fmt(targetNewContributedCents), shares: targetNewShares, updatedAt: new Date() })
+        .where(and(eq(members.id, t.toMemberId), eq(members.tenantId, tenantId)));
 
       recipientValues.push({
         type: 'Equity-Transfer',
-        amount: fmtAmount(Number(t.amount)),
+        amount: fmt(t.amountCents),
         description: `Equity Migration: Received from ${sourceMember.name} [Reference: ${data.reason}]`,
         memberId: t.toMemberId,
         status: 'Completed',
         referenceNumber: batchId,
-        authorizedBy: userId,
-        createdBy: userId,
-        updatedBy: userId,
-        handlingOfficer: userName,
+        authorizedBy: user.id,
+        createdBy: user.id,
+        updatedBy: user.id,
+        handlingOfficer: user.name,
       });
     }
 
@@ -1441,50 +1521,46 @@ export async function transferEquity(data: EquityTransferInput, userId: string, 
       await tx.insert(transactions).values(recipientValues);
     }
 
-    // Deduct from source
-    const sourceNewContributed = Math.max(0, toNum(sourceMember.totalContributed) - totalBeingTransferred);
+    const sourceNewContributedCents = Math.max(0, toCents(sourceMember.totalContributed ?? '0') - totalBeingTransferredCents);
     const sourceNewShares = Math.max(0, Number(sourceMember.shares) - totalSharesTransferred);
 
     const updateData: Partial<typeof members.$inferInsert> & { updatedAt: Date } = {
-      totalContributed: fmtAmount(sourceNewContributed),
+      totalContributed: fmt(sourceNewContributedCents),
       shares: sourceNewShares,
       updatedAt: new Date(),
     };
 
-    // Auto-inactivate if fully drained
-    if (sourceNewContributed === 0 && sourceNewShares === 0) {
+    if (sourceNewContributedCents === 0 && sourceNewShares === 0) {
       updateData.status = 'inactive';
     }
 
-    await tx.update(members).set(updateData).where(eq(members.id, data.fromMemberId));
+    await tx.update(members).set(updateData).where(and(eq(members.id, data.fromMemberId), eq(members.tenantId, tenantId)));
 
-    // Source transaction record
     await tx.insert(transactions).values({
       type: 'Equity-Transfer',
-      amount: fmtAmount(totalBeingTransferred),
+      amount: fmt(totalBeingTransferredCents),
       description: `Equity Migration: Transferred to ${transfers.length} recipient(s) [Reference: ${data.reason}]`,
       memberId: data.fromMemberId,
       status: 'Completed',
       referenceNumber: batchId,
-      authorizedBy: userId,
-      createdBy: userId,
-      updatedBy: userId,
-      handlingOfficer: userName,
+      authorizedBy: user.id,
+      createdBy: user.id,
+      updatedBy: user.id,
+      handlingOfficer: user.name,
     });
 
-    // Audit
     await tx.insert(auditLogs).values({
-      userId,
-      userName,
+      userId: user.id,
+      userName: user.name,
       action: 'TRANSFER_EQUITY',
       resourceType: 'Member',
       resourceId: data.fromMemberId,
       details: {
         batchId,
         from: sourceMember.name,
-        totalAmount: totalBeingTransferred,
+        totalAmount: totalBeingTransferredCents / 100,
         totalShares: totalSharesTransferred,
-        recipients: transfers.map((t) => ({ id: t.toMemberId, amount: t.amount, shares: t.shares })),
+        recipients: transfers.map((t) => ({ id: t.toMemberId, amount: t.amountCents / 100, shares: t.shares })),
         reason: data.reason,
       },
       status: 'SUCCESS',
@@ -1495,14 +1571,19 @@ export async function transferEquity(data: EquityTransferInput, userId: string, 
 }
 
 // ---------------------------------------------------------------------------
-// 12. reconcileFund
+// 12. reconcileFund — ledger-derived balance check
 // ---------------------------------------------------------------------------
 
-export async function reconcileFund(fundId: string) {
+export async function reconcileFund(fundId: string, user: SessionUser) {
+  const tenantId = requireTenant(user);
   const db = getDb();
   const rawSql = getSql();
 
-  const [fund] = await db.select().from(funds).where(eq(funds.id, fundId)).limit(1);
+  const [fund] = await db
+    .select()
+    .from(funds)
+    .where(and(eq(funds.id, fundId), eq(funds.tenantId, tenantId)))
+    .limit(1);
   if (!fund) throw new NotFoundError('Fund');
 
   const txSummary = await rawSql<{ total_in: string; total_out: string }[]>`
@@ -1511,17 +1592,24 @@ export async function reconcileFund(fundId: string) {
       COALESCE(SUM(CASE WHEN type IN ('Expense', 'Withdrawal', 'Dividend', 'Adjustment') THEN amount::numeric ELSE 0 END), 0) as total_out
     FROM transactions
     WHERE fund_id = ${fund.id}
+      AND tenant_id = ${tenantId}
       AND status IN ('Completed')
+      AND is_deleted = false
   `;
 
   const stats = txSummary[0] || { total_in: '0', total_out: '0' };
-  const calculatedBalance = toNum(stats.total_in) - toNum(stats.total_out);
-  let isMatched = Math.abs(calculatedBalance - toNum(fund.balance)) < 0.01;
+  const calculatedBalanceCents = toCents(stats.total_in) - toCents(stats.total_out);
+  const actualBalanceCents = toCents(fund.balance ?? '0');
+  let isMatched = Math.abs(calculatedBalanceCents - actualBalanceCents) < 1; // < 1 cent
   let projectMismatch = false;
 
   if (fund.linkedProjectId) {
-    const [project] = await db.select().from(projects).where(eq(projects.id, fund.linkedProjectId)).limit(1);
-    if (project && Math.abs(toNum(fund.balance) - toNum(project.currentFundBalance)) > 0.01) {
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, fund.linkedProjectId), eq(projects.tenantId, tenantId)))
+      .limit(1);
+    if (project && Math.abs(actualBalanceCents - toCents(project.currentFundBalance ?? '0')) >= 1) {
       isMatched = false;
       projectMismatch = true;
     }
@@ -1534,57 +1622,63 @@ export async function reconcileFund(fundId: string) {
       reconciliationStatus: isMatched ? 'VERIFIED' : 'DISCREPANCY',
       updatedAt: new Date(),
     })
-    .where(eq(funds.id, fundId));
+    .where(and(eq(funds.id, fundId), eq(funds.tenantId, tenantId)));
 
   return {
     fund: fund.name,
-    actualBalance: toNum(fund.balance),
-    calculatedBalance,
+    actualBalance: actualBalanceCents / 100,
+    calculatedBalance: calculatedBalanceCents / 100,
     isMatched,
-    inflow: toNum(stats.total_in),
-    outflow: toNum(stats.total_out),
-    discrepancy: calculatedBalance - toNum(fund.balance),
+    inflow: toCents(stats.total_in) / 100,
+    outflow: toCents(stats.total_out) / 100,
+    discrepancy: (calculatedBalanceCents - actualBalanceCents) / 100,
     projectMismatch,
   };
 }
 
 // ---------------------------------------------------------------------------
-// 13. bulkAddDeposits
+// 13. bulkAddDeposits — idempotent batch (unique batchId reference)
 // ---------------------------------------------------------------------------
 
-export async function bulkAddDeposits(data: BulkDepositInput, userId: string, userName: string) {
+export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser) {
+  const tenantId = requireTenant(user);
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const [fund] = await tx.select().from(funds).where(eq(funds.id, data.fundId)).for('update').limit(1);
+    const [fund] = await tx
+      .select()
+      .from(funds)
+      .where(and(eq(funds.id, data.fundId), eq(funds.tenantId, tenantId)))
+      .for('update')
+      .limit(1);
     if (!fund) throw new NotFoundError('Target fund');
 
-    const batchId = `BLK-${Date.now()}`;
+    const batchId = `BLK-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
     const seenEntries = new Set<string>();
     const memberIds = data.deposits.map((d) => d.memberId);
 
-    // Validate batch duplicates
     for (const dep of data.deposits) {
       const month = dep.depositMonth || data.commonMonth || '';
       const entryKey = `${dep.memberId}-${month}`;
       if (seenEntries.has(entryKey)) {
-        throw new AppError(`Duplicate entry detected: Member ID ${dep.memberId} is already in this batch for ${month}`, 400, 'DUPLICATE_BATCH');
+        throw new AppError(
+          `Duplicate entry detected: Member ID ${dep.memberId} is already in this batch for ${month}`,
+          400,
+          'DUPLICATE_BATCH',
+        );
       }
       seenEntries.add(entryKey);
     }
 
-    // 1. Batch load all target members
     const memberRows = await tx
       .select()
       .from(members)
-      .where(inArray(members.id, memberIds))
+      .where(and(inArray(members.id, memberIds), eq(members.tenantId, tenantId)))
       .for('update');
-
     const memberMap = new Map(memberRows.map((m) => [m.id, m]));
 
-    // 2. Prepare transaction inserts and validate
-    let totalBatchAmount = 0;
-    const runningFundBalance = toNum(fund.balance);
+    let totalBatchAmountCents = 0;
+    const runningFundBalanceCents = toCents(fund.balance ?? '0');
     const txnInserts: Array<typeof transactions.$inferInsert> = [];
     const memberContributions = new Map<string, number>();
     const results: Array<{ member: string; amount: number; txId?: string }> = [];
@@ -1593,15 +1687,11 @@ export async function bulkAddDeposits(data: BulkDepositInput, userId: string, us
       const member = memberMap.get(dep.memberId);
       if (!member) throw new AppError(`Member with ID ${dep.memberId} not found`, 404, 'MEMBER_NOT_FOUND');
 
-      const depositAmount = Number(dep.amount);
-      if (depositAmount <= 0) {
-        throw new AppError(`Invalid amount for member ${member.name}`, 400, 'INVALID_AMOUNT');
-      }
-
+      const depositAmountCents = parsePositiveAmount(dep.amount);
       const month = dep.depositMonth || data.commonMonth || '';
       const depositDate = resolveDepositDate(dep.date, month);
 
-      // Check existing duplicate in this month
+      // Duplicate deposit check for this month
       const startOfMonth = new Date(depositDate.getFullYear(), depositDate.getMonth(), 1);
       const endOfMonth = new Date(depositDate.getFullYear(), depositDate.getMonth() + 1, 0, 23, 59, 59);
 
@@ -1610,6 +1700,7 @@ export async function bulkAddDeposits(data: BulkDepositInput, userId: string, us
         .from(transactions)
         .where(
           and(
+            eq(transactions.tenantId, tenantId),
             eq(transactions.type, 'Deposit'),
             eq(transactions.memberId, dep.memberId),
             eq(transactions.fundId, data.fundId),
@@ -1628,71 +1719,59 @@ export async function bulkAddDeposits(data: BulkDepositInput, userId: string, us
         );
       }
 
-      const balanceBefore = runningFundBalance + totalBatchAmount;
-      const balanceAfter = balanceBefore + depositAmount;
-      totalBatchAmount += depositAmount;
+      const balanceBeforeCents = runningFundBalanceCents + totalBatchAmountCents;
+      const balanceAfterCents = balanceBeforeCents + depositAmountCents;
+      totalBatchAmountCents += depositAmountCents;
 
       txnInserts.push({
         type: 'Deposit',
-        amount: fmtAmount(depositAmount),
+        amount: fmt(depositAmountCents),
         description: `Bulk Deposit [${month}]`,
         memberId: dep.memberId,
         fundId: data.fundId,
         date: depositDate,
         status: 'Completed',
-        authorizedBy: userId,
-        createdBy: userId,
-        updatedBy: userId,
-        handlingOfficer: userName || data.cashierName || 'System',
+        authorizedBy: user.id,
+        createdBy: user.id,
+        updatedBy: user.id,
+        handlingOfficer: user.name || data.cashierName || 'System',
         depositMethod: data.depositMethod || 'Cash',
         referenceNumber: batchId,
-        balanceBefore: fmtAmount(balanceBefore),
-        balanceAfter: fmtAmount(balanceAfter),
+        balanceBefore: fmt(balanceBeforeCents),
+        balanceAfter: fmt(balanceAfterCents),
       });
 
-      memberContributions.set(
-        dep.memberId,
-        (memberContributions.get(dep.memberId) || 0) + depositAmount,
-      );
-
-      results.push({ member: member.name, amount: depositAmount });
+      memberContributions.set(dep.memberId, (memberContributions.get(dep.memberId) || 0) + depositAmountCents);
+      results.push({ member: member.name, amount: depositAmountCents / 100 });
     }
 
-    // 3. Batch insert transactions
     const insertedTxns = await tx.insert(transactions).values(txnInserts).returning();
     for (let i = 0; i < insertedTxns.length; i++) {
-      if (results[i]) results[i].txId = insertedTxns[i].id;
+      const result = results[i];
+      const inserted = insertedTxns[i];
+      if (result && inserted) result.txId = inserted.id;
     }
 
-    // 4. Update members totalContributed
-    for (const [memberId, addedAmount] of memberContributions) {
+    for (const [memberId, addedCents] of memberContributions) {
       await tx
         .update(members)
-        .set({
-          totalContributed: sql<string>`(${members.totalContributed}::numeric + ${addedAmount})::numeric(15,2)`,
-          updatedAt: new Date(),
-        })
-        .where(eq(members.id, memberId));
+        .set({ totalContributed: sql`(${members.totalContributed}::numeric + ${addedCents / 100})::numeric(15,2)`, updatedAt: new Date() })
+        .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId)));
     }
 
-    // 5. Update fund balance
     await tx
       .update(funds)
-      .set({
-        balance: sql<string>`(${funds.balance}::numeric + ${totalBatchAmount})::numeric(15,2)`,
-        updatedAt: new Date(),
-      })
-      .where(eq(funds.id, data.fundId));
+      .set({ balance: sql`(${funds.balance}::numeric + ${totalBatchAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
+      .where(and(eq(funds.id, data.fundId), eq(funds.tenantId, tenantId)));
 
-    // 6. Audit
     await tx.insert(auditLogs).values({
-      userId,
-      userName,
+      userId: user.id,
+      userName: user.name,
       action: 'BULK_DEPOSIT',
       resourceType: 'Finance',
       details: {
         batchId,
-        totalAmount: totalBatchAmount,
+        totalAmount: totalBatchAmountCents / 100,
         count: data.deposits.length,
         fundName: fund.name,
         month: data.commonMonth,
@@ -1700,6 +1779,6 @@ export async function bulkAddDeposits(data: BulkDepositInput, userId: string, us
       status: 'SUCCESS',
     });
 
-    return { batchId, totalAmount: totalBatchAmount, count: data.deposits.length, results };
+    return { batchId, totalAmount: totalBatchAmountCents / 100, count: data.deposits.length, results };
   });
 }
