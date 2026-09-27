@@ -1,23 +1,44 @@
+import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getSql } from '@/db/index';
+import { getSql } from '@/db/index';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
-import { AuthError, ForbiddenError } from '@/lib/utils/errors';
+import { requireTenant } from '@/lib/tenant';
+import { logAudit } from '@/lib/utils/audit';
+import { AppError, AuthError, ForbiddenError } from '@/lib/utils/errors';
 
+// ponytail: export set is the minimum tenant-scoped business slice. Tables
+// holding credentials or unscoped secrets are deliberately absent: users
+// (bcrypt hashes), sessions (live ids), blacklisted_tokens (raw JWTs),
+// login_attempts (IPs), deleted_records and global_stats (no tenant_id
+// column — see DATA-029). Platform-wide backups go through the R2 pg_dump
+// workflow, never this endpoint.
 const TABLES = [
-  'members', 'transactions', 'projects', 'funds', 'users',
-  'system_settings', 'audit_logs', 'login_attempts', 'sessions',
-  'deleted_records', 'blacklisted_tokens', 'global_stats', 'goals',
-];
+  'members', 'transactions', 'projects', 'funds',
+  'system_settings', 'audit_logs', 'goals',
+] as const;
 
-async function performBackup() {
+async function performBackup(tenantId: string) {
   const sql = getSql();
   const backup: Record<string, unknown[]> = {};
   for (const table of TABLES) {
-    const rows = await sql.unsafe(`SELECT * FROM ${table}`);
-    backup[table] = rows;
+    backup[table] = [...(await sql`SELECT * FROM ${sql(table)} WHERE tenant_id = ${tenantId}`)];
   }
   return backup;
+}
+
+function rowCounts(backup: Record<string, unknown[]>): Record<string, number> {
+  return Object.fromEntries(TABLES.map((t) => [t, backup[t]?.length ?? 0]));
+}
+
+// Constant-time bearer comparison (SEV-024): plain !== leaks the secret
+// prefix through response timing.
+function isValidCronSecret(cronSecret: string, auth: string | null): boolean {
+  if (!auth || !auth.startsWith('Bearer ')) return false;
+  const presented = Buffer.from(auth.slice(7));
+  const expected = Buffer.from(`Bearer ${cronSecret}`.slice(7));
+  if (presented.length !== expected.length) return false;
+  return timingSafeEqual(presented, expected);
 }
 
 // POST /api/backup/cron - Cron endpoint (no auth, uses CRON_SECRET)
@@ -25,17 +46,18 @@ export async function POST(request: NextRequest) {
   try {
     const cronSecret = process.env.CRON_SECRET;
     const auth = request.headers.get('authorization');
-    
-    if (!cronSecret || !auth || auth !== `Bearer ${cronSecret}`) {
+
+    if (!cronSecret || !isValidCronSecret(cronSecret, auth)) {
       return NextResponse.json(
         { success: false, message: 'Invalid or missing cron secret' },
         { status: 401 }
       );
     }
 
-    const backup = await performBackup();
-
-    console.log(`[cron] Backup completed: ${TABLES.length} tables at ${new Date().toISOString()}`);
+    // ponytail: this endpoint historically materialized every table into
+    // memory and discarded it (DATA-021 DoS amplifier). The durable backup is
+    // the R2 pg_dump workflow; the cron hook stays as a liveness signal only.
+    console.log(`[cron] Backup ping at ${new Date().toISOString()}`);
 
     return NextResponse.json({
       success: true,
@@ -55,7 +77,7 @@ export async function POST(request: NextRequest) {
 // GET /api/backup/manual - Manual backup (admin only)
 export async function GET(request: NextRequest) {
   try {
-    const { user: authUser, error } = await getAuthContext(request);
+    const { user: authUser, tenantId, error } = await getAuthContext(request);
     if (error || !authUser) {
       return error || NextResponse.json(
         { success: false, message: 'Authentication required', code: 'UNAUTHORIZED' },
@@ -69,17 +91,32 @@ export async function GET(request: NextRequest) {
       throw new ForbiddenError('Admin access required');
     }
 
+    // Fail closed: tenant Admins export only their own slice; platform
+    // operators (null tenant) must use /api/admin, never this endpoint.
+    const scopedTenantId = requireTenant(tenantId, authUser);
+
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'daily';
     const download = searchParams.get('download') === 'true';
 
-    const backup = await performBackup();
+    const backup = await performBackup(scopedTenantId);
+    const counts = rowCounts(backup);
+
+    // logAudit never throws; tenantId rides in details until the writer
+    // itself is tenant-scoped (API-023).
+    await logAudit({
+      user: { id: authUser.id, name: authUser.name },
+      action: 'EXPORT_BACKUP',
+      resourceType: 'Backup',
+      details: { tenantId: scopedTenantId, type, download, rowCounts: counts },
+    });
 
     const backupData = {
       version: '2.0',
       engine: 'postgresql',
       timestamp: new Date().toISOString(),
       type,
+      tenantId: scopedTenantId,
       tables: backup,
     };
 
@@ -87,7 +124,7 @@ export async function GET(request: NextRequest) {
       return new NextResponse(JSON.stringify(backupData), {
         headers: {
           'Content-Type': 'application/json',
-          'Content-Disposition': `attachment; filename=investwise-backup-${new Date().toISOString().split('T')[0]}.json`,
+          'Content-Disposition': `attachment; filename=investwise-backup-${scopedTenantId}-${new Date().toISOString().split('T')[0]}.json`,
         },
       });
     }
@@ -97,12 +134,13 @@ export async function GET(request: NextRequest) {
       status: 'completed',
       duration: 0,
       tables: TABLES.length,
+      rowCounts: counts,
       timestamp: backupData.timestamp,
     });
   } catch (error: any) {
     console.error('[MANUAL BACKUP ERROR]', error);
     
-    if (error instanceof AuthError || error instanceof ForbiddenError) {
+    if (error instanceof AppError) {
       return NextResponse.json(
         { success: false, message: error.message, code: error.code },
         { status: error.statusCode }
