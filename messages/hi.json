@@ -58,6 +58,7 @@
     "noData": "No Data Available",
     "update": "Update",
     "preview": "Preview",
+    "continue": "Continue",
     "hidePreview": "Hide Preview",
     "all": "All",
     "printReceipt": "Print Receipt",
@@ -1492,7 +1493,18 @@
         "userStatus": "स्थिति",
         "userJoined": "शामिल होने की तिथि",
         "userActions": "कार्रवाई"
-      }
+      },
+      "onboardTitle": "टेनेंट ऑनबोर्ड करें",
+      "onboardDesc": "टेनेंट, एडमिन लॉगिन, सेटिंग्स और 14-दिन का ट्रायल एक ही चरण में बनाता है।",
+      "adminName": "एडमिन नाम",
+      "adminEmail": "एडमिन ईमेल",
+      "adminPassword": "एडमिन पासवर्ड",
+      "onboarded": "टेनेंट ऑनबोर्ड हो गया",
+      "onboardFailed": "ऑनबोर्डिंग विफल रही",
+      "fieldSlug": "स्लग",
+      "fieldName": "नाम",
+      "fieldPlan": "प्लान",
+      "fieldMaxUsers": "अधिकतम उपयोगकर्ता"
     },
     "billing": {
       "title": "बिलिंग और सदस्यता",
@@ -1504,7 +1516,23 @@
       "empty": "कोई सदस्यता नहीं मिली",
       "updated": "सदस्यता अद्यतन की गई",
       "updateFailed": "अद्यतन विफल रहा",
-      "confirmTitle": "सदस्यता स्थिति बदलें?"
+      "confirmTitle": "सदस्यता स्थिति बदलें?",
+      "actions": "Actions",
+      "history": "History",
+      "mrr": "MRR (active)",
+      "activeSubs": "Active",
+      "trials": "Trials",
+      "attention": "Needs attention",
+      "loadFailed": "Could not load billing data",
+      "trialEnds": "Trial ends",
+      "selectStatus": "Select status…",
+      "selectPlan": "Select plan…",
+      "planHint": "Empty keeps the current plan.",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why is this changing? (recorded in the audit log)",
+      "noHistory": "No subscription changes recorded yet",
+      "historyFailed": "Could not load history",
+      "changedBy": "Changed by"
     },
     "impersonate": {
       "title": "उपयोगकर्ता प्रतिरूपण",

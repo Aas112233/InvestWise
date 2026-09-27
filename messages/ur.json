@@ -58,6 +58,7 @@
     "noData": "No Data Available",
     "update": "Update",
     "preview": "Preview",
+    "continue": "Continue",
     "hidePreview": "Hide Preview",
     "all": "All",
     "printReceipt": "Print Receipt",
@@ -1492,7 +1493,18 @@
         "userStatus": "حالت",
         "userJoined": "شمولیت کی تاریخ",
         "userActions": "اقدام"
-      }
+      },
+      "onboardTitle": "ٹیننٹ آن بورڈ کریں",
+      "onboardDesc": "ٹیننٹ، ایڈمن لاگ ان، ترتیبات اور 14 دن کا ٹرائل ایک ہی مرحلے میں بناتا ہے۔",
+      "adminName": "ایڈمن کا نام",
+      "adminEmail": "ایڈمن ای میل",
+      "adminPassword": "ایڈمن پاس ورڈ",
+      "onboarded": "ٹیننٹ آن بورڈ ہو گیا",
+      "onboardFailed": "آن بورڈنگ ناکام رہی",
+      "fieldSlug": "سلگ",
+      "fieldName": "نام",
+      "fieldPlan": "پلان",
+      "fieldMaxUsers": "زیادہ سے زیادہ صارفین"
     },
     "billing": {
       "title": "بلنگ اور رکنیت",
@@ -1504,7 +1516,23 @@
       "empty": "کوئی رکنیت نہیں ملی",
       "updated": "رکنیت اپ ڈیٹ ہو گئی",
       "updateFailed": "اپ ڈیٹ ناکام",
-      "confirmTitle": "کیا رکنیت کی حالت تبدیل کریں؟"
+      "confirmTitle": "کیا رکنیت کی حالت تبدیل کریں؟",
+      "actions": "Actions",
+      "history": "History",
+      "mrr": "MRR (active)",
+      "activeSubs": "Active",
+      "trials": "Trials",
+      "attention": "Needs attention",
+      "loadFailed": "Could not load billing data",
+      "trialEnds": "Trial ends",
+      "selectStatus": "Select status…",
+      "selectPlan": "Select plan…",
+      "planHint": "Empty keeps the current plan.",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why is this changing? (recorded in the audit log)",
+      "noHistory": "No subscription changes recorded yet",
+      "historyFailed": "Could not load history",
+      "changedBy": "Changed by"
     },
     "impersonate": {
       "title": "صارف کا روپ دھاریں",
