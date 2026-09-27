@@ -1,0 +1,232 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from '@/db/index';
+import { members, transactions } from '@/db/schema/index';
+import { eq, and, desc, count, sql, or } from 'drizzle-orm';
+import { getAuthContext, requirePermission } from '@/lib/middleware/auth';
+import { logAudit } from '@/lib/utils/audit';
+import { normalizeEmail } from '@/lib/utils/types';
+import { NotFoundError, ValidationError, ConflictError, ForbiddenError, LockedError } from '@/lib/utils/errors';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function tenantScope(tenantId: string | null): ReturnType<typeof sql> | undefined {
+  if (!tenantId) return undefined;
+  return sql`${members.tenantId} = ${tenantId}`;
+}
+
+function errJson(err: unknown, fallback: string) {
+  console.error('[MEMBER ID ERROR]', err);
+  const e = err as { statusCode?: number; message?: string };
+  return NextResponse.json(
+    { success: false, message: e.message || fallback },
+    { status: e.statusCode || 500 },
+  );
+}
+
+// GET /api/members/[id] — member profile (uuid or MEM-XXXX code) plus recent
+// deposit history for the detail sheet.
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { user, error } = await getAuthContext(request);
+    if (error || !user) {
+      return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    }
+    requirePermission('MEMBERS', 'READ')(user);
+
+    const { id } = await params;
+    const db = getDb();
+    const idMatch = UUID_RE.test(id) ? or(eq(members.id, id), eq(members.memberId, id)) : eq(members.memberId, id);
+    const scope = tenantScope(user.tenantId);
+    const [member] = await db
+      .select()
+      .from(members)
+      .where(scope ? and(idMatch, scope) : idMatch)
+      .limit(1);
+    if (!member) throw new NotFoundError('Member');
+
+    const depositScope = user.tenantId ? sql`${transactions.tenantId} = ${user.tenantId}` : undefined;
+    const deposits = await db
+      .select({
+        id: transactions.id,
+        amount: transactions.amount,
+        description: transactions.description,
+        referenceNumber: transactions.referenceNumber,
+        date: transactions.date,
+        status: transactions.status,
+        depositMethod: transactions.depositMethod,
+        balanceBefore: transactions.balanceBefore,
+        balanceAfter: transactions.balanceAfter,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.memberId, member.id),
+          eq(transactions.type, 'Deposit'),
+          eq(transactions.isDeleted, false),
+          ...(depositScope ? [depositScope] : []),
+        ),
+      )
+      .orderBy(desc(transactions.date))
+      .limit(20);
+
+    return NextResponse.json({ success: true, data: { ...member, deposits } });
+  } catch (err: unknown) {
+    return errJson(err, 'Failed to fetch member');
+  }
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const UPDATABLE_STATUS = ['active', 'inactive', 'pending', 'suspended'];
+
+// PUT /api/members/[id] — update profile fields. Shares are locked after
+// creation (derived from ledger), so any shares payload is ignored.
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { user, error } = await getAuthContext(request);
+    if (error || !user) {
+      return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    }
+    try {
+      requirePermission('MEMBERS', 'WRITE')(user);
+    } catch {
+      throw new ForbiddenError('Write permission required for: MEMBERS');
+    }
+
+    const { id } = await params;
+    const db = getDb();
+    const idMatch = UUID_RE.test(id) ? or(eq(members.id, id), eq(members.memberId, id)) : eq(members.memberId, id);
+    const scope = tenantScope(user.tenantId);
+    const [existing] = await db
+      .select({ id: members.id })
+      .from(members)
+      .where(scope ? and(idMatch, scope) : idMatch)
+      .limit(1);
+    if (!existing) throw new NotFoundError('Member');
+
+    const body = await request.json();
+    const patch: Partial<typeof members.$inferInsert> = {};
+    if (body.name !== undefined) {
+      const name = String(body.name).trim();
+      if (!name) throw new ValidationError('Name is required');
+      patch.name = name;
+    }
+    if (body.email !== undefined) {
+      const email = normalizeEmail(String(body.email));
+      if (!EMAIL_RE.test(email)) throw new ValidationError('Valid email is required');
+      const [clash] = await db
+        .select({ id: members.id })
+        .from(members)
+        .where(eq(members.email, email))
+        .limit(1);
+      if (clash && clash.id !== existing.id) throw new ConflictError('A member with this email already exists');
+      patch.email = email;
+    }
+    if (body.phone !== undefined) patch.phone = String(body.phone).trim();
+    if (body.role !== undefined) patch.role = String(body.role);
+    if (body.status !== undefined) {
+      if (!UPDATABLE_STATUS.includes(String(body.status))) throw new ValidationError('Invalid status');
+      patch.status = String(body.status);
+    }
+    if (body.avatar !== undefined) patch.avatar = body.avatar || null;
+    if (body.nidOrPassport !== undefined) patch.nidOrPassport = body.nidOrPassport || null;
+    if (body.fatherName !== undefined) patch.fatherName = body.fatherName || null;
+    if (body.address !== undefined) patch.address = body.address || null;
+    if (body.nomineeName !== undefined) patch.nomineeName = body.nomineeName || null;
+    if (body.nomineeRelation !== undefined) patch.nomineeRelation = body.nomineeRelation || null;
+    if (body.nomineePhone !== undefined) patch.nomineePhone = body.nomineePhone || null;
+    // One-time setup: shares may only be set or corrected before the member
+    // has any transaction. Afterwards they are locked.
+    if (body.shares !== undefined) {
+      const [txnCount] = await db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(transactions)
+        .where(and(eq(transactions.memberId, existing.id), eq(transactions.isDeleted, false)));
+      if ((txnCount?.total ?? 0) > 0) {
+        throw new LockedError('Share numbers are locked once transactions exist');
+      }
+      const sharesNum = Number(body.shares);
+      if (!Number.isInteger(sharesNum) || sharesNum < 1) throw new ValidationError('Shares must be at least 1');
+      patch.shares = sharesNum;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      const [current] = await db.select().from(members).where(eq(members.id, existing.id)).limit(1);
+      return NextResponse.json({ success: true, data: current });
+    }
+
+    const [updated] = await db
+      .update(members)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(members.id, existing.id))
+      .returning();
+
+    await logAudit({
+      user: { id: user.id, name: user.name },
+      action: 'UPDATE_MEMBER',
+      resourceType: 'Member',
+      resourceId: existing.id,
+      details: { fields: Object.keys(patch) },
+    });
+
+    return NextResponse.json({ success: true, data: updated, message: 'Member updated successfully.' });
+  } catch (err: unknown) {
+    return errJson(err, 'Failed to update member');
+  }
+}
+
+// DELETE /api/members/[id] — blocked while non-deleted ledger entries exist.
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { user, error } = await getAuthContext(request);
+    if (error || !user) {
+      return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    }
+    try {
+      requirePermission('MEMBERS', 'WRITE')(user);
+    } catch {
+      throw new ForbiddenError('Write permission required for: MEMBERS');
+    }
+
+    const { id } = await params;
+    const db = getDb();
+    const idMatch = UUID_RE.test(id) ? or(eq(members.id, id), eq(members.memberId, id)) : eq(members.memberId, id);
+    const scope = tenantScope(user.tenantId);
+    const [existing] = await db
+      .select({ id: members.id, name: members.name })
+      .from(members)
+      .where(scope ? and(idMatch, scope) : idMatch)
+      .limit(1);
+    if (!existing) throw new NotFoundError('Member');
+
+    const [linked] = await db
+      .select({ count: count() })
+      .from(transactions)
+      .where(and(eq(transactions.memberId, existing.id), eq(transactions.isDeleted, false)));
+    if (Number(linked?.count ?? 0) > 0) {
+      throw new ValidationError('Member has ledger history and cannot be deleted. Suspend the member instead.');
+    }
+
+    await db.delete(members).where(eq(members.id, existing.id));
+
+    await logAudit({
+      user: { id: user.id, name: user.name },
+      action: 'DELETE_MEMBER',
+      resourceType: 'Member',
+      resourceId: existing.id,
+      details: { name: existing.name },
+    });
+
+    return NextResponse.json({ success: true, message: 'Member deleted successfully.' });
+  } catch (err: unknown) {
+    return errJson(err, 'Failed to delete member');
+  }
+}

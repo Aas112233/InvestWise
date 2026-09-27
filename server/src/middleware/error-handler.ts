@@ -1,4 +1,4 @@
-﻿import type { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { AppError } from "../shared/errors.js";
 
 // PostgreSQL error codes -> human-readable messages
@@ -49,6 +49,15 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
         `[SCHEMA_MISMATCH] pg_code=${pgErr.code} table=${pgErr.table ?? "?"} detail=${pgErr.detail ?? "?"}`
       );
     }
+  } else if (
+    err.message?.includes('ECONNRESET') ||
+    err.message?.includes('Connection terminated') ||
+    err.message?.includes('CONNECTION_ENDED') ||
+    err.message?.includes('ETIMEDOUT')
+  ) {
+    statusCode = 503;
+    clientMessage = "Database connection momentarily refreshed. Please retry.";
+    errorCode = "DB_CONNECTION_ERROR";
   } else {
     statusCode = 500;
     clientMessage = "An unexpected error occurred";

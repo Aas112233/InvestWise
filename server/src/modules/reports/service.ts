@@ -29,13 +29,14 @@ export function convertToCsv(data: Record<string, unknown>[]): string {
 /**
  * Reusable helper to query transactions joined with human-readable member, fund, project, and authorizer names
  * and computes accurate chronological running balance, debit, and credit.
+ * Fetches limit+1 rows to detect truncation; returns { rows, truncated }.
  */
 async function selectResolvedTransactions(whereClause: any, limit = 2000) {
   const db = getDb();
   const authorizer = aliasedTable(users, 'report_authorizer');
   const creator = aliasedTable(users, 'report_creator');
 
-  const rows = await db
+  const fetched = await db
     .select({
       id: transactions.id,
       date: transactions.date,
@@ -65,11 +66,14 @@ async function selectResolvedTransactions(whereClause: any, limit = 2000) {
     .leftJoin(creator, eq(transactions.createdBy, creator.id))
     .where(whereClause)
     .orderBy(asc(transactions.date), asc(transactions.createdAt))
-    .limit(limit);
+    .limit(limit + 1);
+
+  const truncated = fetched.length > limit;
+  const rows = truncated ? fetched.slice(0, limit) : fetched;
 
   let cumulativeBalance = 0;
 
-  return rows.map((r) => {
+  const mapped = rows.map((r) => {
     const amt = Math.abs(Number(r.amount || 0));
     const isInflow = ['Deposit', 'Earning', 'Investment', 'Interest', 'Capital-Injection'].includes(r.type);
     const isOutflow = ['Expense', 'Withdrawal', 'Dividend'].includes(r.type);
@@ -92,8 +96,13 @@ async function selectResolvedTransactions(whereClause: any, limit = 2000) {
       ? Number(r.balanceAfter)
       : Math.round(cumulativeBalance * 100) / 100;
 
+    const periodMatch = r.description?.match(/\[(.*?)\]/);
+    const depositPeriod = periodMatch ? periodMatch[1] : '';
+
     return {
       date: r.date ? new Date(r.date).toISOString().split('T')[0] : '',
+      entryDate: r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : '',
+      period: depositPeriod || 'Current',
       reference: r.referenceNumber || 'N/A',
       type: r.type,
       partnerName: r.partnerName || 'N/A',
@@ -113,6 +122,8 @@ async function selectResolvedTransactions(whereClause: any, limit = 2000) {
       status: r.status || 'Completed',
     };
   });
+
+  return { rows: mapped, truncated };
 }
 
 /**
@@ -130,7 +141,7 @@ export async function generateReport(
   switch (type) {
     // ─────────────────────────────────────────────────────────────
     case 'Comprehensive Master Ledger': {
-      const data = await selectResolvedTransactions(baseWhere, 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(baseWhere, 2000);
       const totalInflow = data.reduce((s, r) => s + (r.credit || 0), 0);
       const totalOutflow = data.reduce((s, r) => s + (r.debit || 0), 0);
       const closingBalance = data.length > 0 ? data[data.length - 1].runningBalance : 0;
@@ -154,7 +165,7 @@ export async function generateReport(
         return { reportType: type, format, error: 'projectId is required' };
       }
 
-      const data = await selectResolvedTransactions(and(baseWhere, eq(transactions.projectId, projectId)), 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(and(baseWhere, eq(transactions.projectId, projectId)), 2000);
 
       const [projectInfo] = await db
         .select({ title: projects.title, category: projects.category, currentFundBalance: projects.currentFundBalance })
@@ -176,6 +187,7 @@ export async function generateReport(
         totalOutflow: Math.round(totalOutflow * 100) / 100,
         closingBalance: Math.round(closingBalance * 100) / 100,
         rowCount: data.length,
+        truncated,
         data,
       };
     }
@@ -187,7 +199,7 @@ export async function generateReport(
         return { reportType: type, format, error: 'memberId is required' };
       }
 
-      const data = await selectResolvedTransactions(and(baseWhere, eq(transactions.memberId, memberId)), 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(and(baseWhere, eq(transactions.memberId, memberId)), 2000);
 
       const [memberInfo] = await db
         .select({ name: members.name, memberId: members.memberId, shares: members.shares, totalContributed: members.totalContributed })
@@ -210,6 +222,7 @@ export async function generateReport(
         totalPayouts: Math.round(totalOutflow * 100) / 100,
         closingBalance: Math.round(closingBalance * 100) / 100,
         rowCount: data.length,
+        truncated,
         data,
       };
     }
@@ -221,7 +234,7 @@ export async function generateReport(
         return { reportType: type, format, error: 'fundId is required' };
       }
 
-      const data = await selectResolvedTransactions(and(baseWhere, eq(transactions.fundId, fundId)), 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(and(baseWhere, eq(transactions.fundId, fundId)), 2000);
 
       const [fundInfo] = await db
         .select({ name: funds.name, type: funds.type, balance: funds.balance, handlingOfficer: funds.handlingOfficer })
@@ -244,6 +257,7 @@ export async function generateReport(
         totalOutflow: Math.round(totalOutflow * 100) / 100,
         closingBalance: Math.round(closingBalance * 100) / 100,
         rowCount: data.length,
+        truncated,
         data,
       };
     }
@@ -346,7 +360,7 @@ export async function generateReport(
 
     // ─────────────────────────────────────────────────────────────
     case 'Dividend Report': {
-      const data = await selectResolvedTransactions(and(baseWhere, eq(transactions.type, 'Dividend')), 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(and(baseWhere, eq(transactions.type, 'Dividend')), 2000);
 
       const [aggregate] = await db
         .select({ total: sum(transactions.amount) })
@@ -359,6 +373,7 @@ export async function generateReport(
         generatedAt: new Date().toISOString(),
         totalDividendsDistributed: Number(aggregate?.total ?? 0),
         rowCount: data.length,
+        truncated,
         data,
       };
     }
@@ -370,7 +385,7 @@ export async function generateReport(
         ? and(baseWhere, eq(transactions.type, 'Deposit'), eq(transactions.memberId, memberId))
         : and(baseWhere, eq(transactions.type, 'Deposit'));
 
-      const data = await selectResolvedTransactions(where, 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(where, 2000);
 
       const [aggregate] = await db
         .select({ total: sum(transactions.amount) })
@@ -383,6 +398,7 @@ export async function generateReport(
         generatedAt: new Date().toISOString(),
         totalContributions: Number(aggregate?.total ?? 0),
         rowCount: data.length,
+        truncated,
         data,
       };
     }
@@ -395,7 +411,7 @@ export async function generateReport(
       }
 
       const where = and(baseWhere, eq(transactions.memberId, memberId), eq(transactions.type, 'Deposit'));
-      const data = await selectResolvedTransactions(where, 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(where, 2000);
 
       const [aggregate] = await db
         .select({ total: sum(transactions.amount) })
@@ -416,6 +432,7 @@ export async function generateReport(
         sharesHeld: memberInfo?.shares ?? 0,
         totalDeposits: Number(aggregate?.total ?? 0),
         rowCount: data.length,
+        truncated,
         data,
       };
     }
@@ -435,7 +452,7 @@ export async function generateReport(
         ...dateConditions,
       );
 
-      const data = await selectResolvedTransactions(whereRevenue, 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(whereRevenue, 2000);
 
       const [aggregate] = await db
         .select({ total: sum(transactions.amount) })
@@ -448,13 +465,14 @@ export async function generateReport(
         generatedAt: new Date().toISOString(),
         totalRevenue: Number(aggregate?.total ?? 0),
         rowCount: data.length,
+        truncated,
         data,
       };
     }
 
     // ─────────────────────────────────────────────────────────────
     case 'Interest Accruals': {
-      const data = await selectResolvedTransactions(and(baseWhere, eq(transactions.type, 'Interest')), 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(and(baseWhere, eq(transactions.type, 'Interest')), 2000);
 
       const [aggregate] = await db
         .select({ total: sum(transactions.amount) })
@@ -467,13 +485,14 @@ export async function generateReport(
         generatedAt: new Date().toISOString(),
         totalInterestAccrued: Number(aggregate?.total ?? 0),
         rowCount: data.length,
+        truncated,
         data,
       };
     }
 
     // ─────────────────────────────────────────────────────────────
     case 'Earnings Ledger': {
-      const data = await selectResolvedTransactions(and(baseWhere, eq(transactions.type, 'Earning')), 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(and(baseWhere, eq(transactions.type, 'Earning')), 2000);
 
       const [aggregate] = await db
         .select({ total: sum(transactions.amount) })
@@ -486,13 +505,14 @@ export async function generateReport(
         generatedAt: new Date().toISOString(),
         totalEarnings: Number(aggregate?.total ?? 0),
         rowCount: data.length,
+        truncated,
         data,
       };
     }
 
     // ─────────────────────────────────────────────────────────────
     case 'Expense Audit': {
-      const data = await selectResolvedTransactions(and(baseWhere, eq(transactions.type, 'Expense')), 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(and(baseWhere, eq(transactions.type, 'Expense')), 2000);
 
       const [aggregate] = await db
         .select({ total: sum(transactions.amount) })
@@ -505,6 +525,7 @@ export async function generateReport(
         generatedAt: new Date().toISOString(),
         totalExpenses: Number(aggregate?.total ?? 0),
         rowCount: data.length,
+        truncated,
         data,
       };
     }
@@ -517,7 +538,7 @@ export async function generateReport(
       }
 
       const where = and(baseWhere, eq(transactions.projectId, projectId), eq(transactions.type, 'Expense'));
-      const data = await selectResolvedTransactions(where, 2000);
+      const { rows: data, truncated } = await selectResolvedTransactions(where, 2000);
 
       const [projectInfo] = await db
         .select({ title: projects.title, category: projects.category })
@@ -537,6 +558,7 @@ export async function generateReport(
         projectCategory: projectInfo?.category ?? 'General',
         totalProjectExpenses: Number(aggregate?.total ?? 0),
         rowCount: data.length,
+        truncated,
         data,
       };
     }

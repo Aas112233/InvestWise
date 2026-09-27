@@ -7,6 +7,16 @@
     "vercel": {
       "type": "http",
       "url": "https://mcp.vercel.com"
+    },
+    "codemesh": {
+      "command": "c:\\Users\\mhass\\.antigravity-ide\\extensions\\codemesh.vscode-codemesh-0.4.312-universal\\bin\\win32-x64\\codemesh.exe",
+      "args": [
+        "mcp-stdio"
+      ],
+      "env": {
+        "CODEMESH_API_URL": "https://codemesh.cloud",
+        "CODEMESH_SCOPE_ROOT": "d:\\my project\\Investwise_app_source_code\\investwise_web_app"
+      }
     }
   }
 }

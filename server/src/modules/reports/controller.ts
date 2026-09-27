@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { asyncHandler } from '../../shared/asyncHandler.js';
 import * as reportsService from './service.js';
+import { logAudit } from '../../lib/audit.js';
 
 /**
  * GET /api/reports/generate/:type
@@ -14,6 +15,27 @@ export const generateReportHandler = asyncHandler(async (req: Request, res: Resp
   delete params.type;
 
   const report = (await reportsService.generateReport(type, format, params)) as any;
+
+  // Compliance trail: every financial report extraction is recorded in the audit ledger.
+  const actor = req.user as { id?: string; name?: string } | undefined;
+  await logAudit({
+    user: actor ?? null,
+    req: { ip: req.ip, headers: req.headers as Record<string, string | undefined> },
+    action: 'EXPORT',
+    resourceType: 'Report',
+    resourceId: type,
+    details: {
+      format,
+      period: req.query.period || null,
+      date: req.query.date || null,
+      projectId: req.query.projectId || null,
+      memberId: req.query.memberId || null,
+      fundId: req.query.fundId || null,
+      rowCount: Array.isArray(report?.data) ? report.data.length : null,
+      truncated: report?.truncated === true,
+    },
+    status: 'SUCCESS',
+  });
 
   if (format === 'csv') {
     const rawData = Array.isArray(report?.data) ? report.data : [report];

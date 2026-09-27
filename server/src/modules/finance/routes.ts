@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { protect, requirePermission } from '../../middleware/auth.js';
+import { protect, requirePermission, requireAnyPermission, requireDepositWritePermission } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import {
   depositSchema,
@@ -40,13 +40,13 @@ const router = Router();
 router.use(protect);
 
 // ── Transactions ──────────────────────────────────────────────────────────
-router.get('/transactions', requirePermission('TRANSACTIONS', 'READ'), getTransactions);
-router.delete('/transactions/:id', requirePermission('TRANSACTIONS', 'WRITE'), deleteTransaction);
+router.get('/transactions', requireAnyPermission(['TRANSACTIONS', 'DEPOSITS', 'REQUEST_DEPOSIT'], 'READ'), getTransactions);
+router.delete('/transactions/:id', requireAnyPermission(['TRANSACTIONS', 'DEPOSITS', 'REQUEST_DEPOSIT'], 'WRITE'), deleteTransaction);
 
 // ── Deposits ──────────────────────────────────────────────────────────────
-router.post('/deposits', requirePermission('DEPOSITS', 'WRITE'), validate(depositSchema), addDeposit);
+router.post('/deposits', requireDepositWritePermission, validate(depositSchema), addDeposit);
 router.post('/deposits/bulk', requirePermission('DEPOSITS', 'WRITE'), validate(bulkDepositSchema), bulkAddDeposits);
-router.put('/deposits/:id', requirePermission('DEPOSITS', 'WRITE'), validate(depositSchema), editDeposit);
+router.put('/deposits/:id', requireDepositWritePermission, validate(depositSchema), editDeposit);
 router.put('/deposits/:id/approve', requirePermission('DEPOSITS', 'WRITE'), approveDeposit);
 
 // ── Expenses ──────────────────────────────────────────────────────────────

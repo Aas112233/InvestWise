@@ -15,3 +15,5 @@ export const deletedRecords = pgTable('deleted_records', {
   index('idx_deleted_records_collection').on(table.collectionName, table.deletedAt.desc()),
   index('idx_deleted_records_original').on(table.collectionName, table.originalId),
 ]);
+
+export type DeletedRecord = typeof deletedRecords.$inferSelect;

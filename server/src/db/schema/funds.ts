@@ -1,7 +1,9 @@
 import { pgTable, uuid, varchar, text, decimal, boolean, timestamp, index } from 'drizzle-orm/pg-core';
+import { tenants } from './tenants.js';
 
 export const funds = pgTable('funds', {
   id: uuid('id').defaultRandom().primaryKey(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
   name: varchar('name', { length: 255 }).notNull(),
   type: varchar('type', { length: 50 }).default('OTHER'),
   status: varchar('status', { length: 50 }).default('ACTIVE'),
@@ -18,7 +20,10 @@ export const funds = pgTable('funds', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  index('idx_funds_tenant').on(table.tenantId),
   index('idx_funds_type_status').on(table.type, table.status),
   index('idx_funds_linked_project').on(table.linkedProjectId),
   index('idx_funds_type').on(table.type),
 ]);
+
+export type Fund = typeof funds.$inferSelect;

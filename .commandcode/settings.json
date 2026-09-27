@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(npx tsc --noEmit)",
+      "Shell(npx vitest run lib/money.test.ts 2 >& 1)",
+      "Shell(npx vitest run lib/money.test.ts)",
+      "Shell(node -e const f=require('fs').readFileSync('tsconfig.finance-check.json','utf8'); require('fs').unlinkSync('tsconfig.finance-check.json'); console.log('deleted'))",
+      "Shell(if:*)",
+      "Shell(else:*)",
+      "Shell()",
+      "Shell(npx eslint server/src/modules/finance/handlers.ts server/src/modules/finance/service.ts app/api/finance 2>&1)",
+      "Shell(node -e \"try{JSON.parse(require('fs').readFileSync('messages/ur.json','utf8'));console.log('ur.json: VALID')}catch(e){console.log('ur.json: MALFORMED', e.message)}\")",
+      "Shell(npx next lint server/src/modules/finance/handlers.ts server/src/modules/finance/service.ts 2 >& 1)",
+      "Shell(npx next lint 2>&1)",
+      "Shell(npx vitest run lib/shares.test.ts)",
+      "Shell(npx vitest run)",
+      "Shell(npm:*)",
+      "Shell(node \"C:\\Users\\mhass\\AppData\\Local\\Temp\\commandcode\\D--my-project-Investwise-app-source-code-investwise-web-app\\7412eab9-be0e-4c6d-aa06-afe370ee3387\\scratchpad\\fill-i18n.mjs\")"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

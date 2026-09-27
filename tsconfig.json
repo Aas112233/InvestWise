@@ -1,0 +1,64 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/server/*": [
+        "./server/src/*"
+      ],
+      "@/*": [
+        "./*"
+      ]
+    },
+    "allowJs": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "scripts/*.mjs.d.ts",
+    "server/src/lib/db.ts",
+    "server/src/lib/jwt.ts",
+    "server/src/lib/session.ts",
+    "server/src/shared/errors.ts",
+    "server/src/middleware/api.ts",
+    "server/src/db/schema/*.ts",
+    "server/src/modules/members/handlers.ts",
+    "server/src/modules/members/service.ts",
+    "server/src/modules/projects/service.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "client",
+    "docs",
+    "server/src/modules/finance/controller.ts",
+    "server/src/modules/finance/routes.ts",
+    "server/src/modules/finance/withdrawal-rules.ts",
+    "server/src/modules/finance/share-consistency.ts"
+  ]
+}

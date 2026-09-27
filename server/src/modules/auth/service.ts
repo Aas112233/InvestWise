@@ -13,6 +13,7 @@ import { hashPassword, comparePassword } from '../../lib/password.js';
 import { logAudit } from '../../lib/audit.js';
 import { AppError, AuthError, NotFoundError, ConflictError, LockedError } from '../../shared/errors.js';
 import { normalizeEmail } from '../../shared/utils.js';
+import { normalizeRole } from '../../shared/roles.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,24 +85,32 @@ const ALL_SCREENS = [
 
 function getDefaultPermissions(role: string): Record<string, string> {
   const perms: Record<string, string> = {};
-  if (role === 'Admin') {
+  const normalized = normalizeRole(role);
+  if (normalized === 'SuperAdmin' || normalized === 'Admin') {
     for (const screen of ALL_SCREENS) perms[screen] = 'WRITE';
-  } else if (role === 'Manager') {
+  } else if (normalized === 'Manager') {
     for (const screen of ALL_SCREENS) perms[screen] = 'READ';
   }
   return perms;
 }
+
+// ---------------------------------------------------------------------------
+// Internal Helpers
+// ---------------------------------------------------------------------------
 
 function toUserResponse(row: Record<string, unknown>): UserResponse {
   const permissions: Record<string, string> =
     typeof row.permissions === 'object' && row.permissions !== null
       ? (row.permissions as Record<string, string>)
       : {};
+
+  const role = normalizeRole(row.role);
+
   return {
     id: row.id as string,
     name: row.name as string,
     email: row.email as string,
-    role: (row.role as string) ?? 'Member',
+    role,
     status: (row.status as string) ?? 'active',
     permissions,
     avatar: (row.avatar as string) ?? null,

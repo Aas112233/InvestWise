@@ -1,9 +1,11 @@
 import { pgTable, uuid, varchar, text, integer, decimal, date, timestamp, index, primaryKey } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { tenants } from './tenants.js';
 import { members } from './members.js';
 
 export const projects = pgTable('projects', {
   id: uuid('id').defaultRandom().primaryKey(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
   title: varchar('title', { length: 255 }).notNull(),
   category: varchar('category', { length: 255 }).notNull(),
   description: text('description').notNull(),
@@ -23,6 +25,7 @@ export const projects = pgTable('projects', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  index('idx_projects_tenant').on(table.tenantId),
   index('idx_projects_status_created').on(table.status, table.createdAt),
   index('idx_projects_category_status').on(table.category, table.status),
   index('idx_projects_created').on(table.createdAt),
@@ -53,3 +56,6 @@ export const projectMembers = pgTable('project_members', {
   primaryKey({ columns: [table.projectId, table.memberId] }),
   index('idx_project_members_member').on(table.memberId),
 ]);
+
+export type Project = typeof projects.$inferSelect;
+export type ProjectUpdate = typeof projectUpdates.$inferSelect;
