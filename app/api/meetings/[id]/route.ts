@@ -1,21 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { meetings, meetingAttendees, members, users } from '@/db/schema/index';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
 import { NotFoundError, ForbiddenError } from '@/lib/utils/errors';
+
+/** §6 guard: tenant business route — resolve tenantId or fail closed. */
+async function requireTenantContext(request: NextRequest) {
+  const { user, tenantId, error } = await getAuthContext(request);
+  if (error || !user) {
+    return { error: error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 }) } as const;
+  }
+  if (!tenantId) {
+    return { error: NextResponse.json({ success: false, message: 'Tenant context required' }, { status: 403 }) } as const;
+  }
+  return { user, tenantId } as const;
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { user, error } = await getAuthContext(request);
-    if (error || !user) {
-      return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireTenantContext(request);
+    if ('error' in ctx) return ctx.error;
+    const { user, tenantId } = ctx;
 
     const { id } = await params;
     const db = getDb();
@@ -38,7 +49,7 @@ export async function GET(
       })
       .from(meetings)
       .leftJoin(users, eq(meetings.conductedBy, users.id))
-      .where(eq(meetings.id, id))
+      .where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)))
       .limit(1);
 
     if (!meeting) throw new NotFoundError('Meeting');
@@ -78,10 +89,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { user, error } = await getAuthContext(request);
-    if (error || !user) {
-      return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireTenantContext(request);
+    if ('error' in ctx) return ctx.error;
+    const { user, tenantId } = ctx;
 
     if (normalizeRole(user.role) === 'Member') {
       throw new ForbiddenError('Insufficient permissions to update meeting');
@@ -94,7 +104,7 @@ export async function PUT(
     const [existing] = await db
       .select()
       .from(meetings)
-      .where(eq(meetings.id, id))
+      .where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)))
       .limit(1);
 
     if (!existing) throw new NotFoundError('Meeting');
@@ -123,7 +133,7 @@ export async function PUT(
     const [updated] = await db
       .update(meetings)
       .set(updateFields)
-      .where(eq(meetings.id, id))
+      .where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)))
       .returning();
 
     await logAudit({
@@ -153,10 +163,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { user, error } = await getAuthContext(request);
-    if (error || !user) {
-      return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireTenantContext(request);
+    if ('error' in ctx) return ctx.error;
+    const { user, tenantId } = ctx;
 
     const callerRole = normalizeRole(user.role);
     if (callerRole !== 'Admin' && callerRole !== 'Manager' && callerRole !== 'SuperAdmin') {
@@ -169,12 +178,12 @@ export async function DELETE(
     const [existing] = await db
       .select()
       .from(meetings)
-      .where(eq(meetings.id, id))
+      .where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)))
       .limit(1);
 
     if (!existing) throw new NotFoundError('Meeting');
 
-    await db.delete(meetings).where(eq(meetings.id, id));
+    await db.delete(meetings).where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)));
 
     await logAudit({
       user: { id: user.id, name: user.name },

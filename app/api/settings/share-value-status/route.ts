@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { systemSettings, transactions } from '@/db/schema/index';
-import { eq, count } from 'drizzle-orm';
+import { eq, and, count } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
-import { AuthError } from '@/lib/utils/errors';
+import { AuthError, ForbiddenError } from '@/lib/utils/errors';
 
 interface ShareValueStatus {
   isLocked: boolean;
@@ -12,17 +12,23 @@ interface ShareValueStatus {
 
 export async function GET(request: NextRequest) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json(
         { success: false, message: 'Authentication required', code: 'UNAUTHORIZED' },
         { status: 401 }
       );
     }
+    // §6: share-value lock is a per-tenant financial invariant.
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     const db = getDb();
 
-    const [settings] = await db.select().from(systemSettings).limit(1);
+    const [settings] = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.tenantId, tenantId))
+      .limit(1);
     if (!settings) {
       return NextResponse.json({ isLocked: false, transactionCount: 0 });
     }
@@ -30,7 +36,7 @@ export async function GET(request: NextRequest) {
     const [txResult] = await db
       .select({ count: count() })
       .from(transactions)
-      .where(eq(transactions.isDeleted, false));
+      .where(and(eq(transactions.tenantId, tenantId), eq(transactions.isDeleted, false)));
 
     const transactionCount = Number(txResult?.count ?? 0);
     let isLocked = Boolean(settings.isShareValueLocked);

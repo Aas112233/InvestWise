@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
 import { Member, MemberPenalty } from "@/types";
 import { useLocale } from "@/lib/i18n";
+import { useTenantPenaltyRules, useTenantCurrency } from "@/lib/use-tenant-settings";
 
 interface IssuePenaltyModalProps {
   isOpen: boolean;
@@ -26,10 +27,12 @@ export function IssuePenaltyModal({
   onIssuePenalty,
 }: IssuePenaltyModalProps) {
   const { t } = useLocale();
+  const penaltyRules = useTenantPenaltyRules();
+  const currency = useTenantCurrency();
 
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [tier, setTier] = useState<1 | 2 | 3 | 4>(1);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState("Verbal Warning for Non-Compliance");
   const [type, setType] = useState<"VERBAL_WARNING" | "FUND_DEDUCTION" | "SUSPENSION">("VERBAL_WARNING");
   const [deductionAmount, setDeductionAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -58,15 +61,29 @@ export function IssuePenaltyModal({
   const handleTierChange = (val: string | null) => {
     const numTier = Number(val) as 1 | 2 | 3 | 4;
     setTier(numTier);
-    if (numTier === 1) {
-      setType("VERBAL_WARNING");
-      setTitle("Verbal Warning for Non-Compliance");
-    } else if (numTier === 2 || numTier === 3) {
-      setType("FUND_DEDUCTION");
-      setTitle(numTier === 2 ? "Tier 2 Governance Deduction" : "Tier 3 Escalated Deduction");
-    } else if (numTier === 4) {
-      setType("SUSPENSION");
-      setTitle("Tier 4 Membership Suspension");
+    const rule = penaltyRules.find((r) => r.tier === numTier);
+    if (rule) {
+      setType((rule.type as any) || "VERBAL_WARNING");
+      setTitle(rule.title);
+      if (rule.deductionAmount) {
+        setDeductionAmount(String(rule.deductionAmount));
+      } else {
+        setDeductionAmount("");
+      }
+    } else {
+      if (numTier === 1) {
+        setType("VERBAL_WARNING");
+        setTitle("Verbal Warning for Non-Compliance");
+        setDeductionAmount("");
+      } else if (numTier === 2 || numTier === 3) {
+        setType("FUND_DEDUCTION");
+        setTitle(numTier === 2 ? "Tier 2 Governance Deduction" : "Tier 3 Escalated Deduction");
+        setDeductionAmount(numTier === 2 ? "50" : "200");
+      } else if (numTier === 4) {
+        setType("SUSPENSION");
+        setTitle("Tier 4 Membership Suspension");
+        setDeductionAmount("500");
+      }
     }
   };
 
@@ -112,7 +129,7 @@ export function IssuePenaltyModal({
       title={t("governance.issuePenalty", { defaultValue: "Issue Governance Penalty" })}
       description={t("governance.issueDescription", { defaultValue: "Issue a tier 1-4 escalation penalty with mandatory violation documentation." })}
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form method="post" onSubmit={handleSubmit} className="space-y-6">
         {errorMessage && (
           <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs rounded-md">
             {errorMessage}

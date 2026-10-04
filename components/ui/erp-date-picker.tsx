@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useIsomorphicLayoutEffect } from "@/lib/use-isomorphic-layout-effect";
 import { AppDropdown } from "./app-dropdown";
 
 export interface ERPDatePickerProps {
@@ -103,7 +104,6 @@ export function ERPDatePicker({
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
   const today = useMemo(() => {
     const now = new Date();
     return toIso(now.getFullYear(), now.getMonth() + 1, now.getDate());
@@ -141,35 +141,45 @@ export function ERPDatePicker({
     [min, max],
   );
 
-  const updatePosition = useCallback(() => {
-    const el = triggerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setPosition({
-      top: rect.bottom + window.scrollY + 4,
-      left: rect.left + window.scrollX,
-      width: Math.max(rect.width, 280),
-    });
+  const placePanel = useCallback(() => {
+    const trigger = triggerRef.current;
+    const panel = panelRef.current;
+    if (!trigger || !panel) return;
+    const rect = trigger.getBoundingClientRect();
+    // Viewport rect + current scroll = document coordinates, which is what
+    // position:absolute on a direct child of <body> resolves against. The
+    // 300px floor is the panel's own design width, so the grid never squeezes.
+    panel.style.top = `${Math.round(rect.bottom + window.scrollY + 4)}px`;
+    panel.style.left = `${Math.round(rect.left + window.scrollX)}px`;
+    panel.style.width = `${Math.max(Math.round(rect.width), 300)}px`;
   }, []);
 
   const close = useCallback(() => setOpen(false), []);
 
-  useEffect(() => {
+  // Layout effect so the panel is placed before it is ever painted: with a
+  // state round-trip it showed one frame at the document origin, and the page
+  // scroll was then wrong for the rest of the interaction.
+  useIsomorphicLayoutEffect(() => {
     if (!open) return;
-    updatePosition();
-    const onResize = () => updatePosition();
+    placePanel();
+    const onResize = () => placePanel();
+    const onScroll = () => placePanel();
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node;
       if (triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
       close();
     };
     window.addEventListener("resize", onResize);
+    // capture: true — the calendar must follow inner scrollers (modal bodies,
+    // table wrappers) whose scroll events never reach window.
+    window.addEventListener("scroll", onScroll, true);
     document.addEventListener("pointerdown", onPointerDown);
     return () => {
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onScroll, true);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [open, updatePosition, close]);
+  }, [open, placePanel, close]);
 
   const pick = useCallback(
     (iso: string) => {
@@ -313,7 +323,7 @@ export function ERPDatePicker({
             role="dialog"
             aria-label={t("erp.datePicker.dialogLabel")}
             className="z-[100] rounded-xl border border-border/80 bg-popover text-popover-foreground shadow-xl p-3 w-[300px] animate-in fade-in-50 zoom-in-95 duration-100"
-            style={{ position: "absolute", top: position.top, left: position.left }}
+            style={{ position: "absolute" }}
           >
             <div className="flex items-center gap-1 mb-2">
               <button

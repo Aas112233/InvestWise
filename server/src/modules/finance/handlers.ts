@@ -21,6 +21,7 @@ import {
   equityTransferSchema,
   deleteTransactionSchema,
   transactionQuerySchema,
+  revertDepositSchema,
   type DividendPayload,
 } from './validation.js';
 import * as finance from './service.js';
@@ -83,6 +84,18 @@ export async function handleApproveDeposit(request: NextRequest, id: string) {
     assertUuid(id);
     const user = await requirePermission('DEPOSITS', 'WRITE');
     const result = await finance.approveDeposit(id, user as SessionUser);
+    return Response.json(result);
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+export async function handleRevertDeposit(request: NextRequest, id: string) {
+  try {
+    assertUuid(id);
+    const body = await validateBody(request, revertDepositSchema);
+    const user = await requirePermission('DEPOSITS', 'WRITE');
+    const result = await finance.revertDeposit(id, body.reason, user as SessionUser);
     return Response.json(result);
   } catch (err) {
     return errorResponse(err);

@@ -13,7 +13,7 @@ import { hashPassword, comparePassword } from '../../lib/password.js';
 import { logAudit } from '../../lib/audit.js';
 import { AppError, AuthError, NotFoundError, ConflictError, LockedError } from '../../shared/errors.js';
 import { normalizeEmail } from '../../shared/utils.js';
-import { normalizeRole } from '../../shared/roles.js';
+import { normalizeRole, isPlatformOwnerEmail } from '../../shared/roles.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -358,6 +358,14 @@ export async function registerUser(
 
   if (existing) {
     throw new ConflictError('A user with this email already exists');
+  }
+
+  // requireSuperAdmin/requireTenant trust the SUPERADMIN_EMAILS allowlist
+  // independently of the stored role, so an allowlisted address is the
+  // privilege. Registering a row with one would mint a platform operator from
+  // an admin-only endpoint. Mirrors app/api/auth/register.
+  if (isPlatformOwnerEmail(email)) {
+    throw new ConflictError('This email address is reserved for platform use');
   }
 
   const hashed = await hashPassword(userData.password);

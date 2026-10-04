@@ -242,3 +242,14 @@ fix_vite.js
 *.pyc
 __pycache__/
 .env*
+
+# Session/agent artifacts (ephemeral)
+.playwright-cli/
+tour-output/
+shot-*.png
+*.yaml.playwright
+members.yaml
+projects.yaml
+txns.yaml
+root?
+root*

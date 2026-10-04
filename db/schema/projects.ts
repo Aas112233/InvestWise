@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, text, integer, decimal, date, timestamp, index,
 import { sql } from 'drizzle-orm';
 import { tenants } from './tenants.js';
 import { members } from './members.js';
+import { funds } from './funds.js';
 export const projects = pgTable('projects', {
   id: uuid('id').defaultRandom().primaryKey(),
   tenantId: uuid('tenant_id').references(() => tenants.id),
@@ -19,7 +20,7 @@ export const projects = pgTable('projects', {
   totalEarnings: decimal('total_earnings', { precision: 15, scale: 2 }).default('0'),
   totalExpenses: decimal('total_expenses', { precision: 15, scale: 2 }).default('0'),
   projectFundHandler: varchar('project_fund_handler', { length: 255 }),
-  linkedFundId: uuid('linked_fund_id'),
+  linkedFundId: uuid('linked_fund_id').references(() => funds.id, { onDelete: 'set null' }),
   currentFundBalance: decimal('current_fund_balance', { precision: 15, scale: 2 }).default('0'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),

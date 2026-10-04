@@ -1,16 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
-import { Project, ProjectUpdateRecord } from "@/types";
+import { Project } from "@/types";
 import { formatMoney } from "@/lib/formatters";
+import { newIdempotencyRef } from "@/lib/idempotency";
 
 interface ProjectUpdateModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (updateData: { type: "Earning" | "Expense"; amount: number; description: string }) => Promise<void>;
-  project: Project | null;
+  onSubmit: (updateData: { type: "Earning" | "Expense"; amount: number; description: string; projectId?: string; referenceNumber: string }) => Promise<void>;
+  project?: Project | null;
+  projects?: Project[];
 }
 
 export function ProjectUpdateModal({
@@ -18,21 +20,45 @@ export function ProjectUpdateModal({
   onClose,
   onSubmit,
   project,
+  projects = [],
 }: ProjectUpdateModalProps) {
   const { t } = useLocale();
 
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(project?.id || "");
   const [type, setType] = useState<"Earning" | "Expense">("Expense");
   const [amount, setAmount] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // §12 idempotency: one retry key per modal session — a retry after a
+  // network failure reuses it so the server rejects the double post.
+  const [idempotencyRef, setIdempotencyRef] = useState<string>("");
+
+  useEffect(() => {
+    if (isOpen) setIdempotencyRef(newIdempotencyRef());
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (project?.id) {
+      setSelectedProjectId(project.id);
+    } else if (projects.length > 0 && !selectedProjectId) {
+      setSelectedProjectId("");
+    }
+  }, [project, projects, isOpen]);
+
+  const effectiveProject = project || projects.find((p) => p.id === selectedProjectId) || null;
+
+  const projectOptions: DropdownOption[] = projects.map((p) => ({
+    value: p.id,
+    label: `${p.title} (Bal: ${formatMoney(p.currentFundBalance)})`,
+  }));
 
   const typeOptions: DropdownOption[] = [
     { value: "Expense", label: t("projects.updateTypes.expense", { defaultValue: "Expense (Project Cost / Material)" }) },
     { value: "Earning", label: t("projects.updateTypes.earning", { defaultValue: "Earning (Revenue / Return)" }) },
   ];
 
-  const currentBalance = Number(project?.currentFundBalance || 0);
+  const currentBalance = Number(effectiveProject?.currentFundBalance || 0);
   const numAmount = parseFloat(amount) || 0;
   const simulatedNewBalance =
     type === "Earning"
@@ -42,6 +68,12 @@ export function ProjectUpdateModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    const targetId = effectiveProject?.id;
+    if (!targetId) {
+      setErrorMessage(t("projects.validation.selectProjectRequired", { defaultValue: "Please select a target project." }));
+      return;
+    }
 
     if (numAmount <= 0) {
       setErrorMessage(t("finance.validation.amountGreaterThanZero", { defaultValue: "Amount must be greater than zero." }));
@@ -64,6 +96,8 @@ export function ProjectUpdateModal({
         type,
         amount: numAmount,
         description: description.trim(),
+        projectId: targetId,
+        referenceNumber: idempotencyRef,
       });
       onClose();
     } catch (err: any) {
@@ -78,16 +112,27 @@ export function ProjectUpdateModal({
       isOpen={isOpen}
       onClose={onClose}
       title={t("projects.recordDisbursement", { defaultValue: "Project Disbursement & Update" })}
-      description={project ? `${project.title} (${project.category})` : ""}
+      description={effectiveProject ? `${effectiveProject.title} (${effectiveProject.category})` : t("projects.selectProjectForUpdate", { defaultValue: "Record income or expense against a project" })}
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form method="post" onSubmit={handleSubmit} className="space-y-6">
         {errorMessage && (
-          <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs rounded-md">
+          <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs rounded-xl">
             {errorMessage}
           </div>
         )}
 
         <ERPFormSection title={t("projects.updateDetails", { defaultValue: "Disbursement Specification" })}>
+          {!project && projects.length > 0 && (
+            <ERPFormField label={t("projects.targetEntity", { defaultValue: "Target Project *" })}>
+              <AppDropdown
+                options={projectOptions}
+                value={selectedProjectId || null}
+                onChange={(val) => setSelectedProjectId(val || "")}
+                placeholder={t("projects.selectProject", { defaultValue: "Select Project..." })}
+              />
+            </ERPFormField>
+          )}
+
           <ERPFormGrid cols={2}>
             <ERPFormField label={t("projects.transactionType", { defaultValue: "Update Type *" })}>
               <AppDropdown
@@ -137,7 +182,7 @@ export function ProjectUpdateModal({
               </span>
             </div>
             <div>
-              <span className="text-slate-500 dark:text-slate-400 block">
+              <span className="text-muted-foreground block">
                 {t("finance.balanceAfter", { defaultValue: "Projected Balance:" })}
               </span>
               <span

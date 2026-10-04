@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { memberPenalties, members } from '@/db/schema/index';
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
@@ -12,10 +12,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6: waiving a penalty moves member money — tenant context required.
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     const callerRole = normalizeRole(user.role);
     if (callerRole !== 'Admin' && callerRole !== 'Manager' && callerRole !== 'SuperAdmin') {
@@ -36,7 +38,7 @@ export async function POST(
       const [penalty] = await tx
         .select()
         .from(memberPenalties)
-        .where(eq(memberPenalties.id, id))
+        .where(and(eq(memberPenalties.id, id), eq(memberPenalties.tenantId, tenantId)))
         .limit(1);
 
       if (!penalty) throw new NotFoundError('Penalty');
@@ -87,6 +89,7 @@ export async function POST(
       resourceType: 'MemberPenalty',
       resourceId: id,
       details: { waiveReason, restoredDeduction: updatedPenalty?.calculatedDeduction },
+      tenantId,
     });
 
     return NextResponse.json({

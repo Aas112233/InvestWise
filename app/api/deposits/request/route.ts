@@ -3,6 +3,7 @@ import { getDb } from '@/db/index';
 import { transactions, funds, members } from '@/db/schema/index';
 import { eq, and, sql } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
+import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/utils/errors';
@@ -16,6 +17,9 @@ export async function POST(request: NextRequest) {
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6 fail-closed: deposit requests move money — null tenant must 403 so the
+    // member/fund lookups below can never run unscoped.
+    const scopedTenantId = requireTenant(tenantId, user);
 
     // Check write permission for REQUEST_DEPOSIT
     if (!hasScreenPermission(user, 'REQUEST_DEPOSIT', 'WRITE')) {
@@ -29,11 +33,24 @@ export async function POST(request: NextRequest) {
       amount,
       depositMethod,
       notes,
+      depositMonth,
     } = body;
 
     // Validate required fields
     if (!memberId || !fundId) {
       throw new ValidationError('memberId and fundId are required');
+    }
+
+    // Deposit month (YYYY-MM): the month the payment is FOR, chosen in the
+    // request form. Validation is server-side, never trusted (§6); optional
+    // so older clients and scripts stay working — approval falls back to the
+    // request date when absent.
+    let depositMonthKey: string | null = null;
+    if (depositMonth !== undefined && depositMonth !== null && depositMonth !== "") {
+      if (typeof depositMonth !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(depositMonth)) {
+        throw new ValidationError("[Field 'depositMonth', Code: invalid_string] Deposit month must be in YYYY-MM format");
+      }
+      depositMonthKey = depositMonth;
     }
 
     const depositAmount = parseFloat(amount);
@@ -51,34 +68,45 @@ export async function POST(request: NextRequest) {
 
     const db = getDb();
 
-    // Check for duplicate reference number (idempotency)
-    const existingDeposit = await db
-      .select({ id: transactions.id })
-      .from(transactions)
-      .where(and(eq(transactions.referenceNumber, refNumber), eq(transactions.isDeleted, false)))
-      .limit(1);
+    // Reference/member/fund lookups are independent of each other (all keyed
+    // off the request payload) — batch them into one round-trip group instead
+    // of three sequential ones. Error checks below preserve the original
+    // precedence (duplicate ref → missing member → missing fund).
+    const [existingDeposit, [member], [fund]] = await Promise.all([
+      // Duplicate reference number check (idempotency, tenant-scoped so one
+      // tenant cannot squat or probe another tenant's reference).
+      db
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.referenceNumber, refNumber),
+            eq(transactions.isDeleted, false),
+            eq(transactions.tenantId, scopedTenantId),
+          ),
+        )
+        .limit(1),
+      // Member with tenant isolation (§6 hard predicate).
+      db
+        .select()
+        .from(members)
+        .where(and(eq(members.id, memberId), eq(members.tenantId, scopedTenantId)))
+        .limit(1),
+      // Fund with tenant isolation (§6 hard predicate).
+      db
+        .select()
+        .from(funds)
+        .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)))
+        .limit(1),
+    ]);
 
     if (existingDeposit.length > 0) {
       throw new ValidationError('Transaction with this reference number already exists');
     }
 
-    // Get member with tenant isolation
-    const [member] = await db
-      .select()
-      .from(members)
-      .where(and(eq(members.id, memberId), tenantId ? eq(members.tenantId, tenantId) : sql`true`))
-      .limit(1);
-
     if (!member) {
       throw new NotFoundError('Member');
     }
-
-    // Get fund with tenant isolation
-    const [fund] = await db
-      .select()
-      .from(funds)
-      .where(and(eq(funds.id, fundId), tenantId ? eq(funds.tenantId, tenantId) : sql`true`))
-      .limit(1);
 
     if (!fund) {
       throw new NotFoundError('Fund');
@@ -96,10 +124,11 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
 
-    // Create pending deposit request transaction
+    // Create pending deposit request transaction (tenant is mandatory — never
+    // insert a NULL-tenant orphan row that no tenant filter can see).
     await db.transaction(async (tx) => {
       await tx.insert(transactions).values({
-        tenantId: tenantId || null,
+        tenantId: scopedTenantId,
         type: 'Deposit',
         amount: formattedAmount,
         description: notes || 'Member deposit request',
@@ -111,6 +140,7 @@ export async function POST(request: NextRequest) {
         fundId: fundId,
         handlingOfficer: user.name,
         depositMethod: depositMethod || null,
+        depositMonth: depositMonthKey,
         authorizedBy: user.id,
         balanceBefore: fund.balance,
         balanceAfter: fund.balance, // Balance unchanged for pending
@@ -131,6 +161,7 @@ export async function POST(request: NextRequest) {
         fundName: fund.name,
         amount: formattedAmount,
         depositMethod: depositMethod || null,
+        depositMonth: depositMonthKey,
         notes: notes || null,
       },
     });

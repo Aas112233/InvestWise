@@ -32,44 +32,48 @@ export async function POST(request: NextRequest) {
 
     const db = getDb();
 
-    // Blacklist the refresh token
-    if (refreshToken) {
-      try {
-        const expiry = getTokenExpiry(refreshToken);
-        await db.insert(blacklistedTokens).values({
-          token: refreshToken,
-          type: 'refresh',
-          userId,
-          expiresAt: expiry,
-          reason: 'logout',
-        });
-        blacklistToken(refreshToken, expiry);
-      } catch {
-        // If the token is malformed we still proceed to end the session
-      }
-    }
-
-    // End specific session if sessionId provided
-    if (sessionId) {
-      await db
-        .update(sessions)
-        .set({
-          isActive: false,
-          isExpired: true,
-          logoutTime: new Date(),
-        })
-        .where(
-          and(eq(sessions.sessionId, sessionId), eq(sessions.userId, userId)),
-        );
-    }
-
-    await logAudit({
-      action: 'LOGOUT',
-      resourceType: 'User',
-      resourceId: userId,
-      details: { sessionEnded: Boolean(sessionId) },
-      status: 'SUCCESS',
-    });
+    // Blacklist insert, session end, and audit entry are independent writes —
+    // run them as one concurrent round-trip group instead of sequentially.
+    await Promise.all([
+      // Blacklist the refresh token (a malformed token must not block logout)
+      (async () => {
+        if (refreshToken) {
+          try {
+            const expiry = getTokenExpiry(refreshToken);
+            await db.insert(blacklistedTokens).values({
+              token: refreshToken,
+              type: 'refresh',
+              userId,
+              expiresAt: expiry,
+              reason: 'logout',
+            });
+            blacklistToken(refreshToken, expiry);
+          } catch {
+            // If the token is malformed we still proceed to end the session
+          }
+        }
+      })(),
+      // End specific session if sessionId provided
+      sessionId
+        ? db
+            .update(sessions)
+            .set({
+              isActive: false,
+              isExpired: true,
+              logoutTime: new Date(),
+            })
+            .where(
+              and(eq(sessions.sessionId, sessionId), eq(sessions.userId, userId)),
+            )
+        : Promise.resolve(),
+      logAudit({
+        action: 'LOGOUT',
+        resourceType: 'User',
+        resourceId: userId,
+        details: { sessionEnded: Boolean(sessionId) },
+        status: 'SUCCESS',
+      }),
+    ]);
 
     const response = NextResponse.json({
       success: true,

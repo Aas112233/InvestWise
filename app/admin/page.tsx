@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, CreditCard, PauseCircle, Users } from "lucide-react";
+import { Building2, CheckCircle2, Clock, CreditCard, TrendingUp, Users } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
+import { toCents, fromCents } from "@/lib/money";
 import { ERPMetricCard } from "@/components/ui/erp-metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 
@@ -20,6 +22,7 @@ interface BillingRow {
   tenantStatus: string;
   subscriptionStatus: string | null;
   planName: string | null;
+  priceMonthly: string | number | null;
   userCount: number;
 }
 
@@ -48,14 +51,41 @@ export default function AdminOverviewPage() {
     staleTime: 60_000,
   });
 
-  const rows = billingData?.data ?? [];
+  // Memoised so the identity is stable: a bare `?? []` allocates a new array on
+  // every render, which silently defeats the money useMemo below.
+  const rows = useMemo(() => billingData?.data ?? [], [billingData]);
   const loading = tenantsLoading || billingLoading;
   const totalTenants = tenantsData?.meta.total ?? rows.length;
   const totalUsers = rows.reduce((sum, r) => sum + (r.userCount ?? 0), 0);
   const suspended = rows.filter((r) => r.tenantStatus === "suspended").length;
   const attention = rows.filter(
-    (r) => r.tenantStatus === "suspended" || r.subscriptionStatus === "past_due",
+    (r) => r.tenantStatus === "suspended" || r.subscriptionStatus === "past_due"
   );
+
+  // Money from the server, in integer cents. Pathshala Pro derives MRR as
+  // `activeTenants * 249`, which silently reports revenue for tenants on a
+  // free tier — sum the real plan prices instead.
+  const money = useMemo(() => {
+    let mrrCents = 0;
+    let active = 0;
+    let trials = 0;
+    for (const r of rows) {
+      const s = (r.subscriptionStatus ?? "").toLowerCase();
+      if (s === "active") {
+        active += 1;
+        if (r.priceMonthly != null && r.priceMonthly !== "") {
+          try {
+            mrrCents += toCents(String(r.priceMonthly));
+          } catch {
+            // Unparseable price never blocks the console.
+          }
+        }
+      } else if (s === "trial") {
+        trials += 1;
+      }
+    }
+    return { mrrCents, arrCents: mrrCents * 12, active, trials };
+  }, [rows]);
 
   return (
     <div className="space-y-6">
@@ -75,21 +105,39 @@ export default function AdminOverviewPage() {
           icon={<Building2 size={16} />}
         />
         <ERPMetricCard
+          label={t("admin.overview.mrr", { defaultValue: "MRR" })}
+          value={loading ? "…" : fromCents(money.mrrCents)}
+          icon={<TrendingUp size={16} />}
+          tone={money.mrrCents > 0 ? "emerald" : "slate"}
+        />
+        <ERPMetricCard
           label={t("admin.overview.platformUsers", { defaultValue: "Platform Users" })}
           value={loading ? "…" : totalUsers}
           icon={<Users size={16} />}
-        />
-        <ERPMetricCard
-          label={t("admin.overview.suspended", { defaultValue: "Suspended" })}
-          value={loading ? "…" : suspended}
-          icon={<PauseCircle size={16} />}
-          tone={suspended > 0 ? "rose" : "emerald"}
         />
         <ERPMetricCard
           label={t("admin.overview.attention", { defaultValue: "Needs Attention" })}
           value={loading ? "…" : attention.length}
           icon={<CreditCard size={16} />}
           tone={attention.length > 0 ? "amber" : "emerald"}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <ERPMetricCard
+          label={t("admin.billing.arr", { defaultValue: "ARR (run rate)" })}
+          value={loading ? "…" : fromCents(money.arrCents)}
+          icon={<TrendingUp size={16} />}
+        />
+        <ERPMetricCard
+          label={t("admin.billing.activeSubs", { defaultValue: "Active subscriptions" })}
+          value={loading ? "…" : `${money.active} / ${rows.length}`}
+          icon={<CheckCircle2 size={16} />}
+        />
+        <ERPMetricCard
+          label={t("admin.billing.trials", { defaultValue: "Active trials" })}
+          value={loading ? "…" : money.trials}
+          icon={<Clock size={16} />}
         />
       </div>
 

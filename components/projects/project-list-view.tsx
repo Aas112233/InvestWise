@@ -27,15 +27,18 @@ import {
   AppDropdown,
   DropdownOption,
   StatusTone,
+  ERPConfirmDialog,
 } from "@/components/ui";
 import { formatMoney, formatDate } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { usePermissions } from "@/lib/use-permissions";
 
 interface ProjectListViewProps {
   projects: Project[];
   isLoading: boolean;
   onOpenCreate: () => void;
   onSelectProject: (project: Project) => void;
+  onOpenEdit?: (project: Project) => void;
   onOpenAddUpdate?: (project: Project) => void;
   onDeleteProject?: (projectId: string) => void;
 }
@@ -45,10 +48,13 @@ export function ProjectListView({
   isLoading,
   onOpenCreate,
   onSelectProject,
+  onOpenEdit,
   onOpenAddUpdate,
   onDeleteProject,
 }: ProjectListViewProps) {
   const { t } = useLocale();
+  const { can } = usePermissions();
+  const canWrite = can("PROJECT_MANAGEMENT", "WRITE");
 
   // Search and Filter State
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,6 +62,7 @@ export function ProjectListView({
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
 
   // Compute Metrics
   const metrics = useMemo(() => {
@@ -215,7 +222,21 @@ export function ProjectListView({
             <Eye className="w-3.5 h-3.5" />
           </Button>
 
-          {onOpenAddUpdate && (
+          {canWrite && onOpenEdit && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenEdit(p);
+              }}
+              title={t("common.edit", { defaultValue: "Edit" })}
+            >
+              <FileEdit className="w-3.5 h-3.5" />
+            </Button>
+          )}
+
+          {canWrite && onOpenAddUpdate && (
             <Button
               variant="outline"
               size="sm"
@@ -229,15 +250,13 @@ export function ProjectListView({
             </Button>
           )}
 
-          {onDeleteProject && (
+          {canWrite && onDeleteProject && (
             <Button
               variant="destructive"
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                if (confirm(t("projects.confirmDelete", { defaultValue: "Delete this project?" }))) {
-                  onDeleteProject(p.id);
-                }
+                setPendingDelete(p);
               }}
               title={t("common.delete", { defaultValue: "Delete" })}
             >
@@ -258,7 +277,7 @@ export function ProjectListView({
           value={metrics.activeCount}
           icon={Briefcase}
           tone="cyan"
-          helperText={`${projects.length} total projects registered`}
+          helperText={t("projects.registeredCount", { count: projects.length, defaultValue: "{count} total projects registered" })}
         />
         <ERPMetricCard
           label={t("projects.metrics.allocatedBudget", { defaultValue: "Allocated Budget" })}
@@ -325,9 +344,11 @@ export function ProjectListView({
           )}
         </div>
 
-        <Button variant="primary" size="sm" onClick={onOpenCreate} icon={Plus}>
-          {t("projects.createButton", { defaultValue: "New Project" })}
-        </Button>
+        {canWrite && (
+          <Button variant="primary" size="sm" onClick={onOpenCreate} icon={Plus}>
+            {t("projects.createButton", { defaultValue: "New Project" })}
+          </Button>
+        )}
       </div>
 
       {/* Main ERP Data Table */}
@@ -341,8 +362,22 @@ export function ProjectListView({
         onPageChange={setCurrentPage}
         onPageSizeChange={setPageSize}
         emptyMessage={t("projects.noProjectsFound", { defaultValue: "No projects match the criteria." })}
-        emptyActionLabel={t("projects.createButton", { defaultValue: "New Project" })}
-        onEmptyAction={onOpenCreate}
+        emptyActionLabel={canWrite ? t("projects.createButton", { defaultValue: "New Project" }) : undefined}
+        onEmptyAction={canWrite ? onOpenCreate : undefined}
+      />
+
+      <ERPConfirmDialog
+        isOpen={pendingDelete !== null}
+        title={t("projects.deleteTitle", { defaultValue: "Cancel this project?" })}
+        description={t("projects.confirmDelete", { defaultValue: "This marks the project as Cancelled. Financial history is retained." })}
+        confirmLabel={t("common.delete", { defaultValue: "Delete" })}
+        cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
+        confirmVariant="destructive"
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete) onDeleteProject?.(pendingDelete.id);
+          setPendingDelete(null);
+        }}
       />
     </div>
   );

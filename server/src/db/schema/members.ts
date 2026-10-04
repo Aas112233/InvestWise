@@ -1,4 +1,5 @@
 import { pgTable, uuid, varchar, integer, decimal, boolean, timestamp, index } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { tenants } from './tenants.js';
 import { users } from './users.js';
 
@@ -43,6 +44,9 @@ export const members = pgTable('members', {
   index('idx_members_status_name').on(table.status, table.name),
   index('idx_members_email_status').on(table.email, table.status),
   index('idx_members_name').on(table.name),
+  // Ledger search box matches member names (GET /api/transactions ?search=) —
+  // pg_trgm GIN, applied live via .workbuddy-ai/tmp/add-search-indexes.mjs.
+  index('idx_members_name_trgm').using('gin', sql`${table.name} gin_trgm_ops`),
   index('idx_members_user_id').on(table.userId),
   index('idx_members_role_status').on(table.role, table.status),
   index('idx_members_created_at').on(table.createdAt),

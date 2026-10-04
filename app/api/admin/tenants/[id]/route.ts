@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { tenants, users, funds, projects } from '@/db/schema/index';
-import { eq, count } from 'drizzle-orm';
+import { tenants, users, funds, projects, transactions } from '@/db/schema/index';
+import { eq, and, count, sql } from 'drizzle-orm';
 import { AuthError, ForbiddenError, NotFoundError } from '@/lib/utils/errors';
 import { requireSuperAdmin, requireAuthUser } from '@/lib/admin-guard';
+import { resolveModuleAccess } from '@/lib/tenant-modules';
+import { forceDeleteTenant } from '@/lib/superadmin-service';
+import { getClientIp } from '@/lib/request-meta';
 
 interface TenantResponse {
   id: string;
@@ -67,24 +70,56 @@ export async function GET(
       .where(eq(users.tenantId, id))
       .limit(50);
 
-    const [userCountResult, fundsCountResult, projectsCountResult] = await Promise.all([
-      db.select({ count: count() }).from(users).where(eq(users.tenantId, id)),
-      db.select({ count: count() }).from(funds).where(eq(funds.tenantId, id)),
-      db.select({ count: count() }).from(projects).where(eq(projects.tenantId, id)),
-    ]);
+    const [userCountResult, fundsCountResult, projectsCountResult, reserveAgg, txAgg, txCountResult] =
+      await Promise.all([
+        db.select({ count: count() }).from(users).where(eq(users.tenantId, id)),
+        db.select({ count: count() }).from(funds).where(eq(funds.tenantId, id)),
+        db.select({ count: count() }).from(projects).where(eq(projects.tenantId, id)),
+        // Reserve balance lives on funds; flow amounts live on transactions.
+        // Deliberately two queries: joining them would fan out to
+        // funds x transactions and multiply every SUM.
+        db
+          .select({ netReserve: sql<string>`coalesce(sum(${funds.balance}::numeric), 0)` })
+          .from(funds)
+          .where(eq(funds.tenantId, id)),
+        db
+          .select({
+            totalDeposits: sql<string>`coalesce(sum(${transactions.amount}::numeric) filter (where ${transactions.type} = 'Deposit'), 0)`,
+            totalWithdrawals: sql<string>`coalesce(sum(${transactions.amount}::numeric) filter (where ${transactions.type} = 'Withdrawal'), 0)`,
+            totalExpenses: sql<string>`coalesce(sum(${transactions.amount}::numeric) filter (where ${transactions.type} = 'Expense'), 0)`,
+            totalDividends: sql<string>`coalesce(sum(${transactions.amount}::numeric) filter (where ${transactions.type} = 'Dividend'), 0)`,
+          })
+          .from(transactions)
+          .where(and(eq(transactions.tenantId, id), eq(transactions.isDeleted, false))),
+        db
+          .select({ count: count() })
+          .from(transactions)
+          .where(and(eq(transactions.tenantId, id), eq(transactions.isDeleted, false))),
+      ]);
 
     const totalUsers = Number(userCountResult[0]?.count ?? 0);
     const totalFunds = Number(fundsCountResult[0]?.count ?? 0);
     const totalProjects = Number(projectsCountResult[0]?.count ?? 0);
+    const flow = txAgg[0];
 
     return NextResponse.json({
       success: true,
       data: {
         tenant: toTenantResponse(target, totalUsers),
+        moduleAccess: resolveModuleAccess(target.moduleAccess),
         stats: {
           totalUsers,
           totalFunds,
           totalProjects,
+          totalTransactions: Number(txCountResult[0]?.count ?? 0),
+        },
+        financials: {
+          // decimal(15,2) crosses the wire as a string — never a JS float.
+          totalDeposits: flow?.totalDeposits ?? '0',
+          totalWithdrawals: flow?.totalWithdrawals ?? '0',
+          totalExpenses: flow?.totalExpenses ?? '0',
+          totalDividends: flow?.totalDividends ?? '0',
+          netReserveBalance: reserveAgg[0]?.netReserve ?? '0',
         },
         users: tenantUsers.map(u => ({
           ...u,
@@ -235,6 +270,22 @@ export async function DELETE(
       );
     }
 
+    // ?force=true = platform wipe: every tenant-scoped row, its users, and the
+    // tenant itself, in one transaction, plus a TENANT_FORCE_DELETE audit row.
+    // Without it this stays a guarded delete that refuses on any remaining data.
+    if (request.nextUrl.searchParams.get('force') === 'true') {
+      await forceDeleteTenant(id, {
+        adminUserId: user.id || null,
+        adminEmail: user.email,
+        ipAddress: getClientIp(request),
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Tenant force deleted',
+      });
+    }
+
     // Check if tenant has users
     const [userCountResult] = await db
       .select({ count: count() })
@@ -261,6 +312,15 @@ export async function DELETE(
       return NextResponse.json(
         { success: false, message: error.message, code: error.code },
         { status: error.statusCode }
+      );
+    }
+
+    // 23503 = a row still references the tenant. Name the constraint instead of
+    // masking it as "Failed to delete tenant" (§11).
+    if (error?.code === '23503') {
+      return NextResponse.json(
+        { success: false, message: `Cannot delete tenant: ${error.detail || error.message}`, code: 'CONFLICT' },
+        { status: 409 }
       );
     }
 

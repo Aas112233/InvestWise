@@ -3,6 +3,7 @@ import { getDb } from "@/db/index";
 import { members, projects, funds, transactions } from "@/db/schema/index";
 import { eq, and, sql, desc, gte, lte } from "drizzle-orm";
 import { getAuthContext } from "@/lib/middleware/auth";
+import { requireTenant } from '@/lib/tenant';
 import { AnalysisData } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -24,19 +25,19 @@ export async function GET(request: NextRequest) {
       return error || NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
+    const scopedTenantId = requireTenant(tenantId, user);
+
+    const searchParams = new URL(request.url).searchParams;
     const yearParam = searchParams.get("year");
     const targetYear = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
     const selectedMemberId = searchParams.get("memberId") || "all";
 
     const db = getDb();
 
-    // 1. Scoped conditions
-    const memberCond = tenantId ? eq(members.tenantId, tenantId) : undefined;
-    const projectCond = tenantId ? eq(projects.tenantId, tenantId) : undefined;
-    const fundCond = tenantId
-      ? and(eq(funds.status, "ACTIVE"), eq(funds.tenantId, tenantId))
-      : eq(funds.status, "ACTIVE");
+    // 1. Scoped conditions (unconditional — scopedTenantId 403s on null via requireTenant above).
+    const memberCond = eq(members.tenantId, scopedTenantId);
+    const projectCond = eq(projects.tenantId, scopedTenantId);
+    const fundCond = and(eq(funds.status, "ACTIVE"), eq(funds.tenantId, scopedTenantId));
 
     // Start & end of target year
     const startOfYear = new Date(targetYear, 0, 1);
@@ -47,7 +48,8 @@ export async function GET(request: NextRequest) {
       gte(transactions.date, startOfYear),
       lte(transactions.date, endOfYear),
     ];
-    if (tenantId) txConditions.push(eq(transactions.tenantId, tenantId));
+    // Unconditional tenant predicate — scopedTenantId already 403s on null.
+    txConditions.push(eq(transactions.tenantId, scopedTenantId));
     if (selectedMemberId !== "all") {
       txConditions.push(eq(transactions.memberId, selectedMemberId));
     }
@@ -111,7 +113,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(transactions.isDeleted, false),
-            tenantId ? eq(transactions.tenantId, tenantId) : sql`1=1`,
+            eq(transactions.tenantId, scopedTenantId),
             selectedMemberId !== "all" ? eq(transactions.memberId, selectedMemberId) : sql`1=1`,
           ),
         ),

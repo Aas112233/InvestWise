@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowLeftRight,
   Ban,
   CheckCircle2,
   Eye,
@@ -12,7 +13,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AppDropdown } from "@/components/ui/app-dropdown";
@@ -21,18 +22,32 @@ import { ERPConfirmDialog } from "@/components/ui/erp-confirm-dialog";
 import { ERPDataTable, type ERPColumn } from "@/components/ui/erp-data-table";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { ApiError, apiClient } from "@/lib/api-client";
+import { memberRoleDisplay } from "@/lib/member-roles";
 import { useAuth } from "@/lib/auth-context";
 import { hasScreenPermission } from "@/lib/permissions";
+import { normalizeRole } from "@/lib/roles";
 import { formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
 import { useTenantCurrency } from "@/lib/use-tenant-settings";
 import type { PaginatedResponse } from "@/lib/utils/types";
 import type { Member } from "@/types";
+import { ShareDivisionModal } from "@/components/dividends/share-division-modal";
 import { MemberDetailSheet } from "./member-detail-sheet";
 import { MemberFormModal } from "./member-form-modal";
 
-function depositTotal(m: Member): number {
-  return Number(m.successfulDepositTotal ?? m.totalDeposits ?? m.totalContributed ?? 0) || 0;
+const MONTH_SHORT = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const;
+
+/** Localized "March 2026" label for a YYYY-MM ledger month key. */
+function monthLabel(key: string | null | undefined, t: (k: string) => string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(key ?? "");
+  if (!m) return "";
+  const short = MONTH_SHORT[Number(m[2]) - 1] ?? "jan";
+  return `${t(`common.months.${short}`)} ${m[1]}`;
+}
+
+/** Consistent muted label for "the server hid this from you". */
+function HiddenLabel({ children }: { children: ReactNode }) {
+  return <span className="text-[10px] uppercase tracking-wider text-slate-400">{children}</span>;
 }
 
 function statusTone(status: string): StatusTone {
@@ -61,16 +76,20 @@ type ConfirmState =
 function RowActionsMenu({
   member,
   canWrite,
+  canDivide,
   onView,
   onEdit,
   onToggleStatus,
+  onDivide,
   onDelete,
 }: {
   member: Member;
   canWrite: boolean;
+  canDivide: boolean;
   onView: () => void;
   onEdit: () => void;
   onToggleStatus: () => void;
+  onDivide: () => void;
   onDelete: () => void;
 }) {
   const { t } = useLocale();
@@ -111,6 +130,15 @@ function RowActionsMenu({
       danger: false,
       show: canWrite,
     },
+    // Equity movement is a DIVIDENDS write, not a member-profile edit: a
+    // manager who may correct a phone number may not move a member's capital.
+    {
+      label: t("dividends.migrationEngine"),
+      icon: <ArrowLeftRight size={13} />,
+      run: onDivide,
+      danger: false,
+      show: canDivide,
+    },
     { label: t("members.rowMenu.delete"), icon: <Trash2 size={13} />, run: onDelete, danger: true, show: canWrite },
   ];
 
@@ -119,7 +147,7 @@ function RowActionsMenu({
       <button
         ref={btnRef}
         type="button"
-        aria-label="Row actions"
+        aria-label={t("members.rowMenu.actions")}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => {
@@ -186,6 +214,7 @@ export function MembersListView() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [divisionMember, setDivisionMember] = useState<Member | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
 
   useEffect(() => {
@@ -197,11 +226,18 @@ export function MembersListView() {
   }, [searchInput]);
 
   const canWrite = hasScreenPermission(user, "MEMBERS", "WRITE");
+  const canDivide = hasScreenPermission(user, "DIVIDENDS", "WRITE");
+  // Review columns (Warnings, Status) are Admin/Manager-only per user spec
+  // (2026-10-04; corrected same day: Manager, not Member) — hidden from
+  // Member/Auditor rows. Fail-closed: hidden until the user object hydrates
+  // (same convention as the sidebar).
+  const showReviewColumns =
+    !!user && (normalizeRole(user.role) === "Admin" || normalizeRole(user.role) === "Manager");
 
   const currency = useTenantCurrency();
 
   const query = useQuery({
-    queryKey: ["members", { page, pageSize, search, status, sortBy, sortOrder }],
+    queryKey: ["members", { page, pageSize, search, status, sortBy, sortOrder, withTotals: "1" }],
     queryFn: () =>
       apiClient<PaginatedResponse<Member>>("/members", {
         params: {
@@ -211,6 +247,9 @@ export function MembersListView() {
           status: status || undefined,
           sortBy,
           sortOrder,
+          // Directory-only ledger aggregates (deposits total, last deposit
+          // month, expected dividend). Member dropdowns omit it.
+          withTotals: "1",
         },
       }),
     placeholderData: (prev) => prev,
@@ -276,7 +315,7 @@ export function MembersListView() {
       render: (m) => (
         <div>
           <p className="font-medium text-slate-800 dark:text-slate-100">{m.name}</p>
-          {m.role && <p className="text-[10px] text-slate-400">{m.role}</p>}
+          {m.role && <p className="text-[10px] text-slate-400">{memberRoleDisplay(m.role, t)}</p>}
         </div>
       ),
     },
@@ -285,7 +324,13 @@ export function MembersListView() {
       header: t("members.columns.contact"),
       render: (m) => (
         <div className="text-[11px]">
-          <p className="text-slate-600 dark:text-slate-300">{m.phone || "—"}</p>
+          {/* Phone is masked PII: say so instead of rendering a blank cell that
+              looks like an uncollected field. */}
+          {m.piiMasked ? (
+            <HiddenLabel>{t("members.hidden")}</HiddenLabel>
+          ) : (
+            <p className="text-slate-600 dark:text-slate-300">{m.phone || "—"}</p>
+          )}
           <p className="text-slate-400 truncate max-w-[200px]">{m.email || "—"}</p>
         </div>
       ),
@@ -298,11 +343,58 @@ export function MembersListView() {
       render: (m) => <span className="font-mono">{m.shares}</span>,
     },
     {
-      key: "totalContributed",
+      key: "nominee",
+      header: t("members.columns.nominee"),
+      render: (m) =>
+        m.piiMasked ? (
+          <HiddenLabel>{t("members.hidden")}</HiddenLabel>
+        ) : m.nomineeName ? (
+          <div className="text-[11px]">
+            <p className="text-slate-600 dark:text-slate-300">
+              {m.nomineeName}
+              {m.nomineeRelation && <span className="text-slate-400"> · {m.nomineeRelation}</span>}
+            </p>
+            <p className="text-slate-400 truncate max-w-[200px]">
+              {[m.nomineePhone, m.nomineeNidOrPassport].filter(Boolean).join(" · ") || "—"}
+            </p>
+          </div>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
+    {
+      key: "totalDeposited",
+      // "Total Contributed" is the deposits-only ledger sum, not the stored
+      // equity figure (which also counts reinvested dividends) — the two are
+      // different numbers and are labeled differently on purpose.
       header: t("members.columns.contributed"),
       sortable: true,
       align: "right",
-      render: (m) => <span className="font-mono">{formatMoney(depositTotal(m), currency)}</span>,
+      render: (m) => <span className="font-mono">{formatMoney(m.totalDeposited, currency)}</span>,
+    },
+    {
+      key: "lastDepositMonth",
+      header: t("members.columns.lastDeposit"),
+      render: (m) => {
+        const label = monthLabel(m.lastDepositMonth, t);
+        return label ? (
+          <span className="whitespace-nowrap text-[11px]">{label}</span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        );
+      },
+    },
+    {
+      key: "expectedDividend",
+      header: t("members.columns.expectedDividend"),
+      sortable: true,
+      align: "right",
+      render: (m) =>
+        m.expectedDividend == null ? (
+          <HiddenLabel>{t("members.noDividendDeclared")}</HiddenLabel>
+        ) : (
+          <span className="font-mono">{formatMoney(m.expectedDividend, currency)}</span>
+        ),
     },
     {
       key: "warningCount",
@@ -332,11 +424,13 @@ export function MembersListView() {
         <RowActionsMenu
           member={m}
           canWrite={canWrite}
+          canDivide={canDivide}
           onView={() => setDetailId(m.memberId || m.id)}
           onEdit={() => {
             setEditing(m);
             setFormOpen(true);
           }}
+          onDivide={() => setDivisionMember(m)}
           onToggleStatus={() =>
             setConfirm(m.status === "suspended" ? { kind: "activate", member: m } : { kind: "suspend", member: m })
           }
@@ -345,6 +439,10 @@ export function MembersListView() {
       ),
     },
   ];
+
+  const tableColumns = showReviewColumns
+    ? columns
+    : columns.filter((c) => c.key !== "warningCount" && c.key !== "status");
 
   const statusOptions = ["active", "pending", "inactive", "suspended"].map((s) => ({
     value: s,
@@ -411,7 +509,7 @@ export function MembersListView() {
 
       <ERPDataTable
         data={rows}
-        columns={columns}
+        columns={tableColumns}
         isLoading={query.isLoading}
         loadingRowCount={pageSize}
         sortBy={sortBy}
@@ -457,11 +555,18 @@ export function MembersListView() {
       <MemberDetailSheet
         memberId={detailId}
         onClose={() => setDetailId(null)}
+        onDivide={canDivide ? (m) => setDivisionMember(m) : undefined}
         onEdit={(m) => {
           setDetailId(null);
           setEditing(m);
           setFormOpen(true);
         }}
+      />
+
+      <ShareDivisionModal
+        open={divisionMember !== null}
+        source={divisionMember}
+        onClose={() => setDivisionMember(null)}
       />
 
       <ERPConfirmDialog

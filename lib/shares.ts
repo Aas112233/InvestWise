@@ -1,17 +1,22 @@
 /**
  * Canonical share-number / share-value conversions.
  *
- * One share is worth `system_settings.share_value_bdt` (default 1000.00 BDT).
- * Share counts are integers (DB `integer` columns) and are ONE-TIME SETUP:
- * they are set at member creation and never change via deposits. The only
- * legitimate mutations are ownership events (equity transfer, exit settlement)
- * which conserve the total.
+ * Each tenant configures their share value in `system_settings.share_value_bdt`
+ * (e.g., 10, 40, 1000, 10000 currency units per share; default 1000.00).
+ *
+ * Member share counts are integers (`members.shares`) representing equity ownership:
+ * they are set at member onboarding and NEVER altered by deposits, dues, dividends,
+ * or financial calculations. Cumulative contributions accumulate over time, but the
+ * member's share count remains strictly invariant.
+ *
+ * The only legitimate mutations of `members.shares` are explicit ownership events
+ * (approved peer equity transfers or member exit settlements).
  *
  * All money amounts here are integer cents (see ./money). Never floats.
  */
 import { MoneyError, toCents } from "./money";
 
-export const DEFAULT_SHARE_VALUE_CENTS = 100_000; // 1000.00 BDT per share
+export const DEFAULT_SHARE_VALUE_CENTS = 100_000; // 1000.00 currency units per share default
 
 export interface ShareValueSource {
   shareValueBdt?: string | number | null;
@@ -38,7 +43,7 @@ export function assertIntegralShares(value: unknown, field = "shares"): number {
   return value;
 }
 
-/** Money (cents) a share count is worth: exact integer product. */
+/** Money (cents) a share count is worth for monthly dues / required deposits: exact integer product. */
 export function sharesToCents(shares: number, shareValueCents: number): number {
   assertIntegralShares(shares);
   if (!Number.isInteger(shareValueCents) || shareValueCents <= 0) {
@@ -47,7 +52,11 @@ export function sharesToCents(shares: number, shareValueCents: number): number {
   return shares * shareValueCents;
 }
 
-/** Whole shares derived from a money amount: floor(contributed / shareValue). */
+/**
+ * @deprecated Member shares are fixed equity allocations and MUST NEVER be derived
+ * or altered by money contributions, deposits, or calculations.
+ * Kept only for pure mathematical unit tests.
+ */
 export function sharesFromCents(totalCents: number, shareValueCents: number): number {
   if (!Number.isInteger(totalCents) || totalCents < 0) {
     throw new MoneyError("Total cents must be a non-negative integer", "INVALID_AMOUNT");

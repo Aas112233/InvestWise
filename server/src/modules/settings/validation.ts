@@ -29,7 +29,7 @@ export const updateSettingsSchema = z.object({
     .optional(),
   system: z
     .object({
-      language: z.enum(['English', 'Bengali']).optional(),
+      language: z.enum(['English', 'Bengali', 'Urdu', 'Hindi']).optional(),
       refreshInterval: z.string().optional(),
       theme: z.enum(['Light', 'Dark', 'System Default']).optional(),
       dateFormat: z.string().optional(),
@@ -41,6 +41,9 @@ export const updateSettingsSchema = z.object({
       monthlyMeetingDay: z.number().int().min(1).max(28).optional(),
       depositDueDate: z.number().int().min(1).max(28).optional(),
       gracePeriodDays: z.number().int().min(0).max(30).optional(),
+      lateDepositGraceMonths: z.number().int().min(0).max(6).optional(),
+      inactiveAfterMonths: z.number().int().min(1).max(36).optional(),
+      suspendedAfterMonths: z.number().int().min(2).max(60).optional(),
       meetingTypes: z.array(z.string().min(1)).optional(),
       penaltyRules: z
         .array(

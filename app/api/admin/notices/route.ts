@@ -4,6 +4,8 @@ import { superAdminActionLog } from '@/db/schema/index';
 import { desc, eq } from 'drizzle-orm';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
+import { getClientIp } from '@/lib/request-meta';
+import { validateNoticeInput } from '@/lib/admin/notice-schema';
 
 export interface BroadcastNotice {
   id: string;
@@ -68,14 +70,20 @@ export async function POST(request: NextRequest) {
     requireSuperAdmin(user);
 
     const body = await request.json();
-    const { title, message, severity = 'info', active = true, expiresAt } = body;
-
-    if (!title?.trim() || !message?.trim()) {
+    const parsed = validateNoticeInput(body);
+    if (!parsed.ok) {
       return NextResponse.json(
-        { success: false, message: 'Title and message are required', code: 'VALIDATION_ERROR' },
+        { success: false, message: parsed.message, code: parsed.code },
         { status: 400 }
       );
     }
+    const { title, message, severity, active, expiresAt } = parsed.value as {
+      title: string;
+      message: string;
+      severity: 'info' | 'warning' | 'critical';
+      active: boolean;
+      expiresAt?: string | null;
+    };
 
     const db = getDb();
     const [inserted] = await db
@@ -85,12 +93,13 @@ export async function POST(request: NextRequest) {
         adminEmail: user.email || 'operator@investwise.system',
         actionType: 'BROADCAST_NOTICE',
         targetType: 'PLATFORM_BROADCAST',
+        ipAddress: getClientIp(request),
         details: {
-          title: title.trim(),
-          message: message.trim(),
+          title,
+          message,
           severity,
           active: Boolean(active),
-          expiresAt: expiresAt || null,
+          expiresAt: expiresAt ?? null,
         },
       })
       .returning();
@@ -107,6 +116,7 @@ export async function POST(request: NextRequest) {
         message,
         severity,
         active,
+        expiresAt: expiresAt ?? null,
         adminEmail: user.email,
         createdAt: inserted.createdAt instanceof Date ? inserted.createdAt.toISOString() : '',
       },

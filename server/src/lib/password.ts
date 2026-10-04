@@ -1,9 +1,9 @@
 import bcrypt from 'bcryptjs';
 
 const SALT_ROUNDS = 12;
-const MIN_PASSWORD_LENGTH = 12;
+const MIN_PASSWORD_LENGTH = 8;
 
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+\-=[\]{}|;:,.<>/~`]).{12,}$/;
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+\-=[\]{}|;:,.<>/~`]).{8,}$/;
 
 export function validatePasswordStrength(password: string): { valid: boolean; message?: string } {
   if (password.length < MIN_PASSWORD_LENGTH) {

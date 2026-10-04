@@ -9,6 +9,7 @@ import { AppError, AuthError, ForbiddenError, ConflictError, ValidationError } f
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { normalizeRole, isSuperAdminRole } from '@/lib/roles';
+import { isPlatformOwnerEmail } from '@/lib/platform-owner';
 
 const USER_SELECT = {
   id: users.id,
@@ -124,6 +125,15 @@ export async function POST(request: NextRequest) {
     const newRole = normalizeRole(role);
     if (isSuperAdminRole(newRole)) {
       throw new ForbiddenError('SuperAdmin accounts cannot be created here');
+    }
+
+    // The same escalation via a different door: requireSuperAdmin trusts the
+    // SUPERADMIN_EMAILS allowlist independently of the stored role, so a
+    // tenant Admin who created a row with an allowlisted address would pass
+    // every platform gate as an operator while holding only Admin. The role
+    // check above cannot catch it — the row would say 'Admin'.
+    if (isPlatformOwnerEmail(normalizedEmail)) {
+      throw new ForbiddenError('This email address is reserved for platform use');
     }
 
     const [created] = await db

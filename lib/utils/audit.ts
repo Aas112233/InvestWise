@@ -9,6 +9,8 @@ interface AuditParams {
   resourceId?: string;
   details?: unknown;
   status?: string;
+  /** §6: tenant scope of the audited action — required for tenant business actions. */
+  tenantId?: string | null;
 }
 
 export async function logAudit(params: AuditParams): Promise<void> {
@@ -20,6 +22,7 @@ export async function logAudit(params: AuditParams): Promise<void> {
     await db.insert(auditLogs).values({
       userId: params.user?.id || null,
       userName: params.user?.name || null,
+      tenantId: params.tenantId || null,
       action: params.action,
       resourceType: params.resourceType || 'System',
       resourceId: params.resourceId || null,

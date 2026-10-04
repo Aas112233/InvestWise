@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { meetings, meetingAttendees, memberPenalties, members } from '@/db/schema/index';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
@@ -12,10 +12,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6: attendance drives member warning counts — tenant context required.
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     if (normalizeRole(user.role) === 'Member') {
       throw new ForbiddenError('Insufficient permissions to record meeting attendance');
@@ -34,58 +36,59 @@ export async function POST(
     const [meeting] = await db
       .select()
       .from(meetings)
-      .where(eq(meetings.id, id))
+      .where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)))
       .limit(1);
 
     if (!meeting) throw new NotFoundError('Meeting');
 
     await db.transaction(async (tx) => {
-      for (const item of attendeesList) {
-        if (!item.memberId) continue;
+      const validItems = attendeesList.filter((item: any) => item?.memberId);
+      if (validItems.length === 0) return;
 
-        const attendanceStatus = item.attendanceStatus || 'PRESENT';
-        const depositStatus = item.depositStatus || 'PENDING';
-        const notes = item.notes || null;
+      // Collapse duplicate memberIds keeping the LAST record — matches the
+      // old sequential overwrite behavior, and ON CONFLICT DO UPDATE cannot
+      // visit the same row twice in one statement.
+      const uniqueItems = Array.from(
+        new Map(validItems.map((item: any) => [item.memberId, item])).values(),
+      ) as Array<{ memberId: string; attendanceStatus?: string; depositStatus?: string; notes?: string }>;
 
-        // Check if attendee row exists
-        const [existing] = await tx
-          .select()
-          .from(meetingAttendees)
-          .where(and(eq(meetingAttendees.meetingId, id), eq(meetingAttendees.memberId, item.memberId)))
-          .limit(1);
+      // One multi-row upsert on uq_meeting_member instead of a per-attendee
+      // SELECT + UPDATE/INSERT (previously 2 round trips per attendee).
+      await tx
+        .insert(meetingAttendees)
+        .values(
+          uniqueItems.map((item) => ({
+            meetingId: id,
+            memberId: item.memberId,
+            attendanceStatus: item.attendanceStatus || 'PRESENT',
+            depositStatus: item.depositStatus || 'PENDING',
+            notes: item.notes || null,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [meetingAttendees.meetingId, meetingAttendees.memberId],
+          set: {
+            attendanceStatus: sql`excluded.attendance_status`,
+            depositStatus: sql`excluded.deposit_status`,
+            notes: sql`excluded.notes`,
+            updatedAt: new Date(),
+          },
+        });
 
-        if (existing) {
-          await tx
-            .update(meetingAttendees)
-            .set({
-              attendanceStatus,
-              depositStatus,
-              notes,
-              updatedAt: new Date(),
-            })
-            .where(eq(meetingAttendees.id, existing.id));
-        } else {
-          await tx
-            .insert(meetingAttendees)
-            .values({
-              meetingId: id,
-              memberId: item.memberId,
-              attendanceStatus,
-              depositStatus,
-              notes,
-            });
-        }
+      // Unexcused absences increment the member's warning count — one grouped
+      // UPDATE for all absentees instead of one per attendee.
+      const absentMemberIds = uniqueItems
+        .filter((item) => (item.attendanceStatus || 'PRESENT') === 'ABSENT')
+        .map((item) => item.memberId);
 
-        // If unexcused absence, increment member's warning count
-        if (attendanceStatus === 'ABSENT') {
-          await tx
-            .update(members)
-            .set({
-              warningCount: sql<number>`COALESCE(${members.warningCount}, 0) + 1`,
-              updatedAt: new Date(),
-            })
-            .where(eq(members.id, item.memberId));
-        }
+      if (absentMemberIds.length > 0) {
+        await tx
+          .update(members)
+          .set({
+            warningCount: sql<number>`COALESCE(${members.warningCount}, 0) + 1`,
+            updatedAt: new Date(),
+          })
+          .where(inArray(members.id, absentMemberIds));
       }
     });
 

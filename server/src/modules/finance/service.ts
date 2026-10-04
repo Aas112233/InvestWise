@@ -1,4 +1,5 @@
 import { eq, and, or, desc, asc, count, ilike, inArray, gte, lte, sql, aliasedTable } from 'drizzle-orm';
+import crypto from 'node:crypto';
 import { getDb, getSql } from '../../lib/db.js';
 import {
   transactions,
@@ -76,12 +77,29 @@ function resolveDepositDate(date?: string | null, depositMonth?: string | null):
   return new Date();
 }
 
+/**
+ * Resolve the submission date (when recorded). Collected date and submission
+ * date may differ (collected 5th, entered 7th). Defaults to now, settable for
+ * back-entry. Never trusts client junk — falls back to now.
+ */
+function resolveSubmittedDate(submittedDate?: string | null): Date {
+  if (submittedDate) {
+    const parsed = new Date(submittedDate);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+}
+
 interface DepositInput {
   memberId: string;
   amount: number | string;
   fundId: string;
   description?: string | null;
   date?: string | null;
+  /** Alias for date — UI sends collectedDate explicitly. */
+  collectedDate?: string | null;
+  /** When recorded in the app. Defaults to now, allows past for back-entry. */
+  submittedDate?: string | null;
   status?: 'Completed' | 'Processing' | 'Pending' | null;
   cashierName?: string | null;
   depositMethod?: string | null;
@@ -112,6 +130,7 @@ interface TransferInput {
   targetFundId: string;
   amount: number | string;
   description?: string;
+  referenceNumber?: string;
 }
 
 interface DividendInput {
@@ -126,6 +145,14 @@ interface EquityTransferInput {
   fromMemberId: string;
   transfers: Array<{ toMemberId: string; amount?: number; shares: number }>;
   reason: string;
+  /** Retry key. Absent means a fresh run; a repeat of a known key is rejected. */
+  referenceNumber?: string;
+  /**
+   * Required when a row moves shares with no contribution behind it. Such a
+   * row transfers a claim on future surplus to someone who never funded it, so
+   * it must be an acknowledged gift rather than an unchecked blank field.
+   */
+  giftAcknowledged?: boolean;
 }
 
 interface BulkDepositInput {
@@ -433,6 +460,11 @@ export async function addDeposit(
     const isCompleted = status === 'Completed';
     const balanceBeforeCents = toCents(fund.balance ?? '0');
 
+    // Collected date is canonical for ledger/month; submission date is audit.
+    // depositMonth is legacy — kept for backward compat but collected date wins.
+    const collectedDate = resolveDepositDate(data.collectedDate ?? data.date, data.depositMonth);
+    const submittedDate = resolveSubmittedDate(data.submittedDate);
+
     const [txn] = await tx
       .insert(transactions)
       .values({
@@ -442,7 +474,8 @@ export async function addDeposit(
         description: data.description || '',
         memberId: targetMemberId,
         fundId: data.fundId,
-        date: resolveDepositDate(data.date, data.depositMonth),
+        date: collectedDate,
+        submittedDate,
         status,
         authorizedBy: user.id,
         createdBy: user.id,
@@ -464,9 +497,8 @@ export async function addDeposit(
         })
         .where(eq(funds.id, data.fundId));
 
-      const billingPeriodIso =
-        parseDepositMonthToIso(data.depositMonth || data.description || '') ||
-        (txn.date ? new Date(txn.date).toISOString().slice(0, 10) : null);
+      // Month auto-derived from collected date (no separate picker).
+      const billingPeriodIso = collectedDate.toISOString().slice(0, 10);
       await tx
         .update(members)
         .set({
@@ -572,14 +604,27 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
 
       const [newMember] = await tx.select().from(members).where(and(eq(members.id, newMemberId), eq(members.tenantId, tenantId))).for('update').limit(1);
       if (!newMember) throw new NotFoundError('Member');
+      const editCollected = resolveDepositDate(
+        data.collectedDate ?? data.date,
+        data.depositMonth || existing.description,
+      );
       await tx
         .update(members)
-        .set({ totalContributed: sql`(${members.totalContributed}::numeric + ${newAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
+        .set({
+          totalContributed: sql`(${members.totalContributed}::numeric + ${newAmountCents / 100})::numeric(15,2)`,
+          lastDepositMonth: editCollected.toISOString().slice(0, 7),
+          lastActive: new Date(),
+          updatedAt: new Date(),
+        })
         .where(eq(members.id, newMemberId));
     }
 
-    // 3. Update transaction record
-    const depositDate = resolveDepositDate(data.date, data.depositMonth || existing.description);
+    // 3. Update transaction record — collected date is canonical, month
+    // auto-derived. submittedDate override allowed for back-entry correction.
+    const depositDate = resolveDepositDate(
+      data.collectedDate ?? data.date,
+      data.depositMonth || existing.description,
+    );
 
     const [updated] = await tx
       .update(transactions)
@@ -589,6 +634,7 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
         memberId: newMemberId,
         description: data.description || existing.description || '',
         date: depositDate,
+        submittedDate: data.submittedDate ? resolveSubmittedDate(data.submittedDate) : existing.submittedDate ?? undefined,
         status: newStatus,
         depositMethod: data.depositMethod || existing.depositMethod,
         handlingOfficer: user.name || data.cashierName || existing.handlingOfficer || 'System',
@@ -678,6 +724,111 @@ export async function approveDeposit(id: string, user: SessionUser) {
       amount: txnCents / 100,
       balanceBefore: updated.balanceBefore ? toNum(updated.balanceBefore) : null,
       balanceAfter: updated.balanceAfter ? toNum(updated.balanceAfter) : null,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 4b. revertDeposit — Completed -> PENDING with amount reversal
+// ---------------------------------------------------------------------------
+
+export async function revertDeposit(id: string, reason: string, user: SessionUser) {
+  const tenantId = requireTenant(user);
+  const db = getDb();
+
+  if (!reason || reason.trim().length === 0) {
+    throw new AppError('A revert reason is required per financial compliance rules', 400, 'REASON_REQUIRED');
+  }
+
+  return db.transaction(async (tx) => {
+    const [txn] = await tx
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId)))
+      .for('update')
+      .limit(1);
+    if (!txn) throw new NotFoundError('Transaction');
+    if (txn.type !== 'Deposit') throw new AppError('Only deposits can be reverted', 400, 'INVALID_TYPE');
+    if (txn.isDeleted) throw new AppError('Deleted transactions cannot be reverted', 400, 'ALREADY_DELETED');
+    if (txn.status !== 'Completed' && txn.status !== 'Success') {
+      throw new AppError('Only completed deposits can be reverted to request', 400, 'INVALID_STATUS');
+    }
+    if (!txn.fundId || !txn.memberId) throw new AppError('Deposit is missing fund or member linkage', 400, 'INVALID_LINKAGE');
+
+    const txnCents = toCents(txn.amount);
+
+    // Lock fund + member in canonical order (funds then members) to avoid deadlocks.
+    const [fund] = await tx
+      .select()
+      .from(funds)
+      .where(and(eq(funds.id, txn.fundId!), eq(funds.tenantId, tenantId)))
+      .for('update')
+      .limit(1);
+    if (!fund) throw new NotFoundError('Fund');
+    const [member] = await tx
+      .select()
+      .from(members)
+      .where(and(eq(members.id, txn.memberId!), eq(members.tenantId, tenantId)))
+      .for('update')
+      .limit(1);
+    if (!member) throw new NotFoundError('Member');
+
+    // Guard: reversal must not drop the fund below its minimum reserve.
+    const afterCents = toCents(fund.balance ?? '0') - txnCents;
+    const minReserveCents = toCents(fund.minimumBalance ?? '0');
+    if (afterCents < minReserveCents) {
+      throw new AppError(
+        `Cannot revert: reversing ${(txnCents / 100).toFixed(2)} would drop ${fund.name} below minimum reserve`,
+        400,
+        'FUND_DEFICIT_PREVENTED',
+      );
+    }
+
+    await tx
+      .update(funds)
+      .set({ balance: sql`(${funds.balance}::numeric - ${txnCents / 100})::numeric(15,2)`, updatedAt: new Date() })
+      .where(and(eq(funds.id, txn.fundId!), eq(funds.tenantId, tenantId)));
+
+    await tx
+      .update(members)
+      .set({
+        totalContributed: sql`GREATEST(0, (${members.totalContributed}::numeric - ${txnCents / 100}))::numeric(15,2)`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(members.id, txn.memberId!), eq(members.tenantId, tenantId)));
+
+    const [updated] = await tx
+      .update(transactions)
+      .set({
+        status: 'PENDING',
+        description: `${txn.description} — REVERTED: ${reason.trim()}`,
+        updatedBy: user.id,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId)))
+      .returning();
+    if (!updated) throw new NotFoundError('Transaction');
+
+    await tx.insert(auditLogs).values({
+      userId: user.id,
+      userName: user.name,
+      action: 'REVERT_DEPOSIT',
+      resourceType: 'Transaction',
+      resourceId: id,
+      details: {
+        amount: txnCents / 100,
+        previousStatus: txn.status,
+        newStatus: 'PENDING',
+        reason: reason.trim(),
+        fundId: txn.fundId,
+        memberId: txn.memberId,
+      },
+      status: 'SUCCESS',
+    });
+
+    return {
+      ...updated,
+      amount: txnCents / 100,
     };
   });
 }
@@ -1223,10 +1374,35 @@ export async function transferFunds(data: TransferInput, user: SessionUser) {
   }
 
   return db.transaction(async (tx) => {
-    const [sourceFund] = await tx.select().from(funds).where(and(eq(funds.id, data.sourceFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
-    const [targetFund] = await tx.select().from(funds).where(and(eq(funds.id, data.targetFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
+    // Canonical sorted locking order prevents PostgreSQL deadlocks on
+    // concurrent bidirectional transfers. Written as an explicit tuple destructure
+    // rather than Array#sort so noUncheckedIndexedAccess does not widen both
+    // ids to `string | undefined`.
+    const { sourceFundId, targetFundId } = data;
+    const [firstId, secondId]: [string, string] =
+      sourceFundId < targetFundId ? [sourceFundId, targetFundId] : [targetFundId, sourceFundId];
+    const [fundA] = await tx
+      .select()
+      .from(funds)
+      .where(and(eq(funds.id, firstId), eq(funds.tenantId, tenantId)))
+      .for('update')
+      .limit(1);
+    const [fundB] = await tx
+      .select()
+      .from(funds)
+      .where(and(eq(funds.id, secondId), eq(funds.tenantId, tenantId)))
+      .for('update')
+      .limit(1);
+
+    const sourceFund = firstId === sourceFundId ? fundA : fundB;
+    const targetFund = firstId === targetFundId ? fundA : fundB;
+
     if (!sourceFund) throw new NotFoundError('Source fund');
     if (!targetFund) throw new NotFoundError('Target fund');
+
+    if (sourceFund.currency && targetFund.currency && sourceFund.currency !== targetFund.currency) {
+      throw new AppError('Cannot transfer between funds with different currencies', 400, 'CURRENCY_MISMATCH');
+    }
 
     const amountCents = parsePositiveAmount(data.amount);
     if (toCents(sourceFund.balance ?? '0') < amountCents) {
@@ -1260,13 +1436,20 @@ export async function transferFunds(data: TransferInput, user: SessionUser) {
       .set({ balance: sql`(${funds.balance}::numeric + ${amountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
       .where(eq(funds.id, data.targetFundId));
 
+    const refNumber = data.referenceNumber || `TRF-${Date.now()}-${data.sourceFundId.slice(0, 4)}-${data.targetFundId.slice(0, 4)}`;
+    // Hard, queryable link pairing the two legs — survives reference-number
+    // edits and lets the ledger reconstruct the full trail of one transfer.
+    const transferGroupId = crypto.randomUUID();
+
     const [sourceTx] = await tx
       .insert(transactions)
       .values({
         tenantId,
-        type: 'Withdrawal',
+        type: 'Transfer Out',
         amount: fmt(amountCents),
         description: `[Transfer OUT] to ${targetFund.name}: ${data.description || ''}`,
+        referenceNumber: `${refNumber}-OUT`,
+        transferGroupId,
         fundId: data.sourceFundId,
         authorizedBy: user.id,
         createdBy: user.id,
@@ -1283,9 +1466,11 @@ export async function transferFunds(data: TransferInput, user: SessionUser) {
       .insert(transactions)
       .values({
         tenantId,
-        type: 'Investment',
+        type: 'Transfer In',
         amount: fmt(amountCents),
         description: `[Transfer IN] from ${sourceFund.name}: ${data.description || ''}`,
+        referenceNumber: `${refNumber}-IN`,
+        transferGroupId,
         fundId: data.targetFundId,
         authorizedBy: user.id,
         createdBy: user.id,
@@ -1333,6 +1518,17 @@ export interface DividendSummary {
   residual: number;
 }
 
+/**
+ * @deprecated Superseded by the shared dividend engine + project settlement.
+ *
+ * This is a second, contradictory payout implementation: it retains no
+ * statutory reserve and splits a PROJECT's proceeds by every member's
+ * ORGANIZATION-WIDE share count, so a member who never funded the project is
+ * paid from it and a majority funder can receive a minority share. The app does
+ * not call it (`/api/dividends/distribute` is the live path); D3 replaces it
+ * with per-project ownership from `project_members`. Kept for the Express
+ * reference build until that lands.
+ */
 export async function distributeDividends(data: DividendInput, user: SessionUser): Promise<DividendSummary> {
   const tenantId = requireTenant(user);
   const db = getDb();
@@ -1449,16 +1645,69 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
   const tenantId = requireTenant(user);
   const db = getDb();
 
+  const batchId =
+    (typeof data.referenceNumber === 'string' && data.referenceNumber.trim)
+      ? data.referenceNumber.trim()
+      : `EQT-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+
   return db.transaction(async (tx) => {
-    const batchId = `EQT-${Date.now()}`;
-    const [sourceMember] = await tx.select().from(members).where(and(eq(members.id, data.fromMemberId), eq(members.tenantId, tenantId))).limit(1);
+    // Lock every row this run touches, in deterministic uuid order, before any
+    // of them is read. Without the locks two concurrent divisions of the same
+    // holder could both pass the share and balance checks against stale values
+    // and move the same equity twice.
+    const involvedIds = [data.fromMemberId, ...data.transfers.map((t) => t.toMemberId)].sort();
+    for (const id of involvedIds) {
+      await tx.execute(
+        sql`SELECT id FROM ${members} WHERE id = ${id}::uuid AND tenant_id = ${tenantId} FOR UPDATE`,
+      );
+    }
+
+    // Idempotency (§12): a retried batch with the same reference must not move
+    // the money twice. Checked under the row locks, so a racing duplicate
+    // serializes behind this run instead of slipping through.
+    const [duplicate] = await tx
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.referenceNumber, `${batchId}-FROM`),
+          eq(transactions.isDeleted, false),
+          eq(transactions.tenantId, tenantId),
+        ),
+      )
+      .limit(1);
+    if (duplicate) throw new ConflictError('An equity transfer with this reference has already been recorded');
+
+    const lockedMembers = await tx
+      .select()
+      .from(members)
+      .where(and(inArray(members.id, involvedIds), eq(members.tenantId, tenantId)));
+    const memberById = new Map(lockedMembers.map((m) => [m.id, m]));
+
+    const sourceMember = memberById.get(data.fromMemberId);
     if (!sourceMember) throw new NotFoundError('Source member');
+    // A suspended holder settles through the exit path, not by pushing shares
+    // out while frozen.
+    if (sourceMember.status !== 'active') {
+      throw new AppError(`Member ${sourceMember.name} is ${sourceMember.status} and cannot transfer equity`, 400, 'SOURCE_NOT_ACTIVE');
+    }
 
     const transfers = data.transfers.map((t) => ({
       toMemberId: t.toMemberId,
       amountCents: t.amount ? parsePositiveAmount(t.amount) : 0,
       shares: assertIntegralShares(t.shares, 'transfers.shares'),
     }));
+
+    // Shares without contribution are a gift: require the explicit flag rather
+    // than treating an empty amount as an implicit one.
+    const giftedShares = transfers.filter((t) => t.amountCents === 0 && t.shares > 0);
+    if (giftedShares.length > 0 && data.giftAcknowledged !== true) {
+      throw new AppError(
+        'Transferring shares without their contribution balance gives the recipient a claim on future surplus they did not fund. Acknowledge this as a gift to continue.',
+        400,
+        'GIFT_ACKNOWLEDGEMENT_REQUIRED',
+      );
+    }
 
     const totalBeingTransferredCents = transfers.reduce((sum, t) => sum + t.amountCents, 0);
     const totalSharesTransferred = transfers.reduce((sum, t) => sum + Number(t.shares || 0), 0);
@@ -1478,6 +1727,14 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
       );
     }
 
+    const recipientIds = transfers.map((t) => t.toMemberId);
+    if (new Set(recipientIds).size !== recipientIds.length) {
+      // Two rows to one member would each be computed from the same locked
+      // base value and the second would silently overwrite the first.
+      throw new AppError('A recipient can appear only once per transfer', 400, 'DUPLICATE_RECIPIENT');
+    }
+
+    const now = new Date();
     const recipientValues: Array<typeof transactions.$inferInsert> = [];
 
     for (const t of transfers) {
@@ -1485,11 +1742,7 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
         throw new AppError('Self-transfer of equity is not permitted', 400, 'SELF_TRANSFER');
       }
 
-      const [targetMember] = await tx
-        .select()
-        .from(members)
-        .where(and(eq(members.id, t.toMemberId), eq(members.tenantId, tenantId)))
-        .limit(1);
+      const targetMember = memberById.get(t.toMemberId);
       if (!targetMember) throw new NotFoundError('Target member');
       if (targetMember.status !== 'active') {
         throw new AppError(`Target member ${targetMember.name} is not active`, 400, 'INACTIVE_TARGET');
@@ -1500,16 +1753,20 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
 
       await tx
         .update(members)
-        .set({ totalContributed: fmt(targetNewContributedCents), shares: targetNewShares, updatedAt: new Date() })
+        .set({ totalContributed: fmt(targetNewContributedCents), shares: targetNewShares, updatedAt: now })
         .where(and(eq(members.id, t.toMemberId), eq(members.tenantId, tenantId)));
 
+      // These rows previously carried no tenantId, which made every
+      // tenant-scoped ledger query blind to a completed equity movement.
       recipientValues.push({
+        tenantId,
         type: 'Equity-Transfer',
         amount: fmt(t.amountCents),
         description: `Equity Migration: Received from ${sourceMember.name} [Reference: ${data.reason}]`,
         memberId: t.toMemberId,
+        date: now,
         status: 'Completed',
-        referenceNumber: batchId,
+        referenceNumber: `${batchId}-TO-${t.toMemberId}`,
         authorizedBy: user.id,
         createdBy: user.id,
         updatedBy: user.id,
@@ -1527,7 +1784,7 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
     const updateData: Partial<typeof members.$inferInsert> & { updatedAt: Date } = {
       totalContributed: fmt(sourceNewContributedCents),
       shares: sourceNewShares,
-      updatedAt: new Date(),
+      updatedAt: now,
     };
 
     if (sourceNewContributedCents === 0 && sourceNewShares === 0) {
@@ -1537,12 +1794,16 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
     await tx.update(members).set(updateData).where(and(eq(members.id, data.fromMemberId), eq(members.tenantId, tenantId)));
 
     await tx.insert(transactions).values({
+      tenantId,
       type: 'Equity-Transfer',
       amount: fmt(totalBeingTransferredCents),
       description: `Equity Migration: Transferred to ${transfers.length} recipient(s) [Reference: ${data.reason}]`,
       memberId: data.fromMemberId,
+      date: now,
       status: 'Completed',
-      referenceNumber: batchId,
+      // The -FROM suffix is what the idempotency check above looks for, so the
+      // debit row is the batch's identity marker as well as its ledger entry.
+      referenceNumber: `${batchId}-FROM`,
       authorizedBy: user.id,
       createdBy: user.id,
       updatedBy: user.id,
@@ -1558,9 +1819,25 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
       details: {
         batchId,
         from: sourceMember.name,
-        totalAmount: totalBeingTransferredCents / 100,
+        // Amounts are exact decimal strings, not float divisions — this record
+        // is the evidence trail for a capital movement.
+        totalAmount: fromCents(totalBeingTransferredCents),
         totalShares: totalSharesTransferred,
-        recipients: transfers.map((t) => ({ id: t.toMemberId, amount: t.amountCents / 100, shares: t.shares })),
+        sourceSharesBefore: Number(sourceMember.shares),
+        sourceSharesAfter: sourceNewShares,
+        recipients: transfers.map((t) => {
+          const target = memberById.get(t.toMemberId);
+          return {
+            id: t.toMemberId,
+            name: target?.name ?? '',
+            amount: fromCents(t.amountCents),
+            shares: t.shares,
+            // Makes an unfunded share movement explicit in the audit trail.
+            gift: t.amountCents === 0 && t.shares > 0,
+            sharesBefore: Number(target?.shares ?? 0),
+            sharesAfter: Number(target?.shares ?? 0) + t.shares,
+          };
+        }),
         reason: data.reason,
       },
       status: 'SUCCESS',
@@ -1588,8 +1865,8 @@ export async function reconcileFund(fundId: string, user: SessionUser) {
 
   const txSummary = await rawSql<{ total_in: string; total_out: string }[]>`
     SELECT
-      COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment') THEN amount::numeric ELSE 0 END), 0) as total_in,
-      COALESCE(SUM(CASE WHEN type IN ('Expense', 'Withdrawal', 'Dividend', 'Adjustment') THEN amount::numeric ELSE 0 END), 0) as total_out
+      COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment', 'Transfer In') THEN amount::numeric ELSE 0 END), 0) as total_in,
+      COALESCE(SUM(CASE WHEN type IN ('Expense', 'Withdrawal', 'Dividend', 'Adjustment', 'Transfer Out') THEN amount::numeric ELSE 0 END), 0) as total_out
     FROM transactions
     WHERE fund_id = ${fund.id}
       AND tenant_id = ${tenantId}
@@ -1681,6 +1958,8 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
     const runningFundBalanceCents = toCents(fund.balance ?? '0');
     const txnInserts: Array<typeof transactions.$inferInsert> = [];
     const memberContributions = new Map<string, number>();
+    const memberLastMonth = new Map<string, string>();
+    const batchSubmittedDate = new Date();
     const results: Array<{ member: string; amount: number; txId?: string }> = [];
 
     for (const dep of data.deposits) {
@@ -1690,6 +1969,10 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
       const depositAmountCents = parsePositiveAmount(dep.amount);
       const month = dep.depositMonth || data.commonMonth || '';
       const depositDate = resolveDepositDate(dep.date, month);
+      // The explicitly selected month wins for the deposit-month record,
+      // duplicate checks and lastDepositMonth; the resolved collected date
+      // remains the ledger date (§12 accuracy — month ≠ collection day).
+      const monthKey = month || depositDate.toISOString().slice(0, 7);
 
       // Duplicate deposit check for this month
       const startOfMonth = new Date(depositDate.getFullYear(), depositDate.getMonth(), 1);
@@ -1713,7 +1996,7 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
 
       if (existingDeposit) {
         throw new AppError(
-          `Duplicate deposit detected: Member ${member.name} already has a deposit in ${month} (Transaction ID: ${existingDeposit.id})`,
+          `Duplicate deposit detected: Member ${member.name} already has a deposit in ${monthKey} (Transaction ID: ${existingDeposit.id})`,
           409,
           'DUPLICATE_DEPOSIT',
         );
@@ -1724,24 +2007,29 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
       totalBatchAmountCents += depositAmountCents;
 
       txnInserts.push({
+        tenantId,
         type: 'Deposit',
         amount: fmt(depositAmountCents),
-        description: `Bulk Deposit [${month}]`,
+        description: `Bulk Deposit [${monthKey}]`,
         memberId: dep.memberId,
         fundId: data.fundId,
         date: depositDate,
+        submittedDate: batchSubmittedDate,
         status: 'Completed',
         authorizedBy: user.id,
         createdBy: user.id,
         updatedBy: user.id,
         handlingOfficer: user.name || data.cashierName || 'System',
         depositMethod: data.depositMethod || 'Cash',
+        depositMonth: monthKey || null,
         referenceNumber: batchId,
         balanceBefore: fmt(balanceBeforeCents),
         balanceAfter: fmt(balanceAfterCents),
       });
 
       memberContributions.set(dep.memberId, (memberContributions.get(dep.memberId) || 0) + depositAmountCents);
+      const prevMonth = memberLastMonth.get(dep.memberId);
+      if (!prevMonth || monthKey > prevMonth) memberLastMonth.set(dep.memberId, monthKey);
       results.push({ member: member.name, amount: depositAmountCents / 100 });
     }
 
@@ -1755,7 +2043,12 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
     for (const [memberId, addedCents] of memberContributions) {
       await tx
         .update(members)
-        .set({ totalContributed: sql`(${members.totalContributed}::numeric + ${addedCents / 100})::numeric(15,2)`, updatedAt: new Date() })
+        .set({
+          totalContributed: sql`(${members.totalContributed}::numeric + ${addedCents / 100})::numeric(15,2)`,
+          lastDepositMonth: memberLastMonth.get(memberId) ?? null,
+          lastActive: new Date(),
+          updatedAt: new Date(),
+        })
         .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId)));
     }
 

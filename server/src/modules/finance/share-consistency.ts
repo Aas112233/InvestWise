@@ -1,34 +1,104 @@
 import { getDb } from '../../config/database.js';
-import { members, projects, projectMembers, systemSettings } from '../../db/schema/index.js';
-import { eq, sql } from 'drizzle-orm';
+import { members, projects, projectMembers } from '../../db/schema/index.js';
+import { eq, sql, and } from 'drizzle-orm';
 
 export async function recalculateAllMemberShares(): Promise<{ updated: number }> {
-  // Member shares are fixed via member management / settings screen and are not derived from transactions
+  // In InvestWise, member shares are fixed equity allocations set at creation/transfer.
+  // They are never recomputed or altered by calculations or deposits.
   return { updated: 0 };
 }
 
-export async function checkProjectShareInvariants() {
+export async function checkProjectShareInvariants(tenantId?: string) {
   const db = getDb();
-  const allProjects = await db.select({ id: projects.id, title: projects.title, totalShares: projects.totalShares }).from(projects);
+  const projectScope = tenantId ? eq(projects.tenantId, tenantId) : undefined;
+  const pmScope = tenantId ? eq(projectMembers.tenantId, tenantId) : undefined;
+
+  const projectQuery = projectScope
+    ? db.select({ id: projects.id, title: projects.title, totalShares: projects.totalShares }).from(projects).where(projectScope)
+    : db.select({ id: projects.id, title: projects.title, totalShares: projects.totalShares }).from(projects);
+
+  const pmQuery = pmScope
+    ? db
+        .select({
+          projectId: projectMembers.projectId,
+          allocated: sql<number>`COALESCE(SUM(${projectMembers.sharesInvested}), 0)`,
+        })
+        .from(projectMembers)
+        .where(pmScope)
+        .groupBy(projectMembers.projectId)
+    : db
+        .select({
+          projectId: projectMembers.projectId,
+          allocated: sql<number>`COALESCE(SUM(${projectMembers.sharesInvested}), 0)`,
+        })
+        .from(projectMembers)
+        .groupBy(projectMembers.projectId);
+
+  const [allProjects, allocations] = await Promise.all([projectQuery, pmQuery]);
+
+  const allocatedByProject = new Map(allocations.map((r) => [r.projectId, Number(r.allocated)]));
+
   const violations: Array<{ projectId: string; projectTitle: string; declaredTotalShares: number; memberAllocatedShares: number; overflow: number }> = [];
   for (const p of allProjects) {
-    const [agg] = await db.select({ total: sql<number>`COALESCE(SUM(${projectMembers.sharesInvested}), 0)` }).from(projectMembers).where(eq(projectMembers.projectId, p.id));
-    const allocated = agg?.total ?? 0;
-    if (allocated > (p.totalShares ?? 0)) violations.push({ projectId: p.id, projectTitle: p.title ?? '', declaredTotalShares: p.totalShares ?? 0, memberAllocatedShares: allocated, overflow: allocated - (p.totalShares ?? 0) });
+    const allocated = allocatedByProject.get(p.id) ?? 0;
+    if (allocated > (p.totalShares ?? 0)) {
+      violations.push({
+        projectId: p.id,
+        projectTitle: p.title ?? '',
+        declaredTotalShares: p.totalShares ?? 0,
+        memberAllocatedShares: allocated,
+        overflow: allocated - (p.totalShares ?? 0),
+      });
+    }
   }
   return violations;
 }
 
-export async function getShareConsistencyReport() {
+export async function getShareConsistencyReport(tenantId?: string) {
   const db = getDb();
-  const [settings] = await db.select().from(systemSettings).limit(1);
-  const shareValue = Number(settings?.shareValueBdt ?? 1000);
-  const active = await db.select({ id: members.id, name: members.name, totalContributed: members.totalContributed, shares: members.shares }).from(members).where(eq(members.status, 'active'));
-  const drift: Array<{ memberId: string; memberName: string; currentShares: number; derivedShares: number; contributed: number; shareValue: number; drift: number }> = [];
+  
+  // Scope by tenant when provided
+  const memberScope = tenantId
+    ? and(eq(members.status, 'active'), eq(members.tenantId, tenantId))
+    : eq(members.status, 'active');
+
+  const active = await db
+    .select({
+      id: members.id,
+      name: members.name,
+      totalContributed: members.totalContributed,
+      shares: members.shares,
+    })
+    .from(members)
+    .where(memberScope);
+
+  // In InvestWise, member shares are fixed equity allocations assigned during onboarding
+  // and modified only via explicit equity transfers or exit settlements.
+  // Calculations (deposits, dividends, arrears) must NEVER alter or derive share numbers.
+  // Validate that all active members have valid non-negative integer shares.
+  const invalidShares: Array<{
+    memberId: string;
+    memberName: string;
+    currentShares: number;
+    issue: string;
+  }> = [];
+
   for (const m of active) {
-    const derived = shareValue > 0 ? Math.floor(Number(m.totalContributed ?? 0) / shareValue) : 0;
-    if (derived !== (m.shares ?? 0)) drift.push({ memberId: m.id, memberName: m.name ?? '', currentShares: m.shares ?? 0, derivedShares: derived, contributed: Number(m.totalContributed ?? 0), shareValue, drift: derived - (m.shares ?? 0) });
+    const s = m.shares;
+    if (s === null || s === undefined || !Number.isInteger(s) || s < 0) {
+      invalidShares.push({
+        memberId: m.id,
+        memberName: m.name ?? '',
+        currentShares: s ?? 0,
+        issue: 'INVALID_SHARE_COUNT',
+      });
+    }
   }
-  const projectOverflow = await checkProjectShareInvariants();
-  return { membersWithDrift: drift, projectsWithOverflow: projectOverflow, overall: drift.length === 0 && projectOverflow.length === 0 ? 'CONSISTENT' as const : 'DRIFT_DETECTED' as const };
+
+  const projectOverflow = await checkProjectShareInvariants(tenantId);
+  return {
+    membersWithDrift: invalidShares,
+    projectsWithOverflow: projectOverflow,
+    overall: invalidShares.length === 0 && projectOverflow.length === 0 ? ('CONSISTENT' as const) : ('DRIFT_DETECTED' as const),
+  };
 }

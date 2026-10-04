@@ -35,8 +35,16 @@ export interface Member {
   role?: string;
   email?: string;
   shares: number;
-  totalContributed?: number;
+  /** Stored member equity: deposits plus reinvested dividends. String decimal. */
+  totalContributed?: number | string;
   totalDeposits?: number | string;
+  /** Deposits only, summed from the ledger by the list service. Null when the
+   *  caller did not ask for aggregates (`withTotals`). */
+  totalDeposited?: string | null;
+  /** YYYY-MM of the latest completed deposit, derived from the ledger. */
+  lastDepositMonth?: string | null;
+  /** shares x the last declared per-share rate. Null until a dividend run. */
+  expectedDividend?: string | null;
   successfulDepositTotal?: number;
   warningCount?: number;
   performanceScore?: number;
@@ -45,13 +53,32 @@ export interface Member {
   joinDate?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Auth-user link (present on full records; omitted on masked list rows). */
+  userId?: string | null;
+  /** True when the server hid the KYC/nominee fields from this viewer. */
+  piiMasked?: boolean;
+  /** KYC/nominee fields — only present on unmasked (full) records. */
+  nidOrPassport?: string | null;
+  fatherName?: string | null;
+  motherName?: string | null;
+  spouseName?: string | null;
+  address?: string | null;
+  nomineeName?: string | null;
+  nomineeRelation?: string | null;
+  nomineeNidOrPassport?: string | null;
+  nomineePhone?: string | null;
 }
 
 export interface ProjectMemberParticipation {
   memberId: string;
   memberName: string;
+  memberCode?: string;
+  memberPhone?: string;
+  memberStatus?: string;
   sharesInvested: number;
   ownershipPercentage?: number;
+  tenantShareValue?: number;
+  totalInvested?: number;
 }
 
 export interface ProjectUpdateRecord {
@@ -74,17 +101,20 @@ export interface Project {
   expectedRoi: number;
   totalShares: number;
   involvedMembers?: ProjectMemberParticipation[];
-  status: "In Progress" | "Completed" | "Review" | string;
+  status: "In Progress" | "Completed" | "Review" | "Cancelled" | string;
   health: "Stable" | "At Risk" | "Critical" | string;
   startDate: string;
   completionDate?: string;
   projectFundHandler?: string;
   manager?: string;
   linkedFundId?: string;
+  linkedFundName?: string;
+  linkedFundBalance?: number;
   currentFundBalance: number;
   totalEarnings: number;
   totalExpenses: number;
   updates?: ProjectUpdateRecord[];
+  tenantShareValue?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -195,15 +225,62 @@ export interface LeaderboardEntry {
   status: string;
 }
 
+export type FundsHealthStatus = "Good" | "Stable" | "At Risk" | "Critical";
+
+export interface MonthlyDepositPoint {
+  /** 'YYYY-MM' bucket key (UTC). */
+  month: string;
+  amount: number;
+  count: number;
+  submittingMembers: number;
+  /** % of active members who made >=1 completed deposit this month; null when no active members. */
+  submissionRate: number | null;
+}
+
+export interface ProjectIncomeVsExpenses {
+  id: string;
+  title: string;
+  income: number;
+  expenses: number;
+}
+
+export interface FundsHealth {
+  reserves: number;
+  /** Average monthly expenses over the trailing 3 calendar months. */
+  monthlyBurn: number;
+  /** reserves ÷ monthlyBurn; null when nothing is burning. */
+  runwayMonths: number | null;
+  status: FundsHealthStatus;
+}
+
 export interface AnalyticsStats {
   totalAssets: number;
   totalMembers: number;
+  activeMembers: number;
   activeProjects: number;
+  /** Sum of budgets across ongoing (In Progress) projects. */
+  ongoingBudget: number;
   totalDividendsDistributed: number;
-  monthlyGrowthRate: number;
+  /** null = not computable yet (no historical period data exists). Never fake a number here. */
+  monthlyGrowthRate: number | null;
   totalDeposits: number;
+  /** Count of deposit transactions (lifetime). */
+  depositCount: number;
   totalExpenses: number;
   netReserveBalance: number;
+  /** Total shares distributed across members, split founding vs normal (members.role). */
+  totalShares: number;
+  foundingShares: number;
+  normalShares: number;
+  foundingMembers: number;
+  normalMembers: number;
+  /** SUM(projects.initialInvestment) across all projects + project count. */
+  investmentsTotal: number;
+  investmentsCount: number;
+  /** Last 12 calendar months (oldest first), gaps filled with zeros. */
+  monthlyDeposits: MonthlyDepositPoint[];
+  ongoingProjectFinance: ProjectIncomeVsExpenses[];
+  fundsHealth: FundsHealth;
   recentActivities?: Array<{
     id: string;
     type: string;

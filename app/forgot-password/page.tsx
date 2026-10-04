@@ -26,12 +26,14 @@ export default function ForgotPasswordPage() {
 
   const onSubmit = async (values: ForgotForm) => {
     try {
-      const res = await apiClient<{ success: boolean; message?: string }>("/auth/forgot-password", {
+      await apiClient<{ success: boolean; message?: string }>("/auth/forgot-password", {
         method: "POST",
         body: JSON.stringify({ email: values.email.trim() }),
       });
       setSentTo(values.email.trim());
-      toast.success(res.message ?? t("auth.forgot.success"));
+      // Localized copy is authoritative; the server `message` is an English
+      // duplicate and would defeat ur/hi/bn.
+      toast.success(t("auth.forgot.success"));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("auth.login.serverError"));
     }
@@ -59,7 +61,7 @@ export default function ForgotPasswordPage() {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+          <form method="post" onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
             <div className="space-y-1.5">
               <label htmlFor="forgot-email" className="block text-xs font-medium text-foreground">
                 {t("auth.forgot.email")}

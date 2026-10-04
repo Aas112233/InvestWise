@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { ERPDataTable, type ERPColumn } from "@/components/ui/erp-data-table";
 import { ERPMetricCard } from "@/components/ui/erp-metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { usePermissions } from "@/lib/use-permissions";
 import { useAuth } from "@/lib/auth-context";
-import { isSuperAdminRole, normalizeRole } from "@/lib/roles";
+import { normalizeRole, isSuperAdminRole } from "@/lib/roles";
 import { formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
 import { sumCents, centsToAmount, useTenantCurrency } from "@/components/deposits/shared";
@@ -17,13 +18,13 @@ import { FundModal } from "./fund-modal";
 import { FundTransferModal } from "./fund-transfer-modal";
 import { fundTypeLabelKey, useFundsList, type FundRow } from "./shared";
 
-const TYPE_FILTERS = ["DEPOSIT", "PRIMARY", "PROJECT", "OTHER"] as const;
+const TYPE_FILTERS = ["DEPOSIT", "PRIMARY", "PROJECT", "RESERVE", "EMERGENCY", "OTHER"] as const;
 
 // Treasury overview: KPI cards computed in integer cents from the loaded
 // fund set, plus the fund directory table with edit/transfer actions.
 export function FundsView() {
   const { t } = useLocale();
-  const { user } = useAuth();
+  const { can } = usePermissions();
   const queryClient = useQueryClient();
 
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
@@ -36,8 +37,9 @@ export function FundsView() {
   const currency = useTenantCurrency();
   const list = useFundsList({ type: typeFilter, status: statusFilter });
 
-  const normalizedRole = normalizeRole(user?.role);
-  const isAdmin = normalizedRole === "Admin" || isSuperAdminRole(normalizedRole);
+  // Write-gated via the shared evaluator (role baseline + overrides), not a
+  // raw role check — Managers carry FUNDS_MANAGEMENT WRITE by baseline.
+  const canWrite = can("FUNDS_MANAGEMENT", "WRITE");
 
   const funds = list.data?.data ?? [];
   const active = funds.filter((f) => (f.status || "ACTIVE") === "ACTIVE");
@@ -109,7 +111,7 @@ export function FundsView() {
       align: "right",
       render: (f) => (
         <div className="flex items-center justify-end gap-1">
-          {isAdmin && (
+          {canWrite && (
             <button
               type="button"
               aria-label={t("funds.actions.edit")}
@@ -123,18 +125,20 @@ export function FundsView() {
               <Pencil size={14} />
             </button>
           )}
-          <button
-            type="button"
-            aria-label={t("funds.actions.transfer")}
-            title={t("funds.actions.transfer")}
-            onClick={() => {
-              setTransferSource(f.id);
-              setTransferOpen(true);
-            }}
-            className="p-1.5 rounded text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <ArrowLeftRight size={14} />
-          </button>
+          {canWrite && (
+            <button
+              type="button"
+              aria-label={t("funds.actions.transfer")}
+              title={t("funds.actions.transfer")}
+              onClick={() => {
+                setTransferSource(f.id);
+                setTransferOpen(true);
+              }}
+              className="p-1.5 rounded text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <ArrowLeftRight size={14} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -159,7 +163,7 @@ export function FundsView() {
           >
             {t("funds.refresh")}
           </Button>
-          {isAdmin && (
+          {canWrite && (
             <Button
               variant="primary"
               size="sm"
@@ -203,7 +207,7 @@ export function FundsView() {
         rowKey={(f) => f.id}
         emptyMessage={list.isError ? t("funds.loadFailed") : t("common.noData")}
         emptyAction={
-          isAdmin && !list.isError ? (
+          canWrite && !list.isError ? (
             <Button
               variant="outline"
               size="sm"

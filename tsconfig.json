@@ -50,6 +50,7 @@
     "server/src/modules/members/handlers.ts",
     "server/src/modules/members/service.ts",
     "server/src/modules/projects/service.ts",
+    "server/src/modules/finance/withdrawal-rules.ts",
     ".next/types/**/*.ts"
   ],
   "exclude": [
@@ -58,7 +59,6 @@
     "docs",
     "server/src/modules/finance/controller.ts",
     "server/src/modules/finance/routes.ts",
-    "server/src/modules/finance/withdrawal-rules.ts",
     "server/src/modules/finance/share-consistency.ts"
   ]
 }

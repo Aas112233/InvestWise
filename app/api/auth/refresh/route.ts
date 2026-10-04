@@ -33,28 +33,30 @@ export async function POST(request: NextRequest) {
 
     const db = getDb();
 
-    // Check blacklist in DB
-    const [blacklisted] = await db
-      .select({ id: blacklistedTokens.id })
-      .from(blacklistedTokens)
-      .where(
-        and(
-          eq(blacklistedTokens.token, refreshToken),
-          gte(blacklistedTokens.expiresAt, new Date()),
-        ),
-      )
-      .limit(1);
+    // Blacklist check and user lookup are independent — batch them into one
+    // round-trip group instead of two sequential ones. Error precedence is
+    // preserved below (revoked → not found → inactive).
+    const [[blacklisted], [user]] = await Promise.all([
+      db
+        .select({ id: blacklistedTokens.id })
+        .from(blacklistedTokens)
+        .where(
+          and(
+            eq(blacklistedTokens.token, refreshToken),
+            gte(blacklistedTokens.expiresAt, new Date()),
+          ),
+        )
+        .limit(1),
+      db
+        .select({ id: users.id, status: users.status, role: users.role, email: users.email, tenantId: users.tenantId })
+        .from(users)
+        .where(eq(users.id, decoded.id))
+        .limit(1),
+    ]);
 
     if (blacklisted) {
       throw new AuthError('Refresh token has been revoked', 'TOKEN_REVOKED');
     }
-
-    // Verify user still exists and is active
-    const [user] = await db
-      .select({ id: users.id, status: users.status, role: users.role, email: users.email, tenantId: users.tenantId })
-      .from(users)
-      .where(eq(users.id, decoded.id))
-      .limit(1);
 
     if (!user) {
       throw new AuthError('User not found', 'USER_NOT_FOUND');
@@ -67,36 +69,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Rotate: blacklist old token, generate new pair
+    // Rotate: record the blacklist entry and resolve the subscription gate
+    // concurrently — token signing waits on both (the verdict is baked into
+    // the claims, and rotation must be recorded before new tokens are issued).
     const expiry = getTokenExpiry(refreshToken);
-    try {
-      await db.insert(blacklistedTokens).values({
-        token: refreshToken,
-        type: 'refresh',
-        userId: decoded.id,
-        expiresAt: expiry,
-        reason: 'rotation',
-      });
-      blacklistToken(refreshToken, expiry);
-    } catch (insertError: any) {
-      if (insertError?.code === '23505') {
-        throw new AuthError('Token has been revoked or already rotated', 'TOKEN_REVOKED');
-      }
-      console.error('[blacklist INSERT failed]', {
-        code: insertError.code,
-        detail: insertError.detail,
-        constraint: insertError.constraint,
-        column: insertError.column,
-        message: insertError.message,
-      });
-      throw insertError;
-    }
+    const [, subscriptionBlocked] = await Promise.all([
+      (async () => {
+        try {
+          await db.insert(blacklistedTokens).values({
+            token: refreshToken,
+            type: 'refresh',
+            userId: decoded.id,
+            expiresAt: expiry,
+            reason: 'rotation',
+          });
+          blacklistToken(refreshToken, expiry);
+        } catch (insertError: any) {
+          if (insertError?.code === '23505') {
+            throw new AuthError('Token has been revoked or already rotated', 'TOKEN_REVOKED');
+          }
+          console.error('[blacklist INSERT failed]', {
+            code: insertError.code,
+            detail: insertError.detail,
+            constraint: insertError.constraint,
+            column: insertError.column,
+            message: insertError.message,
+          });
+          throw insertError;
+        }
+      })(),
+      getTenantSubscriptionBlocked(user.tenantId ?? null),
+    ]);
 
     const tokens = generateTokenPair(decoded.id, {
       role: normalizeRole(user.role),
       email: user.email,
       tenantId: user.tenantId ?? null,
-      subscriptionBlocked: await getTenantSubscriptionBlocked(user.tenantId ?? null),
+      subscriptionBlocked,
     });
 
     const response = NextResponse.json({

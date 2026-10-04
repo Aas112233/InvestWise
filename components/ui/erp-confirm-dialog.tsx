@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { Button, type ButtonVariant } from "./button";
@@ -18,6 +18,8 @@ export interface ERPConfirmDialogProps {
   confirmVariant?: Extract<ButtonVariant, "primary" | "destructive">;
   pending?: boolean;
   pendingLabel?: string;
+  /** Optional content between the description and the actions (e.g. a reason input). */
+  extra?: ReactNode;
   onConfirm: () => void | Promise<void>;
   onClose: () => void;
 }
@@ -35,6 +37,7 @@ export function ERPConfirmDialog({
   confirmVariant = "destructive",
   pending = false,
   pendingLabel,
+  extra,
   onConfirm,
   onClose,
 }: ERPConfirmDialogProps) {
@@ -103,6 +106,7 @@ export function ERPConfirmDialog({
             </p>
           </div>
         </div>
+        {extra != null && <div className="px-6 pb-4">{extra}</div>}
         <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-border/80 bg-muted/20">
           <Button variant="outline" size="sm" onClick={onClose} disabled={pending} autoFocus>
             {cancelLabel}

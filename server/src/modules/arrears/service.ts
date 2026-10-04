@@ -9,6 +9,7 @@ export async function calculateMonthlyArrears(
   monthlyDueAmount?: number,
   userId?: string,
   userName?: string,
+  tenantId?: string,
 ) {
   const db = getDb();
   const now = new Date();
@@ -21,17 +22,24 @@ export async function calculateMonthlyArrears(
     throw new AppError('Invalid periodKey format. Expected YYYY-MM', 400, 'INVALID_PERIOD');
   }
 
-  // Get default monthly due from settings if not passed
+  // Get default monthly due from tenant settings if not passed
   let requiredAmount = monthlyDueAmount;
   if (!requiredAmount || requiredAmount <= 0) {
-    const [settings] = await db.select().from(systemSettings).limit(1);
+    const settingsQuery = tenantId
+      ? db.select().from(systemSettings).where(eq(systemSettings.tenantId, tenantId)).limit(1)
+      : db.select().from(systemSettings).limit(1);
+    const [settings] = await settingsQuery;
     requiredAmount = Number(settings?.shareValueBdt ?? 1000);
   }
 
   const startOfMonth = new Date(year, month - 1, 1);
   const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
 
-  // Fetch all active members
+  // Fetch all active members (scoped by tenant if tenantId is provided)
+  const memberConditions = [eq(members.status, 'active')];
+  if (tenantId) {
+    memberConditions.push(eq(members.tenantId, tenantId));
+  }
   const activeMembers = await db
     .select({
       id: members.id,
@@ -40,38 +48,55 @@ export async function calculateMonthlyArrears(
       shares: members.shares,
     })
     .from(members)
-    .where(eq(members.status, 'active'));
+    .where(and(...memberConditions));
 
   const results: Array<{ memberId: string; name: string; required: number; deposited: number; shortfall: number; status: string }> = [];
 
-  // Batch sum deposits for all members in this month (1 query instead of N queries)
-  const depositAggRows = activeMembers.length > 0 ? await db
-    .select({
-      memberId: transactions.memberId,
-      total: sql<string>`COALESCE(SUM(${transactions.amount}), '0.00')`,
-    })
-    .from(transactions)
-    .where(
-      and(
-        inArray(transactions.memberId, activeMembers.map((m) => m.id)),
-        eq(transactions.type, 'Deposit'),
-        inArray(transactions.status, ['Completed']),
-        eq(transactions.isDeleted, false),
-        sql`${transactions.date} >= ${startOfMonth.toISOString()}::timestamptz`,
-        sql`${transactions.date} <= ${endOfMonth.toISOString()}::timestamptz`,
-      ),
-    )
-    .groupBy(transactions.memberId) : [];
+  // Batch sum deposits for all members in this month + fetch existing arrears
+  // rows concurrently (these two reads are independent).
+  const [depositAggRows, existingArrears] = await Promise.all([
+    activeMembers.length === 0
+      ? (Promise.resolve([]) as Promise<Array<{ memberId: string | null; total: string }>>)
+      : db
+          .select({
+            memberId: transactions.memberId,
+            total: sql<string>`COALESCE(SUM(${transactions.amount}), '0.00')`,
+          })
+          .from(transactions)
+          .where(
+            and(
+              inArray(transactions.memberId, activeMembers.map((m) => m.id)),
+              eq(transactions.type, 'Deposit'),
+              inArray(transactions.status, ['Completed']),
+              eq(transactions.isDeleted, false),
+              sql`${transactions.date} >= ${startOfMonth.toISOString()}::timestamptz`,
+              sql`${transactions.date} <= ${endOfMonth.toISOString()}::timestamptz`,
+            ),
+          )
+          .groupBy(transactions.memberId),
+    db
+      .select({ id: memberArrears.id, memberId: memberArrears.memberId, currentStatus: memberArrears.status })
+      .from(memberArrears)
+      .where(eq(memberArrears.periodKey, targetPeriod)),
+  ]);
 
   const depositMap = new Map(depositAggRows.map((r) => [r.memberId, Number(r.total)]));
 
-  // Batch fetch existing arrears for targetPeriod (1 query instead of N queries)
-  const existingArrears = await db
-    .select({ id: memberArrears.id, memberId: memberArrears.memberId, currentStatus: memberArrears.status })
-    .from(memberArrears)
-    .where(eq(memberArrears.periodKey, targetPeriod));
-
   const existingMap = new Map(existingArrears.map((a) => [a.memberId, a]));
+
+  // Compute per-member arrears in memory first, then write in at most 2
+  // batched statements (one grouped UPDATE for existing rows + one multi-row
+  // INSERT for new rows) inside a transaction. Previously this loop issued
+  // one round trip PER member and ran without a transaction, so a mid-loop
+  // failure could leave partially recalculated rows behind.
+  const updateRows: Array<{
+    id: string;
+    required: string;
+    deposited: string;
+    shortfall: string;
+    status: string;
+  }> = [];
+  const insertRows: Array<typeof memberArrears.$inferInsert> = [];
 
   for (const m of activeMembers) {
     const actualDeposited = depositMap.get(m.id) ?? 0;
@@ -85,19 +110,17 @@ export async function calculateMonthlyArrears(
     if (existing) {
       // If already WAIVED, don't overwrite with OUTSTANDING
       if (existing.currentStatus !== 'WAIVED') {
-        await db
-          .update(memberArrears)
-          .set({
-            requiredAmount: memberRequired.toFixed(2),
-            actualDeposited: actualDeposited.toFixed(2),
-            shortfall: shortfall.toFixed(2),
-            status,
-            updatedAt: new Date(),
-          })
-          .where(eq(memberArrears.id, existing.id));
+        updateRows.push({
+          id: existing.id,
+          required: memberRequired.toFixed(2),
+          deposited: actualDeposited.toFixed(2),
+          shortfall: shortfall.toFixed(2),
+          status,
+        });
       }
     } else {
-      await db.insert(memberArrears).values({
+      insertRows.push({
+        tenantId: tenantId ?? null,
         memberId: m.id,
         periodKey: targetPeriod,
         requiredAmount: memberRequired.toFixed(2),
@@ -117,20 +140,47 @@ export async function calculateMonthlyArrears(
     });
   }
 
-  if (userId) {
-    await db.insert(auditLogs).values({
-      userId,
-      userName: userName || 'System',
-      action: 'CALCULATE_MONTHLY_ARREARS',
-      resourceType: 'Finance',
-      details: {
-        periodKey: targetPeriod,
-        totalMembersProcessed: activeMembers.length,
-        outstandingCount: results.filter((r) => r.status === 'OUTSTANDING').length,
-      },
-      status: 'SUCCESS',
-    });
-  }
+  await db.transaction(async (tx) => {
+    if (updateRows.length > 0) {
+      // Grouped update via a VALUES join: one statement regardless of how
+      // many members are being recalculated.
+      await tx.execute(sql`
+        UPDATE ${memberArrears} AS ma
+        SET required_amount = v.required_amount,
+            actual_deposited = v.actual_deposited,
+            shortfall = v.shortfall,
+            status = v.status,
+            updated_at = now()
+        FROM (VALUES ${sql.join(
+          updateRows.map(
+            (u) =>
+              sql`(${u.id}::uuid, ${u.required}::numeric, ${u.deposited}::numeric, ${u.shortfall}::numeric, ${u.status}::varchar)`,
+          ),
+          sql`, `,
+        )}) AS v(id, required_amount, actual_deposited, shortfall, status)
+        WHERE ma.id = v.id
+      `);
+    }
+
+    if (insertRows.length > 0) {
+      await tx.insert(memberArrears).values(insertRows);
+    }
+
+    if (userId) {
+      await tx.insert(auditLogs).values({
+        userId,
+        userName: userName || 'System',
+        action: 'CALCULATE_MONTHLY_ARREARS',
+        resourceType: 'Finance',
+        details: {
+          periodKey: targetPeriod,
+          totalMembersProcessed: activeMembers.length,
+          outstandingCount: results.filter((r) => r.status === 'OUTSTANDING').length,
+        },
+        status: 'SUCCESS',
+      });
+    }
+  });
 
   return {
     periodKey: targetPeriod,

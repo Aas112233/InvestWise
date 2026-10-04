@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { History, Pencil } from "lucide-react";
+import { History, Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
 import { toCents, fromCents } from "@/lib/money";
+import { daysUntil } from "@/lib/admin/date-input";
 import { ERPDataTable, type ERPColumn } from "@/components/ui/erp-data-table";
 import { ERPConfirmDialog } from "@/components/ui/erp-confirm-dialog";
 import { AppModal } from "@/components/ui/app-modal";
@@ -15,6 +16,7 @@ import { ERPFormField } from "@/components/ui/erp-form-layout";
 import { ERPMetricCard } from "@/components/ui/erp-metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface BillingPlan {
   id: string;
@@ -105,6 +107,7 @@ export default function AdminBillingPage() {
     let active = 0;
     let trials = 0;
     let attention = 0;
+    let trialing = 0;
     for (const r of rows) {
       const s = (r.subscriptionStatus ?? "").toLowerCase();
       if (s === "active") {
@@ -118,12 +121,65 @@ export default function AdminBillingPage() {
         }
       } else if (s === "trial") {
         trials += 1;
+        trialing += 1;
       } else if (s === "past_due" || s === "suspended") {
         attention += 1;
       }
     }
-    return { mrrCents, active, trials, attention, total: rows.length };
+    return {
+      mrrCents,
+      // ARR is MRR x 12, in integer cents — never a float multiply.
+      arrCents: mrrCents * 12,
+      active,
+      trials,
+      attention,
+      // Trials that ever paid: a trial that has not yet converted is not a
+      // lost customer, so the denominator is trials + already-active.
+      conversion: trialing + active > 0 ? `${Math.round((active / (trialing + active)) * 100)}` : "0",
+      total: rows.length,
+    };
   }, [rows]);
+
+  // Plan catalogue: create / reprice / retire tiers.
+  const [planOpen, setPlanOpen] = useState(false);
+  const [planDraft, setPlanDraft] = useState({ slug: "", name: "", priceMonthly: "", maxUsers: "100" });
+  const [planEditTarget, setPlanEditTarget] = useState<BillingPlan | null>(null);
+  const [planDeleteTarget, setPlanDeleteTarget] = useState<BillingPlan | null>(null);
+
+  const planMutation = useMutation({
+    mutationFn: (input: { id?: string; body: Record<string, unknown> }) =>
+      input.id
+        ? apiClient(`/admin/plans?id=${input.id}`, { method: "PATCH", body: JSON.stringify(input.body) })
+        : apiClient("/admin/plans", { method: "POST", body: JSON.stringify(input.body) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "billing"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "plans"] });
+      setPlanOpen(false);
+      setPlanEditTarget(null);
+      setPlanDraft({ slug: "", name: "", priceMonthly: "", maxUsers: "100" });
+      toast.success(t("admin.plans.saved", { defaultValue: "Plan saved" }));
+    },
+    onError: (err) =>
+      toast.error(
+        err instanceof ApiError ? err.message : t("admin.plans.saveFailed", { defaultValue: "Save failed" })
+      ),
+  });
+
+  const planDeleteMutation = useMutation({
+    mutationFn: (id: string) => apiClient(`/admin/plans?id=${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "billing"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "plans"] });
+      setPlanDeleteTarget(null);
+      toast.success(t("admin.plans.deleted", { defaultValue: "Plan deleted" }));
+    },
+    onError: (err) =>
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : t("admin.plans.deleteFailed", { defaultValue: "Delete failed" })
+      ),
+  });
 
   const historyQuery = useQuery<{ success: boolean; data: HistoryEntry[]; meta: { total: number } }>({
     queryKey: ["admin", "billing", "history", historyTarget?.tenantId ?? null],
@@ -183,16 +239,34 @@ export default function AdminBillingPage() {
     {
       key: "period",
       header: t("admin.billing.periodEnd", { defaultValue: "Period End" }),
-      render: (row) => (
-        <div className="min-w-0">
-          <p className="text-xs text-slate-600 dark:text-slate-300">{fmtDate(row.currentPeriodEnd)}</p>
-          {row.subscriptionStatus?.toLowerCase() === "trial" && row.trialEndsAt ? (
-            <p className="text-[11px] text-slate-500">
-              {t("admin.billing.trialEnds", { defaultValue: "Trial ends" })} {fmtDate(row.trialEndsAt)}
-            </p>
-          ) : null}
-        </div>
-      ),
+      render: (row) => {
+        const status = (row.subscriptionStatus ?? "").toLowerCase();
+        const deadline =
+          status === "trial" ? (row.trialEndsAt ?? row.currentPeriodEnd) : row.currentPeriodEnd;
+        const days = daysUntil(deadline);
+        const settled =
+          status === "suspended" || status === "cancelled" || status === "expired";
+        return (
+          <div className="min-w-0">
+            <p className="text-xs text-slate-600 dark:text-slate-300">{fmtDate(deadline)}</p>
+            {days !== null && !settled ? (
+              <p
+                className={`text-[11px] font-mono ${
+                  days < 0
+                    ? "text-rose-600 dark:text-rose-400"
+                    : days <= 7
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-muted-foreground"
+                }`}
+              >
+                {days < 0
+                  ? t("admin.billing.overdueBy", { defaultValue: "{days}d overdue", days: Math.abs(days) })
+                  : t("admin.billing.daysLeft", { defaultValue: "{days}d left", days })}
+              </p>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       key: "actions",
@@ -222,6 +296,80 @@ export default function AdminBillingPage() {
     },
   ];
 
+  const planColumns: ERPColumn<BillingPlan>[] = [
+    {
+      key: "name",
+      header: t("admin.plans.plan", { defaultValue: "Plan" }),
+      render: (p) => (
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-foreground truncate">{p.name}</p>
+          <p className="font-mono text-[11px] text-muted-foreground truncate">{p.slug}</p>
+        </div>
+      ),
+    },
+    {
+      key: "price",
+      header: t("admin.plans.price", { defaultValue: "Monthly" }),
+      render: (p) => (
+        <span className="font-mono text-[11px] font-semibold text-foreground">
+          {p.priceMonthly != null && p.priceMonthly !== "" ? String(p.priceMonthly) : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "maxUsers",
+      header: t("admin.plans.maxUsers", { defaultValue: "Max users" }),
+      render: (p) => (
+        <span className="font-mono text-[11px] text-muted-foreground">{p.maxUsers ?? "—"}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: t("admin.plans.status", { defaultValue: "Status" }),
+      render: (p) => (
+        <StatusBadge
+          tone={p.isActive === false ? "slate" : "emerald"}
+          label={p.isActive === false ? "retired" : "active"}
+        />
+      ),
+    },
+    {
+      key: "actions",
+      header: t("common.edit", { defaultValue: "Edit" }),
+      align: "right",
+      render: (p) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setPlanEditTarget(p);
+              setPlanDraft({
+                slug: p.slug,
+                name: p.name,
+                priceMonthly: p.priceMonthly != null ? String(p.priceMonthly) : "",
+                maxUsers: String(p.maxUsers ?? 100),
+              });
+              setPlanOpen(true);
+            }}
+            aria-label={`${t("common.edit", { defaultValue: "Edit" })}: ${p.name}`}
+          >
+            <Pencil size={13} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setPlanDeleteTarget(p)}
+            aria-label={`${t("admin.plans.delete", { defaultValue: "Delete" })}: ${p.name}`}
+            className="text-rose-600 hover:text-rose-700"
+          >
+            <Trash2 size={13} />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="pb-2 border-b border-border/80">
@@ -233,11 +381,16 @@ export default function AdminBillingPage() {
         </h1>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
         <ERPMetricCard
           label={t("admin.billing.mrr", { defaultValue: "MRR (active)" })}
           value={fromCents(cards.mrrCents)}
           tone="emerald"
+          isLoading={billingQuery.isLoading}
+        />
+        <ERPMetricCard
+          label={t("admin.billing.arr", { defaultValue: "ARR (run rate)" })}
+          value={fromCents(cards.arrCents)}
           isLoading={billingQuery.isLoading}
         />
         <ERPMetricCard
@@ -247,9 +400,8 @@ export default function AdminBillingPage() {
           isLoading={billingQuery.isLoading}
         />
         <ERPMetricCard
-          label={t("admin.billing.trials", { defaultValue: "Trials" })}
-          value={cards.trials}
-          tone="cyan"
+          label={t("admin.billing.conversion", { defaultValue: "Trial conversion" })}
+          value={`${cards.conversion}%`}
           isLoading={billingQuery.isLoading}
         />
         <ERPMetricCard
@@ -258,6 +410,43 @@ export default function AdminBillingPage() {
           tone={cards.attention > 0 ? "amber" : "emerald"}
           isLoading={billingQuery.isLoading}
         />
+      </div>
+
+      {/* Plan catalogue */}
+      <div className="rounded-xl border border-border/80 bg-card shadow-xs">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/80">
+          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Layers className="h-4 w-4 text-primary" />
+            {t("admin.plans.title", { defaultValue: "Plan Catalogue" })}
+          </h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setPlanEditTarget(null);
+              setPlanDraft({ slug: "", name: "", priceMonthly: "", maxUsers: "100" });
+              setPlanOpen(true);
+            }}
+            className="gap-1.5"
+          >
+            <Plus size={13} />
+            {t("admin.plans.create", { defaultValue: "New plan" })}
+          </Button>
+        </div>
+        <div className="p-4">
+          {plans.length === 0 ? (
+            <p className="py-6 text-center text-xs text-muted-foreground">
+              {t("admin.plans.empty", { defaultValue: "No plans defined" })}
+            </p>
+          ) : (
+            <ERPDataTable<BillingPlan>
+              data={plans}
+              columns={planColumns}
+              rowKey={(p) => p.id}
+              emptyMessage={t("admin.plans.empty", { defaultValue: "No plans defined" })}
+            />
+          )}
+        </div>
       </div>
 
       {billingQuery.isError ? (
@@ -318,6 +507,127 @@ export default function AdminBillingPage() {
           }
         }}
       />
+
+      <ERPConfirmDialog
+        isOpen={planDeleteTarget !== null}
+        onClose={() => setPlanDeleteTarget(null)}
+        title={t("admin.plans.deleteTitle", { defaultValue: "Delete this plan?" })}
+        description={t("admin.plans.deleteDesc", {
+          defaultValue:
+            "Only possible if no tenant is on this plan. Otherwise retire it instead — a live plan with tenants cannot be removed.",
+        })}
+        confirmLabel={t("admin.plans.delete", { defaultValue: "Delete" })}
+        cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
+        confirmVariant="destructive"
+        pending={planDeleteMutation.isPending}
+        onConfirm={() => {
+          if (planDeleteTarget) planDeleteMutation.mutate(planDeleteTarget.id);
+        }}
+      />
+
+      {/* Plan create / edit */}
+      <AppModal
+        isOpen={planOpen}
+        onClose={() => {
+          setPlanOpen(false);
+          setPlanEditTarget(null);
+        }}
+        title={
+          planEditTarget
+            ? `${t("admin.plans.editTitle", { defaultValue: "Edit plan" })} — ${planEditTarget.name}`
+            : t("admin.plans.createTitle", { defaultValue: "New plan" })
+        }
+        footer={
+          <div className="flex items-center justify-end gap-2.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPlanOpen(false);
+                setPlanEditTarget(null);
+              }}
+              disabled={planMutation.isPending}
+            >
+              {t("common.cancel", { defaultValue: "Cancel" })}
+            </Button>
+            <Button
+              size="sm"
+              loading={planMutation.isPending}
+              disabled={
+                planMutation.isPending ||
+                !planDraft.name.trim() ||
+                !planDraft.priceMonthly.trim() ||
+                (planEditTarget === null && !planDraft.slug.trim())
+              }
+              onClick={() =>
+                planMutation.mutate({
+                  id: planEditTarget?.id,
+                  body: planEditTarget
+                    ? {
+                        name: planDraft.name.trim(),
+                        priceMonthly: planDraft.priceMonthly.trim(),
+                        maxUsers: Number(planDraft.maxUsers) || 100,
+                      }
+                    : {
+                        slug: planDraft.slug.trim().toLowerCase(),
+                        name: planDraft.name.trim(),
+                        priceMonthly: planDraft.priceMonthly.trim(),
+                        maxUsers: Number(planDraft.maxUsers) || 100,
+                      },
+                })
+              }
+            >
+              {t("common.save", { defaultValue: "Save" })}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {planEditTarget === null && (
+            <ERPFormField
+              label={t("admin.plans.slug", { defaultValue: "Slug" })}
+              required
+              hint={t("admin.plans.slugHint", { defaultValue: "Lowercase, digits and dashes." })}
+            >
+              <Input
+                value={planDraft.slug}
+                onChange={(e) => setPlanDraft({ ...planDraft, slug: e.target.value })}
+                placeholder="standard"
+                className="text-xs font-mono"
+              />
+            </ERPFormField>
+          )}
+          <ERPFormField label={t("admin.plans.name", { defaultValue: "Display name" })} required>
+            <Input
+              value={planDraft.name}
+              onChange={(e) => setPlanDraft({ ...planDraft, name: e.target.value })}
+              className="text-xs"
+            />
+          </ERPFormField>
+          <ERPFormField
+            label={t("admin.plans.price", { defaultValue: "Monthly price" })}
+            required
+            hint={t("admin.plans.priceHint", { defaultValue: "Decimal amount, max 2 places." })}
+          >
+            <Input
+              value={planDraft.priceMonthly}
+              onChange={(e) => setPlanDraft({ ...planDraft, priceMonthly: e.target.value })}
+              inputMode="decimal"
+              placeholder="299.00"
+              className="text-xs font-mono"
+            />
+          </ERPFormField>
+          <ERPFormField label={t("admin.plans.maxUsers", { defaultValue: "Max users" })} required>
+            <Input
+              type="number"
+              min={1}
+              value={planDraft.maxUsers}
+              onChange={(e) => setPlanDraft({ ...planDraft, maxUsers: e.target.value })}
+              className="text-xs font-mono"
+            />
+          </ERPFormField>
+        </div>
+      </AppModal>
 
       <AppModal
         isOpen={historyTarget !== null}

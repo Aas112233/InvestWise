@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, members, funds, projects, users } from '@/db/schema/index';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
@@ -12,10 +12,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6: tenant business data — fail closed without tenant context.
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     const { id } = await params;
     const db = getDb();
@@ -51,7 +53,7 @@ export async function GET(
       .leftJoin(funds, eq(transactions.fundId, funds.id))
       .leftJoin(projects, eq(transactions.projectId, projects.id))
       .leftJoin(users, eq(transactions.authorizedBy, users.id))
-      .where(eq(transactions.id, id))
+      .where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId)))
       .limit(1);
 
     if (!tx) throw new NotFoundError('Transaction');
@@ -74,10 +76,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     const callerRole = normalizeRole(user.role);
     if (callerRole !== 'Admin' && callerRole !== 'Manager' && callerRole !== 'SuperAdmin') {
@@ -97,12 +100,25 @@ export async function DELETE(
     const [existing] = await db
       .select()
       .from(transactions)
-      .where(eq(transactions.id, id))
+      .where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId)))
       .limit(1);
 
     if (!existing) throw new NotFoundError('Transaction');
     if (existing.isDeleted) {
       throw new ValidationError('Transaction is already deleted');
+    }
+
+    // Real-money guard (deposits spec): Completed/Success deposits moved real
+    // money and cannot be deleted — they must be reverted to request first
+    // (POST /api/deposits/[id]/revert), which reverses fund/member balances
+    // atomically. Deleting here would orphan the ledger from balances.
+    if (
+      existing.type === 'Deposit' &&
+      (existing.status === 'Completed' || existing.status === 'Success')
+    ) {
+      throw new ValidationError(
+        'Completed deposits cannot be deleted. Revert to request instead (POST /api/deposits/[id]/revert) so fund and member balances are reversed.',
+      );
     }
 
     // Rule §12: Soft delete only — transactions use isDeleted + deletedBy/deletionReason, never hard delete
@@ -115,7 +131,7 @@ export async function DELETE(
         deletionReason: reason.trim(),
         updatedAt: new Date(),
       })
-      .where(eq(transactions.id, id))
+      .where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId)))
       .returning();
 
     await logAudit({

@@ -28,7 +28,7 @@ interface AuthContextValue {
   tenantId: string | null;
   setTenantId: (id: string | null) => void;
   setUser: (u: AuthUser | null) => void;
-  logout: () => Promise<void>;
+  logout: (opts?: { revokeServer?: boolean }) => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -69,7 +69,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     try {
-      const profile = (await fetchJson("/api/auth/profile")) as AuthUser;
+      // GET /api/auth/me — fresh DB-backed profile incl. normalized role and
+      // permissions map. (The old "/api/auth/profile" URL never had a route —
+      // every hydrate 404'd, leaving user null: empty sidebar + fake header.)
+      const profile = (await fetchJson("/api/auth/me")) as AuthUser;
       setUser(profile);
       try {
         localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
@@ -97,11 +100,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshProfile]);
 
-  const logout = useCallback(async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    } catch {
-      // logout is best-effort; client state clears regardless
+  const logout = useCallback(async (opts?: { revokeServer?: boolean }) => {
+    const { revokeServer = true } = opts ?? {};
+    // revokeServer=false: inactivity timeouts in one tab must NOT blacklist
+    // the shared refresh cookie — cookies span all tabs, so a server revoke
+    // here would kill every other tab's session. Local state clears either way.
+    if (revokeServer) {
+      try {
+        await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      } catch {
+        // logout is best-effort; client state clears regardless
+      }
     }
     try {
       localStorage.removeItem(PROFILE_KEY);

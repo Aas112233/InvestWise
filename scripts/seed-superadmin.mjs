@@ -32,13 +32,35 @@ function loadEnvFile() {
 
 const SCREENS = ['DASHBOARD', 'MEMBERS', 'MEETINGS', 'GOVERNANCE', 'GOALS', 'DEPOSITS', 'REQUEST_DEPOSIT', 'TRANSACTIONS', 'DIVIDENDS', 'EXPENSES', 'PROJECT_MANAGEMENT', 'FUNDS_MANAGEMENT', 'ANALYSIS', 'REPORTS', 'SETTINGS'];
 
+// Development convenience only — rejected outright when NODE_ENV=production.
+const DEV_DEFAULT_PASSWORD = 'pass-12345678';
+
 const env = loadEnvFile();
 if (!env.DATABASE_URL) {
   console.error('DATABASE_URL is not set (.env.local).');
   process.exit(1);
 }
 const EMAIL = (env.SUPERADMIN_EMAIL || 'superadmin@investwise.com').toLowerCase().trim();
-const PASSWORD = env.SUPERADMIN_PASSWORD || 'pass-12345678';
+
+// The update branch below re-writes the password on every run, so an absent
+// SUPERADMIN_PASSWORD in production would silently reset the only platform
+// operator to a value that is committed to this file in public. Fail closed on
+// that path instead. Local seeding keeps the convenience default.
+const isProduction = (env.NODE_ENV || '').trim().toLowerCase() === 'production';
+const configured = env.SUPERADMIN_PASSWORD;
+if (!configured || configured === DEV_DEFAULT_PASSWORD) {
+  if (isProduction) {
+    console.error(
+      'SUPERADMIN_PASSWORD must be set to a unique strong value before seeding in production ' +
+        '(this script resets the operator password on every run).'
+    );
+    process.exit(1);
+  }
+  if (!configured) {
+    console.warn('SUPERADMIN_PASSWORD is not set — using the development default. Never do this in production.');
+  }
+}
+const PASSWORD = configured || DEV_DEFAULT_PASSWORD;
 
 const sql = postgres(env.DATABASE_URL, { prepare: false, connect_timeout: 15 });
 

@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { systemSettings, transactions } from '@/db/schema/index';
-import { eq, count } from 'drizzle-orm';
+import { systemSettings, transactions, DEFAULT_MEETING_TYPES, DEFAULT_PENALTY_RULES } from '@/db/schema/index';
+import { eq, and, count } from 'drizzle-orm';
 import { getAuthContext, type AuthenticatedUser } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { AuthError, ForbiddenError, LockedError } from '@/lib/utils/errors';
 import { updateSettingsSchema, UpdateSettingsInput } from '@/lib/utils/validation';
+import { logAudit } from '@/lib/utils/audit';
 
-const SETTINGS_CACHE_KEY = 'settings:singleton';
 const SETTINGS_CACHE_TTL = 5 * 60_000; // 5 minutes
+// Cache is PER-TENANT — a shared singleton key leaked tenant A's settings
+// (currency, share value, penalty rules) to tenant B.
 const settingsCache = new Map<string, { data: any; expiresAt: number }>();
 
 function formatSettingsResponse(settings: any): Record<string, unknown> {
@@ -42,39 +44,52 @@ function formatSettingsResponse(settings: any): Record<string, unknown> {
       monthlyMeetingDay: settings.monthlyMeetingDay || 5,
       depositDueDate: settings.depositDueDate || 10,
       gracePeriodDays: settings.gracePeriodDays || 3,
-      meetingTypes: settings.meetingTypes,
-      penaltyRules: settings.penaltyRules,
+      lateDepositGraceMonths: settings.lateDepositGraceMonths ?? 1,
+      inactiveAfterMonths: settings.inactiveAfterMonths ?? 3,
+      suspendedAfterMonths: settings.suspendedAfterMonths ?? 6,
+      meetingTypes: settings.meetingTypes && settings.meetingTypes.length > 0 ? settings.meetingTypes : DEFAULT_MEETING_TYPES,
+      penaltyRules: settings.penaltyRules && settings.penaltyRules.length > 0 ? settings.penaltyRules : DEFAULT_PENALTY_RULES,
     },
     system: {
       language: settings.language || 'English',
       refreshInterval: settings.refreshInterval || 'Real-time',
-      theme: settings.theme || 'System Default',
+      theme: settings.theme || 'Light',
       dateFormat: settings.dateFormat || 'DD/MM/YYYY',
       isMaintenanceMode: Boolean(settings.isMaintenanceMode),
     },
   };
 }
 
-async function checkAndAutoLockShareValue() {
+/**
+ * Auto-lock share value if transactions exist (this tenant only). Returns
+ * the tenant's full settings row, fresh after any lock update, so the caller
+ * doesn't pay a second round trip to read the same data.
+ */
+async function checkAndAutoLockShareValue(tenantId: string) {
   const db = getDb();
   const [settings] = await db
-    .select({ id: systemSettings.id, isShareValueLocked: systemSettings.isShareValueLocked })
+    .select()
     .from(systemSettings)
+    .where(eq(systemSettings.tenantId, tenantId))
     .limit(1);
 
-  if (!settings || settings.isShareValueLocked) return;
+  if (!settings) return null;
+  if (settings.isShareValueLocked) return settings;
 
   const [txResult] = await db
     .select({ count: count() })
     .from(transactions)
-    .where(eq(transactions.isDeleted, false));
+    .where(and(eq(transactions.tenantId, tenantId), eq(transactions.isDeleted, false)));
 
   if (Number(txResult?.count ?? 0) > 0) {
     await db
       .update(systemSettings)
       .set({ isShareValueLocked: true, updatedAt: new Date() })
       .where(eq(systemSettings.id, settings.id));
+    return { ...settings, isShareValueLocked: true, updatedAt: new Date() };
   }
+
+  return settings;
 }
 
 function hasSettingsWritePermission(user: AuthenticatedUser): boolean {
@@ -92,36 +107,43 @@ function hasSettingsWritePermission(user: AuthenticatedUser): boolean {
 
 export async function GET(request: NextRequest) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json(
         { success: false, message: 'Authentication required', code: 'UNAUTHORIZED' },
         { status: 401 }
       );
     }
+    // §6: settings are one-row-per-tenant. No tenant context → no settings.
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
+
+    const cacheKey = `settings:${tenantId}`;
 
     // Check cache
-    const cached = settingsCache.get(SETTINGS_CACHE_KEY);
+    const cached = settingsCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return NextResponse.json(cached.data);
     }
 
-    // Auto-lock share value if transactions exist
-    await checkAndAutoLockShareValue();
-
     const db = getDb();
-    const [settings] = await db.select().from(systemSettings).limit(1);
 
-    let responseData: Record<string, unknown>;
+    // Auto-lock share value if transactions exist (this tenant only). The
+    // helper returns the fresh settings row, so no second read is needed.
+    let settings = await checkAndAutoLockShareValue(tenantId);
+
     if (!settings) {
-      const [created] = await db.insert(systemSettings).values({}).returning();
-      responseData = formatSettingsResponse(created);
-    } else {
-      responseData = formatSettingsResponse(settings);
+      const [created] = await db
+        .insert(systemSettings)
+        .values({ tenantId })
+        .returning();
+      if (!created) throw new Error('Failed to initialize tenant settings');
+      settings = created;
     }
 
+    const responseData = formatSettingsResponse(settings);
+
     // Cache the response
-    settingsCache.set(SETTINGS_CACHE_KEY, {
+    settingsCache.set(cacheKey, {
       data: responseData,
       expiresAt: Date.now() + SETTINGS_CACHE_TTL,
     });
@@ -129,7 +151,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(responseData);
   } catch (error: any) {
     console.error('[GET SETTINGS ERROR]', error);
-    
+
     if (error instanceof AuthError || error instanceof ForbiddenError) {
       return NextResponse.json(
         { success: false, message: error.message, code: error.code },
@@ -146,13 +168,14 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json(
         { success: false, message: 'Authentication required', code: 'UNAUTHORIZED' },
         { status: 401 }
       );
     }
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     // Check WRITE permission for SETTINGS
     if (!hasSettingsWritePermission(user)) {
@@ -178,9 +201,18 @@ export async function PUT(request: NextRequest) {
     const data: UpdateSettingsInput = validation.data;
     const db = getDb();
 
-    let current = (await db.select().from(systemSettings).limit(1))[0];
+    let current = (
+      await db
+        .select()
+        .from(systemSettings)
+        .where(eq(systemSettings.tenantId, tenantId))
+        .limit(1)
+    )[0];
     if (!current) {
-      const [inserted] = await db.insert(systemSettings).values({}).returning();
+      const [inserted] = await db
+        .insert(systemSettings)
+        .values({ tenantId })
+        .returning();
       current = inserted;
     }
     
@@ -284,6 +316,15 @@ export async function PUT(request: NextRequest) {
       if (data.governance.gracePeriodDays !== undefined) {
         updateData.gracePeriodDays = data.governance.gracePeriodDays;
       }
+      if (data.governance.lateDepositGraceMonths !== undefined) {
+        updateData.lateDepositGraceMonths = data.governance.lateDepositGraceMonths;
+      }
+      if (data.governance.inactiveAfterMonths !== undefined) {
+        updateData.inactiveAfterMonths = data.governance.inactiveAfterMonths;
+      }
+      if (data.governance.suspendedAfterMonths !== undefined) {
+        updateData.suspendedAfterMonths = data.governance.suspendedAfterMonths;
+      }
       if (data.governance.meetingTypes !== undefined) {
         updateData.meetingTypes = data.governance.meetingTypes;
       }
@@ -296,16 +337,55 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(formatSettingsResponse(currentSettings));
     }
 
+    // The hold/suspend ordering invariant must hold on the MERGED row, not just
+    // the incoming payload — a partial update that only moves one threshold can
+    // otherwise invert the lifecycle.
+    if (
+      updateData.inactiveAfterMonths !== undefined ||
+      updateData.suspendedAfterMonths !== undefined
+    ) {
+      const mergedInactive = Number(
+        updateData.inactiveAfterMonths ?? currentSettings.inactiveAfterMonths ?? 3,
+      );
+      const mergedSuspended = Number(
+        updateData.suspendedAfterMonths ?? currentSettings.suspendedAfterMonths ?? 6,
+      );
+      if (mergedSuspended <= mergedInactive) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `[Field 'suspendedAfterMonths', Code: INVALID_THRESHOLD_ORDER] Must be greater than inactiveAfterMonths (${mergedInactive}); received ${mergedSuspended}.`,
+            code: 'VALIDATION_ERROR',
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     updateData.updatedAt = new Date();
 
     const [updated] = await db
       .update(systemSettings)
       .set(updateData)
-      .where(eq(systemSettings.id, currentSettings.id))
+      .where(and(eq(systemSettings.id, currentSettings.id), eq(systemSettings.tenantId, tenantId)))
       .returning();
 
     // Invalidate settings cache
-    settingsCache.delete(SETTINGS_CACHE_KEY);
+    settingsCache.delete(`settings:${tenantId}`);
+
+    // Audit log — `logAudit` takes a nested `user` object; passing flat
+    // userId/userName silently wrote the row with no actor recorded.
+    await logAudit({
+      tenantId,
+      user: { id: user.id, name: user.name || user.email },
+      action: 'UPDATE_SETTINGS',
+      resourceType: 'SYSTEM_SETTINGS',
+      resourceId: updated?.id,
+      details: {
+        updatedFields: Object.keys(updateData),
+      },
+      status: 'SUCCESS',
+    });
 
     return NextResponse.json(formatSettingsResponse(updated));
   } catch (error: any) {

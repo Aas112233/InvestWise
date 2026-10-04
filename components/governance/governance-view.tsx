@@ -28,6 +28,7 @@ import {
 } from "@/components/ui";
 import { formatMoney, formatDate } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { useTenantCurrency } from "@/lib/use-tenant-settings";
 
 interface GovernanceViewProps {
   leaderboard: LeaderboardEntry[];
@@ -49,6 +50,7 @@ export function GovernanceView({
   onRecalculateScores,
 }: GovernanceViewProps) {
   const { t } = useLocale();
+  const currency = useTenantCurrency();
 
   const [activeTab, setActiveTab] = useState<"LEADERBOARD" | "PENALTIES">("PENALTIES");
   const [searchQuery, setSearchQuery] = useState("");
@@ -180,7 +182,7 @@ export function GovernanceView({
         const amt = Number(p.calculatedDeduction || p.deductionAmount || 0);
         return (
           <span className="font-mono text-xs text-rose-600 dark:text-rose-400">
-            {amt > 0 ? `-${formatMoney(amt)}` : "-"}
+            {amt > 0 ? `-${formatMoney(amt, currency)}` : "-"}
           </span>
         );
       },
@@ -319,7 +321,7 @@ export function GovernanceView({
         />
         <ERPMetricCard
           label={t("governance.metrics.totalDeductions", { defaultValue: "Total Deductions" })}
-          value={formatMoney(metrics.totalDeductions)}
+          value={formatMoney(metrics.totalDeductions, currency)}
           icon={TrendingUp}
           tone="cyan"
         />

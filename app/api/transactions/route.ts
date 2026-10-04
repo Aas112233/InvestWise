@@ -3,6 +3,7 @@ import { getDb } from '@/db/index';
 import { transactions, members, funds, projects, users, systemSettings } from '@/db/schema/index';
 import { eq, and, desc, sql, ilike, gte, lte, count } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
+import { requireTenant } from '@/lib/tenant';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError } from '@/lib/utils/errors';
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6 fail-closed: the ledger is tenant business data — null tenant must
+    // 403 instead of aggregating every tenant's inflow/outflow.
+    const scopedTenantId = requireTenant(tenantId, user);
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
@@ -28,6 +32,7 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     const search = searchParams.get('search');
     const includeDeleted = searchParams.get('includeDeleted') === 'true';
+    const hasProject = searchParams.get('hasProject') === 'true';
 
     const db = getDb();
     const conditions: ReturnType<typeof sql>[] = [];
@@ -37,9 +42,8 @@ export async function GET(request: NextRequest) {
       conditions.push(sql`${transactions.isDeleted} = false`);
     }
 
-    if (tenantId) {
-      conditions.push(sql`${transactions.tenantId} = ${tenantId}`);
-    }
+    // Unconditional tenant predicate — scopedTenantId already 403s on null.
+    conditions.push(sql`${transactions.tenantId} = ${scopedTenantId}`);
     if (type && type !== 'All') {
       conditions.push(sql`${transactions.type} = ${type}`);
     }
@@ -48,6 +52,8 @@ export async function GET(request: NextRequest) {
     }
     if (projectId) {
       conditions.push(sql`${transactions.projectId} = ${projectId}`);
+    } else if (hasProject) {
+      conditions.push(sql`${transactions.projectId} IS NOT NULL`);
     }
     if (memberId) {
       conditions.push(sql`${transactions.memberId} = ${memberId}`);
@@ -62,9 +68,26 @@ export async function GET(request: NextRequest) {
       conditions.push(lte(transactions.date, new Date(endDate)));
     }
     if (search) {
-      conditions.push(
-        sql`(${transactions.description} ILIKE ${'%' + search + '%'} OR ${transactions.referenceNumber} ILIKE ${'%' + search + '%'})`
-      );
+      const term = search.trim();
+      if (term) {
+        // Full transaction id → exact PK lookup (index scan, no fuzzy matching).
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (UUID_RE.test(term)) {
+          conditions.push(sql`${transactions.id} = ${term}`);
+        } else {
+          // Reference # / partial id / description / member-name contains-search.
+          // All arms are served by pg_trgm GIN indexes (idx_trans_ref_trgm,
+          // idx_trans_desc_trgm, idx_trans_id_text_trgm, idx_members_name_trgm)
+          // — no seq scan. The members join is already tenant-scoped below.
+          const like = `%${term}%`;
+          conditions.push(sql`(
+            ${transactions.referenceNumber} ILIKE ${like}
+            OR ${transactions.description} ILIKE ${like}
+            OR ${transactions.id}::text ILIKE ${like}
+            OR ${members.name} ILIKE ${like}
+          )`);
+        }
+      }
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -77,8 +100,8 @@ export async function GET(request: NextRequest) {
         .where(whereClause),
       db
         .select({
-          inflow: sql<number>`coalesce(sum(case when ${transactions.type} in ('Deposit', 'Earning') then ${transactions.amount}::numeric else 0 end), 0)::float`,
-          outflow: sql<number>`coalesce(sum(case when ${transactions.type} in ('Expense', 'Dividend', 'Disbursement') then ${transactions.amount}::numeric else 0 end), 0)::float`,
+          inflow: sql<number>`coalesce(sum(case when ${transactions.type} in ('Deposit', 'Earning', 'Transfer In', 'Investment') then ${transactions.amount}::numeric else 0 end), 0)::float`,
+          outflow: sql<number>`coalesce(sum(case when ${transactions.type} in ('Expense', 'Dividend', 'Disbursement', 'Transfer Out', 'Withdrawal') then ${transactions.amount}::numeric else 0 end), 0)::float`,
         })
         .from(transactions)
         .where(whereClause),
@@ -86,6 +109,7 @@ export async function GET(request: NextRequest) {
         .select({
           id: transactions.id,
           referenceNumber: transactions.referenceNumber,
+          transferGroupId: transactions.transferGroupId,
           date: transactions.date,
           type: transactions.type,
           category: transactions.category,
@@ -107,9 +131,11 @@ export async function GET(request: NextRequest) {
           createdAt: transactions.createdAt,
         })
         .from(transactions)
-        .leftJoin(members, eq(transactions.memberId, members.id))
-        .leftJoin(funds, eq(transactions.fundId, funds.id))
-        .leftJoin(projects, eq(transactions.projectId, projects.id))
+        // §6: joined entities must belong to the same tenant — joining on id
+        // alone would render another tenant's member/fund/project names.
+        .leftJoin(members, and(eq(transactions.memberId, members.id), eq(members.tenantId, scopedTenantId)))
+        .leftJoin(funds, and(eq(transactions.fundId, funds.id), eq(funds.tenantId, scopedTenantId)))
+        .leftJoin(projects, and(eq(transactions.projectId, projects.id), eq(projects.tenantId, scopedTenantId)))
         .where(whereClause)
         .orderBy(desc(transactions.date))
         .limit(limit)
@@ -150,6 +176,10 @@ export async function POST(request: NextRequest) {
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6 fail-closed: generic transactions write ledger rows — null tenant must
+    // 403 instead of inserting NULL-tenant orphans. Cross-tenant fund/member/
+    // project ids are rejected below.
+    const scopedTenantId = requireTenant(tenantId, user);
 
     if (normalizeRole(user.role) === 'Member') {
       throw new ForbiddenError('Insufficient permissions to record transactions');
@@ -177,10 +207,38 @@ export async function POST(request: NextRequest) {
     const db = getDb();
     const refNum = referenceNumber || `TXN-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 1000)}`;
 
+    // §6: referenced entities must belong to the caller's tenant — otherwise a
+    // crafted fundId/memberId/projectId links this tenant's ledger row to
+    // another tenant's entities (and leaks their existence via NotFound vs ok).
+    if (fundId) {
+      const [fund] = await db
+        .select({ id: funds.id })
+        .from(funds)
+        .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)))
+        .limit(1);
+      if (!fund) throw new ValidationError("[Field 'fundId', Code: cross_tenant] Fund does not belong to this tenant");
+    }
+    if (memberId) {
+      const [member] = await db
+        .select({ id: members.id })
+        .from(members)
+        .where(and(eq(members.id, memberId), eq(members.tenantId, scopedTenantId)))
+        .limit(1);
+      if (!member) throw new ValidationError("[Field 'memberId', Code: cross_tenant] Member does not belong to this tenant");
+    }
+    if (projectId) {
+      const [project] = await db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(and(eq(projects.id, projectId), eq(projects.tenantId, scopedTenantId)))
+        .limit(1);
+      if (!project) throw new ValidationError("[Field 'projectId', Code: cross_tenant] Project does not belong to this tenant");
+    }
+
     const [created] = await db
       .insert(transactions)
       .values({
-        tenantId: tenantId || null,
+        tenantId: scopedTenantId,
         type,
         amount: String(numAmount),
         description: description.trim(),
@@ -198,11 +256,13 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    // Enforce Rule §12: auto-lock share value once transactions exist
+    // Enforce Rule §12: auto-lock share value once transactions exist (§6:
+    // tenant-scoped — a global predicate would lock every tenant because one
+    // tenant transacted).
     await db
       .update(systemSettings)
       .set({ isShareValueLocked: true, updatedAt: new Date() })
-      .where(eq(systemSettings.isShareValueLocked, false));
+      .where(and(eq(systemSettings.tenantId, scopedTenantId), eq(systemSettings.isShareValueLocked, false)));
 
     await logAudit({
       user: { id: user.id, name: user.name },

@@ -19,7 +19,7 @@ export const createMemberSchema = z.object({
   nomineePhone: z.string().nullable().optional(),
 });
 
-// Shares are locked after creation — derived from totalContributed / shareValueBdt
+// Shares are locked after creation — fixed equity ownership unit, never derived from deposits
 export const updateMemberSchema = z.object({
   name: z.string().min(1).optional(),
   email: z.string().email().transform(e => e.toLowerCase().trim()).optional(),

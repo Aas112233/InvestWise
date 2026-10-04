@@ -5,14 +5,16 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
-import { ValidationError } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError } from '@/lib/utils/errors';
 
 export async function GET(request: NextRequest) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6: tenant-scoped goal list; no tenant context → no rows.
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
@@ -21,6 +23,8 @@ export async function GET(request: NextRequest) {
 
     const db = getDb();
     const conditions: ReturnType<typeof sql>[] = [];
+
+    conditions.push(sql`${goals.tenantId} = ${tenantId}`);
 
     // Filter by user unless Manager+ who can see team goals
     if (normalizeRole(user.role) === 'Member') {
@@ -74,10 +78,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     const body = await request.json();
     const { title, description, targetAmount, currentAmount, deadline, type, linkedProjectId } = body;
@@ -91,6 +96,7 @@ export async function POST(request: NextRequest) {
     const [created] = await db
       .insert(goals)
       .values({
+        tenantId,
         userId: user.id,
         title: title.trim(),
         description: description ? description.trim() : null,

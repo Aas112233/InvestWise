@@ -97,7 +97,7 @@ export function GoalFormModal({
       title={initialData ? t("goals.editGoal", { defaultValue: "Edit Goal" }) : t("goals.newGoal", { defaultValue: "Define New Goal" })}
       description={t("goals.formDescription", { defaultValue: "Track milestone capital accumulation and tie to active projects." })}
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form method="post" onSubmit={handleSubmit} className="space-y-6">
         {errorMessage && (
           <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs rounded-md">
             {errorMessage}

@@ -47,6 +47,10 @@ export function fundTypeLabelKey(type: string | null | undefined): string {
       return "funds.types.primary";
     case "PROJECT":
       return "funds.types.project";
+    case "RESERVE":
+      return "funds.types.reserve";
+    case "EMERGENCY":
+      return "funds.types.emergency";
     default:
       return "funds.types.other";
   }

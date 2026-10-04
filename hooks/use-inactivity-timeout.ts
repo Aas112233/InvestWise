@@ -19,7 +19,7 @@ interface UseInactivityTimeoutReturn {
 // Behavioral port of client/hooks/useInactivityTimeout.ts: warn after
 // `timeoutMs` of inactivity, count down `warningDurationMs`, then log out.
 export function useInactivityTimeout({
-  timeoutMs = 2 * 60 * 1000,
+  timeoutMs = 30 * 60 * 1000,
   warningDurationMs = 60 * 1000,
   onLogout,
   enabled = true,

@@ -10,8 +10,6 @@ title InvestWise Development Launcher
 ::
 ::  Flags:
 ::    --port <n>        Next.js dev port              (default 3000)
-::    --no-check        Skip the tsc --noEmit gate
-::    --fast            Skip typecheck AND i18n validation (fastest boot)
 ::    --lint            Run eslint before booting
 ::    --test            Run vitest before booting
 ::    --i18n            Validate the 4 locale files before booting
@@ -22,9 +20,8 @@ title InvestWise Development Launcher
 ::    --help            Show this help and exit
 ::
 ::  Examples:
-::    run-dev.bat                        normal boot with preflight + typecheck
+::    run-dev.bat                        normal boot with preflight
 ::    run-dev.bat 3005                   boot on port 3005
-::    run-dev.bat --fast                 skip all pre-boot gates
 ::    run-dev.bat --lint --test          run lint + tests, then boot
 ::    run-dev.bat --doctor               environment check only
 :: ============================================================================
@@ -42,7 +39,6 @@ if not exist "%POWERSHELL%" set "POWERSHELL=powershell"
 
 :: --- Defaults ---------------------------------------------------------------
 set "NEXT_PORT=3000"
-set "SKIP_CHECK=0"
 set "RUN_LINT=0"
 set "RUN_TEST=0"
 set "RUN_I18N=0"
@@ -67,8 +63,6 @@ set "ARG=!ARG:"=!"
 if "!ARG!"=="--help"    goto :usage
 if "!ARG!"=="-h"        goto :usage
 if "!ARG!"=="/?"        goto :usage
-if "!ARG!"=="--no-check" set "SKIP_CHECK=1" & shift & goto :parse_args
-if "!ARG!"=="--fast"     set "SKIP_CHECK=1" & set "RUN_I18N=0" & shift & goto :parse_args
 if "!ARG!"=="--lint"     set "RUN_LINT=1"   & shift & goto :parse_args
 if "!ARG!"=="--test"     set "RUN_TEST=1"   & shift & goto :parse_args
 if "!ARG!"=="--i18n"     set "RUN_I18N=1"   & shift & goto :parse_args
@@ -125,7 +119,6 @@ echo ================================================
 echo   App      : http://localhost:%NEXT_PORT%
 echo   Landing  : http://localhost:%NEXT_PORT%/login
 echo   Root     : %ROOT_DIR%
-if "%SKIP_CHECK%"=="1"   echo   Mode     : fast (typecheck skipped^)
 if "%RUN_LINT%"=="1"     echo   Gates    : + lint
 if "%RUN_TEST%"=="1"     echo   Gates    : + tests
 if "%RUN_I18N%"=="1"     echo   Gates    : + i18n validation
@@ -255,25 +248,10 @@ if "%FRESH%"=="1" (
 :: ============================================================================
 ::  PRE-BOOT GATES
 ::  Each gate failure is reported together, then the run aborts before boot.
+::  Typecheck was removed from the boot path — run `npx tsc --noEmit`
+::  (or `npm run typecheck`) manually when you want the full gate.
 :: ============================================================================
 
-:: --- Typecheck --------------------------------------------------------------
-if "%SKIP_CHECK%"=="1" goto :gate_i18n
-echo.
-echo [..] Typecheck: tsc --noEmit
-pushd "%ROOT_DIR%"
-call npx tsc --noEmit
-if errorlevel 1 (
-    echo [FAIL] Type errors found. Fix them before booting.
-    echo        Skip this gate with: %~nx0 %NEXT_PORT% --no-check
-    set "FAILURES=1"
-    popd
-    goto :gate_abort
-)
-popd
-echo [OK] Typecheck clean.
-
-:gate_i18n
 :: --- i18n locale parity -----------------------------------------------------
 if "%RUN_I18N%"=="1" (
     echo.
@@ -508,8 +486,6 @@ echo   [port]              Shorthand, e.g. "run-dev.bat 3005"     (default 3000)
 echo   --port ^<n^>          Same, explicit form
 echo.
 echo Flags:
-echo   --no-check          Skip the tsc --noEmit gate
-echo   --fast              Skip typecheck and i18n validation (fastest boot)
 echo   --lint              Run eslint before booting
 echo   --test              Run vitest before booting
 echo   --i18n              Validate the 4 locale files before booting
@@ -520,9 +496,8 @@ echo   --fresh             Wipe .next build cache before booting
 echo   --help              Show this help
 echo.
 echo Examples:
-echo   run-dev.bat                             normal boot (preflight + typecheck)
+echo   run-dev.bat                             normal boot (preflight)
 echo   run-dev.bat 3005                        boot on port 3005
-echo   run-dev.bat --fast                      skip all pre-boot gates
 echo   run-dev.bat --lint --test               full verification, then boot
 echo   run-dev.bat --migrate --seed            provision the DB, then boot
 echo   run-dev.bat --doctor                    environment check only

@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  ArrowDownLeft,
+  ArrowUpRight,
   Building2,
   CheckCircle2,
   FolderKanban,
@@ -13,7 +15,9 @@ import {
   PauseCircle,
   PiggyBank,
   PlayCircle,
+  Receipt,
   ShieldAlert,
+  TrendingUp,
   Users,
   Wrench,
 } from "lucide-react";
@@ -25,6 +29,15 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { ERPDataTable, type ERPColumn } from "@/components/ui/erp-data-table";
 import { ERPConfirmDialog } from "@/components/ui/erp-confirm-dialog";
+import { TenantModuleAccessPanel } from "@/components/admin/tenant-module-access-panel";
+
+// decimal(15,2) string -> display. Grouping only; no arithmetic.
+function formatCentsOnly(value: string | undefined): string {
+  if (!value) return "0";
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "0";
+  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 interface TenantUser {
   id: string;
@@ -33,6 +46,7 @@ interface TenantUser {
   role: string;
   status: string;
   createdAt: string;
+  impersonatable: boolean;
 }
 
 interface TenantDetailResponse {
@@ -48,10 +62,20 @@ interface TenantDetailResponse {
     updatedAt: string;
     userCount: number;
   };
+  moduleAccess: Record<string, boolean>;
   stats: {
     totalUsers: number;
     totalFunds: number;
     totalProjects: number;
+    totalTransactions: number;
+  };
+  // decimal(15,2) as strings — formatted for display, never re-summed.
+  financials: {
+    totalDeposits: string;
+    totalWithdrawals: string;
+    totalExpenses: string;
+    totalDividends: string;
+    netReserveBalance: string;
   };
   users: TenantUser[];
 }
@@ -66,6 +90,22 @@ export default function TenantDetailPage({
   const { t } = useLocale();
   const qc = useQueryClient();
   const [confirmSuspend, setConfirmSuspend] = useState(false);
+  const [impersonateTarget, setImpersonateTarget] = useState<TenantUser | null>(null);
+
+  const impersonateMutation = useMutation({
+    mutationFn: (userId: string) =>
+      apiClient("/admin/impersonate", { method: "POST", body: JSON.stringify({ userId }) }),
+    onSuccess: () => {
+      // Full navigation so the server layout re-reads the swapped cookie.
+      window.location.href = "/";
+    },
+    onError: (err) =>
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : t("admin.users.impersonateFailed", { defaultValue: "Could not start session" })
+      ),
+  });
 
   const { data, isLoading, refetch } = useQuery<{ success: boolean; data: TenantDetailResponse }>({
     queryKey: ["admin", "tenants", id],
@@ -76,7 +116,9 @@ export default function TenantDetailPage({
   const detail = data?.data;
   const tenant = detail?.tenant;
   const stats = detail?.stats;
+  const financials = detail?.financials;
   const usersList = detail?.users ?? [];
+  const moduleAccess = detail?.moduleAccess ?? {};
 
   const patchMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
@@ -137,14 +179,25 @@ export default function TenantDetailPage({
       header: t("admin.tenants.detail.userActions", { defaultValue: "Action" }),
       align: "right",
       render: (u) => (
-        <Link
-          href={`/admin/impersonate`}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border border-border/80 text-foreground hover:bg-muted/60 transition-colors"
-          title="Impersonate this user"
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!u.impersonatable || impersonateMutation.isPending}
+          onClick={() => setImpersonateTarget(u)}
+          className="gap-1.5"
+          title={
+            u.impersonatable
+              ? t("admin.tenants.detail.supportSession", { defaultValue: "Start support session" })
+              : t("admin.users.cannotImpersonate", {
+                  defaultValue: "Platform operators cannot be impersonated",
+                })
+          }
         >
           <KeyRound size={12} className="text-primary" />
-          <span>Support Session</span>
-        </Link>
+          <span>
+            {t("admin.tenants.detail.supportSessionShort", { defaultValue: "Support" })}
+          </span>
+        </Button>
       ),
     },
   ];
@@ -261,6 +314,52 @@ export default function TenantDetailPage({
         />
       </div>
 
+      {/* Financial throughput — the platform operator needs to see a tenant's
+          money, not just its row counts. Rendered from server-side decimal
+          sums; the client never re-adds. */}
+      <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+        <h2 className="text-sm font-bold text-foreground mb-3">
+          {t("admin.tenants.detail.financials", { defaultValue: "Financial Throughput" })}
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <ERPMetricCard
+            label={t("admin.tenants.detail.netReserve", { defaultValue: "Net Reserves" })}
+            value={formatCentsOnly(financials?.netReserveBalance)}
+            icon={<PiggyBank size={16} />}
+            tone="cyan"
+          />
+          <ERPMetricCard
+            label={t("common.deposit", { defaultValue: "Deposits" })}
+            value={formatCentsOnly(financials?.totalDeposits)}
+            icon={<ArrowDownLeft size={16} />}
+            tone="emerald"
+          />
+          <ERPMetricCard
+            label={t("common.dividend", { defaultValue: "Dividends" })}
+            value={formatCentsOnly(financials?.totalDividends)}
+            icon={<TrendingUp size={16} />}
+          />
+          <ERPMetricCard
+            label={t("common.expense", { defaultValue: "Expenses" })}
+            value={formatCentsOnly(financials?.totalExpenses)}
+            icon={<ArrowUpRight size={16} />}
+            tone="amber"
+          />
+          <ERPMetricCard
+            label={t("admin.tenants.detail.transactions", { defaultValue: "Transactions" })}
+            value={stats?.totalTransactions ?? 0}
+            icon={<Receipt size={16} />}
+          />
+        </div>
+      </div>
+
+      {/* Per-tenant module licensing */}
+      <TenantModuleAccessPanel
+        tenantId={tenant.id}
+        initialAccess={moduleAccess}
+        onUpdated={() => void refetch()}
+      />
+
       {/* Users Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -293,6 +392,24 @@ export default function TenantDetailPage({
         confirmVariant="destructive"
         pending={patchMutation.isPending}
         onConfirm={() => patchMutation.mutate({ status: "suspended" })}
+      />
+
+      <ERPConfirmDialog
+        isOpen={impersonateTarget !== null}
+        onClose={() => setImpersonateTarget(null)}
+        title={t("admin.users.impersonateTitle", { defaultValue: "Start a support session?" })}
+        description={t("admin.users.impersonateDesc", {
+          defaultValue:
+            "You will be signed in as {email} for 30 minutes. Everything they do is attributed to you in the audit log.",
+          email: impersonateTarget?.email ?? "",
+        })}
+        confirmLabel={t("admin.users.impersonate", { defaultValue: "Impersonate" })}
+        cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
+        confirmVariant="primary"
+        pending={impersonateMutation.isPending}
+        onConfirm={() => {
+          if (impersonateTarget) impersonateMutation.mutate(impersonateTarget.id);
+        }}
       />
     </div>
   );

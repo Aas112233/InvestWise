@@ -1,32 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { projects, projectUpdates, projectMembers, members } from '@/db/schema/index';
-import { eq, desc } from 'drizzle-orm';
-import { getAuthContext } from '@/lib/middleware/auth';
-import { normalizeRole } from '@/lib/roles';
+import { projects, projectUpdates, projectMembers, members, funds, systemSettings } from '@/db/schema/index';
+import { eq, and, desc } from 'drizzle-orm';
 import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError, ForbiddenError } from '@/lib/utils/errors';
+import { NotFoundError } from '@/lib/utils/errors';
+import { projectUpdateSchema } from '@/lib/utils/validation';
+import { requireProjectContext, zodMessage, assertFundInTenant } from '../_helpers';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { user, error } = await getAuthContext(request);
-    if (error || !user) {
-      return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireProjectContext(request);
+    if ('error' in ctx) return ctx.error;
+    const { tenantId } = ctx;
 
     const { id } = await params;
     const db = getDb();
 
-    const [project] = await db
-      .select()
+    const [projectWithFund] = await db
+      .select({
+        project: projects,
+        fundName: funds.name,
+        fundBalance: funds.balance,
+      })
       .from(projects)
-      .where(eq(projects.id, id))
+      .leftJoin(funds, and(eq(projects.linkedFundId, funds.id), eq(funds.tenantId, tenantId)))
+      .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)))
       .limit(1);
 
-    if (!project) throw new NotFoundError('Project');
+    if (!projectWithFund || !projectWithFund.project) throw new NotFoundError('Project');
+    const project = projectWithFund.project;
+
+    // Fetch tenant share value for valuation calculations
+    const [settingRow] = await db
+      .select({ shareValueBdt: systemSettings.shareValueBdt })
+      .from(systemSettings)
+      .where(eq(systemSettings.tenantId, tenantId))
+      .limit(1);
+    const shareValue = Number(settingRow?.shareValueBdt || 1000);
 
     const [updates, participants] = await Promise.all([
       db
@@ -38,77 +51,114 @@ export async function GET(
         .select({
           memberId: projectMembers.memberId,
           memberName: members.name,
+          memberCode: members.memberId,
+          memberPhone: members.phone,
+          memberStatus: members.status,
           sharesInvested: projectMembers.sharesInvested,
           ownershipPercentage: projectMembers.ownershipPercentage,
         })
         .from(projectMembers)
-        .leftJoin(members, eq(projectMembers.memberId, members.id))
+        .leftJoin(members, and(eq(projectMembers.memberId, members.id), eq(members.tenantId, tenantId)))
         .where(eq(projectMembers.projectId, id)),
     ]);
+
+    const enrichedParticipants = participants.map((p) => {
+      const shares = Number(p.sharesInvested || 0);
+      return {
+        ...p,
+        tenantShareValue: shareValue,
+        totalInvested: shares * shareValue,
+      };
+    });
 
     return NextResponse.json({
       success: true,
       data: {
         ...project,
+        linkedFundName: projectWithFund.fundName || undefined,
+        linkedFundBalance: projectWithFund.fundBalance ? Number(projectWithFund.fundBalance) : undefined,
         updates,
-        involvedMembers: participants,
+        involvedMembers: enrichedParticipants,
+        tenantShareValue: shareValue,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[PROJECT GET ERROR]', err);
+    const e = err as { message?: string; statusCode?: number };
     return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch project' },
-      { status: err.statusCode || 500 }
+      { success: false, message: e.message || 'Failed to fetch project' },
+      { status: e.statusCode || 500 },
     );
   }
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { user, error } = await getAuthContext(request);
-    if (error || !user) {
-      return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (normalizeRole(user.role) === 'Member') {
-      throw new ForbiddenError('Insufficient permissions to modify project');
-    }
+    const ctx = await requireProjectContext(request, { write: true });
+    if ('error' in ctx) return ctx.error;
+    const { user, tenantId } = ctx;
 
     const { id } = await params;
-    const body = await request.json();
     const db = getDb();
 
     const [existing] = await db
       .select()
       .from(projects)
-      .where(eq(projects.id, id))
+      .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)))
       .limit(1);
 
     if (!existing) throw new NotFoundError('Project');
 
-    const updateFields: Record<string, unknown> = {
-      updatedAt: new Date(),
-    };
+    const body = await request.json();
+    const parsed = projectUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, message: zodMessage(parsed.error) },
+        { status: 400 },
+      );
+    }
+    const data = parsed.data;
 
-    if (body.title !== undefined) updateFields.title = body.title.trim();
-    if (body.category !== undefined) updateFields.category = body.category.trim();
-    if (body.description !== undefined) updateFields.description = body.description.trim();
-    if (body.budget !== undefined) updateFields.budget = String(Number(body.budget));
-    if (body.expectedRoi !== undefined) updateFields.expectedRoi = String(Number(body.expectedRoi));
-    if (body.status !== undefined) updateFields.status = body.status;
-    if (body.health !== undefined) updateFields.health = body.health;
-    if (body.startDate !== undefined) updateFields.startDate = body.startDate;
-    if (body.completionDate !== undefined) updateFields.completionDate = body.completionDate || null;
-    if (body.linkedFundId !== undefined) updateFields.linkedFundId = body.linkedFundId || null;
-    if (body.projectFundHandler !== undefined) updateFields.projectFundHandler = body.projectFundHandler || null;
+    // §6: a linked fund (when changed) must belong to this tenant.
+    if (data.linkedFundId !== undefined) {
+      await assertFundInTenant(data.linkedFundId, tenantId);
+    }
+
+    // Map only validated, present fields (never raw client values).
+    const updateFields: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.title !== undefined) updateFields.title = data.title;
+    if (data.category !== undefined) updateFields.category = data.category;
+    if (data.description !== undefined) updateFields.description = data.description;
+    if (data.budget !== undefined) updateFields.budget = String(data.budget);
+    if (data.initialInvestment !== undefined) updateFields.initialInvestment = String(data.initialInvestment);
+    if (data.expectedRoi !== undefined) updateFields.expectedRoi = String(data.expectedRoi);
+    if (data.status !== undefined) updateFields.status = data.status;
+    if (data.health !== undefined) updateFields.health = data.health;
+    if (data.startDate !== undefined) updateFields.startDate = data.startDate;
+    if (data.completionDate !== undefined) updateFields.completionDate = data.completionDate ?? null;
+    if (data.linkedFundId !== undefined) updateFields.linkedFundId = data.linkedFundId ?? null;
+    if (data.projectFundHandler !== undefined) updateFields.projectFundHandler = data.projectFundHandler ?? null;
+
+    // §6 audit: record old → new for every field actually changed. Money
+    // fields are decimal(15,2) strings in the row ("5000.00") vs numeric
+    // request values — normalize so formatting can't mask or fake a diff.
+    const moneyFields = new Set(['budget', 'initialInvestment', 'expectedRoi']);
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    for (const [field, to] of Object.entries(updateFields)) {
+      if (field === 'updatedAt') continue;
+      const beforeRaw = (existing as unknown as Record<string, unknown>)[field];
+      const before = moneyFields.has(field) ? Number(beforeRaw ?? 0) : beforeRaw;
+      const after = moneyFields.has(field) ? Number(to) : to;
+      if (before !== after) changes[field] = { from: before, to: after };
+    }
 
     const [updated] = await db
       .update(projects)
       .set(updateFields)
-      .where(eq(projects.id, id))
+      .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)))
       .returning();
 
     await logAudit({
@@ -116,7 +166,7 @@ export async function PUT(
       action: 'UPDATE_PROJECT',
       resourceType: 'Project',
       resourceId: id,
-      details: { updatedFields: Object.keys(updateFields) },
+      details: { changes },
     });
 
     return NextResponse.json({
@@ -124,29 +174,25 @@ export async function PUT(
       data: updated,
       message: 'Project updated successfully',
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[PROJECT PUT ERROR]', err);
+    const e = err as { message?: string; statusCode?: number };
     return NextResponse.json(
-      { success: false, message: err.message || 'Failed to update project' },
-      { status: err.statusCode || 500 }
+      { success: false, message: e.message || 'Failed to update project' },
+      { status: e.statusCode || 500 },
     );
   }
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { user, error } = await getAuthContext(request);
-    if (error || !user) {
-      return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
-
-    const callerRole = normalizeRole(user.role);
-    if (callerRole !== 'Admin' && callerRole !== 'Manager' && callerRole !== 'SuperAdmin') {
-      throw new ForbiddenError('Admin privilege required to delete project');
-    }
+    // §6/RBAC: cancel is a destructive write — Manager/Admin/SuperAdmin only.
+    const ctx = await requireProjectContext(request, { write: true });
+    if ('error' in ctx) return ctx.error;
+    const { user, tenantId } = ctx;
 
     const { id } = await params;
     const db = getDb();
@@ -154,20 +200,16 @@ export async function DELETE(
     const [existing] = await db
       .select()
       .from(projects)
-      .where(eq(projects.id, id))
+      .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)))
       .limit(1);
 
     if (!existing) throw new NotFoundError('Project');
 
-    // Soft delete: update status to Cancelled
+    // Soft delete: mark Cancelled (never hard delete financial records).
     const [cancelled] = await db
       .update(projects)
-      .set({
-        status: 'Cancelled',
-        health: 'Critical',
-        updatedAt: new Date(),
-      })
-      .where(eq(projects.id, id))
+      .set({ status: 'Cancelled', health: 'Critical', updatedAt: new Date() })
+      .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)))
       .returning();
 
     await logAudit({
@@ -182,11 +224,12 @@ export async function DELETE(
       data: cancelled,
       message: 'Project cancelled successfully',
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[PROJECT DELETE ERROR]', err);
+    const e = err as { message?: string; statusCode?: number };
     return NextResponse.json(
-      { success: false, message: err.message || 'Failed to cancel project' },
-      { status: err.statusCode || 500 }
+      { success: false, message: e.message || 'Failed to cancel project' },
+      { status: e.statusCode || 500 },
     );
   }
 }

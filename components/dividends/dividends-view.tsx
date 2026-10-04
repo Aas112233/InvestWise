@@ -11,10 +11,10 @@ import {
   Button,
   StatusBadge,
 } from "@/components/ui";
-import { formatMoney, formatDate } from "@/lib/formatters";
+import { formatMoney, formatDatePattern } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
 import { apiClient } from "@/lib/api-client";
-import { toast } from "sonner";
+import { useTenantCurrency, useTenantDateFormat, useTenantSettings } from "@/lib/use-tenant-settings";
 import {
   PieChart,
   TrendingUp,
@@ -41,8 +41,26 @@ export interface DividendRecord {
   fundName?: string;
 }
 
+interface DividendsResponse {
+  data: DividendRecord[];
+  pagination: { total: number; totalPages: number };
+  // Server-side aggregate over the whole filtered set, not the visible page.
+  metrics?: { totalInflow: number; totalOutflow: number; netFlow: number };
+}
+
+function statusTone(status: string | null | undefined) {
+  const s = (status || "").toUpperCase();
+  if (s === "COMPLETED" || s === "SUCCESS") return "emerald" as const;
+  if (s === "PENDING" || s === "PROCESSING") return "amber" as const;
+  if (s === "REJECTED" || s === "FAILED") return "rose" as const;
+  return "cyan" as const;
+}
+
 export function DividendsView() {
   const { t } = useLocale();
+  const currency = useTenantCurrency();
+  const dateFormat = useTenantDateFormat();
+  const { data: settings } = useTenantSettings();
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -51,41 +69,30 @@ export function DividendsView() {
   const [isDistributeModalOpen, setIsDistributeModalOpen] = useState(false);
 
   // TanStack Query v5: Hierarchical key ["dividends", { ... }]
-  const { data: responseData, isLoading, refetch, isFetching } = useQuery<{
-    data: DividendRecord[];
-    pagination: { total: number; totalPages: number };
-  }>({
+  const { data: responseData, isLoading, refetch, isFetching } = useQuery<DividendsResponse>({
     queryKey: ["dividends", { page, pageSize, search, memberId: memberFilter }],
     queryFn: async () => {
-      try {
-        const params: Record<string, string | number> = {
-          page,
-          limit: pageSize,
-          type: "Dividend",
-        };
-        if (search) params.search = search;
-        if (memberFilter) params.memberId = memberFilter;
+      const params: Record<string, string | number> = {
+        page,
+        limit: pageSize,
+        type: "Dividend",
+      };
+      if (search) params.search = search;
+      if (memberFilter) params.memberId = memberFilter;
 
-        return await apiClient("/transactions", { params });
-      } catch (err: any) {
-        toast.error(err?.message || t("common.errors.failedToLoadDividendHistory", { defaultValue: "Failed to load dividend history" }));
-        return {
-          data: [],
-          pagination: { total: 0, totalPages: 1 },
-        };
-      }
+      return await apiClient<DividendsResponse>("/transactions", { params });
     },
+    placeholderData: (prev) => prev,
   });
 
+  // Distinct from the shared ["members", "dropdown"] feed, which requests 500
+  // rows for form pickers — two fetchers must not share one key.
   const { data: membersData } = useQuery<{ data: Array<{ id: string; name: string; memberId: string }> }>({
-    queryKey: ["members", "dropdown"],
-    queryFn: async () => {
-      try {
-        return await apiClient("/members?limit=200");
-      } catch {
-        return { data: [] };
-      }
-    },
+    queryKey: ["members", "dividend-filter"],
+    queryFn: () => apiClient<{ data: Array<{ id: string; name: string; memberId: string }> }>("/members", {
+      params: { limit: 500 },
+    }),
+    staleTime: 60_000,
   });
 
   const memberOptions: DropdownOption[] = (membersData?.data || []).map((m) => ({
@@ -95,27 +102,25 @@ export function DividendsView() {
 
   const records = responseData?.data || [];
   const totalCount = responseData?.pagination?.total || 0;
-
-  // Calculate total distributed amount from loaded records
-  const totalDistributedAmount = records.reduce(
-    (acc, curr) => acc + (parseFloat(String(curr.amount)) || 0),
-    0
-  );
+  // Distributed total comes from the server aggregate over the whole filtered
+  // set — summing the loaded page reported a different number per page size.
+  const totalDistributedAmount = responseData?.metrics?.totalOutflow ?? 0;
+  const statutoryReservePercent = settings?.financial?.statutoryReservePercent;
 
   const columns: ERPColumn<DividendRecord>[] = [
     {
       key: "date",
-      header: "Date",
+      header: t("dividends.columns.date"),
       sortable: true,
       render: (row) => (
         <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
-          {formatDate(row.date)}
+          {formatDatePattern(row.date, dateFormat)}
         </span>
       ),
     },
     {
       key: "referenceNumber",
-      header: t("expenses.expRef"),
+      header: t("dividends.columns.reference"),
       sortable: true,
       render: (row) => (
         <span className="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100">
@@ -151,13 +156,13 @@ export function DividendsView() {
       sortable: true,
       render: (row) => (
         <span className="font-semibold text-xs text-emerald-600 dark:text-emerald-400">
-          {formatMoney(row.amount, "BDT")}
+          {formatMoney(row.amount, currency)}
         </span>
       ),
     },
     {
       key: "fundName",
-      header: "Fund",
+      header: t("dividends.columns.fund"),
       render: (row) => (
         <span className="text-xs text-slate-600 dark:text-slate-400">
           {row.fundName || "-"}
@@ -166,7 +171,7 @@ export function DividendsView() {
     },
     {
       key: "description",
-      header: t("expenses.reasonEntity"),
+      header: t("dividends.columns.description"),
       render: (row) => (
         <span className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-xs block">
           {row.description || "-"}
@@ -175,11 +180,14 @@ export function DividendsView() {
     },
     {
       key: "status",
-      header: "Status",
-      render: (row) => {
-        const tone = row.status === "Completed" ? "emerald" : "cyan";
-        return <StatusBadge tone={tone}>{row.status}</StatusBadge>;
-      },
+      header: t("dividends.columns.status"),
+      render: (row) => (
+        <StatusBadge tone={statusTone(row.status)}>
+          {t(`dividends.statusLabels.${(row.status || "").toLowerCase()}`, {
+            defaultValue: row.status,
+          })}
+        </StatusBadge>
+      ),
     },
   ];
 
@@ -219,32 +227,37 @@ export function DividendsView() {
       {/* KPI Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <ERPMetricCard
-          label={t("dividends.totalRevenue")}
-          value={formatMoney(totalDistributedAmount, "BDT")}
+          label={t("dividends.totalDistributed")}
+          value={formatMoney(totalDistributedAmount, currency)}
           icon={<PieChart className="w-4 h-4" />}
           tone="emerald"
-          description="Distributed in current view"
+          description={t("dividends.distributedAllRecords")}
         />
         <ERPMetricCard
           label={t("dividends.execLogic")}
-          value="Share-Weighted"
+          value={t("dividends.distributionMethod.shareWeighted")}
           icon={<TrendingUp className="w-4 h-4" />}
           tone="slate"
-          description="Proportional equity allocation"
+          description={t("dividends.proportionalEquityAllocation")}
         />
         <ERPMetricCard
-          label="Statutory Buffer"
-          value="10.00%"
+          label={t("dividends.statutoryBuffer")}
+          value={
+            // The tenant's configured retention, never a hardcoded figure.
+            statutoryReservePercent === undefined || statutoryReservePercent === null
+              ? "—"
+              : `${statutoryReservePercent}%`
+          }
           icon={<ShieldCheck className="w-4 h-4" />}
           tone="amber"
-          description="Retained statutory reserve"
+          description={t("dividends.retainedReserve")}
         />
         <ERPMetricCard
           label={t("dividends.stakeholderMatrix")}
           value={String(totalCount)}
           icon={<Users className="w-4 h-4" />}
           tone="slate"
-          description="Total dividend payouts recorded"
+          description={t("dividends.totalPayoutsRecorded")}
         />
       </div>
 
@@ -272,7 +285,7 @@ export function DividendsView() {
               setMemberFilter(val || "");
               setPage(1);
             }}
-            placeholder={t("dividends.selectDeparting")}
+            placeholder={t("dividends.selectRecipient")}
           />
         </div>
 
@@ -286,7 +299,7 @@ export function DividendsView() {
               setPage(1);
             }}
           >
-            Clear Filters
+            {t("common.clear")}
           </Button>
         )}
       </div>
@@ -314,7 +327,6 @@ export function DividendsView() {
       <DividendDistributionModal
         isOpen={isDistributeModalOpen}
         onClose={() => setIsDistributeModalOpen(false)}
-        currency="BDT"
       />
     </div>
   );

@@ -33,6 +33,9 @@ export function AppShell({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const router = useRouter();
   const { logout } = useAuth();
+  // Identity split (user spec, 2026-10-04): the sidebar brands the APP
+  // ("InvestWise"); TopNav owns the TENANT name via useTenantSettings
+  // (skeleton while it loads).
 
   // Auto-shrink sidebar according to screen size on open + on resize
   useEffect(() => {
@@ -42,17 +45,23 @@ export function AppShell({
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  const handleLogout = useCallback(async () => {
-    await logout();
+  // Session expiry (idle timeout or dead refresh): local-only sign-out. The
+  // shared auth cookies span every tab — a server revoke here would kill the
+  // sessions of any other open tab, which is the "mid-session user switch"
+  // bug. Full server revoke stays on the explicit logout button.
+  const handleSessionExpired = useCallback(async () => {
+    await logout({ revokeServer: false });
     router.push("/login?session=timeout");
   }, [logout, router]);
 
+  // 30 minutes of idle before the warning; 60s countdown inside it. (The old
+  // 2-minute timeout logged people out mid-work — the reported session bug.)
   const { showWarning, timeRemaining, extendSession, logout: timeoutLogout } =
     useInactivityTimeout({
-      timeoutMs: 2 * 60 * 1000,
+      timeoutMs: 30 * 60 * 1000,
       warningDurationMs: 60 * 1000,
       onLogout: () => {
-        void handleLogout();
+        void handleSessionExpired();
       },
       enabled: true,
     });
@@ -62,9 +71,9 @@ export function AppShell({
       await refreshSession();
       extendSession();
     } catch {
-      await handleLogout();
+      await handleSessionExpired();
     }
-  }, [extendSession, handleLogout]);
+  }, [extendSession, handleSessionExpired]);
 
   return (
     <div className="flex min-h-screen bg-background">

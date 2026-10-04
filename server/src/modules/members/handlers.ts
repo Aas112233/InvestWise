@@ -24,6 +24,10 @@ const listMembersQuerySchema = z.object({
   search: z.string().optional(),
   status: z.string().optional(),
   role: z.string().optional(),
+  // Directory-only: asks the service to compute the per-row ledger aggregates
+  // (deposits total, last deposit month, expected dividend). Dropdown feeds
+  // omit it so 500-row member picks stay on the cheap path.
+  withTotals: z.string().optional(),
 });
 
 export async function handleListMembers(request: NextRequest) {
@@ -64,6 +68,7 @@ export async function handleListFunds(request: NextRequest) {
 export async function handleCreateFund(request: NextRequest) {
   try {
     const user = await requirePermission('FUNDS_MANAGEMENT', 'WRITE');
+    const tenantId = requireTenant(user);
     const body = (await request.json()) as Record<string, unknown>;
     const name = String(body.name || '').trim();
     if (!name) {
@@ -75,13 +80,15 @@ export async function handleCreateFund(request: NextRequest) {
     const fund = await fundsService.createFund(
       {
         name,
-        type: (body.type as 'DEPOSIT' | 'PRIMARY' | 'PROJECT' | 'OTHER') || 'OTHER',
+        type: (body.type as 'DEPOSIT' | 'PRIMARY' | 'PROJECT' | 'RESERVE' | 'OTHER') || 'OTHER',
         description: body.description ? String(body.description) : undefined,
         handlingOfficer: body.handlingOfficer ? String(body.handlingOfficer) : undefined,
         accountNumber: body.accountNumber ? String(body.accountNumber) : undefined,
-        initialBalance: body.initialBalance ? Number(body.initialBalance) : undefined,
+        initialBalance: body.initialBalance !== undefined && body.initialBalance !== '' ? Number(body.initialBalance) : undefined,
+        minimumBalance: body.minimumBalance !== undefined && body.minimumBalance !== '' ? Number(body.minimumBalance) : undefined,
       },
       user,
+      tenantId,
     );
     return Response.json(fund, { status: 201 });
   } catch (err) {
@@ -92,9 +99,10 @@ export async function handleCreateFund(request: NextRequest) {
 export async function handleUpdateFund(request: NextRequest, id: string) {
   try {
     assertUuid(id);
-    await requirePermission('FUNDS_MANAGEMENT', 'WRITE');
+    const user = await requirePermission('FUNDS_MANAGEMENT', 'WRITE');
+    const tenantId = requireTenant(user);
     const body = (await request.json()) as Record<string, unknown>;
-    const fund = await fundsService.updateFund(id, body as never);
+    const fund = await fundsService.updateFund(id, body as never, tenantId);
     return Response.json(fund);
   } catch (err) {
     return errorResponse(err);

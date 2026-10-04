@@ -1,0 +1,1272 @@
+{
+  "auth.logout": {
+    "en": "Logout",
+    "hasPlaceholder": false,
+    "source": "components/admin/admin-shell.tsx:296"
+  },
+  "common.actions": {
+    "en": "ACTIONS",
+    "hasPlaceholder": false,
+    "source": "components/goals/goals-view.tsx:201"
+  },
+  "common.allCategories": {
+    "en": "All Categories",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:336"
+  },
+  "common.backToProjects": {
+    "en": "Back to Projects",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:141"
+  },
+  "common.date": {
+    "en": "DATE",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:55"
+  },
+  "common.deleting": {
+    "en": "Soft Deleting...",
+    "hasPlaceholder": false,
+    "source": "components/transactions/soft-delete-modal.tsx:108"
+  },
+  "common.details": {
+    "en": "Details",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:200"
+  },
+  "common.entries": {
+    "en": "entries",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:255"
+  },
+  "common.errors.failedToRecordProjectUpdate": {
+    "en": "Failed to record project update.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:70"
+  },
+  "common.noMatches": {
+    "en": "No matches found",
+    "hasPlaceholder": false,
+    "source": "components/ui/app-dropdown.tsx:59"
+  },
+  "common.postTransaction": {
+    "en": "Post Disbursement",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:161"
+  },
+  "common.saveChanges": {
+    "en": "Save Changes",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:193"
+  },
+  "common.signingOut": {
+    "en": "Signing out…",
+    "hasPlaceholder": false,
+    "source": "components/layout/top-nav.tsx:338"
+  },
+  "common.signOut": {
+    "en": "Sign out",
+    "hasPlaceholder": false,
+    "source": "components/layout/top-nav.tsx:338"
+  },
+  "common.type": {
+    "en": "TYPE",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:65"
+  },
+  "common.view": {
+    "en": "View Details",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:220"
+  },
+  "finance.amount": {
+    "en": "AMOUNT",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:85"
+  },
+  "finance.balanceAfter": {
+    "en": "BALANCE SNAPSHOT",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:112"
+  },
+  "finance.balanceBefore": {
+    "en": "Current Balance:",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:133"
+  },
+  "finance.description": {
+    "en": "DESCRIPTION",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:103"
+  },
+  "finance.ledgerSnapshot": {
+    "en": "Balance Impact Snapshot",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:128"
+  },
+  "finance.validation.amountGreaterThanZero": {
+    "en": "Amount must be greater than zero.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:47"
+  },
+  "funds.selectFund": {
+    "en": "Target Fund",
+    "hasPlaceholder": false,
+    "source": "components/reports/reports-view.tsx:299"
+  },
+  "goals.createdSuccess": {
+    "en": "Goal created successfully",
+    "hasPlaceholder": false,
+    "source": "app/goals/page.tsx:64"
+  },
+  "goals.currentAmount": {
+    "en": "Initial / Current Accumulated",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:154"
+  },
+  "goals.deadline": {
+    "en": "Target Deadline",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:168"
+  },
+  "goals.deletedSuccess": {
+    "en": "Goal removed",
+    "hasPlaceholder": false,
+    "source": "app/goals/page.tsx:82"
+  },
+  "goals.description": {
+    "en": "Description & Milestones",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:129"
+  },
+  "goals.financialTargets": {
+    "en": "Financial Targets & Deadlines",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:140"
+  },
+  "goals.formDescription": {
+    "en": "Track milestone capital accumulation and tie to active projects.",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:98"
+  },
+  "goals.goalDetails": {
+    "en": "Goal Target & Scope",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:107"
+  },
+  "goals.linkedProject": {
+    "en": "Linked Project (Optional)",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:177"
+  },
+  "goals.metrics.achievedGoals": {
+    "en": "Achieved Goals",
+    "hasPlaceholder": false,
+    "source": "components/goals/goals-view.tsx:255"
+  },
+  "goals.metrics.currentAccumulated": {
+    "en": "Accumulated Savings",
+    "hasPlaceholder": false,
+    "source": "components/goals/goals-view.tsx:243"
+  },
+  "goals.metrics.overallProgress": {
+    "en": "Overall Progress",
+    "hasPlaceholder": false,
+    "source": "components/goals/goals-view.tsx:249"
+  },
+  "goals.metrics.totalTarget": {
+    "en": "Total Capital Target",
+    "hasPlaceholder": false,
+    "source": "components/goals/goals-view.tsx:237"
+  },
+  "goals.newGoal": {
+    "en": "Define New Goal",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:97"
+  },
+  "goals.progressUpdated": {
+    "en": "Progress updated",
+    "hasPlaceholder": false,
+    "source": "app/goals/page.tsx:98"
+  },
+  "goals.selectCategoryPlaceholder": {
+    "en": "Select category...",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:124"
+  },
+  "goals.selectProjectPlaceholder": {
+    "en": "Link to active project...",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:182"
+  },
+  "goals.status.achieved": {
+    "en": "Achieved",
+    "hasPlaceholder": false,
+    "source": "components/goals/goals-view.tsx:281"
+  },
+  "goals.status.cancelled": {
+    "en": "Cancelled",
+    "hasPlaceholder": false,
+    "source": "components/goals/goals-view.tsx:282"
+  },
+  "goals.status.inProgress": {
+    "en": "In Progress",
+    "hasPlaceholder": false,
+    "source": "components/goals/goals-view.tsx:280"
+  },
+  "goals.targetAmount": {
+    "en": "Target Amount *",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:142"
+  },
+  "goals.titlePlaceholder": {
+    "en": "e.g. 2026 Real Estate Acquisition Reserve",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:112"
+  },
+  "goals.type": {
+    "en": "Goal Category *",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:119"
+  },
+  "goals.type.investment": {
+    "en": "Investment",
+    "hasPlaceholder": false,
+    "source": "components/goals/goals-view.tsx:295"
+  },
+  "goals.type.other": {
+    "en": "Other",
+    "hasPlaceholder": false,
+    "source": "components/goals/goals-view.tsx:296"
+  },
+  "goals.type.savings": {
+    "en": "Savings",
+    "hasPlaceholder": false,
+    "source": "components/goals/goals-view.tsx:294"
+  },
+  "goals.types.emergency": {
+    "en": "Emergency Reserve",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:50"
+  },
+  "goals.types.investment": {
+    "en": "Project Investment",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:49"
+  },
+  "goals.types.other": {
+    "en": "Other Target",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:51"
+  },
+  "goals.types.savings": {
+    "en": "Savings Accumulation",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:48"
+  },
+  "goals.updatedSuccess": {
+    "en": "Goal updated successfully",
+    "hasPlaceholder": false,
+    "source": "app/goals/page.tsx:63"
+  },
+  "goals.validation.titleRequired": {
+    "en": "Goal title is required.",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:59"
+  },
+  "goals.validation.validTarget": {
+    "en": "Target amount must be greater than zero.",
+    "hasPlaceholder": false,
+    "source": "components/goals/goal-form-modal.tsx:65"
+  },
+  "governance.allTiers": {
+    "en": "All Tiers",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:395"
+  },
+  "governance.auditJustification": {
+    "en": "Administrative Justification",
+    "hasPlaceholder": false,
+    "source": "components/governance/waive-penalty-modal.tsx:87"
+  },
+  "governance.columns.deduction": {
+    "en": "DEDUCTION",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:177"
+  },
+  "governance.columns.escalationTier": {
+    "en": "TIER & ACTION",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:151"
+  },
+  "governance.columns.grade": {
+    "en": "GRADE",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:257"
+  },
+  "governance.columns.issuedAt": {
+    "en": "ISSUED DATE",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:200"
+  },
+  "governance.columns.member": {
+    "en": "MEMBER",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:134"
+  },
+  "governance.columns.rank": {
+    "en": "RANK",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:233"
+  },
+  "governance.columns.score": {
+    "en": "SCORE",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:264"
+  },
+  "governance.columns.status": {
+    "en": "STATUS",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:190"
+  },
+  "governance.columns.tier": {
+    "en": "Tier:",
+    "hasPlaceholder": false,
+    "source": "components/governance/waive-penalty-modal.tsx:70"
+  },
+  "governance.columns.violationReason": {
+    "en": "VIOLATION REASON",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:163"
+  },
+  "governance.columns.warnings": {
+    "en": "WARNINGS",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:275"
+  },
+  "governance.confirmIssue": {
+    "en": "Issue Penalty",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:196"
+  },
+  "governance.confirmWaive": {
+    "en": "Confirm Waiver",
+    "hasPlaceholder": false,
+    "source": "components/governance/waive-penalty-modal.tsx:104"
+  },
+  "governance.deductionAmount": {
+    "en": "Deduction Amount *",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:154"
+  },
+  "governance.documentation": {
+    "en": "Violation Documentation",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:169"
+  },
+  "governance.escalationTier": {
+    "en": "Escalation Tier *",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:133"
+  },
+  "governance.issueDescription": {
+    "en": "Issue a tier 1-4 escalation penalty with mandatory violation documentation.",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:113"
+  },
+  "governance.issuedSuccess": {
+    "en": "Penalty issued and recorded",
+    "hasPlaceholder": false,
+    "source": "app/governance/page.tsx:78"
+  },
+  "governance.issuePenalty": {
+    "en": "Issue Penalty",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:372"
+  },
+  "governance.metrics.activePenalties": {
+    "en": "Active Penalties",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:303"
+  },
+  "governance.metrics.tier4Suspensions": {
+    "en": "Tier 4 Suspensions",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:309"
+  },
+  "governance.metrics.totalDeductions": {
+    "en": "Total Deductions",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:321"
+  },
+  "governance.metrics.waivedPenalties": {
+    "en": "Waived with Audit",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:315"
+  },
+  "governance.noLeaderboardData": {
+    "en": "No leaderboard data available.",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:445"
+  },
+  "governance.noPenaltiesRecorded": {
+    "en": "No penalty records match criteria.",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:431"
+  },
+  "governance.originalReason": {
+    "en": "Original Violation:",
+    "hasPlaceholder": false,
+    "source": "components/governance/waive-penalty-modal.tsx:82"
+  },
+  "governance.penaltySpecification": {
+    "en": "Target & Escalation Tier",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:122"
+  },
+  "governance.penaltyTitle": {
+    "en": "Penalty Notice Title *",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:170"
+  },
+  "governance.penaltyType": {
+    "en": "Action Type *",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:144"
+  },
+  "governance.penaltyTypes.fundDeduction": {
+    "en": "Fund Deduction",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:54"
+  },
+  "governance.penaltyTypes.suspension": {
+    "en": "Membership Suspension",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:55"
+  },
+  "governance.penaltyTypes.verbalWarning": {
+    "en": "Verbal Warning",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:53"
+  },
+  "governance.recalculateAll": {
+    "en": "Recalculate Scores",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:363"
+  },
+  "governance.recalculatedSuccess": {
+    "en": "Performance scores recalculated",
+    "hasPlaceholder": false,
+    "source": "app/governance/page.tsx:118"
+  },
+  "governance.searchPenalties": {
+    "en": "Search by member, reason...",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:385"
+  },
+  "governance.selectActionTypePlaceholder": {
+    "en": "Select action type...",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:149"
+  },
+  "governance.selectMemberPlaceholder": {
+    "en": "Select member...",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:129"
+  },
+  "governance.selectTargetMember": {
+    "en": "Target Member *",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:124"
+  },
+  "governance.selectTierPlaceholder": {
+    "en": "Select tier...",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:138"
+  },
+  "governance.statuses.active": {
+    "en": "ACTIVE",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:411"
+  },
+  "governance.statuses.resolved": {
+    "en": "RESOLVED",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:413"
+  },
+  "governance.statuses.waived": {
+    "en": "WAIVED",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:412"
+  },
+  "governance.tabs.leaderboard": {
+    "en": "Performance Leaderboard",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:351"
+  },
+  "governance.tabs.penaltyHub": {
+    "en": "Penalty Escalations",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:340"
+  },
+  "governance.tiers.tier1": {
+    "en": "Tier 1 - Verbal Warning",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:396"
+  },
+  "governance.tiers.tier2": {
+    "en": "Tier 2 - Minor Deduction",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:397"
+  },
+  "governance.tiers.tier3": {
+    "en": "Tier 3 - Major Deduction",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:398"
+  },
+  "governance.tiers.tier4": {
+    "en": "Tier 4 - Suspension",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:399"
+  },
+  "governance.validation.reasonRequired": {
+    "en": "Violation reason is required.",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:86"
+  },
+  "governance.validation.selectMember": {
+    "en": "Please select a member.",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:78"
+  },
+  "governance.validation.titleRequired": {
+    "en": "Penalty title is required.",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:82"
+  },
+  "governance.validation.waiveReasonLength": {
+    "en": "Please provide a detailed justification for waiving this penalty (min 5 characters).",
+    "hasPlaceholder": false,
+    "source": "components/governance/waive-penalty-modal.tsx:34"
+  },
+  "governance.violationReason": {
+    "en": "Detailed Reason & Incident Report *",
+    "hasPlaceholder": false,
+    "source": "components/governance/issue-penalty-modal.tsx:180"
+  },
+  "governance.waive": {
+    "en": "Waive",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:221"
+  },
+  "governance.waiveAuditNotice": {
+    "en": "Waiving leaves an immutable audit trail with your timestamp and justification.",
+    "hasPlaceholder": false,
+    "source": "components/governance/waive-penalty-modal.tsx:54"
+  },
+  "governance.waivedSuccess": {
+    "en": "Penalty waived with audit record",
+    "hasPlaceholder": false,
+    "source": "app/governance/page.tsx:102"
+  },
+  "governance.waivePenalty": {
+    "en": "Waive Penalty",
+    "hasPlaceholder": false,
+    "source": "components/governance/governance-view.tsx:219"
+  },
+  "governance.waivePenaltyTitle": {
+    "en": "Waive Escalated Penalty",
+    "hasPlaceholder": false,
+    "source": "components/governance/waive-penalty-modal.tsx:53"
+  },
+  "governance.waiveReasonLabel": {
+    "en": "Audit Justification / Waiver Reason *",
+    "hasPlaceholder": false,
+    "source": "components/governance/waive-penalty-modal.tsx:88"
+  },
+  "governance.waiveReasonPlaceholder": {
+    "en": "Explain why this penalty is being waived (e.g., Medical exemption verified, Board unanimous resolution)...",
+    "hasPlaceholder": false,
+    "source": "components/governance/waive-penalty-modal.tsx:91"
+  },
+  "meetings.absent": {
+    "en": "Absent",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-attendance-modal.tsx:147"
+  },
+  "meetings.agenda": {
+    "en": "Official Agenda",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:136"
+  },
+  "meetings.agendaPlaceholder": {
+    "en": "1. Financial report review\n2. Shareholder votes\n3. New projects",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:139"
+  },
+  "meetings.agendaSection": {
+    "en": "Agenda & Notes",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:135"
+  },
+  "meetings.allTypes": {
+    "en": "All Types",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:284"
+  },
+  "meetings.attendanceRoster": {
+    "en": "Attendance Roster",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-attendance-modal.tsx:133"
+  },
+  "meetings.attendanceSaved": {
+    "en": "Attendance records updated",
+    "hasPlaceholder": false,
+    "source": "app/meetings/page.tsx:82"
+  },
+  "meetings.columns.attendance": {
+    "en": "ATTENDANCE",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:143"
+  },
+  "meetings.columns.dateSchedule": {
+    "en": "SCHEDULE",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:124"
+  },
+  "meetings.columns.meeting": {
+    "en": "MEETING & TYPE",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:109"
+  },
+  "meetings.columns.status": {
+    "en": "STATUS",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:165"
+  },
+  "meetings.completeAndEscalate": {
+    "en": "Finalize & Complete Meeting",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-attendance-modal.tsx:248"
+  },
+  "meetings.completedSuccess": {
+    "en": "Meeting finalized and penalties evaluated",
+    "hasPlaceholder": false,
+    "source": "app/meetings/page.tsx:105"
+  },
+  "meetings.confirmComplete": {
+    "en": "Finalize this meeting and process penalty evaluations?",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-attendance-modal.tsx:102"
+  },
+  "meetings.confirmDelete": {
+    "en": "Delete this meeting?",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:210"
+  },
+  "meetings.dateTime": {
+    "en": "Date & Time *",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:114"
+  },
+  "meetings.deletedSuccess": {
+    "en": "Meeting removed",
+    "hasPlaceholder": false,
+    "source": "app/meetings/page.tsx:120"
+  },
+  "meetings.editMeeting": {
+    "en": "Edit Meeting",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:81"
+  },
+  "meetings.excused": {
+    "en": "Excused",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-attendance-modal.tsx:151"
+  },
+  "meetings.formDescription": {
+    "en": "Set meeting agenda, participant group, and scheduling time.",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:82"
+  },
+  "meetings.location": {
+    "en": "Location / Venue",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:123"
+  },
+  "meetings.meetingDetails": {
+    "en": "Schedule & Scope",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:91"
+  },
+  "meetings.meetingMinutes": {
+    "en": "Official Minutes / Discussion Summary",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-attendance-modal.tsx:220"
+  },
+  "meetings.meetingType": {
+    "en": "Participant Scope *",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:103"
+  },
+  "meetings.metrics.completed": {
+    "en": "Completed",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:245"
+  },
+  "meetings.metrics.inProgress": {
+    "en": "Live In Progress",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:233"
+  },
+  "meetings.metrics.scheduled": {
+    "en": "Scheduled",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:239"
+  },
+  "meetings.metrics.totalMeetings": {
+    "en": "Total Meetings",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:227"
+  },
+  "meetings.minutesPlaceholder": {
+    "en": "Document resolutions, decisions and key takeaways...",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-attendance-modal.tsx:224"
+  },
+  "meetings.noMeetingsFound": {
+    "en": "No meetings found.",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:312"
+  },
+  "meetings.notes": {
+    "en": "Preparation Notes",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:146"
+  },
+  "meetings.notesPlaceholder": {
+    "en": "Internal instructions for meeting moderator...",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:149"
+  },
+  "meetings.present": {
+    "en": "Present",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-attendance-modal.tsx:143"
+  },
+  "meetings.resume": {
+    "en": "Live Room",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:187"
+  },
+  "meetings.saveDraft": {
+    "en": "Save Roster",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-attendance-modal.tsx:234"
+  },
+  "meetings.scheduleButton": {
+    "en": "Schedule Meeting",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:162"
+  },
+  "meetings.scheduledSuccess": {
+    "en": "Meeting scheduled successfully",
+    "hasPlaceholder": false,
+    "source": "app/meetings/page.tsx:59"
+  },
+  "meetings.scheduleMeeting": {
+    "en": "Schedule Meeting",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:81"
+  },
+  "meetings.searchPlaceholder": {
+    "en": "Search meetings...",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:259"
+  },
+  "meetings.selectType": {
+    "en": "Select meeting type...",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:108"
+  },
+  "meetings.start": {
+    "en": "Start",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:188"
+  },
+  "meetings.statuses.cancelled": {
+    "en": "Cancelled",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:273"
+  },
+  "meetings.statuses.completed": {
+    "en": "Completed",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:272"
+  },
+  "meetings.statuses.inProgress": {
+    "en": "In Progress",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:271"
+  },
+  "meetings.statuses.scheduled": {
+    "en": "Scheduled",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:270"
+  },
+  "meetings.title": {
+    "en": "Meeting Title *",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:93"
+  },
+  "meetings.titlePlaceholder": {
+    "en": "e.g. Q3 Governance & Dividends Review",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:96"
+  },
+  "meetings.total": {
+    "en": "Total",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-attendance-modal.tsx:139"
+  },
+  "meetings.turnout": {
+    "en": "turnout",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meetings-list-view.tsx:156"
+  },
+  "meetings.types.foundingMember": {
+    "en": "Founding Member",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:36"
+  },
+  "meetings.types.general": {
+    "en": "General Member",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:39"
+  },
+  "meetings.types.investor": {
+    "en": "Investor",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:38"
+  },
+  "meetings.types.shareholder": {
+    "en": "Shareholder",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:37"
+  },
+  "meetings.validation.dateRequired": {
+    "en": "Meeting schedule date is required.",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:55"
+  },
+  "meetings.validation.titleRequired": {
+    "en": "Meeting title is required.",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:47"
+  },
+  "meetings.validation.typeRequired": {
+    "en": "Meeting type is required.",
+    "hasPlaceholder": false,
+    "source": "components/meetings/meeting-form-modal.tsx:51"
+  },
+  "members.selectMember": {
+    "en": "Target Member",
+    "hasPlaceholder": false,
+    "source": "components/reports/reports-view.tsx:288"
+  },
+  "projects.addUpdate": {
+    "en": "Post Disbursement / Earning",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:151"
+  },
+  "projects.basicDetails": {
+    "en": "General Information",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:123"
+  },
+  "projects.budget": {
+    "en": "Total Budget *",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:158"
+  },
+  "projects.budgetUtilization": {
+    "en": "Budget Utilization",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:199"
+  },
+  "projects.category": {
+    "en": "Category *",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:135"
+  },
+  "projects.columns.balance": {
+    "en": "Available Fund Balance",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:229"
+  },
+  "projects.columns.budget": {
+    "en": "Allocated Budget",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:223"
+  },
+  "projects.columns.earnings": {
+    "en": "Total Earnings",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:235"
+  },
+  "projects.columns.expenses": {
+    "en": "Total Expenses",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:241"
+  },
+  "projects.columns.health": {
+    "en": "HEALTH",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:190"
+  },
+  "projects.columns.project": {
+    "en": "PROJECT",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:135"
+  },
+  "projects.columns.roi": {
+    "en": "EXP. ROI",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:172"
+  },
+  "projects.columns.status": {
+    "en": "STATUS",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:183"
+  },
+  "projects.columns.timeline": {
+    "en": "TIMELINE",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:197"
+  },
+  "projects.completionDate": {
+    "en": "Estimated Completion Date",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:226"
+  },
+  "projects.confirmDelete": {
+    "en": "This marks the project as Cancelled. Financial history is retained.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:372"
+  },
+  "projects.createButton": {
+    "en": "Create Project",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:241"
+  },
+  "projects.description": {
+    "en": "Project Description",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:145"
+  },
+  "projects.descriptionPlaceholder": {
+    "en": "Comprehensive project scope, objectives and deliverables...",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:148"
+  },
+  "projects.disbursementsLedger": {
+    "en": "Disbursements & Earnings History",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:252"
+  },
+  "projects.editProject": {
+    "en": "Edit Project",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:113"
+  },
+  "projects.expectedRoi": {
+    "en": "Expected ROI (%)",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:182"
+  },
+  "projects.financials": {
+    "en": "Capital & Fund Allocation",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:156"
+  },
+  "projects.formDescription": {
+    "en": "Define project capital requirements, linked fund, and expected ROI.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:114"
+  },
+  "projects.linkedFund": {
+    "en": "Source / Linked Fund",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:196"
+  },
+  "projects.linkedProject": {
+    "en": "Target Project",
+    "hasPlaceholder": false,
+    "source": "components/reports/reports-view.tsx:277"
+  },
+  "projects.metrics.activeProjects": {
+    "en": "Active Projects",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:276"
+  },
+  "projects.metrics.allocatedBudget": {
+    "en": "Allocated Budget",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:283"
+  },
+  "projects.metrics.currentBalance": {
+    "en": "Available Balance",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:289"
+  },
+  "projects.metrics.totalEarnings": {
+    "en": "Disbursed Earnings",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:295"
+  },
+  "projects.newProject": {
+    "en": "New Project Master",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:113"
+  },
+  "projects.noProjectsFound": {
+    "en": "No projects match the criteria.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:364"
+  },
+  "projects.noUpdatesRecorded": {
+    "en": "No disbursement or earning records for this project.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-detail-view.tsx:267"
+  },
+  "projects.recordDisbursement": {
+    "en": "Project Disbursement & Update",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:80"
+  },
+  "projects.searchPlaceholder": {
+    "en": "Search projects by title, category...",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-list-view.tsx:309"
+  },
+  "projects.selectCategory": {
+    "en": "Select category...",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:140"
+  },
+  "projects.selectFund": {
+    "en": "Select fund to link...",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:201"
+  },
+  "projects.selectUpdateTypePlaceholder": {
+    "en": "Select type...",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:97"
+  },
+  "projects.startDate": {
+    "en": "Start Date *",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:218"
+  },
+  "projects.status": {
+    "en": "Lifecycle Status",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:205"
+  },
+  "projects.timeline": {
+    "en": "Timeline & Dates",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:216"
+  },
+  "projects.title": {
+    "en": "Project Title *",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:125"
+  },
+  "projects.transactionType": {
+    "en": "Update Type *",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:92"
+  },
+  "projects.updateDescriptionPlaceholder": {
+    "en": "Reason for disbursement or source of earned income...",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:117"
+  },
+  "projects.updateDetails": {
+    "en": "Disbursement Specification",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:90"
+  },
+  "projects.updateTypes.earning": {
+    "en": "Earning (Revenue / Return)",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:32"
+  },
+  "projects.updateTypes.expense": {
+    "en": "Expense (Project Cost / Material)",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:31"
+  },
+  "projects.validation.categoryRequired": {
+    "en": "Category is required.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:73"
+  },
+  "projects.validation.descriptionRequired": {
+    "en": "Description is required.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:52"
+  },
+  "projects.validation.insufficientBalance": {
+    "en": "Insufficient project fund balance for this expense.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-update-modal.tsx:57"
+  },
+  "projects.validation.startDateRequired": {
+    "en": "Start date is required.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:77"
+  },
+  "projects.validation.titleRequired": {
+    "en": "Project title is required.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:69"
+  },
+  "projects.validation.validBudget": {
+    "en": "Valid budget is required.",
+    "hasPlaceholder": false,
+    "source": "components/projects/project-form-modal.tsx:83"
+  },
+  "reports.downloadSuccess": {
+    "en": "Document downloaded successfully",
+    "hasPlaceholder": false,
+    "source": "app/reports/page.tsx:106"
+  },
+  "reports.generatingNotice": {
+    "en": "Synthesizing report document...",
+    "hasPlaceholder": false,
+    "source": "app/reports/page.tsx:66"
+  },
+  "transactions.amountHeader": {
+    "en": "Amount",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:149"
+  },
+  "transactions.auditReasonLabel": {
+    "en": "Audit Reason for Deletion",
+    "hasPlaceholder": false,
+    "source": "components/transactions/soft-delete-modal.tsx:84"
+  },
+  "transactions.auditReasonPlaceholder": {
+    "en": "Explain why this transaction is being retracted (e.g. duplicate voucher, incorrect bank reference)...",
+    "hasPlaceholder": false,
+    "source": "components/transactions/soft-delete-modal.tsx:91"
+  },
+  "transactions.confirmSoftDelete": {
+    "en": "Confirm Soft Delete",
+    "hasPlaceholder": false,
+    "source": "components/transactions/soft-delete-modal.tsx:110"
+  },
+  "transactions.dateHeader": {
+    "en": "Date",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:104"
+  },
+  "transactions.deletedSuccess": {
+    "en": "Transaction successfully soft-deleted",
+    "hasPlaceholder": false,
+    "source": "app/transactions/page.tsx:70"
+  },
+  "transactions.descriptionHeader": {
+    "en": "Narration",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:162"
+  },
+  "transactions.emptyDescription": {
+    "en": "Financial transactions will appear here once deposits, expenses, or transfers are recorded.",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:266"
+  },
+  "transactions.filterTypePlaceholder": {
+    "en": "Filter by type...",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:251"
+  },
+  "transactions.netBalance": {
+    "en": "Net Operating Flow",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:225"
+  },
+  "transactions.partyHeader": {
+    "en": "Entity / Fund",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:133"
+  },
+  "transactions.reasonRequired": {
+    "en": "A deletion reason is mandatory for financial auditing.",
+    "hasPlaceholder": false,
+    "source": "components/transactions/soft-delete-modal.tsx:39"
+  },
+  "transactions.refHeader": {
+    "en": "Ref Number",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:95"
+  },
+  "transactions.softDeleteTitle": {
+    "en": "Soft Delete Transaction",
+    "hasPlaceholder": false,
+    "source": "components/transactions/soft-delete-modal.tsx:51"
+  },
+  "transactions.statusHeader": {
+    "en": "Status",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:171"
+  },
+  "transactions.totalInflow": {
+    "en": "Total Deposit Inflow",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:211"
+  },
+  "transactions.totalOutflow": {
+    "en": "Total Capital Outflow",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:218"
+  },
+  "transactions.typeDeposit": {
+    "en": "Deposit (Inflow)",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:86"
+  },
+  "transactions.typeDividend": {
+    "en": "Dividend (Payout)",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:88"
+  },
+  "transactions.typeExpense": {
+    "en": "Expense (Outflow)",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:87"
+  },
+  "transactions.typeHeader": {
+    "en": "Type",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:113"
+  },
+  "transactions.typeTransfer": {
+    "en": "Fund Transfer",
+    "hasPlaceholder": false,
+    "source": "components/transactions/transactions-list-view.tsx:89"
+  },
+  "transactions.voucherTitle": {
+    "en": "Financial Voucher",
+    "hasPlaceholder": false,
+    "source": "components/transactions/voucher-drawer.tsx:47"
+  },
+  "ui.clearSearch": {
+    "en": "Clear search",
+    "hasPlaceholder": false,
+    "source": "components/layout/sidebar.tsx:165"
+  }
+}

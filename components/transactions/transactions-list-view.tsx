@@ -238,7 +238,7 @@ export function TransactionsListView({
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={t("transactions.searchPlaceholder", { defaultValue: "Search by ref # or description..." })}
+            placeholder={t("transactions.searchPlaceholder", { defaultValue: "Search by ID, reference, description, or member..." })}
             className="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-border/80 bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
           />
         </div>

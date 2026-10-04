@@ -3,6 +3,7 @@ import { getDb } from '@/db/index';
 import { transactions, funds, members } from '@/db/schema/index';
 import { eq, and, sql } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
+import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/utils/errors';
@@ -18,6 +19,9 @@ export async function POST(
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6 fail-closed: rejecting mutates another tenant's ledger if the lookup
+    // runs unscoped — null tenant must 403.
+    const scopedTenantId = requireTenant(tenantId, user);
 
     // Check write permission for DEPOSITS
     if (!hasScreenPermission(user, 'DEPOSITS', 'WRITE')) {
@@ -27,11 +31,11 @@ export async function POST(
     const { id } = await params;
     const db = getDb();
 
-    // Get the pending deposit transaction
+    // Get the pending deposit transaction (§6 hard tenant predicate).
     const [deposit] = await db
       .select()
       .from(transactions)
-      .where(and(eq(transactions.id, id), eq(transactions.isDeleted, false), tenantId ? eq(transactions.tenantId, tenantId) : sql`true`))
+      .where(and(eq(transactions.id, id), eq(transactions.isDeleted, false), eq(transactions.tenantId, scopedTenantId)))
       .limit(1);
 
     if (!deposit) {
@@ -53,31 +57,36 @@ export async function POST(
       throw new ValidationError('Rejection reason is required');
     }
 
-    // Get fund with tenant isolation
-    const [fund] = await db
-      .select()
-      .from(funds)
-      .where(and(eq(funds.id, deposit.fundId!), tenantId ? eq(funds.tenantId, tenantId) : sql`true`))
-      .limit(1);
+    // Fund and member lookups are independent (both keyed off the already
+    // fetched deposit row) — batch them into one round-trip group instead of
+    // two sequential ones. A deposit without a member can never satisfy the
+    // member lookup (sql false → no row); member stays optional as before.
+    const [[fund], [member]] = await Promise.all([
+      // Fund with tenant isolation (§6 hard predicate).
+      db
+        .select()
+        .from(funds)
+        .where(and(eq(funds.id, deposit.fundId!), eq(funds.tenantId, scopedTenantId)))
+        .limit(1),
+      // Member with tenant isolation (§6 hard predicate).
+      db
+        .select()
+        .from(members)
+        .where(
+          deposit.memberId
+            ? and(eq(members.id, deposit.memberId), eq(members.tenantId, scopedTenantId))
+            : sql`false`
+        )
+        .limit(1),
+    ]);
 
     if (!fund) {
       throw new NotFoundError('Fund');
     }
 
-    // Get member with tenant isolation
-    let member = null;
-    if (deposit.memberId) {
-      const [m] = await db
-        .select()
-        .from(members)
-        .where(and(eq(members.id, deposit.memberId), tenantId ? eq(members.tenantId, tenantId) : sql`true`))
-        .limit(1);
-      member = m;
-    }
-
     const now = new Date();
 
-    // Update deposit transaction status to REJECTED
+    // Update deposit transaction status to REJECTED (§6: tenant-scoped write).
     await db
       .update(transactions)
       .set({
@@ -86,7 +95,7 @@ export async function POST(
         updatedBy: user.id,
         updatedAt: now,
       })
-      .where(eq(transactions.id, id));
+      .where(and(eq(transactions.id, id), eq(transactions.tenantId, scopedTenantId)));
 
     await logAudit({
       user: { id: user.id, name: user.name },

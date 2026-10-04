@@ -21,7 +21,7 @@ interface AuditLogQuery {
 
 export async function GET(request: NextRequest) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json(
         { success: false, message: 'Authentication required', code: 'UNAUTHORIZED' },
@@ -34,6 +34,10 @@ export async function GET(request: NextRequest) {
     if (callerRole !== 'Admin' && callerRole !== 'Manager' && callerRole !== 'SuperAdmin') {
       throw new ForbiddenError('Admin or Manager access required');
     }
+
+    // §6: tenant audit trail — a tenant's Admin/Manager may only see their own
+    // tenant's logs. Platform admins (no tenant context) use /api/admin/audit-logs.
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     const { searchParams } = new URL(request.url);
     const query: AuditLogQuery = {
@@ -52,6 +56,8 @@ export async function GET(request: NextRequest) {
     const { page, limit, skip } = getPaginationParams(query as Record<string, string>);
 
     const conditions: ReturnType<typeof sql>[] = [];
+
+    conditions.push(eq(auditLogs.tenantId, tenantId));
 
     if (query.action) {
       conditions.push(sql`${auditLogs.action} ILIKE ${'%' + query.action + '%'}`);

@@ -17,16 +17,30 @@ export default function DashboardPage() {
       try {
         return await apiClient<AnalyticsStats>("/analytics/stats");
       } catch {
-        // Fallback default snapshot if database is initializing
+        // API unreachable — render an honest empty state (zeros), never a
+        // fabricated demo snapshot (AGENTS.md §0/§12).
         return {
-          totalAssets: 4850000,
-          totalMembers: 24,
-          activeProjects: 6,
-          totalDividendsDistributed: 420000,
-          monthlyGrowthRate: 8.5,
-          totalDeposits: 5200000,
-          totalExpenses: 1350000,
-          netReserveBalance: 3850000,
+          totalAssets: 0,
+          totalMembers: 0,
+          activeMembers: 0,
+          activeProjects: 0,
+          ongoingBudget: 0,
+          totalDividendsDistributed: 0,
+          monthlyGrowthRate: null,
+          totalDeposits: 0,
+          depositCount: 0,
+          totalExpenses: 0,
+          netReserveBalance: 0,
+          totalShares: 0,
+          foundingShares: 0,
+          normalShares: 0,
+          foundingMembers: 0,
+          normalMembers: 0,
+          investmentsTotal: 0,
+          investmentsCount: 0,
+          monthlyDeposits: [],
+          ongoingProjectFinance: [],
+          fundsHealth: { reserves: 0, monthlyBurn: 0, runwayMonths: null, status: "Good" },
         };
       }
     },

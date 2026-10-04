@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, Check, ChevronDown, Loader2, Search } from "lucide-react";
+import { useIsomorphicLayoutEffect } from "@/lib/use-isomorphic-layout-effect";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/lib/i18n";
 
@@ -21,7 +22,12 @@ export interface DropdownOption {
 }
 
 export interface AppDropdownProps {
-  options: DropdownOption[];
+  /**
+   * Readonly because the list is only ever filtered and searched, never
+   * mutated — which lets callers pass a shared `as const`/readonly catalogue
+   * (lib/org-setup.ts) without copying it per render.
+   */
+  options: readonly DropdownOption[];
   value: string | null;
   onChange: (value: string | null) => void;
   placeholder?: string;
@@ -38,6 +44,15 @@ export interface AppDropdownProps {
 // Searchable, portal-rendered dropdown. Never a native <select> (AGENTS.md rule 4).
 // Parent→child rule: pass `disabled` + placeholder ("Select fund first…") until
 // the parent is chosen, and reset child state on parent change (caller-owned).
+//
+// Positioning: the panel is a direct child of <body>, so its coordinates are
+// document-space. They are written straight to the node from a layout effect
+// rather than through React state — a state round-trip paints one frame at
+// {top:0,left:0} and the search field's focus() then drags the document to the
+// top, which is the bug this replaced.
+const PANEL_GAP_PX = 4;
+const PANEL_MIN_WIDTH_PX = 180;
+
 export function AppDropdown({
   options,
   value,
@@ -63,7 +78,6 @@ export function AppDropdown({
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const [mounted, setMounted] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -88,15 +102,16 @@ export function AppDropdown({
     );
   }, [options, query, onSearch]);
 
-  const updatePosition = useCallback(() => {
-    const el = triggerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setPosition({
-      top: rect.bottom + window.scrollY + 4,
-      left: rect.left + window.scrollX,
-      width: rect.width,
-    });
+  const placePanel = useCallback(() => {
+    const trigger = triggerRef.current;
+    const panel = listRef.current;
+    if (!trigger || !panel) return;
+    const rect = trigger.getBoundingClientRect();
+    // Viewport rect + current scroll = document coordinates, which is what
+    // position:absolute on a direct child of <body> resolves against.
+    panel.style.top = `${Math.round(rect.bottom + window.scrollY + PANEL_GAP_PX)}px`;
+    panel.style.left = `${Math.round(rect.left + window.scrollX)}px`;
+    panel.style.width = `${Math.max(Math.round(rect.width), PANEL_MIN_WIDTH_PX)}px`;
   }, []);
 
   const close = useCallback(() => {
@@ -105,12 +120,17 @@ export function AppDropdown({
     setHighlight(0);
   }, []);
 
-  useEffect(() => {
+  // Layout effect, so the panel is placed before the browser paints it: a
+  // useEffect would show one frame at the top-left of the document, and the
+  // focus() below would then scroll the page there.
+  useIsomorphicLayoutEffect(() => {
     if (!open) return;
-    updatePosition();
-    searchRef.current?.focus();
-    const onResize = () => updatePosition();
-    const onScroll = () => updatePosition();
+    placePanel();
+    // preventScroll: focusing a field the browser considers off-screen scrolls
+    // the document. The panel is already placed where it belongs.
+    searchRef.current?.focus({ preventScroll: true });
+    const onResize = () => placePanel();
+    const onScroll = () => placePanel();
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node;
       if (
@@ -122,6 +142,8 @@ export function AppDropdown({
       close();
     };
     window.addEventListener("resize", onResize);
+    // capture: true — scrolls from inner scrollers (modal bodies, table
+    // wrappers) never bubble to window, and the panel must follow them.
     window.addEventListener("scroll", onScroll, true);
     document.addEventListener("pointerdown", onPointerDown);
     return () => {
@@ -129,7 +151,7 @@ export function AppDropdown({
       window.removeEventListener("scroll", onScroll, true);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [open, updatePosition, close]);
+  }, [open, placePanel, close]);
 
   useEffect(() => {
     setHighlight(0);
@@ -230,12 +252,10 @@ export function AppDropdown({
             aria-labelledby={listId}
             onKeyDown={onListKeyDown}
             className="z-[100] rounded-xl border border-border/80 bg-popover text-popover-foreground shadow-xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-100"
-            style={{
-              position: "absolute",
-              top: position.top,
-              left: position.left,
-              width: Math.max(position.width, 180),
-            }}
+            // top/left/width are written onto this node by placePanel() in a
+            // layout effect, before the first paint. Keeping them out of React
+            // state is what stops the one-frame flash at the document origin.
+            style={{ position: "absolute" }}
           >
             <div className="relative border-b border-border/70 bg-muted/20">
               <Search

@@ -58,3 +58,21 @@ export class ServiceUnavailableError extends AppError {
     this.name = 'ServiceUnavailableError';
   }
 }
+
+/**
+ * Drizzle rethrows the driver (Postgres) error as a "Failed query: ..." wrapper
+ * and parks the real SQLSTATE code + message on the nested `cause`, not the
+ * thrown object. Callers that read `error.code` see `undefined` and lose the
+ * reason. Walk the cause chain and return the first 5-character SQLSTATE.
+ */
+export function extractDbError(error: unknown): { code?: string; message?: string } {
+  let cur: unknown = error;
+  for (let depth = 0; cur && depth < 5; depth += 1) {
+    const e = cur as { code?: string; message?: string; cause?: unknown };
+    if (typeof e.code === 'string' && /^[0-9A-Z]{5}$/.test(e.code)) {
+      return { code: e.code, message: e.message };
+    }
+    cur = e.cause;
+  }
+  return { message: (error as { message?: string } | null)?.message };
+}

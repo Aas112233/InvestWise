@@ -9,6 +9,7 @@ export const calculateArrearsHandler = asyncHandler(async (req: Request, res: Re
     monthlyDueAmount ? Number(monthlyDueAmount) : undefined,
     req.user!.id,
     req.user!.name,
+    req.tenantId,
   );
   res.status(200).json({ success: true, ...result });
 });

@@ -2,11 +2,20 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema/index.js';
 
+/**
+ * Pool sizing targets the Supabase transaction-mode pooler (port 6543).
+ *
+ * The timeouts are deliberately loose. A distant region (ap-northeast-1 from
+ * South Asia) pays TCP + TLS + PgBouncer negotiation on every cold socket; the
+ * old 4s idle / 10s connect pair killed sockets faster than the link could
+ * rebuild them, producing constant CONNECT_TIMEOUT churn under load. Cycle
+ * slowly, connect patiently — reuse a warm socket instead of re-handshaking.
+ */
 const poolOptions = {
   max: 10,
-  idle_timeout: 4,
-  connect_timeout: 10,
-  max_lifetime: 60 * 3,
+  idle_timeout: 30,
+  connect_timeout: 30,
+  max_lifetime: 60 * 10,
   prepare: false,
   fetch_types: false,
   debug: false,
@@ -99,6 +108,34 @@ export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
 export function getSql(): ReturnType<typeof postgres> {
   if (!sql) getDb();
   return sql!;
+}
+
+const TRANSIENT_DB_CODES = new Set([
+  'CONNECT_TIMEOUT', 'CONNECTION_ENDED', 'CONNECTION_REFUSED', 'ECONNRESET',
+  'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'EHOSTUNREACH', 'ENETUNREACH',
+  '08000', '08001', '08003', '08004', '08006', '08007',
+  '53300', '53400', '57P01',
+]);
+
+export function isTransientDbError(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code;
+  return typeof code === 'string' && TRANSIENT_DB_CODES.has(code);
+}
+
+/**
+ * One retry for a socket that never opened or was dropped mid-flight. The
+ * failure is at the transport layer, so the query never reached Postgres and
+ * is safe to re-send. Bounded to a single attempt: a second failure is a real
+ * outage and belongs surfaced to the caller, not hidden behind a stall.
+ */
+export async function withDbRetry<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!isTransientDbError(error)) throw error;
+    console.warn('[DB] transient connection failure, retrying once:', (error as Error).message);
+    return run();
+  }
 }
 
 export async function checkDbHealth(): Promise<boolean> {

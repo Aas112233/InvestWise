@@ -1,0 +1,61 @@
+name: i18n CI
+
+# Guards the two failure modes that `i18n:validate` alone cannot catch:
+#   1. the four locale files disagreeing with each other (parity)
+#   2. the dictionaries disagreeing with the code (broken t() refs, orphans,
+#      server messages rendered without t())
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'messages/**'
+      - 'app/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'lib/i18n.tsx'
+      - 'scripts/*i18n*.mjs'
+      - '.github/workflows/i18n-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'messages/**'
+      - 'app/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'lib/i18n.tsx'
+      - 'scripts/*i18n*.mjs'
+      - '.github/workflows/i18n-ci.yml'
+
+jobs:
+  i18n:
+    name: Locale parity & usage audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # messages/{en,ur,hi,bn}.json must share an identical key shape and
+      # matching {placeholder} sets.
+      - name: Locale parity
+        run: npm run i18n:validate
+
+      # Dictionary must agree with the code: no broken t() refs, no
+      # server-authored English leaking into the UI, no dead keys.
+      - name: Usage audit
+        run: npm run i18n:audit
+
+      - name: Extract any keys still missing from the dictionaries
+        if: always()
+        run: node scripts/extract-missing-keys.mjs
+
+      - name: Upload missing-key report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: i18n-missing-keys
+          path: docs/i18n-missing-keys.json
+          if-no-files-found: ignore
