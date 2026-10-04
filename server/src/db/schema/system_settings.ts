@@ -1,5 +1,6 @@
 import { pgTable, uuid, varchar, decimal, integer, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
 import { users } from './users.js';
+import { tenants } from './tenants.js';
 
 export interface PenaltyRuleConfig {
   tier: number;
@@ -20,6 +21,10 @@ export const DEFAULT_MEETING_TYPES = ['FOUNDING_MEMBER', 'SHAREHOLDER', 'INVESTO
 
 export const systemSettings = pgTable('system_settings', {
   id: uuid('id').defaultRandom().primaryKey(),
+  // One row per tenant (AGENTS.md §multi-tenancy). This copy of the schema was
+  // missing the column the live table and the root schema both have, which
+  // forced every server-side settings read to run unscoped.
+  tenantId: uuid('tenant_id').references(() => tenants.id),
 
   // Organization / Corporate Identity
   companyName: varchar('company_name', { length: 150 }).default('InvestWise'),
@@ -44,7 +49,7 @@ export const systemSettings = pgTable('system_settings', {
   lastFiscalCloseDate: timestamp('last_fiscal_close_date', { withTimezone: true }),
   language: varchar('language', { length: 50 }).default('English'),
   refreshInterval: varchar('refresh_interval', { length: 50 }).default('Real-time'),
-  theme: varchar('theme', { length: 50 }).default('System Default'),
+  theme: varchar('theme', { length: 50 }).default('Light'),
   dateFormat: varchar('date_format', { length: 50 }).default('DD/MM/YYYY'),
   isMaintenanceMode: boolean('is_maintenance_mode').default(false),
 

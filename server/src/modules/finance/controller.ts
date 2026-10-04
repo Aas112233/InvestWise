@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { asyncHandler } from '../../shared/asyncHandler.js';
+import { AppError } from '../../shared/errors.js';
 import * as financeService from './service.js';
 import {
   validateWithdrawal,
@@ -78,29 +79,44 @@ export const bulkAddDeposits = asyncHandler(async (req: Request, res: Response) 
 
 // ── Financial Governance ──────────────────────────────────────────────────
 
+/**
+ * Fail-closed tenant scope (§6). The withdrawal and settlement rules used to
+ * run with no tenant at all — summing every tenant's funds into one member's
+ * payout — so a missing tenant here is a hard 403, never a global read.
+ */
+function tenantOf(req: Request): string {
+  if (!req.tenantId) throw new AppError('Tenant context required', 403, 'TENANT_REQUIRED');
+  return req.tenantId;
+}
+
 export const validateWithdrawalHandler = asyncHandler(async (req: Request, res: Response) => {
   const { memberId, amount, fundId } = req.body;
-  res.json(await validateWithdrawal(memberId, Number(amount), fundId));
+  res.json(await validateWithdrawal(tenantOf(req), memberId, amount, fundId));
 });
 
 export const calculateExitSettlementHandler = asyncHandler(async (req: Request, res: Response) => {
-  res.json(await calculateExitSettlement(req.params.memberId as string));
+  res.json(await calculateExitSettlement(tenantOf(req), req.params.memberId as string));
 });
 
 export const executeWithdrawalHandler = asyncHandler(async (req: Request, res: Response) => {
-  const result = await executeWithdrawal(req.body, req.user!.id, req.user!.name);
+  const result = await executeWithdrawal(tenantOf(req), req.body, req.user!.id, req.user!.name);
   res.status(201).json({ success: true, ...result, message: 'Withdrawal executed successfully' });
 });
 
 export const executeExitSettlementHandler = asyncHandler(async (req: Request, res: Response) => {
   const memberId = req.params.memberId as string;
   const { fundId, reason, paymentMethod } = req.body;
-  const result = await executeMemberExitSettlement({ memberId, fundId, reason, paymentMethod }, req.user!.id, req.user!.name);
+  const result = await executeMemberExitSettlement(
+    tenantOf(req),
+    { memberId, fundId, reason, paymentMethod },
+    req.user!.id,
+    req.user!.name,
+  );
   res.status(201).json({ success: true, ...result });
 });
 
-export const getShareConsistencyHandler = asyncHandler(async (_req: Request, res: Response) => {
-  res.json(await getShareConsistencyReport());
+export const getShareConsistencyHandler = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await getShareConsistencyReport(req.tenantId));
 });
 
 export const recalculateSharesHandler = asyncHandler(async (_req: Request, res: Response) => {

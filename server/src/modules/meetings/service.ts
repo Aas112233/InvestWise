@@ -38,16 +38,27 @@ export interface AttendanceRecordInput {
   notes?: string;
 }
 
+type DepositPunctualityStatus = 'PAID_ON_TIME' | 'PAID_LATE' | 'PENDING';
+
 /**
- * Determine a member's deposit punctuality status for a given month and meeting date.
+ * Determine deposit punctuality for MANY members against one meeting month in
+ * a single grouped query. Replaces the former per-member SELECT loop, which
+ * cost one round trip per attendee over a high-latency link (a 50-member
+ * roster paid ~50 sequential round trips inside the creation transaction).
+ * Semantics identical to the old single-member version: no completed deposit
+ * in the month → PENDING; earliest deposit on/before the due+grace deadline →
+ * PAID_ON_TIME; otherwise PAID_LATE.
  */
-async function resolveDepositStatusForMember(
+async function resolveDepositStatusForMembers(
   tx: any,
-  memberId: string,
+  memberIds: string[],
   targetDate: Date,
   depositDueDate: number,
   gracePeriodDays: number,
-): Promise<'PAID_ON_TIME' | 'PAID_LATE' | 'PENDING'> {
+): Promise<Map<string, DepositPunctualityStatus>> {
+  const statusByMember = new Map<string, DepositPunctualityStatus>();
+  if (memberIds.length === 0) return statusByMember;
+
   const year = targetDate.getFullYear();
   const month = targetDate.getMonth(); // 0-indexed
 
@@ -55,17 +66,16 @@ async function resolveDepositStatusForMember(
   const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
   const deadlineDate = new Date(year, month, Math.min(28, depositDueDate + gracePeriodDays), 23, 59, 59, 999);
 
-  // Find deposits made by this member for this month
-  const deposits = await tx
+  // Earliest completed deposit per member for this month (one round trip)
+  const earliestRows = await tx
     .select({
-      id: transactions.id,
-      date: transactions.date,
-      amount: transactions.amount,
+      memberId: transactions.memberId,
+      earliest: sql<string | null>`MIN(${transactions.date})`,
     })
     .from(transactions)
     .where(
       and(
-        eq(transactions.memberId, memberId),
+        inArray(transactions.memberId, memberIds),
         eq(transactions.type, 'Deposit'),
         inArray(transactions.status, ['Completed']),
         eq(transactions.isDeleted, false),
@@ -73,19 +83,28 @@ async function resolveDepositStatusForMember(
         sql`${transactions.date} <= ${endOfMonth.toISOString()}::timestamptz`,
       ),
     )
-    .orderBy(transactions.date);
+    .groupBy(transactions.memberId);
 
-  if (!deposits || deposits.length === 0) {
-    return 'PENDING';
+  const earliestByMember = new Map(
+    earliestRows.map((r: { memberId: string | null; earliest: string | null }) => [
+      r.memberId,
+      r.earliest ? new Date(r.earliest) : null,
+    ]),
+  );
+
+  for (const memberId of memberIds) {
+    const earliest = earliestByMember.get(memberId);
+    statusByMember.set(
+      memberId,
+      earliest
+        ? earliest <= deadlineDate
+          ? 'PAID_ON_TIME'
+          : 'PAID_LATE'
+        : 'PENDING',
+    );
   }
 
-  // Earliest deposit date
-  const earliestDepositDate = deposits[0].date ? new Date(deposits[0].date) : new Date();
-  if (earliestDepositDate <= deadlineDate) {
-    return 'PAID_ON_TIME';
-  }
-
-  return 'PAID_LATE';
+  return statusByMember;
 }
 
 export async function createMeeting(data: CreateMeetingInput, userId: string, userName: string) {
@@ -144,23 +163,22 @@ export async function createMeeting(data: CreateMeetingInput, userId: string, us
       .where(eq(members.status, 'active'));
 
     if (activeMembers.length > 0) {
-      const attendeeInserts = [];
-      for (const m of activeMembers) {
-        const depositStatus = await resolveDepositStatusForMember(
-          tx,
-          m.id,
-          meetingDate,
-          depositDueDate,
-          gracePeriodDays,
-        );
+      // Batched punctuality resolution: one grouped query instead of one
+      // SELECT per active member inside this transaction.
+      const statusByMember = await resolveDepositStatusForMembers(
+        tx,
+        activeMembers.map((m) => m.id),
+        meetingDate,
+        depositDueDate,
+        gracePeriodDays,
+      );
 
-        attendeeInserts.push({
-          meetingId: meeting.id,
-          memberId: m.id,
-          attendanceStatus: 'ABSENT', // Default until recorded
-          depositStatus,
-        });
-      }
+      const attendeeInserts = activeMembers.map((m) => ({
+        meetingId: meeting.id,
+        memberId: m.id,
+        attendanceStatus: 'ABSENT', // Default until recorded
+        depositStatus: statusByMember.get(m.id) ?? 'PENDING',
+      }));
 
       await tx.insert(meetingAttendees).values(attendeeInserts);
     }
@@ -389,44 +407,49 @@ export async function recordAttendance(
   if (!meeting) throw new NotFoundError('Meeting');
 
   return db.transaction(async (tx) => {
-    const updatedRecords = [];
-
-    for (const rec of records) {
-      const [existing] = await tx
-        .select({ id: meetingAttendees.id })
-        .from(meetingAttendees)
-        .where(
-          and(
-            eq(meetingAttendees.meetingId, meetingId),
-            eq(meetingAttendees.memberId, rec.memberId),
-          ),
-        )
-        .limit(1);
-
-      if (existing) {
-        const [updated] = await tx
-          .update(meetingAttendees)
-          .set({
-            attendanceStatus: rec.attendanceStatus,
-            notes: rec.notes || null,
-            updatedAt: new Date(),
-          })
-          .where(eq(meetingAttendees.id, existing.id))
-          .returning();
-        updatedRecords.push(updated);
-      } else {
-        const [inserted] = await tx
-          .insert(meetingAttendees)
-          .values({
-            meetingId,
-            memberId: rec.memberId,
-            attendanceStatus: rec.attendanceStatus,
-            notes: rec.notes || null,
-          })
-          .returning();
-        updatedRecords.push(inserted);
-      }
+    if (records.length === 0) {
+      await tx.insert(auditLogs).values({
+        userId,
+        userName,
+        action: 'RECORD_ATTENDANCE',
+        resourceType: 'Meeting',
+        resourceId: meetingId,
+        details: { recordsUpdatedCount: 0 },
+        status: 'SUCCESS',
+      });
+      return {
+        meetingId,
+        updatedCount: 0,
+      };
     }
+
+    // Single multi-row upsert on uq_meeting_member instead of a per-record
+    // SELECT + UPDATE/INSERT (2 round trips per attendee before). Duplicate
+    // memberIds in the payload are collapsed keeping the LAST record, which
+    // matches the old sequential overwrite behavior; ON CONFLICT DO UPDATE
+    // cannot visit the same row twice in one statement.
+    const uniqueRecords = Array.from(
+      new Map(records.map((rec) => [rec.memberId, rec])).values(),
+    );
+
+    await tx
+      .insert(meetingAttendees)
+      .values(
+        uniqueRecords.map((rec) => ({
+          meetingId,
+          memberId: rec.memberId,
+          attendanceStatus: rec.attendanceStatus,
+          notes: rec.notes || null,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: [meetingAttendees.meetingId, meetingAttendees.memberId],
+        set: {
+          attendanceStatus: sql`excluded.attendance_status`,
+          notes: sql`excluded.notes`,
+          updatedAt: new Date(),
+        },
+      });
 
     await tx.insert(auditLogs).values({
       userId,
@@ -440,7 +463,7 @@ export async function recordAttendance(
 
     return {
       meetingId,
-      updatedCount: updatedRecords.length,
+      updatedCount: records.length,
     };
   });
 }
@@ -457,28 +480,47 @@ export async function completeMeeting(id: string, userId: string, userName: stri
     const depositDueDate = settings?.depositDueDate ?? 10;
     const gracePeriodDays = settings?.gracePeriodDays ?? 3;
 
-    // 2. Finalize each attendee's deposit status
+    // 2. Finalize each attendee's deposit status — batched: one grouped
+    // MIN(date) read + at most 3 grouped updates (one per status bucket),
+    // instead of two round trips per attendee (a 30-member meeting used to
+    // pay ~60 sequential round trips inside this transaction).
     const attendees = await tx
       .select()
       .from(meetingAttendees)
       .where(eq(meetingAttendees.meetingId, id));
 
-    for (const att of attendees) {
-      const liveDepositStatus = await resolveDepositStatusForMember(
+    if (attendees.length > 0) {
+      const statusByMember = await resolveDepositStatusForMembers(
         tx,
-        att.memberId,
+        attendees.map((att) => att.memberId),
         meeting.meetingDate,
         depositDueDate,
         gracePeriodDays,
       );
 
-      await tx
-        .update(meetingAttendees)
-        .set({
-          depositStatus: liveDepositStatus,
-          updatedAt: new Date(),
-        })
-        .where(eq(meetingAttendees.id, att.id));
+      const attendeeIdsByStatus: Record<DepositPunctualityStatus, string[]> = {
+        PAID_ON_TIME: [],
+        PAID_LATE: [],
+        PENDING: [],
+      };
+      for (const att of attendees) {
+        attendeeIdsByStatus[statusByMember.get(att.memberId) ?? 'PENDING'].push(att.id);
+      }
+
+      const finalizedAt = new Date();
+      await Promise.all(
+        (Object.entries(attendeeIdsByStatus) as Array<[DepositPunctualityStatus, string[]]>)
+          .filter(([, ids]) => ids.length > 0)
+          .map(([status, ids]) =>
+            tx
+              .update(meetingAttendees)
+              .set({
+                depositStatus: status,
+                updatedAt: finalizedAt,
+              })
+              .where(inArray(meetingAttendees.id, ids)),
+          ),
+      );
     }
 
     // 3. Mark meeting as COMPLETED

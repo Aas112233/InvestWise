@@ -9,10 +9,12 @@ import { ValidationError, ForbiddenError } from '@/lib/utils/errors';
 
 export async function GET(request: NextRequest) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6: tenant-scoped meeting list; no tenant context → no rows.
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
@@ -24,6 +26,8 @@ export async function GET(request: NextRequest) {
 
     const db = getDb();
     const conditions: ReturnType<typeof sql>[] = [];
+
+    conditions.push(sql`${meetings.tenantId} = ${tenantId}`);
 
     if (status) {
       conditions.push(sql`${meetings.status} = ${status}`);
@@ -89,10 +93,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     if (normalizeRole(user.role) === 'Member') {
       throw new ForbiddenError('Insufficient permissions to schedule meetings');
@@ -110,6 +115,7 @@ export async function POST(request: NextRequest) {
     const [created] = await db
       .insert(meetings)
       .values({
+        tenantId,
         title: title.trim(),
         meetingDate: new Date(meetingDate),
         meetingType: meetingType.trim(),

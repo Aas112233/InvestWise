@@ -62,7 +62,10 @@ export async function calculateMemberPerformance(
 
   if (!member) throw new NotFoundError('Member');
 
-  const [settings] = await db.select().from(systemSettings).limit(1);
+  const settingsQuery = member.tenantId
+    ? db.select().from(systemSettings).where(eq(systemSettings.tenantId, member.tenantId)).limit(1)
+    : db.select().from(systemSettings).limit(1);
+  const [settings] = await settingsQuery;
   const depositDueDate = settings?.depositDueDate ?? 10;
   const gracePeriodDays = settings?.gracePeriodDays ?? 3;
   const shareValue = Number(settings?.shareValueBdt ?? 1000);

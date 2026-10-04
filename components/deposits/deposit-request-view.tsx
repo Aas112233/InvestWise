@@ -1,26 +1,18 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppDropdown } from "@/components/ui/app-dropdown";
 import { Button } from "@/components/ui/button";
-import { ERPDataTable, type ERPColumn } from "@/components/ui/erp-data-table";
 import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/components/ui/erp-form-layout";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { TopSheet } from "@/components/ui/top-sheet";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import { formatDatePattern, formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
-import {
-  depositStatusTone,
-  useDepositsList,
-  useFundOptions,
-  useMemberOptions,
-  useTenantCurrency,
-  useTenantDateFormat,
-  type DepositRow,
-} from "./shared";
+import { useTenantShareValue } from "@/lib/use-tenant-settings";
+import { DepositsListView } from "./deposits-list-view";
+import { buildDepositMonthOptions, buildDepositYearOptions, useFundOptions, useMemberOptions } from "./shared";
 
 const AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
 const REQUEST_METHODS = ["BANK_TRANSFER", "BKASH", "NAGAD", "ROCKET", "CASH", "OTHER"] as const;
@@ -45,72 +37,93 @@ function requestMethodLabelKey(m: string): string {
 const inputCls =
   "w-full px-3 py-2 rounded-xl border text-xs bg-card border-border/80 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors";
 
-// Member-facing deposit slip portal: submit a payment proof for officer
-// review (POST /api/deposits/request → PENDING) and track submission
-// history below. TRX id + proof note travel in `notes` since the request
-// contract carries no dedicated proof fields.
+// Member-facing deposit slip desk. Shares the deposits management layout
+// (DepositsListView: header, filter bar, fiscal month picker, sortable
+// paginated table, receipt sheet) and opens the slip form in a TopSheet, the
+// same way "Add Deposit" does. Scope is the signed-in member's own requests.
+// TRX id + proof note travel in `notes` because the request contract
+// (POST /api/deposits/request) carries no dedicated proof fields.
 export function DepositRequestView() {
   const { t } = useLocale();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [fundId, setFundId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<string | null>(null);
   const [trxId, setTrxId] = useState("");
   const [proofNote, setProofNote] = useState("");
+  // Deposit month/year: the month the payment is FOR — survives approval so
+  // the deposit lands in the claimed month, not the approval month.
+  const [depositMonth, setDepositMonth] = useState("");
+  const [depositYear, setDepositYear] = useState("");
   const [touched, setTouched] = useState(false);
 
-  const currency = useTenantCurrency();
-  const dateFormat = useTenantDateFormat();
   const membersQuery = useMemberOptions();
   const fundsQuery = useFundOptions();
+  const tenantShareValue = useTenantShareValue();
 
-  // Default the member picker to the signed-in user's own member record
-  // (matched by email). The picker itself still starts empty per Rule §15
-  // until resolved here — resolution is identity, not a pre-selection.
-  const linkedMemberUuid = useMemo(() => {
-    if (memberId) return memberId;
+  // Scope the directory to the signed-in user's own member record (matched by
+  // email). That is identity, not a pre-selection: every money field below
+  // still starts empty (Rule §15). Falls back to an open member filter until
+  // (or unless) the match resolves.
+  const selfMember = useMemo(() => {
     const email = user?.email?.toLowerCase();
     if (!email) return null;
-    return membersQuery.data?.find((m) => m.email?.toLowerCase() === email)?.id ?? null;
-  }, [user?.email, memberId, membersQuery.data]);
-  const effectiveMemberId = memberId ?? linkedMemberUuid;
+    return membersQuery.data?.find((m) => m.email?.toLowerCase() === email) ?? null;
+  }, [user?.email, membersQuery.data]);
 
-  const history = useDepositsList({
-    page: 1,
-    pageSize: 20,
-    search: "",
-    memberId: effectiveMemberId,
-    fundId: null,
-    status: null,
-    startDate: null,
-    endDate: null,
-  });
+  const effectiveMemberId = selfMember?.id ?? memberId ?? null;
+  const scopeMember = selfMember ?? (membersQuery.data ?? []).find((m) => m.id === memberId) ?? null;
+
+  // Amount autofill (same contract as the deposit form): fires only when the
+  // member identity actually changes — including the moment the signed-in
+  // member's own record resolves — so a background refetch never clobbers a
+  // hand-typed amount. Still editable for partial or extra payments.
+  const lastAutofilledMember = useRef("");
+  useEffect(() => {
+    if (!sheetOpen) return;
+    if (!effectiveMemberId || effectiveMemberId === lastAutofilledMember.current) return;
+    const member = (membersQuery.data ?? []).find((m) => m.id === effectiveMemberId);
+    const shares = Number(member?.shares ?? 0);
+    if (!member || !Number.isFinite(shares) || shares <= 0) return;
+    const suggested = (shares * tenantShareValue).toFixed(2);
+    if (parseFloat(suggested) > 0) {
+      lastAutofilledMember.current = effectiveMemberId;
+      setAmount(suggested);
+    }
+  }, [sheetOpen, effectiveMemberId, membersQuery.data, tenantShareValue]);
 
   const submitMutation = useMutation({
-    mutationFn: (payload: { memberId: string; fundId: string; amount: string; depositMethod: string; notes: string }) =>
+    mutationFn: (payload: { memberId: string; fundId: string; amount: string; depositMethod: string; notes: string; depositMonth: string }) =>
       apiClient<{ success: boolean; message?: string }>("/deposits/request", {
         method: "POST",
         body: JSON.stringify(payload),
       }),
-    onSuccess: (res) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deposits"] });
-      toast.success(res.message ?? t("requestDeposit.success"));
+      // Localized copy is authoritative; the server `message` is an English
+      // duplicate and would defeat ur/hi/bn.
+      toast.success(t("requestDeposit.success"));
+      setSheetOpen(false);
       setFundId(null);
       setAmount("");
       setMethod(null);
       setTrxId("");
       setProofNote("");
+      setDepositMonth("");
+      setDepositYear("");
       setTouched(false);
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : t("requestDeposit.loadFailed")),
   });
 
   const amountValid = AMOUNT_RE.test(amount.trim()) && parseFloat(amount) > 0;
+  const monthValid = /^\d{4}-(0[1-9]|1[0-2])$/.test(`${depositYear}-${depositMonth}`);
   const formValid =
-    !!effectiveMemberId && !!fundId && amountValid && !!method && trxId.trim().length > 0;
+    !!effectiveMemberId && !!fundId && amountValid && !!method && trxId.trim().length > 0 && monthValid;
 
   const onSubmit = () => {
     setTouched(true);
@@ -123,76 +136,44 @@ export function DepositRequestView() {
       amount: amount.trim(),
       depositMethod: method,
       notes: parts.join(" | "),
+      depositMonth: `${depositYear}-${depositMonth}`,
     });
   };
 
-  const memberOptions = (membersQuery.data ?? [])
-    .filter((m) => m.status === "active")
-    .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
+  const memberOptions = selfMember
+    ? [{ value: selfMember.id, label: selfMember.name, caption: selfMember.memberId }]
+    : (membersQuery.data ?? [])
+        .filter((m) => m.status === "active")
+        .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
   const fundOptions = (fundsQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
   const methodOptions = REQUEST_METHODS.map((m) => ({ value: m, label: t(requestMethodLabelKey(m)) }));
-
-  const statusLabel = (s: string | null | undefined): string => {
-    const u = (s || "").toUpperCase();
-    if (u === "PENDING") return t("deposits.statusPending");
-    if (u === "REJECTED") return t("deposits.statusRejected");
-    return t("deposits.statusVerified");
-  };
-
-  const columns: ERPColumn<DepositRow>[] = [
-    {
-      key: "date",
-      header: t("requestDeposit.columns.date"),
-      render: (r) => <span className="font-mono text-[11px]">{formatDatePattern(r.date, dateFormat)}</span>,
-    },
-    {
-      key: "fundName",
-      header: t("requestDeposit.columns.fund"),
-      render: (r) => <span>{r.fundName || "—"}</span>,
-    },
-    {
-      key: "amount",
-      header: t("requestDeposit.columns.amount"),
-      align: "right",
-      render: (r) => <span className="font-mono">{formatMoney(r.amount, currency)}</span>,
-    },
-    {
-      key: "depositMethod",
-      header: t("requestDeposit.columns.method"),
-      render: (r) => <span className="text-[11px]">{r.depositMethod || "—"}</span>,
-    },
-    {
-      key: "referenceNumber",
-      header: t("requestDeposit.columns.reference"),
-      render: (r) => <span className="font-mono text-[11px]">{r.referenceNumber || "—"}</span>,
-    },
-    {
-      key: "status",
-      header: t("requestDeposit.columns.status"),
-      align: "right",
-      render: (r) => <StatusBadge tone={depositStatusTone(r.status)}>{statusLabel(r.status)}</StatusBadge>,
-    },
-  ];
+  const monthOptions = buildDepositMonthOptions(t);
+  const yearOptions = buildDepositYearOptions();
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight text-foreground">
-          {t("requestDeposit.title")}
-        </h1>
-        <p className="text-xs text-muted-foreground mt-0.5">{t("requestDeposit.subtitle")}</p>
-      </div>
+    <>
+      <DepositsListView
+        onAdd={() => setSheetOpen(true)}
+        memberScope={{ id: effectiveMemberId, name: scopeMember?.name }}
+      />
 
-      <div className="bg-card rounded-xl border border-border/80 shadow-sm p-6">
+      <TopSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title={t("requestDeposit.title")}
+        subtitle={t("requestDeposit.subtitle")}
+      >
         <ERPFormLayout>
           <ERPFormSection title={t("requestDeposit.title")}>
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("requestDeposit.member")} required error={touched && !effectiveMemberId ? t("requestDeposit.selectMember") : undefined}>
                 <AppDropdown
                   options={memberOptions}
-                  value={memberId}
+                  value={effectiveMemberId}
                   onChange={setMemberId}
-                  placeholder={t("requestDeposit.selectMember")}
+                  placeholder={selfMember ? selfMember.name : t("requestDeposit.selectMember")}
+                  disabled={!!selfMember}
+                  clearable={!selfMember}
                 />
               </ERPFormField>
               <ERPFormField label={t("requestDeposit.fund")} required error={touched && !fundId ? t("requestDeposit.selectFund") : undefined}>
@@ -225,6 +206,24 @@ export function DepositRequestView() {
               </ERPFormField>
             </ERPFormGrid>
             <ERPFormGrid columns={2}>
+              <ERPFormField label={t("deposits.modal.depositMonth")} required error={touched && !monthValid ? t("deposits.modal.selectMonth") : undefined}>
+                <AppDropdown
+                  options={monthOptions}
+                  value={depositMonth || null}
+                  onChange={(v) => setDepositMonth(v ?? "")}
+                  placeholder={t("deposits.modal.selectMonth")}
+                />
+              </ERPFormField>
+              <ERPFormField label={t("deposits.modal.depositYear")} required error={touched && !monthValid ? t("deposits.modal.selectYear") : undefined}>
+                <AppDropdown
+                  options={yearOptions}
+                  value={depositYear || null}
+                  onChange={(v) => setDepositYear(v ?? "")}
+                  placeholder={t("deposits.modal.selectYear")}
+                />
+              </ERPFormField>
+            </ERPFormGrid>
+            <ERPFormGrid columns={2}>
               <ERPFormField label={t("requestDeposit.trxId")} required error={touched && !trxId.trim() ? t("requestDeposit.trxId") : undefined}>
                 <input
                   type="text"
@@ -246,6 +245,9 @@ export function DepositRequestView() {
             </ERPFormGrid>
           </ERPFormSection>
           <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="ghost" size="sm" onClick={() => setSheetOpen(false)} disabled={submitMutation.isPending}>
+              {t("common.cancel")}
+            </Button>
             <Button
               variant="primary"
               size="sm"
@@ -257,20 +259,7 @@ export function DepositRequestView() {
             </Button>
           </div>
         </ERPFormLayout>
-      </div>
-
-      <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-          {t("requestDeposit.history")}
-        </h2>
-        <ERPDataTable
-          data={history.data?.data ?? []}
-          columns={columns}
-          isLoading={history.isLoading}
-          rowKey={(r) => r.id}
-          emptyMessage={history.isError ? t("requestDeposit.loadFailed") : t("requestDeposit.emptyHistory")}
-        />
-      </div>
-    </div>
+      </TopSheet>
+    </>
   );
 }

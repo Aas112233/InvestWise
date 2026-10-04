@@ -1,24 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { members, funds, systemSettings, transactions, profitAllocations, fiscalPeriods } from '@/db/schema/index';
-import { eq, and, sql, sum } from 'drizzle-orm';
+import { members, funds, transactions, profitAllocations, fiscalPeriods } from '@/db/schema/index';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
+import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
-import { ValidationError, ForbiddenError, NotFoundError, LockedError } from '@/lib/utils/errors';
-import { toCents, fromCents, splitDividendByShares } from '@/lib/money';
+import { ValidationError, ForbiddenError, AppError } from '@/lib/utils/errors';
+import { MoneyError, fromCents, toCents } from '@/lib/money';
+import { planDividendRun } from '@/server/modules/finance/dividend-engine';
 import crypto from 'node:crypto';
 
-// Screen permissions: shared RBAC evaluator (lib/permissions.ts).
+// Batched run (grouped payout insert + one VALUES-joined equity update), but
+// the full validation + run transaction still deserves timeout headroom.
+export const maxDuration = 60;
 
+/**
+ * POST /api/dividends/distribute — execute a dividend run.
+ *
+ * The plan (reserve split, per-member payouts, run rate) comes from
+ * `planDividendRun`, the same function the preview endpoint calls, so what an
+ * operator approved is what gets paid.
+ *
+ * Concurrency: a run moves one fund's balance out to every member at once, so
+ * the distributable fund, the reserve fund and every recipient row are locked
+ * `FOR UPDATE` inside the transaction and the balance test is re-run against
+ * the locked values. Without that, two simultaneous runs could each pass the
+ * pre-check against a stale balance and overdraft the fund.
+ */
 export async function POST(request: NextRequest) {
   try {
     const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6 fail-closed: dividend runs move money to every member — null tenant
+    // must 403 so the fund/member/settings lookups below can never run global.
+    const scopedTenantId = requireTenant(tenantId, user);
 
-    // Check write permission for DIVIDENDS
     if (!hasScreenPermission(user, 'DIVIDENDS', 'WRITE')) {
       throw new ForbiddenError('Write permission required for: DIVIDENDS');
     }
@@ -29,290 +48,276 @@ export async function POST(request: NextRequest) {
       distributableFundId,
       fiscalPeriodId,
       referenceNumber,
+      statutoryReservePercent,
+      reserveFundId,
     } = body;
 
-    // Validate required fields
     if (!grossEarnings || !distributableFundId) {
       throw new ValidationError('grossEarnings and distributableFundId are required');
     }
-
-    const gross = parseFloat(grossEarnings);
-    if (isNaN(gross) || gross <= 0) {
-      throw new ValidationError('Gross earnings must be a positive number');
+    if (typeof grossEarnings !== 'string' && typeof grossEarnings !== 'number') {
+      throw new ValidationError('grossEarnings must be a number or numeric string');
     }
-
-    // Validate 2 decimal places
-    if (!/^\d+(\.\d{1,2})?$/.test(grossEarnings.toString())) {
-      throw new ValidationError('Gross earnings must have at most 2 decimal places');
-    }
-
-    const formattedGross = gross.toFixed(2);
-    const refNumber = referenceNumber || `DIV-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
     const db = getDb();
+    const refNumber =
+      (typeof referenceNumber === 'string' && referenceNumber.trim()) ||
+      `DIV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
-    // Check for duplicate reference number (idempotency)
-    const existingDividend = await db
+    // Idempotency (§12): a retry with the same reference must not pay twice.
+    const [alreadyRun] = await db
       .select({ id: transactions.id })
       .from(transactions)
-      .where(and(eq(transactions.referenceNumber, refNumber), eq(transactions.isDeleted, false)))
+      .where(
+        and(
+          eq(transactions.referenceNumber, refNumber),
+          eq(transactions.isDeleted, false),
+          eq(transactions.tenantId, scopedTenantId),
+        ),
+      )
       .limit(1);
-
-    if (existingDividend.length > 0) {
-      throw new ValidationError('Transaction with this reference number already exists');
+    if (alreadyRun) {
+      throw new ValidationError('A dividend run with this reference number already exists');
     }
 
-    // Get system settings for statutory reserve percentage
-    const [settings] = await db.select().from(systemSettings).limit(1);
-    const statutoryReservePercent = parseFloat(settings?.statutoryReservePercent || '10');
+    // Reads, validation and the exact split. Throws before any write if the
+    // fund balance, reserve fund, member set or percent is unusable.
+    const { plan, distributableFund, reserveFund } = await planDividendRun(scopedTenantId, {
+      grossEarnings,
+      distributableFundId: String(distributableFundId),
+      statutoryReservePercent:
+        statutoryReservePercent === undefined || statutoryReservePercent === null || statutoryReservePercent === ''
+          ? null
+          : String(statutoryReservePercent),
+      reserveFundId: reserveFundId ? String(reserveFundId) : null,
+    });
 
-    // Get the distributable fund
-    const [distributableFund] = await db
-      .select()
-      .from(funds)
-      .where(and(eq(funds.id, distributableFundId), tenantId ? eq(funds.tenantId, tenantId) : sql`true`))
-      .limit(1);
+    const payoutRows = plan.payouts.filter((p) => p.payoutCents > 0);
+    const currentYear = new Date().getFullYear();
+    const now = new Date();
 
-    if (!distributableFund) {
-      throw new NotFoundError('Distributable fund');
-    }
+    await db.transaction(async (tx) => {
+      // 1. Lock the two funds in deterministic id order (deadlock-safe), then
+      // re-read their balances from inside the lock.
+      const fundIds = [distributableFund.id, reserveFund.id].sort();
+      for (const id of fundIds) {
+        await tx.execute(
+          sql`SELECT id FROM ${funds} WHERE id = ${id}::uuid AND tenant_id = ${scopedTenantId} FOR UPDATE`,
+        );
+      }
+      const lockedFunds = await tx
+        .select({ id: funds.id, name: funds.name, balance: funds.balance })
+        .from(funds)
+        .where(and(inArray(funds.id, fundIds), eq(funds.tenantId, scopedTenantId)));
+      const lockedDistributable = lockedFunds.find((f) => f.id === distributableFund.id);
+      const lockedReserve = lockedFunds.find((f) => f.id === reserveFund.id);
+      if (!lockedDistributable || !lockedReserve) throw new AppError('Payout fund disappeared mid-run', 409, 'FUND_STALE');
 
-    // Check if fund has sufficient balance
-    const fundBalance = parseFloat(distributableFund.balance);
-    if (fundBalance < gross) {
-      throw new ValidationError(
-        `Insufficient fund balance. Available: ${fundBalance.toFixed(2)}, Required: ${formattedGross}`
-      );
-    }
+      const distributableBeforeCents = toCents(lockedDistributable.balance ?? '0');
+      const reserveBeforeCents = toCents(lockedReserve.balance ?? '0');
+      if (distributableBeforeCents < plan.grossCents) {
+        throw new ValidationError(
+          `Insufficient fund balance. Available: ${fromCents(distributableBeforeCents)}, Required: ${plan.grossAmount}`,
+        );
+      }
 
-    // Get reserve fund (type = 'RESERVE')
-    const [reserveFund] = await db
-      .select()
-      .from(funds)
-      .where(and(eq(funds.type, 'RESERVE'), eq(funds.status, 'ACTIVE'), tenantId ? eq(funds.tenantId, tenantId) : sql`true`))
-      .limit(1);
+      // 2. Lock every recipient row so the recorded member balances match the
+      // equity actually updated below.
+      if (payoutRows.length > 0) {
+        await tx.execute(
+          sql`SELECT id FROM ${members} WHERE id IN (${sql.join(
+            payoutRows.map((p) => sql`${p.id}::uuid`),
+            sql`, `,
+          )}) AND tenant_id = ${scopedTenantId} FOR UPDATE`,
+        );
+      }
+      const lockedMembers = payoutRows.length
+        ? await tx
+            .select({ id: members.id, totalContributed: members.totalContributed })
+            .from(members)
+            .where(and(inArray(members.id, payoutRows.map((p) => p.id)), eq(members.tenantId, scopedTenantId)))
+        : [];
+      const contributedById = new Map(lockedMembers.map((m) => [m.id, toCents(m.totalContributed ?? '0')]));
 
-    if (!reserveFund) {
-      throw new NotFoundError('Reserve fund not found. Please create a RESERVE type fund first.');
-    }
+      const newDistributableCents = distributableBeforeCents - plan.grossCents;
+      const newReserveCents = reserveBeforeCents + plan.reserveCents;
 
-    const reserveFundBalance = parseFloat(reserveFund.balance);
+      // 3. Move the money. Both fund writes re-assert the tenant (§6).
+      await tx
+        .update(funds)
+        .set({ balance: fromCents(newDistributableCents), updatedAt: now })
+        .where(and(eq(funds.id, distributableFund.id), eq(funds.tenantId, scopedTenantId)));
 
-    // Get all active members with shares > 0
-    const activeMembers = await db
-      .select({
-        id: members.id,
-        memberId: members.memberId,
-        name: members.name,
-        shares: members.shares,
-        totalContributed: members.totalContributed,
-      })
-      .from(members)
-      .where(and(
-        eq(members.status, 'active'),
-        sql`${members.shares} > 0`,
-        tenantId ? eq(members.tenantId, tenantId) : sql`true`
-      ))
-      .orderBy(members.name);
+      if (plan.reserveCents > 0) {
+        await tx
+          .update(funds)
+          .set({ balance: fromCents(newReserveCents), updatedAt: now })
+          .where(and(eq(funds.id, reserveFund.id), eq(funds.tenantId, scopedTenantId)));
 
-    // Calculate total active shares
-    const totalActiveShares = activeMembers.reduce((sum, m) => sum + m.shares, 0);
+        await tx.insert(transactions).values({
+          tenantId: scopedTenantId,
+          type: 'Statutory Reserve',
+          amount: plan.reserveAmount,
+          description: `Statutory reserve (${plan.reservePercent}%) for dividend run ${refNumber}`,
+          category: 'Reserve',
+          referenceNumber: `${refNumber}-RESERVE`,
+          date: now,
+          status: 'Completed',
+          fundId: reserveFund.id,
+          handlingOfficer: user.name,
+          authorizedBy: user.id,
+          balanceBefore: fromCents(reserveBeforeCents),
+          balanceAfter: fromCents(newReserveCents),
+          createdBy: user.id,
+          updatedBy: user.id,
+        });
+      }
 
-    if (totalActiveShares === 0) {
-      throw new ValidationError('No active members with shares found. Dividend cannot be distributed.');
-    }
+      // 4. The run-level distribution row.
+      await tx.insert(transactions).values({
+        tenantId: scopedTenantId,
+        type: 'Dividend Distribution',
+        amount: plan.netDistributable,
+        description: `Dividend distribution to ${plan.recipientCount} members`,
+        category: 'Dividend',
+        referenceNumber: `${refNumber}-DIST`,
+        date: now,
+        status: 'Completed',
+        fundId: distributableFund.id,
+        handlingOfficer: user.name,
+        authorizedBy: user.id,
+        balanceBefore: fromCents(distributableBeforeCents),
+        balanceAfter: fromCents(newDistributableCents),
+        createdBy: user.id,
+        updatedBy: user.id,
+      });
 
-    // Calculate statutory reserve
-    const statutoryReserveAmount = (gross * statutoryReservePercent / 100).toFixed(2);
-    const netDistributable = (gross - parseFloat(statutoryReserveAmount)).toFixed(2);
+      if (payoutRows.length > 0) {
+        // 5a. One dividend row per recipient.
+        await tx.insert(transactions).values(
+          payoutRows.map((p) => {
+            const beforeCents = contributedById.get(p.id) ?? 0;
+            return {
+              tenantId: scopedTenantId,
+              type: 'Dividend',
+              amount: p.grossAmount,
+              description: `Dividend payout for ${p.shares} shares`,
+              category: 'Dividend',
+              referenceNumber: `${refNumber}-${p.memberId}`,
+              date: now,
+              status: 'Completed',
+              memberId: p.id,
+              fundId: distributableFund.id,
+              handlingOfficer: user.name,
+              authorizedBy: user.id,
+              balanceBefore: fromCents(beforeCents),
+              balanceAfter: fromCents(beforeCents + p.payoutCents),
+              createdBy: user.id,
+              updatedBy: user.id,
+            };
+          }),
+        );
 
-    // Exact split in integer cents — Σ payouts === netDistributable, always.
-    // (lib/money.ts largest-remainder is the single canonical dividend math.)
-    const netDistributableCents = toCents(netDistributable);
-    const payouts = splitDividendByShares(
-      netDistributableCents,
-      activeMembers.map((m) => ({ id: m.id, shares: m.shares })),
-    );
-    const payoutByMember = new Map(payouts.map((p) => [p.id, p.payoutCents]));
-    const recipientCount = payouts.filter((p) => p.payoutCents > 0).length;
-    // Informational only — actual payouts come from the exact split above.
-    const ratePerShare = netDistributableCents / totalActiveShares;
+        // 5b. Add payouts to member equity in one grouped statement, computed
+        // DB-side from the CURRENT total_contributed under the row locks held
+        // above. The §6 tenant predicate stays in the WHERE — a VALUES join
+        // must never widen the write scope.
+        await tx.execute(sql`
+          UPDATE ${members} AS m
+          SET total_contributed = (COALESCE(m.total_contributed, '0')::numeric + v.payout::numeric),
+              last_active = ${now},
+              updated_at = ${now}
+          FROM (VALUES ${sql.join(
+            payoutRows.map((p) => sql`(${p.id}::uuid, ${p.grossAmount}::numeric)`),
+            sql`, `,
+          )}) AS v(id, payout)
+          WHERE m.id = v.id AND m.tenant_id = ${scopedTenantId}
+        `);
+      }
 
-    // Get or create fiscal period
-    let fiscalPeriod = null;
-    if (fiscalPeriodId) {
-      const [fp] = await db
+      // 6. Fiscal period: reuse an explicit id when given, else this tenant's
+      // OPEN year, creating one only now that every check has passed — all
+      // inside the run's transaction so a rollback cannot orphan a period.
+      let fiscalPeriod: typeof fiscalPeriods.$inferSelect | null = null;
+      const [lookup] = await tx
         .select()
         .from(fiscalPeriods)
-        .where(eq(fiscalPeriods.id, fiscalPeriodId))
+        .where(
+          fiscalPeriodId
+            ? and(eq(fiscalPeriods.id, String(fiscalPeriodId)), eq(fiscalPeriods.tenantId, scopedTenantId))
+            : and(
+                eq(fiscalPeriods.year, currentYear),
+                eq(fiscalPeriods.status, 'OPEN'),
+                eq(fiscalPeriods.tenantId, scopedTenantId),
+              ),
+        )
         .limit(1);
-      fiscalPeriod = fp;
-    } else {
-      // Create or get current fiscal period
-      const currentYear = new Date().getFullYear();
-      const [fp] = await db
-        .select()
-        .from(fiscalPeriods)
-        .where(and(eq(fiscalPeriods.year, currentYear), eq(fiscalPeriods.status, 'OPEN')))
-        .limit(1);
-      if (fp) {
-        fiscalPeriod = fp;
-      } else {
-        // Create new fiscal period
-        const [newFp] = await db
+      fiscalPeriod = lookup ?? null;
+
+      if (!fiscalPeriod && !fiscalPeriodId) {
+        const [created] = await tx
           .insert(fiscalPeriods)
           .values({
+            tenantId: scopedTenantId,
             year: currentYear,
             periodStart: new Date(`${currentYear}-01-01`),
             periodEnd: new Date(`${currentYear}-12-31`),
             status: 'OPEN',
           })
           .returning();
-        fiscalPeriod = newFp;
-      }
-    }
-
-    const now = new Date();
-    let totalDistributedCents = 0;
-
-    // Execute atomic dividend distribution transaction
-    await db.transaction(async (tx) => {
-      // 1. Debit distributable fund by gross amount
-      const newDistributableFundBalance = (fundBalance - gross).toFixed(2);
-      await tx
-        .update(funds)
-        .set({ balance: newDistributableFundBalance, updatedAt: now })
-        .where(eq(funds.id, distributableFundId));
-
-      // 2. Credit reserve fund with statutory reserve
-      const newReserveFundBalance = (reserveFundBalance + parseFloat(statutoryReserveAmount)).toFixed(2);
-      await tx
-        .update(funds)
-        .set({ balance: newReserveFundBalance, updatedAt: now })
-        .where(eq(funds.id, reserveFund.id));
-
-      // 3. Create statutory reserve transaction
-      await tx.insert(transactions).values({
-        tenantId: tenantId || null,
-        type: 'Statutory Reserve',
-        amount: statutoryReserveAmount,
-        description: `Statutory reserve (${statutoryReservePercent}%) for dividend run`,
-        category: 'Reserve',
-        referenceNumber: `${refNumber}-RESERVE`,
-        date: now,
-        status: 'Completed',
-        fundId: reserveFund.id,
-        handlingOfficer: user.name,
-        authorizedBy: user.id,
-        balanceBefore: reserveFund.balance,
-        balanceAfter: newReserveFundBalance,
-        createdBy: user.id,
-        updatedBy: user.id,
-      });
-
-      // 4. Create dividend distribution transaction for the fund
-      await tx.insert(transactions).values({
-        tenantId: tenantId || null,
-        type: 'Dividend Distribution',
-        amount: netDistributable,
-        description: `Dividend distribution to ${activeMembers.length} members`,
-        category: 'Dividend',
-        referenceNumber: `${refNumber}-DIST`,
-        date: now,
-        status: 'Completed',
-        fundId: distributableFundId,
-        handlingOfficer: user.name,
-        authorizedBy: user.id,
-        balanceBefore: distributableFund.balance,
-        balanceAfter: newDistributableFundBalance,
-        createdBy: user.id,
-        updatedBy: user.id,
-      });
-
-      // 5. Create individual dividend transactions for each member
-      for (const member of activeMembers) {
-        const memberShares = member.shares;
-        const payoutCents = payoutByMember.get(member.id) ?? 0;
-        if (payoutCents <= 0) continue; // payout below one whole cent
-        const grossAmount = fromCents(payoutCents);
-        totalDistributedCents += payoutCents;
-
-        // Credit member's deposit balance (or create payout record)
-        // For now, we'll create a dividend transaction record for each member
-        await tx.insert(transactions).values({
-          tenantId: tenantId || null,
-          type: 'Dividend',
-          amount: grossAmount,
-          description: `Dividend payout for ${memberShares} shares`,
-          category: 'Dividend',
-          referenceNumber: `${refNumber}-${member.memberId}`,
-          date: now,
-          status: 'Completed',
-          memberId: member.id,
-          fundId: distributableFundId,
-          handlingOfficer: user.name,
-          authorizedBy: user.id,
-          balanceBefore: member.totalContributed || '0',
-          balanceAfter: (parseFloat(member.totalContributed || '0') + payoutCents / 100).toFixed(2),
-          createdBy: user.id,
-          updatedBy: user.id,
-        });
-
-        // Update member's total contributed (dividend adds to their equity)
-        await tx
-          .update(members)
-          .set({
-            totalContributed: (parseFloat(member.totalContributed || '0') + payoutCents / 100).toFixed(2),
-            lastActive: now,
-            updatedAt: now,
-          })
-          .where(eq(members.id, member.id));
-
-        // Record in profit_allocations table
-        await tx.insert(profitAllocations).values({
-          fiscalPeriodId: fiscalPeriod?.id,
-          memberId: member.id,
-          allocationType: 'Dividend',
-          amount: grossAmount,
-          sharesAtTime: memberShares,
-          ratePerShare: (payoutCents / (memberShares * 100)).toFixed(6),
-          notes: `Dividend run ${refNumber}`,
-          allocatedBy: user.id,
-          allocatedAt: now,
-        });
+        fiscalPeriod = created ?? null;
       }
 
-      // 6. Update fiscal period totals
       if (fiscalPeriod) {
-        await tx
-          .update(fiscalPeriods)
-          .set({
-            totalEarnings: (parseFloat(fiscalPeriod.totalEarnings || '0') + gross).toFixed(2),
-            statutoryReserve: (parseFloat(fiscalPeriod.statutoryReserve || '0') + parseFloat(statutoryReserveAmount)).toFixed(2),
-            distributableSurplus: (parseFloat(fiscalPeriod.distributableSurplus || '0') + parseFloat(netDistributable)).toFixed(2),
-            actualDistributed: (parseFloat(fiscalPeriod.actualDistributed || '0') + totalDistributedCents / 100).toFixed(2),
-            updatedAt: now,
-          })
-          .where(eq(fiscalPeriods.id, fiscalPeriod.id));
+        // Rollups are additive and computed DB-side, so two runs in the same
+        // year cannot clobber each other with stale read-then-write math.
+        await tx.execute(sql`
+          UPDATE ${fiscalPeriods}
+          SET total_earnings = COALESCE(total_earnings, 0)::numeric + ${plan.grossAmount}::numeric,
+              statutory_reserve = COALESCE(statutory_reserve, 0)::numeric + ${plan.reserveAmount}::numeric,
+              distributable_surplus = COALESCE(distributable_surplus, 0)::numeric + ${plan.netDistributable}::numeric,
+              actual_distributed = COALESCE(actual_distributed, 0)::numeric + ${plan.netDistributable}::numeric,
+              updated_at = ${now}
+          WHERE id = ${fiscalPeriod.id} AND tenant_id = ${scopedTenantId}
+        `);
+      }
+
+      // 7. Profit allocation per recipient, recording the rate that produced
+      // the payout — the member directory reads this as the expected dividend.
+      if (payoutRows.length > 0) {
+        await tx.insert(profitAllocations).values(
+          payoutRows.map((p) => ({
+            tenantId: scopedTenantId,
+            fiscalPeriodId: fiscalPeriod?.id,
+            memberId: p.id,
+            allocationType: 'Dividend',
+            amount: p.grossAmount,
+            sharesAtTime: p.shares,
+            ratePerShare: p.ratePerShare,
+            notes: `Dividend run ${refNumber}`,
+            allocatedBy: user.id,
+            allocatedAt: now,
+          })),
+        );
       }
     });
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId: scopedTenantId,
       action: 'DISTRIBUTE_DIVIDEND',
       resourceType: 'Transaction',
       resourceId: refNumber,
       details: {
-        grossEarnings: formattedGross,
-        statutoryReservePercent: statutoryReservePercent.toFixed(2),
-        statutoryReserveAmount,
-        netDistributable,
-        totalActiveShares,
-        ratePerShare,
-        memberCount: recipientCount,
+        grossEarnings: plan.grossAmount,
+        statutoryReservePercent: plan.reservePercent,
+        statutoryReserveAmount: plan.reserveAmount,
+        netDistributable: plan.netDistributable,
+        totalActiveShares: plan.totalActiveShares,
+        ratePerShare: plan.ratePerShare,
+        memberCount: plan.recipientCount,
         distributableFund: { id: distributableFund.id, name: distributableFund.name },
         reserveFund: { id: reserveFund.id, name: reserveFund.name },
-        fiscalPeriodId: fiscalPeriod?.id,
       },
     });
 
@@ -320,25 +325,28 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         referenceNumber: refNumber,
-        grossEarnings: formattedGross,
-        statutoryReservePercent: statutoryReservePercent.toFixed(2),
-        statutoryReserveAmount,
-        netDistributable,
-        totalActiveShares,
-        ratePerShare,
-        memberCount: recipientCount,
-        totalDistributed: (totalDistributedCents / 100).toFixed(2),
-        distributableFund: { id: distributableFund.id, name: distributableFund.name, newBalance: (fundBalance - gross).toFixed(2) },
-        reserveFund: { id: reserveFund.id, name: reserveFund.name, newBalance: (reserveFundBalance + parseFloat(statutoryReserveAmount)).toFixed(2) },
-        fiscalPeriodId: fiscalPeriod?.id,
+        grossEarnings: plan.grossAmount,
+        statutoryReservePercent: plan.reservePercent,
+        statutoryReserveAmount: plan.reserveAmount,
+        netDistributable: plan.netDistributable,
+        totalActiveShares: plan.totalActiveShares,
+        ratePerShare: plan.ratePerShare,
+        memberCount: plan.recipientCount,
+        totalDistributed: fromCents(plan.totalDistributedCents),
+        distributableFund: { id: distributableFund.id, name: distributableFund.name },
+        reserveFund: { id: reserveFund.id, name: reserveFund.name },
       },
       message: 'Dividend distribution completed successfully',
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[DIVIDEND DISTRIBUTE ERROR]', err);
+    if (err instanceof MoneyError) {
+      return NextResponse.json({ success: false, message: err.message, code: err.code }, { status: 400 });
+    }
+    const e = err as { statusCode?: number; message?: string };
     return NextResponse.json(
-      { success: false, message: err.message || 'Failed to distribute dividend' },
-      { status: err.statusCode || 500 }
+      { success: false, message: e.message || 'Failed to distribute dividend' },
+      { status: e.statusCode || 500 },
     );
   }
 }

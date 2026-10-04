@@ -1,0 +1,203 @@
+﻿<!doctype html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Jakarta";
+        src: url("assets/fonts/PlusJakartaSans-Variable.ttf") format("truetype");
+        font-weight: 200 800;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        margin: 0; width: 1920px; height: 1080px; overflow: hidden;
+        background: oklch(0.155 0.02 265);
+        font-family: "Jakarta", ui-sans-serif, system-ui, sans-serif;
+      }
+      #root {
+        width: 100%; height: 100%; position: relative;
+        background: oklch(0.155 0.02 265);
+        color: oklch(0.965 0.008 260);
+      }
+      .clip { position: absolute; inset: 0; }
+      .card {
+        background: oklch(0.205 0.025 265);
+        border: 1px solid oklch(0.31 0.022 260);
+        border-radius: 14px;
+      }
+      .teal { color: oklch(0.72 0.135 185); }
+      .muted { color: oklch(0.72 0.022 250); }
+      .pill {
+        display: inline-block; padding: 4px 14px; border-radius: 999px;
+        font-size: 20px; font-weight: 600;
+      }
+      .pill-success { background: oklch(0.28 0.06 160); color: oklch(0.8 0.13 160); border: 1px solid oklch(0.45 0.1 160); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="20" data-width="1920" data-height="1080">
+
+      <!-- SCENE 1: HOOK (0-3) -->
+      <div id="scene1" class="clip" data-start="0" data-duration="3.0" data-track-index="0">
+        <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+          <div id="hook" style="font-size:64px; font-weight:700; letter-spacing:-0.02em; white-space:nowrap;"></div>
+          <div id="hook-rule" style="margin-top:28px; height:3px; width:0; background:oklch(0.72 0.135 185); border-radius:2px;"></div>
+        </div>
+      </div>
+
+      <!-- SCENE 2: DASHBOARD (3-9) -->
+      <div id="scene2" class="clip" data-start="3" data-duration="6.0" data-track-index="0">
+        <div style="position:absolute; left:0; top:0; bottom:0; width:280px; border-right:1px solid oklch(0.31 0.022 260); background:oklch(0.185 0.022 258); padding:36px 28px;">
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:44px;">
+            <div style="width:34px; height:34px; border-radius:9px; background:oklch(0.72 0.135 185);"></div>
+            <div style="font-size:26px; font-weight:700;">InvestWise</div>
+          </div>
+          <div id="nav" style="display:flex; flex-direction:column; gap:14px; font-size:21px;">
+            <div class="teal" style="font-weight:600;">Dashboard</div>
+            <div class="muted">Members</div>
+            <div class="muted">Deposits</div>
+            <div class="muted">Funds</div>
+            <div class="muted">Projects</div>
+            <div class="muted">Dividends</div>
+            <div class="muted">Meetings</div>
+            <div class="muted">Reports</div>
+          </div>
+        </div>
+        <div style="position:absolute; left:280px; top:0; right:0; bottom:0; padding:44px 56px;">
+          <div style="font-size:30px; font-weight:700; margin-bottom:6px;">Dashboard</div>
+          <div class="muted" style="font-size:18px; margin-bottom:32px;">Portfolio overview</div>
+          <div id="stats" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:20px;">
+            <div class="card stat" style="padding:26px;">
+              <div class="muted" style="font-size:15px; text-transform:uppercase; letter-spacing:0.08em;">Total Assets</div>
+              <div class="teal" style="font-size:40px; font-weight:700; margin-top:10px;">৳12.4M</div>
+            </div>
+            <div class="card stat" style="padding:26px;">
+              <div class="muted" style="font-size:15px; text-transform:uppercase; letter-spacing:0.08em;">Members</div>
+              <div style="font-size:40px; font-weight:700; margin-top:10px;">148</div>
+            </div>
+            <div class="card stat" style="padding:26px;">
+              <div class="muted" style="font-size:15px; text-transform:uppercase; letter-spacing:0.08em;">Deposits</div>
+              <div style="font-size:40px; font-weight:700; margin-top:10px;">৳3.2M</div>
+            </div>
+            <div class="card stat" style="padding:26px;">
+              <div class="muted" style="font-size:15px; text-transform:uppercase; letter-spacing:0.08em;">Dividends</div>
+              <div class="teal" style="font-size:40px; font-weight:700; margin-top:10px;">৳860K</div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:28px; padding:26px;">
+            <div style="font-size:20px; font-weight:600; margin-bottom:16px;">Recent transactions</div>
+            <table id="ledger" style="width:100%; border-collapse:collapse; font-size:18px;">
+              <tr class="txrow" style="border-bottom:1px solid oklch(0.31 0.022 260);"><td style="padding:10px 0;">Sarah Ahmed</td><td>Deposit</td><td class="teal">৳12,500.00</td><td class="muted">Completed</td></tr>
+              <tr class="txrow" style="border-bottom:1px solid oklch(0.31 0.022 260);"><td style="padding:10px 0;">Rahim Uddin</td><td>Dividend</td><td class="teal">৳2,400.00</td><td class="muted">Paid</td></tr>
+              <tr class="txrow" style="border-bottom:1px solid oklch(0.31 0.022 260);"><td style="padding:10px 0;">Growth Fund A</td><td>Transfer</td><td class="teal">৳75,000.00</td><td class="muted">Reconciled</td></tr>
+              <tr class="txrow"><td style="padding:10px 0;">Nadia Karim</td><td>Expense</td><td class="teal">৳8,300.00</td><td class="muted">Posted</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCENE 3: DEPOSIT (9-15) -->
+      <div id="scene3" class="clip" data-start="9" data-duration="6.0" data-track-index="0">
+        <div style="position:absolute; inset:0; background:oklch(0.155 0.02 265); display:flex; align-items:center; justify-content:center;">
+          <div class="card" style="width:900px; padding:44px;">
+            <div style="font-size:28px; font-weight:700; margin-bottom:28px;">New deposit</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+              <div>
+                <div class="muted" style="font-size:14px; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">Member</div>
+                <div id="f-member" class="card" style="padding:16px 20px; font-size:20px;">Select member…</div>
+              </div>
+              <div>
+                <div class="muted" style="font-size:14px; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">Fund</div>
+                <div id="f-fund" class="card" style="padding:16px 20px; font-size:20px;">Select fund…</div>
+              </div>
+              <div>
+                <div class="muted" style="font-size:14px; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">Month</div>
+                <div id="f-month" class="card" style="padding:16px 20px; font-size:20px;">Select month…</div>
+              </div>
+              <div>
+                <div class="muted" style="font-size:14px; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">Amount</div>
+                <div id="f-amount" class="card" style="padding:16px 20px; font-size:20px;">0.00</div>
+              </div>
+            </div>
+            <div id="save-btn" class="card" style="margin-top:28px; padding:18px; text-align:center; font-size:22px; font-weight:700; border-color:oklch(0.72 0.135 185);">Save deposit</div>
+            <div id="toast" class="pill pill-success" style="margin-top:20px; opacity:0;">Deposit saved</div>
+            <div id="post-row" class="muted" style="margin-top:16px; font-size:17px; opacity:0;">TXN-20261004-118 · ৳12,500.00 · Status: Completed</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCENE 4: DIVIDEND + OUTRO (15-20) -->
+      <div id="scene4" class="clip" data-start="15" data-duration="5.0" data-track-index="0">
+        <div style="position:absolute; inset:0; background:oklch(0.155 0.02 265); display:flex; align-items:center; justify-content:center;">
+          <div id="dividend-card" class="card" style="width:900px; padding:44px;">
+            <div style="font-size:28px; font-weight:700; margin-bottom:24px;">Dividend run — Global</div>
+            <div id="split-rows" style="font-size:19px;">
+              <div class="srow" style="padding:10px 0; border-bottom:1px solid oklch(0.31 0.022 260);">Sarah Ahmed · 60 shares <span class="teal" style="float:right;">৳2,400.00</span></div>
+              <div class="srow" style="padding:10px 0; border-bottom:1px solid oklch(0.31 0.022 260);">Rahim Uddin · 45 shares <span class="teal" style="float:right;">৳1,800.00</span></div>
+              <div class="srow" style="padding:10px 0; border-bottom:1px solid oklch(0.31 0.022 260);">Nadia Karim · 30 shares <span class="teal" style="float:right;">৳1,200.00</span></div>
+            </div>
+            <div style="margin-top:24px;"><span id="dist-pill" class="pill pill-success" style="opacity:0;">Distributed</span></div>
+          </div>
+          <div id="logo-lockup" style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:oklch(0.155 0.02 265); opacity:0;">
+            <div style="display:flex; align-items:center; gap:18px;">
+              <div style="width:54px; height:54px; border-radius:14px; background:oklch(0.72 0.135 185);"></div>
+              <div style="font-size:64px; font-weight:700; letter-spacing:-0.02em;">InvestWise</div>
+            </div>
+            <div class="muted" style="margin-top:18px; font-size:24px;">Enterprise Investment Management Platform</div>
+          </div>
+        </div>
+      </div>
+
+      <audio id="bg-music" data-start="0" data-duration="20" data-track-index="10" data-volume="0.35" data-fade-in="0.5" data-fade-out="2.5" src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3"></audio>
+      <audio id="sfx-key1" data-start="0.4" data-duration="0.25" data-track-index="11" data-volume="0.5" src="assets/sfx/keyboard/keypress-001.wav"></audio>
+      <audio id="sfx-card1" data-start="4.39" data-duration="0.69" data-track-index="12" data-volume="0.7" src="assets/sfx/casino/card-place-1.ogg"></audio>
+      <audio id="sfx-card2" data-start="5.34" data-duration="0.46" data-track-index="13" data-volume="0.7" src="assets/sfx/casino/card-place-2.ogg"></audio>
+      <audio id="sfx-drop" data-start="6.5" data-duration="0.11" data-track-index="14" data-volume="0.6" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx-click" data-start="13.3" data-duration="0.10" data-track-index="15" data-volume="0.7" src="assets/sfx/interface/click_001.ogg"></audio>
+      <audio id="sfx-bell" data-start="17.47" data-duration="1.48" data-track-index="16" data-volume="0.8" src="assets/sfx/impact/impactBell_heavy_000.ogg"></audio>
+      <audio id="sfx-soft" data-start="18.56" data-duration="0.19" data-track-index="17" data-volume="0.6" src="assets/sfx/impact/impactSoft_medium_001.ogg"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      // Scene 1: hook typing 0.4 -> 2.4
+      const hookText = "Every deposit. Every share. Accounted for.";
+      const proxy = { i: 0 };
+      tl.to(proxy, {
+        i: hookText.length, duration: 2.0, ease: "none",
+        onUpdate: () => { document.getElementById("hook").textContent = hookText.slice(0, Math.round(proxy.i)); }
+      }, 0.4);
+      tl.fromTo("#hook-rule", { width: 0 }, { width: 520, duration: 0.5, ease: "power2.out" }, 2.5);
+
+      // Scene 2: stat cards on beat grid, rows cascade
+      tl.fromTo("#scene2 .stat", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, stagger: 0.475 }, 4.39);
+      tl.fromTo("#ledger .txrow", { opacity: 0, x: -18 }, { opacity: 1, x: 0, duration: 0.4, stagger: 0.5 }, 6.5);
+
+      // Scene 3: form fill
+      tl.call(() => { document.getElementById("f-member").textContent = "Sarah Ahmed"; }, null, 9.8);
+      tl.call(() => { document.getElementById("f-fund").textContent = "Growth Fund A"; }, null, 10.4);
+      tl.call(() => { document.getElementById("f-month").textContent = "October 2026"; }, null, 10.9);
+      const amt = { v: 0 };
+      tl.to(amt, {
+        v: 12500, duration: 1.4, ease: "power1.out",
+        onUpdate: () => { document.getElementById("f-amount").textContent = amt.v.toFixed(2); }
+      }, 11.4);
+      tl.fromTo("#save-btn", { backgroundColor: "oklch(0.205 0.025 265)" }, { backgroundColor: "oklch(0.72 0.135 185)", color: "#151824", duration: 0.3 }, 13.2);
+      tl.fromTo("#toast", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35 }, 13.6);
+      tl.fromTo("#post-row", { opacity: 0 }, { opacity: 1, duration: 0.35 }, 14.0);
+
+      // Scene 4: dividend split rows, Distributed at 17.47, logo at 18.4
+      tl.fromTo("#scene4 .srow", { opacity: 0, x: -18 }, { opacity: 1, x: 0, duration: 0.4, stagger: 0.4 }, 15.6);
+      tl.fromTo("#dist-pill", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2)" }, 17.47);
+      tl.to("#dividend-card", { opacity: 0, duration: 0.5 }, 18.3);
+      tl.fromTo("#logo-lockup", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 0.6 }, 18.4);
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

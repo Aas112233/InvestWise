@@ -3,24 +3,63 @@ import { getDb } from '@/db/index';
 import { blacklistedTokens } from '@/db/schema/index';
 import { AuthError, ForbiddenError, AppError } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
-import { issueImpersonationToken, logSuperAdminAction, IMPERSONATION_TOKEN_TTL } from '@/lib/superadmin-service';
+import {
+  issueImpersonationSession,
+  logSuperAdminAction,
+  IMPERSONATION_TOKEN_TTL,
+  type ImpersonationSession,
+} from '@/lib/superadmin-service';
 import { verifyToken, blacklistToken } from '@/lib/utils/jwt';
 import { getTokenExpiry } from '@/lib/token-expiry';
+import { getClientIp } from '@/lib/request-meta';
+import { COOKIE_NAMES } from '@/lib/utils/cookies';
 
 // POST /api/admin/impersonate { userId } — platform-only.
-// Returns a 30-minute access token for the TARGET user with impersonatedBy
-// set to the platform admin. The client keeps its own admin session and uses
-// this token explicitly (e.g. Authorization header); exiting discards it.
-// Issue + revoke are recorded in super_admin_action_log with both identities,
-// the operator's IP and user-agent; in-tenant actions during the session
-// attribute to the target user.
-// Same header precedence as the login route: proxy chain first, then direct
-// peer. null (not '0.0.0.0') when absent — unknown beats a fake IP in an
-// audit column.
-function getClientIp(request: NextRequest): string | null {
-  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    null;
+//
+// The credential is delivered as an HttpOnly cookie and NEVER in the JSON body
+// for browser use: a token rendered into the DOM is readable by any injected
+// script, lands in React state and the clipboard, and is visible on screen.
+// The operator's own session is stashed first so DELETE can restore it.
+//
+// Issue + revoke land in super_admin_action_log with both identities, the
+// operator's IP and user-agent. In-tenant actions during the session attribute
+// to the target user, with the platform admin retained as impersonatedBy.
+
+const STASH_COOKIE = 'impersonationAdminSession';
+const STASH_MAX_AGE = 60 * 60; // 1h — longer than the 30m session it restores
+
+function isProduction(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
+function stashAdminSession(response: NextResponse, request: NextRequest): void {
+  const access = request.cookies.get(COOKIE_NAMES.ACCESS_TOKEN)?.value;
+  const refresh = request.cookies.get(COOKIE_NAMES.REFRESH_TOKEN)?.value;
+  if (!access) return;
+  response.cookies.set(STASH_COOKIE, JSON.stringify({ access, refresh: refresh ?? null }), {
+    httpOnly: true,
+    secure: isProduction(),
+    sameSite: isProduction() ? 'strict' : 'lax',
+    maxAge: STASH_MAX_AGE,
+    path: '/',
+  });
+}
+
+function applyTargetSession(response: NextResponse, session: ImpersonationSession): void {
+  response.cookies.set(COOKIE_NAMES.ACCESS_TOKEN, session.accessToken, {
+    httpOnly: true,
+    secure: isProduction(),
+    sameSite: isProduction() ? 'strict' : 'lax',
+    maxAge: 30 * 60,
+    path: '/',
+  });
+  response.cookies.set(COOKIE_NAMES.REFRESH_TOKEN, session.refreshToken, {
+    httpOnly: true,
+    secure: isProduction(),
+    sameSite: isProduction() ? 'strict' : 'lax',
+    maxAge: 30 * 60,
+    path: '/api/auth',
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -30,14 +69,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { userId } = body;
-    if (!userId) {
+    if (!userId || typeof userId !== 'string') {
       return NextResponse.json(
-        { success: false, message: 'userId is required', code: 'VALIDATION_ERROR' },
+        {
+          success: false,
+          message: "[Field 'userId', Code: invalid_type] userId is required",
+          code: 'VALIDATION_ERROR',
+        },
         { status: 400 },
       );
     }
 
-    const session = await issueImpersonationToken(
+    const session = await issueImpersonationSession(
       { id: platformUser.id, email: platformUser.email },
       userId,
     );
@@ -58,10 +101,19 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      data: { token: session.token, expiresIn: IMPERSONATION_TOKEN_TTL, tenantId: session.tenantId },
+      data: {
+        targetUserId: session.targetUserId,
+        targetEmail: session.email,
+        tenantId: session.tenantId,
+        expiresIn: IMPERSONATION_TOKEN_TTL,
+      },
     });
+
+    stashAdminSession(response, request);
+    applyTargetSession(response, session);
+    return response;
   } catch (error: unknown) {
     console.error('[IMPERSONATE ERROR]', error);
     if (error instanceof AuthError || error instanceof ForbiddenError || error instanceof AppError || error instanceof Error) {
@@ -73,18 +125,92 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE /api/admin/impersonate { token } — platform-only revoke. The token
-// hits the existing blacklist machinery, so any further use is rejected.
+// DELETE /api/admin/impersonate — platform-only. Two modes:
+//
+//   {}                    exit the active session: restore the stashed platform
+//                         admin cookies, blacklisting the impersonation tokens
+//                         so a copy already in circulation dies immediately.
+//   { token }             revoke one specific leaked token by blacklisting it.
+//
+// Blacklist (not just cookie-clear) on the exit path is deliberate: the
+// impersonation token was a live credential for up to 30 minutes, and clearing
+// a cookie does nothing to a copy someone else took.
 export async function DELETE(request: NextRequest) {
   try {
+    const raw = await request.text();
+    const body = raw ? (JSON.parse(raw) as { token?: string }) : {};
+    const token = body?.token;
+
+    const stashRaw = request.cookies.get(STASH_COOKIE)?.value;
+    let stashed: { access: string; refresh: string | null } | null = null;
+    if (stashRaw) {
+      try {
+        stashed = JSON.parse(stashRaw) as { access: string; refresh: string | null };
+      } catch {
+        stashed = null;
+      }
+    }
+
+    // Exit path requires no body and no admin auth: the caller is the
+    // IMPERSONATED session, which by definition is not a platform admin.
+    if (!token && stashed) {
+      const db = getDb();
+      const current = request.cookies.get(COOKIE_NAMES.ACCESS_TOKEN)?.value;
+
+      if (current) {
+        // blacklisted_tokens.user_id is NOT NULL and must name the token's
+        // OWNER, not the platform admin — so decode it from the token. An
+        // undecodable token (already expired/revoked) is skipped rather than
+        // written under a wrong owner; the in-memory blacklist still applies.
+        try {
+          const ownerId = verifyToken(current, 'access').id;
+          const expiry = getTokenExpiry(current);
+          await db.insert(blacklistedTokens).values({
+            token: current,
+            type: 'access',
+            userId: ownerId,
+            expiresAt: expiry,
+            reason: 'impersonation_exit',
+          });
+          blacklistToken(current, expiry);
+        } catch {
+          // Never block the restore on a blacklist write.
+        }
+      }
+
+      const response = NextResponse.json({
+        success: true,
+        message: 'Exited impersonation',
+        data: { redirectTo: '/admin' },
+      });
+      response.cookies.set(COOKIE_NAMES.ACCESS_TOKEN, stashed.access, {
+        httpOnly: true,
+        secure: isProduction(),
+        sameSite: isProduction() ? 'strict' : 'lax',
+        maxAge: 15 * 60,
+        path: '/',
+      });
+      if (stashed.refresh) {
+        response.cookies.set(COOKIE_NAMES.REFRESH_TOKEN, stashed.refresh, {
+          httpOnly: true,
+          secure: isProduction(),
+          sameSite: isProduction() ? 'strict' : 'lax',
+          maxAge: 7 * 24 * 60 * 60,
+          path: '/api/auth',
+        });
+      } else {
+        response.cookies.delete(COOKIE_NAMES.REFRESH_TOKEN);
+      }
+      response.cookies.delete(STASH_COOKIE);
+      return response;
+    }
+
     const platformUser = await requireAuthUser(request);
     requireSuperAdmin(platformUser);
 
-    const body = await request.json();
-    const { token } = body;
     if (!token) {
       return NextResponse.json(
-        { success: false, message: 'token is required', code: 'VALIDATION_ERROR' },
+        { success: false, message: 'No active impersonation session to exit', code: 'NO_SESSION' },
         { status: 400 },
       );
     }
@@ -117,10 +243,12 @@ export async function DELETE(request: NextRequest) {
       actionType: 'TENANT_IMPERSONATE_END',
       targetType: 'User',
       targetId,
-      details: { userAgent: request.headers.get('user-agent') },
+      details: { userAgent: request.headers.get('user-agent'), via: 'explicit_revoke' },
     });
 
-    return NextResponse.json({ success: true, message: 'Impersonation session revoked' });
+    const response = NextResponse.json({ success: true, message: 'Impersonation session revoked' });
+    if (stashed) response.cookies.delete(STASH_COOKIE);
+    return response;
   } catch (error: unknown) {
     console.error('[IMPERSONATE REVOKE ERROR]', error);
     if (error instanceof AuthError || error instanceof ForbiddenError) {

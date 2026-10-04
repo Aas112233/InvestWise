@@ -1,3 +1,5 @@
+import { ValidationError } from './errors';
+
 export interface PaginationParams {
   page: number;
   limit: number;
@@ -52,4 +54,19 @@ export function formatPaginatedResponse<T>(data: T[], page: number, limit: numbe
 
 export function normalizeEmail(email: string): string {
   return email.toLowerCase().trim();
+}
+
+/**
+ * Coerce an optional text field from a request body, returning null when the
+ * caller sent nothing or an empty string, and rejecting an over-long value
+ * with a clean 400 instead of letting it reach Postgres and surface as a raw
+ * 500. Shared by the member create and update routes so a field accepted with
+ * one length limit on create cannot fail with a different one on edit.
+ */
+export function optionalStringField(value: unknown, field: string, max: number): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  if (s.length > max) throw new ValidationError(`${field} must be at most ${max} characters`);
+  return s;
 }

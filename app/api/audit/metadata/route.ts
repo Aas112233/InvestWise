@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { auditLogs } from '@/db/schema/index';
+import { eq } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
 
 export async function GET(request: NextRequest) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json(
         { success: false, message: 'Authentication required', code: 'UNAUTHORIZED' },
@@ -21,11 +22,20 @@ export async function GET(request: NextRequest) {
       throw new ForbiddenError('Admin or Manager access required');
     }
 
+    // §6: metadata derives from the tenant's own audit trail.
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
+
     const db = getDb();
 
     const [actionRows, resourceTypeRows] = await Promise.all([
-      db.selectDistinct({ action: auditLogs.action }).from(auditLogs),
-      db.selectDistinct({ resourceType: auditLogs.resourceType }).from(auditLogs),
+      db
+        .selectDistinct({ action: auditLogs.action })
+        .from(auditLogs)
+        .where(eq(auditLogs.tenantId, tenantId)),
+      db
+        .selectDistinct({ resourceType: auditLogs.resourceType })
+        .from(auditLogs)
+        .where(eq(auditLogs.tenantId, tenantId)),
     ]);
 
     return NextResponse.json({

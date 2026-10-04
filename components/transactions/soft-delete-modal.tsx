@@ -51,7 +51,7 @@ export function SoftDeleteModal({
       title={t("transactions.softDeleteTitle", { defaultValue: "Soft Delete Transaction" })}
       description={`Reference: ${transaction.referenceNumber || transaction.id}`}
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form method="post" onSubmit={handleSubmit} className="space-y-4">
         <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded flex items-start gap-2.5">
           <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="text-xs text-amber-800 dark:text-amber-300">

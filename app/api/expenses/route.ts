@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { transactions, funds, projects, systemSettings } from '@/db/schema/index';
+import { transactions, funds, projects, members, users, systemSettings } from '@/db/schema/index';
 import { eq, and, desc, sql, gte, lte, ilike } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
+import { requireTenant } from '@/lib/tenant';
+import { toCents, fromCents } from '@/lib/money';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/utils/errors';
@@ -16,6 +18,9 @@ export async function GET(request: NextRequest) {
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6 fail-closed: expense ledger is tenant business data — null tenant must
+    // 403 instead of returning every tenant's expenses.
+    const scopedTenantId = requireTenant(tenantId, user);
 
     // Check read permission for EXPENSES
     if (!hasScreenPermission(user, 'EXPENSES', 'READ')) {
@@ -37,9 +42,8 @@ export async function GET(request: NextRequest) {
     const db = getDb();
     const conditions: ReturnType<typeof sql>[] = [];
 
-    if (tenantId) {
-      conditions.push(sql`${transactions.tenantId} = ${tenantId}`);
-    }
+    // Unconditional tenant predicate — scopedTenantId already 403s on null.
+    conditions.push(sql`${transactions.tenantId} = ${scopedTenantId}`);
 
     // Only expense transactions
     conditions.push(sql`${transactions.type} = 'Expense'`);
@@ -82,12 +86,14 @@ export async function GET(request: NextRequest) {
           type: transactions.type,
           amount: transactions.amount,
           description: transactions.description,
+          expenseName: transactions.expenseName,
           category: transactions.category,
           referenceNumber: transactions.referenceNumber,
           date: transactions.date,
           status: transactions.status,
           fundId: transactions.fundId,
           projectId: transactions.projectId,
+          memberId: transactions.memberId,
           handlingOfficer: transactions.handlingOfficer,
           authorizedBy: transactions.authorizedBy,
           balanceBefore: transactions.balanceBefore,
@@ -95,10 +101,16 @@ export async function GET(request: NextRequest) {
           createdAt: transactions.createdAt,
           fundName: funds.name,
           projectTitle: projects.title,
+          memberName: members.name,
+          approvedByName: users.name,
         })
         .from(transactions)
         .leftJoin(funds, eq(transactions.fundId, funds.id))
         .leftJoin(projects, eq(transactions.projectId, projects.id))
+        // §6: joined entities must belong to the same tenant — joining on id
+        // alone would render another tenant's member/approver names.
+        .leftJoin(members, and(eq(transactions.memberId, members.id), eq(members.tenantId, scopedTenantId)))
+        .leftJoin(users, and(eq(transactions.authorizedBy, users.id), eq(users.tenantId, scopedTenantId)))
         .where(whereClause)
         .orderBy(desc(transactions.date))
         .limit(limit)
@@ -132,6 +144,9 @@ export async function POST(request: NextRequest) {
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6 fail-closed: expenses move money — null tenant must 403 so the
+    // idempotency + fund/project lookups below can never run unscoped.
+    const scopedTenantId = requireTenant(tenantId, user);
 
     // Check write permission for EXPENSES
     if (!hasScreenPermission(user, 'EXPENSES', 'WRITE')) {
@@ -144,6 +159,9 @@ export async function POST(request: NextRequest) {
       projectId,
       amount,
       category,
+      expenseName,
+      memberId,
+      approvedBy,
       description,
       receiptUrl,
       date,
@@ -157,6 +175,18 @@ export async function POST(request: NextRequest) {
 
     if (!category) {
       throw new ValidationError('category is required');
+    }
+
+    // Expenses module spec: an expense carries a distinct name and is
+    // submitted against the member who incurred it.
+    if (typeof expenseName !== 'string' || !expenseName.trim()) {
+      throw new ValidationError("[Field 'expenseName', Code: required] Expense name is required");
+    }
+    if (expenseName.trim().length > 255) {
+      throw new ValidationError("[Field 'expenseName', Code: too_long] Expense name must be at most 255 characters");
+    }
+    if (!memberId) {
+      throw new ValidationError("[Field 'memberId', Code: required] Expense by member is required");
     }
 
     const expenseAmount = parseFloat(amount);
@@ -175,23 +205,62 @@ export async function POST(request: NextRequest) {
 
     const db = getDb();
 
-    // Check for duplicate reference number (idempotency)
-    const existingExpense = await db
-      .select({ id: transactions.id })
-      .from(transactions)
-      .where(and(eq(transactions.referenceNumber, refNumber), eq(transactions.isDeleted, false)))
-      .limit(1);
+    // Reference/fund/project/member/approver lookups are independent of each
+    // other (all keyed off the request payload) — batch them into one
+    // round-trip group instead of up to five sequential ones. Error checks
+    // below preserve the original precedence. An absent optional id can never
+    // satisfy the lookup (sql false → no row), matching the skip behavior.
+    const [existingExpense, [fund], [project], [member], [approver]] = await Promise.all([
+      // Duplicate reference number check (idempotency, tenant-scoped).
+      db
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.referenceNumber, refNumber),
+            eq(transactions.isDeleted, false),
+            eq(transactions.tenantId, scopedTenantId),
+          ),
+        )
+        .limit(1),
+      // Fund with tenant isolation (§6 hard predicate).
+      db
+        .select()
+        .from(funds)
+        .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)))
+        .limit(1),
+      // Project with tenant isolation (§6: must belong to the same tenant).
+      db
+        .select()
+        .from(projects)
+        .where(
+          projectId
+            ? and(eq(projects.id, projectId), eq(projects.tenantId, scopedTenantId))
+            : sql`false`
+        )
+        .limit(1),
+      // Expense-by member with tenant isolation (§6).
+      db
+        .select({ id: members.id })
+        .from(members)
+        .where(and(eq(members.id, memberId), eq(members.tenantId, scopedTenantId)))
+        .limit(1),
+      // Approver must be a user of the same tenant (§6). Absent → the
+      // submitting user records themselves as approver.
+      db
+        .select({ id: users.id })
+        .from(users)
+        .where(
+          approvedBy
+            ? and(eq(users.id, approvedBy), eq(users.tenantId, scopedTenantId))
+            : sql`false`
+        )
+        .limit(1),
+    ]);
 
     if (existingExpense.length > 0) {
       throw new ValidationError('Transaction with this reference number already exists');
     }
-
-    // Get fund with tenant isolation
-    const [fund] = await db
-      .select()
-      .from(funds)
-      .where(and(eq(funds.id, fundId), tenantId ? eq(funds.tenantId, tenantId) : sql`true`))
-      .limit(1);
 
     if (!fund) {
       throw new NotFoundError('Fund');
@@ -213,60 +282,92 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate project if provided
-    let project = null;
-    if (projectId) {
-      const [p] = await db
-        .select()
-        .from(projects)
-        .where(and(eq(projects.id, projectId), tenantId ? eq(projects.tenantId, tenantId) : sql`true`))
-        .limit(1);
-      project = p;
-      if (!project) {
-        throw new NotFoundError('Project');
-      }
+    // Project was already resolved in the parallel lookup batch above; a
+    // provided-but-unknown project still fails here.
+    if (projectId && !project) {
+      throw new NotFoundError('Project');
+    }
+
+    if (!member) {
+      throw new ValidationError("[Field 'memberId', Code: cross_tenant] Member does not belong to this tenant");
+    }
+
+    if (approvedBy && !approver) {
+      throw new ValidationError("[Field 'approvedBy', Code: cross_tenant] Approver does not belong to this tenant");
     }
 
     const now = new Date();
 
-    // Execute atomic expense transaction
-    await db.transaction(async (tx) => {
-      // Debit fund balance
-      const newFundBalance = (fundBalance - expenseAmount).toFixed(2);
+    // Execute atomic expense transaction (§6: every write re-asserts the
+    // tenant — id-only updates would debit another tenant's fund/project).
+    // Bulletproofing (Funds module spec): the fund row is locked (FOR UPDATE)
+    // and re-read INSIDE the tx — the outer read is stale-prone — and the
+    // balance write is atomic SQL arithmetic, so a concurrent deposit,
+    // transfer, or expense can never lose an update (§12).
+    const { newFundBalance, newProjectExpenses } = await db.transaction(async (tx) => {
+      const [lockedFund] = await tx
+        .select()
+        .from(funds)
+        .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)))
+        .for('update')
+        .limit(1);
+      if (!lockedFund) throw new NotFoundError('Fund');
+
+      const expenseCents = toCents(formattedAmount);
+      const fundBalanceCents = toCents(lockedFund.balance ?? '0');
+      const fundMinBalanceCents = toCents(lockedFund.minimumBalance ?? '0');
+      if (fundBalanceCents - fundMinBalanceCents < expenseCents) {
+        throw new ValidationError(
+          `Insufficient available balance in fund. Available (above minimum): ${fromCents(fundBalanceCents - fundMinBalanceCents)}, Required: ${formattedAmount}`
+        );
+      }
+      const newFundBalanceCents = fundBalanceCents - expenseCents;
+
+      // Debit fund balance (atomic — SQL reads the locked row's live value).
       await tx
         .update(funds)
-        .set({ balance: newFundBalance, updatedAt: now })
-        .where(eq(funds.id, fundId));
+        .set({
+          balance: sql`(${funds.balance}::numeric - ${expenseCents / 100})::numeric(15,2)`,
+          updatedAt: now,
+        })
+        .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)));
 
       // Create expense transaction
       await tx.insert(transactions).values({
-        tenantId: tenantId || null,
+        tenantId: scopedTenantId,
         type: 'Expense',
         amount: formattedAmount,
         description: description || 'Operational expense',
+        expenseName: expenseName.trim(),
         category: category,
         referenceNumber: refNumber,
         date: expenseDate,
         status: 'Completed',
         fundId: fundId,
         projectId: projectId || null,
+        memberId: memberId,
         handlingOfficer: user.name,
-        authorizedBy: user.id,
-        balanceBefore: fund.balance,
-        balanceAfter: newFundBalance,
+        authorizedBy: approvedBy || user.id,
+        balanceBefore: fromCents(fundBalanceCents),
+        balanceAfter: fromCents(newFundBalanceCents),
         createdBy: user.id,
         updatedBy: user.id,
       });
 
-      // Update project expenses if linked
+      // Update project expenses if linked (§6 tenant-scoped write, atomic).
+      let newProjectExpenses: string | null = null;
       if (project) {
-        const projectExpenses = parseFloat(project.totalExpenses || '0');
-        const newProjectExpenses = (projectExpenses + expenseAmount).toFixed(2);
+        newProjectExpenses = fromCents(toCents(project.totalExpenses || '0') + expenseCents);
         await tx
           .update(projects)
-          .set({ totalExpenses: newProjectExpenses, updatedAt: now })
-          .where(eq(projects.id, projectId));
+          .set({
+            totalExpenses: sql`(coalesce(${projects.totalExpenses}, 0) + ${expenseCents / 100})::numeric(15,2)`,
+            updatedAt: now,
+          })
+          .where(and(eq(projects.id, projectId), eq(projects.tenantId, scopedTenantId)));
       }
+
+      return { newFundBalance: fromCents(newFundBalanceCents), newProjectExpenses };
     });
 
     await logAudit({
@@ -279,6 +380,9 @@ export async function POST(request: NextRequest) {
         fundName: fund.name,
         projectId: project?.id,
         projectTitle: project?.title,
+        memberId,
+        approvedBy: approvedBy || user.id,
+        expenseName: expenseName.trim(),
         amount: formattedAmount,
         category,
         description: description || null,
@@ -291,8 +395,8 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         referenceNumber: refNumber,
-        fund: { id: fund.id, name: fund.name, newBalance: (fundBalance - expenseAmount).toFixed(2) },
-        project: project ? { id: project.id, title: project.title, newTotalExpenses: (parseFloat(project.totalExpenses || '0') + expenseAmount).toFixed(2) } : null,
+        fund: { id: fund.id, name: fund.name, newBalance: newFundBalance },
+        project: project ? { id: project.id, title: project.title, newTotalExpenses: newProjectExpenses } : null,
         amount: formattedAmount,
         category,
         description: description || null,

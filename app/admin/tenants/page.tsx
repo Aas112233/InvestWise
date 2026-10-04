@@ -43,8 +43,11 @@ export default function AdminTenantsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
-  const [plan, setPlan] = useState("standard");
-  const [maxUsers, setMaxUsers] = useState("100");
+  const [plan, setPlan] = useState("");
+  const [maxUsers, setMaxUsers] = useState("");
+  const [adminName, setAdminName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
   const [confirm, setConfirm] = useState<{ tenant: Tenant; action: "suspend" | "delete" } | null>(null);
 
   const { data, isLoading } = useQuery<TenantListResponse>({
@@ -74,24 +77,45 @@ export default function AdminTenantsPage() {
     onError: (err) => toast.error(errMsg(err, t("admin.tenants.updateFailed", { defaultValue: "Update failed" }))),
   });
 
-  const createMutation = useMutation({
+  // Full onboarding: tenant + org-admin login + settings + 14-day trial in one
+  // transaction (POST /admin/tenants/onboard). The plain tenant-create endpoint
+  // leaves a tenant with no admin user and no subscription, so the panel only
+  // exposes the complete flow.
+  const onboardMutation = useMutation({
     mutationFn: () =>
-      apiClient("/admin/tenants", {
+      apiClient("/admin/tenants/onboard", {
         method: "POST",
-        body: JSON.stringify({ slug: slug.trim(), name: name.trim(), plan, maxUsers: Number(maxUsers) || 100 }),
+        body: JSON.stringify({
+          slug: slug.trim(),
+          name: name.trim(),
+          ...(plan.trim() ? { plan: plan.trim() } : {}),
+          ...(maxUsers.trim() ? { maxUsers: Number(maxUsers) } : {}),
+          ...(adminName.trim() ? { adminName: adminName.trim() } : {}),
+          adminEmail: adminEmail.trim(),
+          adminPassword,
+        }),
       }),
     onSuccess: () => {
       invalidate();
       setCreateOpen(false);
       setSlug("");
       setName("");
-      toast.success(t("admin.tenants.created", { defaultValue: "Tenant created" }));
+      setPlan("");
+      setMaxUsers("");
+      setAdminName("");
+      setAdminEmail("");
+      setAdminPassword("");
+      toast.success(t("admin.tenants.onboarded", { defaultValue: "Tenant onboarded" }));
     },
-    onError: (err) => toast.error(errMsg(err, t("admin.tenants.createFailed", { defaultValue: "Create failed" }))),
+    onError: (err) => toast.error(errMsg(err, t("admin.tenants.onboardFailed", { defaultValue: "Onboarding failed" }))),
   });
 
+  // The dialog is explicitly destructive, so this is the platform wipe
+  // (?force=true) rather than the guarded delete that refuses while the
+  // tenant still has users or business data.
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiClient(`/admin/tenants/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) =>
+      apiClient(`/admin/tenants/${id}`, { method: "DELETE", params: { force: true } }),
     onSuccess: () => {
       invalidate();
       setConfirm(null);
@@ -232,7 +256,7 @@ export default function AdminTenantsPage() {
       <TopSheet
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
-        title={t("admin.tenants.createTitle", { defaultValue: "Create tenant" })}
+        title={t("admin.tenants.onboardTitle", { defaultValue: "Onboard tenant" })}
         footer={
           <div className="flex justify-end gap-2">
             <Button
@@ -246,18 +270,30 @@ export default function AdminTenantsPage() {
             <Button
               type="button"
               size="sm"
-              loading={createMutation.isPending}
-              disabled={createMutation.isPending || !slug.trim() || !name.trim()}
-              onClick={() => createMutation.mutate()}
+              loading={onboardMutation.isPending}
+              disabled={
+                onboardMutation.isPending ||
+                !slug.trim() ||
+                !name.trim() ||
+                !adminEmail.trim() ||
+                !adminPassword
+              }
+              onClick={() => onboardMutation.mutate()}
             >
               {t("common.save", { defaultValue: "Save" })}
             </Button>
           </div>
         }
       >
+        <p className="px-4 pt-4 text-xs text-muted-foreground">
+          {t("admin.tenants.onboardDesc", {
+            defaultValue:
+              "Creates the tenant, its admin login, settings and a 14-day trial in one step.",
+          })}
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4">
           <label className="text-xs font-medium text-foreground space-y-1">
-            <span>Slug</span>
+            <span>{t("admin.tenants.fieldSlug", { defaultValue: "Slug" })}</span>
             <Input
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
@@ -266,7 +302,7 @@ export default function AdminTenantsPage() {
             />
           </label>
           <label className="text-xs font-medium text-foreground space-y-1">
-            <span>Name</span>
+            <span>{t("admin.tenants.fieldName", { defaultValue: "Name" })}</span>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -275,19 +311,48 @@ export default function AdminTenantsPage() {
             />
           </label>
           <label className="text-xs font-medium text-foreground space-y-1">
-            <span>Plan</span>
+            <span>{t("admin.tenants.fieldPlan", { defaultValue: "Plan" })}</span>
             <Input
               value={plan}
               onChange={(e) => setPlan(e.target.value)}
+              placeholder="standard"
               className="text-xs"
             />
           </label>
           <label className="text-xs font-medium text-foreground space-y-1">
-            <span>Max users</span>
+            <span>{t("admin.tenants.fieldMaxUsers", { defaultValue: "Max users" })}</span>
             <Input
               value={maxUsers}
               onChange={(e) => setMaxUsers(e.target.value)}
+              placeholder="100"
               isNumeric
+              className="text-xs font-mono"
+            />
+          </label>
+          <label className="text-xs font-medium text-foreground space-y-1">
+            <span>{t("admin.tenants.adminName", { defaultValue: "Admin name" })}</span>
+            <Input
+              value={adminName}
+              onChange={(e) => setAdminName(e.target.value)}
+              className="text-xs"
+            />
+          </label>
+          <label className="text-xs font-medium text-foreground space-y-1">
+            <span>{t("admin.tenants.adminEmail", { defaultValue: "Admin email" })}</span>
+            <Input
+              type="email"
+              value={adminEmail}
+              onChange={(e) => setAdminEmail(e.target.value)}
+              placeholder="admin@acme-corp.com"
+              className="text-xs"
+            />
+          </label>
+          <label className="text-xs font-medium text-foreground space-y-1 sm:col-span-2">
+            <span>{t("admin.tenants.adminPassword", { defaultValue: "Admin password" })}</span>
+            <Input
+              type="password"
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
               className="text-xs font-mono"
             />
           </label>

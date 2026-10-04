@@ -9,9 +9,9 @@ import * as schema from '../db/schema/index.js';
  */
 const poolOptions = {
   max: 10,
-  idle_timeout: 4,
-  connect_timeout: 10,
-  max_lifetime: 60 * 3,
+  idle_timeout: 30,
+  connect_timeout: 30,
+  max_lifetime: 60 * 10,
   prepare: false, // required for Supabase transaction-mode pooler (port 6543)
   fetch_types: false,
 };

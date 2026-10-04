@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   CreditCard,
+  Flag,
   Globe,
   KeyRound,
   LayoutDashboard,
@@ -15,10 +16,12 @@ import {
   LogOut,
   Megaphone,
   Moon,
+  Settings,
   ShieldAlert,
   ShieldCheck,
   Sun,
   TrendingUp,
+  UserCheck,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
@@ -33,11 +36,13 @@ const ADMIN_NAV_GROUPS = [
     items: [
       { route: "/admin", labelKey: "admin.nav.overview", fallback: "Overview", icon: LayoutDashboard },
       { route: "/admin/tenants", labelKey: "admin.nav.tenants", fallback: "Tenants", icon: Building2 },
+      { route: "/admin/users", labelKey: "admin.nav.users", fallback: "Users", icon: UserCheck },
       { route: "/admin/billing", labelKey: "admin.nav.billing", fallback: "Billing", icon: CreditCard },
+      { route: "/admin/feature-flags", labelKey: "admin.nav.featureFlags", fallback: "Modules", icon: Flag },
       {
         route: "/admin/impersonate",
         labelKey: "admin.nav.impersonate",
-        fallback: "Impersonate",
+        fallback: "Support Sessions",
         icon: KeyRound,
       },
     ],
@@ -49,6 +54,7 @@ const ADMIN_NAV_GROUPS = [
       { route: "/admin/diagnostics", labelKey: "admin.nav.diagnostics", fallback: "Diagnostics", icon: Activity },
       { route: "/admin/audit-logs", labelKey: "admin.nav.auditLogs", fallback: "Audit Logs", icon: ShieldAlert },
       { route: "/admin/notices", labelKey: "admin.nav.notices", fallback: "Broadcasts", icon: Megaphone },
+      { route: "/admin/settings", labelKey: "admin.nav.settings", fallback: "Settings", icon: Settings },
     ],
   },
 ];

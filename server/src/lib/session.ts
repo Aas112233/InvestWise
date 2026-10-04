@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers';
-import { eq } from 'drizzle-orm';
+import crypto from 'node:crypto';
+import { eq, and, gt } from 'drizzle-orm';
 import { getDb } from './db.js';
-import { users } from '../db/schema/index.js';
+import { users, blacklistedTokens } from '../db/schema/index.js';
 import { verifyToken, COOKIE_NAMES } from './jwt.js';
 import { normalizeRole } from '../shared/roles.js';
 
@@ -22,6 +23,9 @@ interface CachedUser {
 }
 
 const USER_CACHE_TTL = 60_000;
+// Keyed by sha256(token) (never the raw token): a rotated/logged-out token
+// gets its own entry and its own blacklist check — it never reuses another
+// token's cached identity.
 const userCache = new Map<string, { user: CachedUser; expires: number }>();
 
 let cacheLastSweep = 0;
@@ -30,6 +34,12 @@ function sweepCache() {
   if (now - cacheLastSweep < 5 * 60_000) return;
   cacheLastSweep = now;
   for (const [k, v] of userCache) if (v.expires < now) userCache.delete(k);
+}
+
+/** Cache key: userId + token hash — never stores or logs the raw token. */
+function cacheKey(token: string): string {
+  const hash = crypto.createHash('sha256').update(token).digest('hex');
+  return `${hash.slice(0, 24)}`;
 }
 
 export async function getSessionUser(): Promise<CachedUser | null> {
@@ -44,10 +54,22 @@ export async function getSessionUser(): Promise<CachedUser | null> {
     return null;
   }
 
-  const cached = userCache.get(userId);
+  const cached = userCache.get(cacheKey(token));
   if (cached && cached.expires > Date.now()) return cached.user;
 
   const db = getDb();
+
+  // Blacklist check (parity with lib/middleware/auth.ts): a revoked access
+  // token — logout, logout-all, rotation — must not keep authenticating the
+  // server-module routes (funds transfer, finance handlers) until its 15m
+  // expiry. Checked on cache miss only: ≤1 extra DB read per 60s per token.
+  const [revoked] = await db
+    .select({ id: blacklistedTokens.id })
+    .from(blacklistedTokens)
+    .where(and(eq(blacklistedTokens.token, token), gt(blacklistedTokens.expiresAt, new Date())))
+    .limit(1);
+  if (revoked) return null;
+
   const [user] = await db
     .select({
       id: users.id,
@@ -80,6 +102,6 @@ export async function getSessionUser(): Promise<CachedUser | null> {
     tenantId: user.tenantId ?? null,
   };
 
-  userCache.set(userId, { user: resolved, expires: Date.now() + USER_CACHE_TTL });
+  userCache.set(cacheKey(token), { user: resolved, expires: Date.now() + USER_CACHE_TTL });
   return resolved;
 }

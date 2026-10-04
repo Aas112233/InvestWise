@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, Loader2, ShieldAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -30,7 +30,7 @@ const inviteSchema = z
   .object({
     name: z.string().min(2),
     email: z.string().email(),
-    password: z.string().min(12),
+    password: z.string().min(8),
     confirmPassword: z.string().min(1),
     role: z.string().min(1),
     memberId: z.string().optional(),
@@ -44,7 +44,7 @@ type InviteForm = z.infer<typeof inviteSchema>;
 
 function strengthScore(password: string): number {
   let score = 0;
-  if (password.length >= 12) score += 1;
+  if (password.length >= 8) score += 1;
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
   if (/\d/.test(password)) score += 1;
   if (/[@$!%*?&#^()_+\-=[\]{}|;:,.<>/~`]/.test(password)) score += 1;
@@ -55,7 +55,7 @@ const inputCls =
   "w-full px-3 py-2 rounded-lg border text-xs bg-card border-border/80 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors";
 
 // Admin-only user invitation portal. Wired to POST /api/auth/register, which
-// enforces Admin access + 12-char complex passwords server-side (Rule §0:
+// enforces Admin access + 8-char complex passwords server-side (Rule §0:
 // never weaken what the server requires — the meter mirrors it live).
 export default function RegisterPage() {
   const router = useRouter();
@@ -94,17 +94,22 @@ export default function RegisterPage() {
   const strengthTone =
     score <= 1 ? "bg-rose-500" : score === 2 ? "bg-amber-500" : score === 3 ? "bg-cyan-500" : "bg-emerald-500";
 
-  if (!authLoading && !user) {
-    router.replace("/login?redirect=/register");
-    return null;
-  }
+  // Guests are bounced to login. The redirect must happen in an effect, not
+  // during render — `router.replace()` state-updates the router (and its
+  // links), which React forbids from a render pass.
+  const isGuest = !authLoading && !user;
+  useEffect(() => {
+    if (isGuest) router.replace("/login?redirect=/register");
+  }, [isGuest, router]);
+
+  if (isGuest) return null;
 
   const normalizedRole = normalizeRole(user?.role);
   const isAdmin = normalizedRole === "Admin" || isSuperAdminRole(normalizedRole);
 
   const onSubmit = async (values: InviteForm) => {
     try {
-      const res = await apiClient<{ success: boolean; message?: string }>( "/auth/register", {
+      await apiClient<{ success: boolean; message?: string }>( "/auth/register", {
         method: "POST",
         body: JSON.stringify({
           name: values.name.trim(),
@@ -114,7 +119,9 @@ export default function RegisterPage() {
           memberId: values.memberId?.trim() || undefined,
         }),
       });
-      toast.success(res.message ?? t("auth.register.success", { name: values.name.trim() }));
+      // Localized copy is authoritative; the server `message` is an English
+      // duplicate and would defeat ur/hi/bn.
+      toast.success(t("auth.register.success", { name: values.name.trim() }));
       reset({ name: "", email: "", password: "", confirmPassword: "", role: "", memberId: "" });
     } catch (err) {
       // Unmasked server message (Rule §11).
@@ -142,7 +149,7 @@ export default function RegisterPage() {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit(onSubmit)} className="bg-card rounded-xl border border-border/80 shadow-sm p-6" noValidate>
+          <form method="post" onSubmit={handleSubmit(onSubmit)} className="bg-card rounded-xl border border-border/80 shadow-sm p-6" noValidate>
             <ERPFormLayout>
               <ERPFormSection title={t("auth.register.title")}>
                 <ERPFormGrid columns={2}>

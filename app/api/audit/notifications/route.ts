@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { auditLogs } from '@/db/schema/index';
-import { and, gte, desc, sql } from 'drizzle-orm';
+import { and, gte, desc, eq, sql } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
@@ -17,7 +17,7 @@ interface Notification {
 
 export async function GET(request: NextRequest) {
   try {
-    const { user, error } = await getAuthContext(request);
+    const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
       return error || NextResponse.json(
         { success: false, message: 'Authentication required', code: 'UNAUTHORIZED' },
@@ -30,6 +30,9 @@ export async function GET(request: NextRequest) {
     if (callerRole !== 'Admin' && callerRole !== 'Manager' && callerRole !== 'SuperAdmin') {
       throw new ForbiddenError('Admin or Manager access required');
     }
+
+    // §6: activity notifications come from the tenant's own audit trail.
+    if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     const db = getDb();
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
@@ -46,6 +49,7 @@ export async function GET(request: NextRequest) {
       .from(auditLogs)
       .where(
         and(
+          eq(auditLogs.tenantId, tenantId),
           gte(auditLogs.createdAt, since),
           sql`${auditLogs.action} ~ '^(CREATE|UPDATE|DELETE|ADD|EDIT)'`,
         ),

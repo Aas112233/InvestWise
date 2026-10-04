@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, decimal, boolean, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, decimal, boolean, timestamp, index, unique } from 'drizzle-orm/pg-core';
 import { tenants } from './tenants.js';
 
 export const funds = pgTable('funds', {
@@ -9,7 +9,7 @@ export const funds = pgTable('funds', {
   status: varchar('status', { length: 50 }).default('ACTIVE'),
   currency: varchar('currency', { length: 10 }).default(''),
   linkedProjectId: uuid('linked_project_id'),
-  accountNumber: varchar('account_number', { length: 255 }).unique(),
+  accountNumber: varchar('account_number', { length: 255 }),
   balance: decimal('balance', { precision: 15, scale: 2 }).default('0').notNull(),
   lastReconciledAt: timestamp('last_reconciled_at', { withTimezone: true }),
   reconciliationStatus: varchar('reconciliation_status', { length: 50 }).default('PENDING'),
@@ -24,6 +24,7 @@ export const funds = pgTable('funds', {
   index('idx_funds_type_status').on(table.type, table.status),
   index('idx_funds_linked_project').on(table.linkedProjectId),
   index('idx_funds_type').on(table.type),
+  unique('uq_funds_tenant_account').on(table.tenantId, table.accountNumber),
 ]);
 
 export type Fund = typeof funds.$inferSelect;

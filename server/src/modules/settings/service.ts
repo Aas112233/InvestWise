@@ -50,7 +50,7 @@ function formatSettingsResponse(settings: any): Record<string, unknown> {
     system: {
       language: settings.language || 'English',
       refreshInterval: settings.refreshInterval || 'Real-time',
-      theme: settings.theme || 'System Default',
+      theme: settings.theme || 'Light',
       dateFormat: settings.dateFormat || 'DD/MM/YYYY',
       isMaintenanceMode: Boolean(settings.isMaintenanceMode),
     },

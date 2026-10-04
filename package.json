@@ -9,10 +9,14 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "node scripts/seed-superadmin.mjs",
-    "shares:realign": "node scripts/realign-member-shares.mjs",
     "test": "vitest run",
-    "i18n:validate": "node scripts/validate-i18n.mjs"
+    "i18n:validate": "node scripts/validate-i18n.mjs",
+    "i18n:audit": "node scripts/audit-i18n.mjs",
+    "i18n:extract": "node scripts/extract-missing-keys.mjs",
+    "i18n:phase5": "node scripts/phase5-i18n.mjs",
+    "i18n:prune": "node scripts/prune-orphan-keys.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

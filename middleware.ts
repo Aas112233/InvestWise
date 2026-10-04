@@ -17,6 +17,10 @@ const PUBLIC_PATHS = [
   '/',
   '/login',
   '/forgot-password',
+  // Self-serve tenant onboarding (page + its endpoint). The endpoint enforces
+  // platform_settings.allow_public_registration; the edge only lets it through.
+  '/signup',
+  '/api/auth/signup',
   '/register',
   '/subscription/inactive',
   '/api/auth/login',
@@ -49,6 +53,13 @@ export async function middleware(request: NextRequest) {
     (path) => pathname === path || pathname.startsWith(path + '/'),
   );
   if (isPublic) {
+    return forward();
+  }
+
+  // Scheduled jobs authenticate with a shared CRON_SECRET bearer, never a
+  // session cookie, so they cannot pass the cookie-presence check below.
+  // Bypassed at the edge; the route handler enforces the secret itself.
+  if (pathname.startsWith('/api/cron/')) {
     return forward();
   }
 

@@ -1,36 +1,33 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Calculator, CheckCircle2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { AppDropdown, type DropdownOption } from "@/components/ui/app-dropdown";
+import { Button } from "@/components/ui/button";
 import {
-  TopSheet,
+  ERPFormField,
+  ERPFormGrid,
   ERPFormLayout,
   ERPFormSection,
-  ERPFormGrid,
-  ERPFormField,
-  AppDropdown,
-  DropdownOption,
-  Button,
-} from "@/components/ui";
-import { apiClient } from "@/lib/api-client";
-import { toast } from "sonner";
-import { useLocale } from "@/lib/i18n";
+} from "@/components/ui/erp-form-layout";
+import { TopSheet } from "@/components/ui/top-sheet";
+import { useFundsList } from "@/components/funds/shared";
+import { ApiError, apiClient } from "@/lib/api-client";
 import { formatMoney } from "@/lib/formatters";
-import { Calculator, CheckCircle2, Loader2 } from "lucide-react";
+import { useLocale } from "@/lib/i18n";
+import { useTenantCurrency, useTenantSettings } from "@/lib/use-tenant-settings";
 
-interface FundOption {
-  id: string;
-  name: string;
-  type: string;
-  balance: string;
-}
-
-interface MemberAllocation {
-  id: string;
+interface MemberBreakdownRow {
+  /** Member uuid — stable key for the preview table. */
   memberId: string;
+  /** Human-readable member code (MEM-0001). */
+  memberIdStr: string;
   name: string;
   shares: number;
   grossAmount: string;
+  ratePerShare: string;
 }
 
 interface CalculationResult {
@@ -40,128 +37,123 @@ interface CalculationResult {
   netDistributable: string;
   totalActiveShares: number;
   ratePerShare: string;
-  memberAllocations: MemberAllocation[];
+  memberBreakdown: MemberBreakdownRow[];
+  recipientCount: number;
 }
 
-interface DividendDistributionModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  currency?: string;
-}
-
+/**
+ * Dividend payout configuration.
+ *
+ * The preview and the payout post the SAME payload to endpoints that now share
+ * one calculation engine, so what is authorized here is what gets paid. The run
+ * also carries a client-generated reference: a double submit or a retry hits
+ * the server's duplicate check instead of paying the members twice.
+ */
 export function DividendDistributionModal({
   isOpen,
   onClose,
-  currency = "BDT",
-}: DividendDistributionModalProps) {
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
+  const currency = useTenantCurrency();
+  const { data: settings } = useTenantSettings();
 
-  const [distributableFundId, setDistributableFundId] = useState("");
-  const [reserveFundId, setReserveFundId] = useState("");
+  const [distributableFundId, setDistributableFundId] = useState<string | null>(null);
+  const [reserveFundId, setReserveFundId] = useState<string | null>(null);
   const [grossEarnings, setGrossEarnings] = useState("");
-  const [statutoryReservePercent, setStatutoryReservePercent] = useState("10");
+  const [reservePercent, setReservePercent] = useState("");
   const [calculation, setCalculation] = useState<CalculationResult | null>(null);
-  const [isCalculating, setIsCalculating] = useState(false);
+  const [runReference, setRunReference] = useState<string | null>(null);
+  const [touched, setTouched] = useState(false);
 
-  // Fetch available funds
-  const { data: fundsData } = useQuery<{ data: FundOption[] }>({
-    queryKey: ["funds", "options"],
-    queryFn: async () => {
-      try {
-        return await apiClient("/funds?limit=100");
-      } catch {
-        return { data: [] };
-      }
-    },
-    enabled: isOpen,
-  });
-
-  const fundsList = fundsData?.data || [];
-
-  const distributableFundOptions: DropdownOption[] = fundsList.map((f) => ({
-    value: f.id,
-    label: `${f.name} (Bal: ${formatMoney(f.balance, currency)})`,
-  }));
-
-  const reserveFundOptions: DropdownOption[] = fundsList.map((f) => ({
-    value: f.id,
-    label: `${f.name} [${f.type}]`,
-  }));
-
-  // Reset form when modal closes
+  // The tenant's configured retention is the starting point, not a hardcoded
+  // 10% — and it is still editable per run.
+  const configuredReservePercent = settings?.financial?.statutoryReservePercent;
   useEffect(() => {
-    if (!isOpen) {
-      setDistributableFundId("");
-      setReserveFundId("");
-      setGrossEarnings("");
-      setStatutoryReservePercent("10");
-      setCalculation(null);
-    }
+    if (!isOpen) return;
+    setReservePercent(
+      configuredReservePercent === undefined || configuredReservePercent === null
+        ? ""
+        : String(configuredReservePercent),
+    );
+  }, [isOpen, configuredReservePercent]);
+
+  useEffect(() => {
+    if (isOpen) return;
+    setDistributableFundId(null);
+    setReserveFundId(null);
+    setGrossEarnings("");
+    setCalculation(null);
+    setRunReference(null);
+    setTouched(false);
   }, [isOpen]);
 
-  const handleSimulate = async () => {
-    if (!distributableFundId) {
-      toast.error(t("dividends.selectFundError"));
-      return;
-    }
-    const grossNum = parseFloat(grossEarnings);
-    if (!grossNum || grossNum <= 0) {
-      toast.error(t("dividends.invalidAmount"));
-      return;
-    }
+  const fundsQuery = useFundsList({ type: null, status: "ACTIVE" });
+  const funds = useMemo(() => fundsQuery.data?.data ?? [], [fundsQuery.data]);
 
-    setIsCalculating(true);
-    try {
-      const res = await apiClient<{ success: boolean; data: CalculationResult }>(
-        "/dividends/calculate",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            grossEarnings: grossNum,
-            distributableFundId,
-            reserveFundId: reserveFundId || undefined,
-            statutoryReservePercent: parseFloat(statutoryReservePercent) || 10,
-          }),
-        }
-      );
-      if (res.success && res.data) {
-        setCalculation(res.data);
-      }
-    } catch (err: any) {
-      toast.error(err?.message || "Simulation failed");
-      setCalculation(null);
-    } finally {
-      setIsCalculating(false);
-    }
+  const reserveFunds = useMemo(
+    () => funds.filter((f) => (f.type ?? "").toUpperCase() === "RESERVE"),
+    [funds],
+  );
+
+  const sourceOptions: DropdownOption[] = funds
+    // A reserve fund is a destination, never a payout source.
+    .filter((f) => (f.type ?? "").toUpperCase() !== "RESERVE")
+    .map((f) => ({ value: f.id, label: `${f.name} (${formatMoney(f.balance, currency)})` }));
+
+  const reserveOptions: DropdownOption[] = reserveFunds.map((f) => ({
+    value: f.id,
+    label: f.name,
+  }));
+
+  // Any input change invalidates the preview: an authorization must match the
+  // numbers it was granted on.
+  const invalidate = () => {
+    setCalculation(null);
+    setRunReference(null);
   };
 
-  const distributeMutation = useMutation({
-    mutationFn: async () => {
-      const grossNum = parseFloat(grossEarnings);
-      return await apiClient("/dividends/distribute", {
+  const payload = () => ({
+    grossEarnings,
+    distributableFundId,
+    statutoryReservePercent: reservePercent,
+    reserveFundId: reserveFundId || undefined,
+  });
+
+  const canSubmit = Boolean(distributableFundId) && /^\d+(\.\d{1,2})?$/.test(grossEarnings);
+
+  const simulateMutation = useMutation({
+    mutationFn: () =>
+      apiClient<{ success: boolean; data: CalculationResult }>("/dividends/calculate", {
         method: "POST",
-        body: JSON.stringify({
-          grossEarnings: grossNum,
-          distributableFundId,
-          reserveFundId: reserveFundId || undefined,
-          statutoryReservePercent: parseFloat(statutoryReservePercent) || 10,
-        }),
-      });
+        body: JSON.stringify(payload()),
+      }),
+    onSuccess: (res) => {
+      setCalculation(res.data ?? null);
+      // One reference per authorized preview, reused on retry (§12).
+      setRunReference(`DIV-${crypto.randomUUID().toUpperCase()}`);
     },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : t("dividends.simulationFailed")),
+  });
+
+  const distributeMutation = useMutation({
+    mutationFn: () =>
+      apiClient("/dividends/distribute", {
+        method: "POST",
+        body: JSON.stringify({ ...payload(), referenceNumber: runReference }),
+      }),
     onSuccess: () => {
-      toast.success(
-        t("dividends.distSuccess") || "Dividends distributed successfully."
-      );
+      toast.success(t("dividends.distSuccess"));
       queryClient.invalidateQueries({ queryKey: ["dividends"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["funds"] });
       queryClient.invalidateQueries({ queryKey: ["members"] });
       onClose();
     },
-    onError: (err: any) => {
-      toast.error(err?.message || t("dividends.distError"));
-    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : t("dividends.distError")),
   });
 
   return (
@@ -170,40 +162,41 @@ export function DividendDistributionModal({
       onClose={onClose}
       title={t("dividends.payoutConfig")}
       subtitle={t("dividends.configSub")}
-      wide={true}
+      wide
       footer={
-        <div className="flex items-center justify-between w-full">
+        <div className="flex items-center justify-between w-full gap-2">
           <Button variant="ghost" onClick={onClose} disabled={distributeMutation.isPending}>
             {t("common.cancel")}
           </Button>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              onClick={handleSimulate}
-              disabled={isCalculating || !distributableFundId || !grossEarnings}
+              size="sm"
+              icon={<Calculator size={13} />}
+              onClick={() => {
+                // Validate on the first attempt rather than disabling silently,
+                // so the reason is always stated on screen (§11).
+                if (!canSubmit) {
+                  setTouched(true);
+                  return;
+                }
+                simulateMutation.mutate();
+              }}
+              loading={simulateMutation.isPending}
+              loadingLabel={t("common.preview")}
             >
-              {isCalculating ? (
-                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-              ) : (
-                <Calculator className="w-4 h-4 mr-1.5" />
-              )}
               {t("common.preview")}
             </Button>
             <Button
               variant="primary"
+              size="sm"
+              icon={<CheckCircle2 size={13} />}
               onClick={() => distributeMutation.mutate()}
-              disabled={
-                distributeMutation.isPending ||
-                !calculation ||
-                !distributableFundId ||
-                !grossEarnings
-              }
+              loading={distributeMutation.isPending}
+              loadingLabel={t("dividends.distributing")}
+              // Authorization requires a fresh preview of these exact inputs.
+              disabled={!calculation || !runReference || !canSubmit}
             >
-              {distributeMutation.isPending ? (
-                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-              ) : (
-                <CheckCircle2 className="w-4 h-4 mr-1.5" />
-              )}
               {t("dividends.authorize")}
             </Button>
           </div>
@@ -211,137 +204,161 @@ export function DividendDistributionModal({
       }
     >
       <ERPFormLayout>
-        <ERPFormSection
-          title={t("dividends.distType")}
-          description={t("dividends.configSub")}
-        >
-          <ERPFormGrid cols={2}>
-            <ERPFormField label={t("dividends.selectSourceFund")} required>
+        <ERPFormSection title={t("dividends.distType")} description={t("dividends.configSub")}>
+          <ERPFormGrid columns={2}>
+            <ERPFormField
+              label={t("dividends.selectSourceFund")}
+              required
+              error={touched && !distributableFundId ? t("dividends.selectFundError") : undefined}
+            >
               <AppDropdown
-                options={distributableFundOptions}
+                options={sourceOptions}
                 value={distributableFundId}
-                onChange={(val) => {
-                  setDistributableFundId(val || "");
-                  setCalculation(null);
+                onChange={(v) => {
+                  setDistributableFundId(v);
+                  invalidate();
                 }}
                 placeholder={t("dividends.selectPrimaryFund")}
               />
             </ERPFormField>
 
-            <ERPFormField label="Statutory Reserve Fund (Retained Earnings)">
+            <ERPFormField label={t("dividends.reserveFund")} required>
               <AppDropdown
-                options={reserveFundOptions}
+                options={reserveOptions}
                 value={reserveFundId}
-                onChange={(val) => {
-                  setReserveFundId(val || "");
-                  setCalculation(null);
+                onChange={(v) => {
+                  setReserveFundId(v);
+                  invalidate();
                 }}
-                placeholder={t("dividends.selectReserveFundPlaceholder", { defaultValue: "Select reserve fund..." })}
+                placeholder={t("dividends.selectReserveFundPlaceholder")}
               />
             </ERPFormField>
-          </ERPFormGrid>
 
-          <ERPFormGrid cols={2}>
-            <ERPFormField label={t("dividends.payoutAmount")} required>
+            <ERPFormField
+              label={t("dividends.payoutAmount")}
+              required
+              error={touched && !canSubmit ? t("dividends.invalidAmount") : undefined}
+            >
               <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                className="w-full px-3 py-2 text-sm bg-card border border-border/80 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                placeholder="0.00"
+                type="text"
+                inputMode="decimal"
                 value={grossEarnings}
                 onChange={(e) => {
-                  setGrossEarnings(e.target.value);
-                  setCalculation(null);
+                  setGrossEarnings(e.target.value.trim());
+                  invalidate();
                 }}
+                placeholder="0.00"
+                className="w-full px-3 py-2 rounded-xl border text-xs bg-card border-border/80 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 font-mono"
               />
             </ERPFormField>
 
-            <ERPFormField label="Statutory Reserve Buffer (%)" hint="Default 10% statutory retention">
+            <ERPFormField label={t("dividends.reservePercent")} required>
               <input
-                type="number"
-                step="1"
-                min="0"
-                max="100"
-                className="w-full px-3 py-2 text-sm bg-card border border-border/80 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                value={statutoryReservePercent}
+                type="text"
+                inputMode="decimal"
+                value={reservePercent}
                 onChange={(e) => {
-                  setStatutoryReservePercent(e.target.value);
-                  setCalculation(null);
+                  setReservePercent(e.target.value.trim());
+                  invalidate();
                 }}
+                placeholder="0.00"
+                className="w-full px-3 py-2 rounded-xl border text-xs bg-card border-border/80 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 font-mono"
               />
             </ERPFormField>
           </ERPFormGrid>
+
+          {reserveFunds.length === 0 && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-400">
+              {t("dividends.noReserveFund")}
+            </p>
+          )}
         </ERPFormSection>
 
-        {calculation && (
-          <ERPFormSection
-            title={t("dividends.payoutPreview")}
-            description={t("dividends.logicDesc")}
-          >
+        {calculation ? (
+          <ERPFormSection title={t("dividends.payoutPreview")} description={t("dividends.logicDesc")}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-muted/30 rounded-lg border border-border/80 text-xs">
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Gross Surplus</span>
-                <span className="font-semibold text-slate-900 dark:text-slate-100">
-                  {formatMoney(calculation.grossEarnings, currency)}
+                <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {t("dividends.grossSurplus")}
                 </span>
+                <span className="font-mono font-semibold">{formatMoney(calculation.grossEarnings, currency)}</span>
               </div>
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">
-                  Statutory Reserve ({calculation.statutoryReservePercent}%)
+                <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {t("dividends.statutoryReserve")} ({calculation.statutoryReservePercent}%)
                 </span>
-                <span className="font-semibold text-amber-600 dark:text-amber-400">
+                <span className="font-mono font-semibold text-amber-700 dark:text-amber-400">
                   {formatMoney(calculation.statutoryReserveAmount, currency)}
                 </span>
               </div>
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">Net Distributable</span>
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {t("dividends.netDistributable")}
+                </span>
+                <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">
                   {formatMoney(calculation.netDistributable, currency)}
                 </span>
               </div>
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">
-                  Rate / Share ({calculation.totalActiveShares} sh)
+                <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {t("dividends.valuePerShare")}
                 </span>
-                <span className="font-semibold text-slate-900 dark:text-slate-100">
-                  {formatMoney(calculation.ratePerShare, currency)} / sh
+                <span className="font-mono font-semibold">
+                  {formatMoney(calculation.ratePerShare, currency)}
                 </span>
               </div>
             </div>
 
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {t("dividends.floatingShares")}: {calculation.totalActiveShares} ·{" "}
+              {t("dividends.totalRecipients")}: {calculation.recipientCount}
+            </p>
+
             <div className="mt-3">
-              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-2">
-                Member Allocation Preview ({calculation.memberAllocations.length} recipients)
-              </span>
-              <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-md">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium text-slate-600 dark:text-slate-400">Member</th>
-                      <th className="px-3 py-2 text-center font-medium text-slate-600 dark:text-slate-400">Shares</th>
-                      <th className="px-3 py-2 text-right font-medium text-slate-600 dark:text-slate-400">Dividend Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                    {calculation.memberAllocations.map((alloc) => (
-                      <tr key={alloc.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
-                        <td className="px-3 py-2 text-slate-900 dark:text-slate-100 font-medium">
-                          {alloc.name} <span className="text-slate-400 font-mono">({alloc.memberId})</span>
-                        </td>
-                        <td className="px-3 py-2 text-center text-slate-700 dark:text-slate-300">
-                          {alloc.shares}
-                        </td>
-                        <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
-                          {formatMoney(alloc.grossAmount, currency)}
-                        </td>
+              <span className="text-xs font-semibold block mb-2">{t("dividends.stakeholderMatrix")}</span>
+              {calculation.memberBreakdown.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4 text-center border border-dashed border-border/80 rounded-lg">
+                  {t("dividends.noActiveShares")}
+                </p>
+              ) : (
+                <div className="max-h-60 overflow-y-auto border border-border/80 rounded-md">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/40 sticky top-0">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-semibold uppercase tracking-wider text-[10px] text-muted-foreground">
+                          {t("dividends.recipient")}
+                        </th>
+                        <th className="text-center px-3 py-2 font-semibold uppercase tracking-wider text-[10px] text-muted-foreground">
+                          {t("members.columns.shares")}
+                        </th>
+                        <th className="text-right px-3 py-2 font-semibold uppercase tracking-wider text-[10px] text-muted-foreground">
+                          {t("dividends.payout")}
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {calculation.memberBreakdown.map((row) => (
+                        <tr key={row.memberId} className="hover:bg-muted/30">
+                          <td className="px-3 py-2">
+                            {row.name}{" "}
+                            <span className="text-muted-foreground font-mono text-[10px]">({row.memberIdStr})</span>
+                          </td>
+                          <td className="px-3 py-2 text-center font-mono">{row.shares}</td>
+                          <td className="px-3 py-2 text-right font-mono text-emerald-700 dark:text-emerald-400">
+                            {formatMoney(row.grossAmount, currency)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </ERPFormSection>
+        ) : (
+          <p className="text-xs text-muted-foreground py-4 text-center border border-dashed border-border/80 rounded-lg">
+            {t("dividends.previewEmpty")}
+          </p>
         )}
       </ERPFormLayout>
     </TopSheet>

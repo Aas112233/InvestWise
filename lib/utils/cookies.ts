@@ -3,8 +3,12 @@ export const COOKIE_NAMES = {
   REFRESH_TOKEN: 'refreshToken',
 } as const;
 
-const ACCESS_COOKIE_MAX_AGE = 15 * 60 * 1000; // 15 minutes
-const REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
+// maxAge is in SECONDS for the Next.js cookies API — 15 min / 7 days.
+// (Was mistakenly multiplied by 1000: access cookie lived ~10 days, refresh
+// until 2045. JWT expiry still governed server-side, but the cookie lifetimes
+// must match the token design.)
+const ACCESS_COOKIE_MAX_AGE = 15 * 60; // 15 minutes
+const REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7 days
 
 export function setAuthCookies(
   cookies: { set: (name: string, value: string, options: CookieOptions) => void },

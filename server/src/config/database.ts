@@ -5,9 +5,9 @@ import * as schema from '../db/schema/index.js';
 
 const poolOptions = {
   max: 10,              // Optimal concurrent connection pool for Supabase PgBouncer pooler
-  idle_timeout: 4,      // 4s idle timeout proactively cycles stale sockets before Supabase drops them
-  connect_timeout: 10,  // 10s fast fail on stale sockets
-  max_lifetime: 60 * 3, // 3 min connection lifetime rotation
+  idle_timeout: 30,     // Hold warm sockets; a distant region needs longer than 4s to rebuild one
+  connect_timeout: 30,  // Remote TLS + pooler negotiation exceeds 10s on a slow link
+  max_lifetime: 60 * 10, // 10 min connection lifetime rotation
   prepare: false,       // Required for Supabase transaction-mode pooler (port 6543)
   fetch_types: false,   // Prevents unnecessary pg_type queries over transaction pooler
   debug: false,

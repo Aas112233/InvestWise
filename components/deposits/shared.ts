@@ -13,11 +13,14 @@ export interface DepositRow {
   category?: string | null;
   referenceNumber?: string | null;
   date: string;
+  submittedDate?: string | null;
   status?: string | null;
   memberId?: string | null;
   fundId?: string | null;
   handlingOfficer?: string | null;
   depositMethod?: string | null;
+  /** Deposit month (YYYY-MM) — the month the deposit is FOR, may differ from date. */
+  depositMonth?: string | null;
   authorizedBy?: string | null;
   balanceBefore?: number | string | null;
   balanceAfter?: number | string | null;
@@ -27,12 +30,34 @@ export interface DepositRow {
   fundName?: string | null;
 }
 
+// §8: deposit month pickers are dropdowns over dynamic arrays, never free
+// text. Shared by the deposit form and the request-deposit form so both
+// always agree on values and ranges.
+export const DEPOSIT_MONTH_KEYS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const;
+
+export function buildDepositMonthOptions(t: (k: string) => string) {
+  return DEPOSIT_MONTH_KEYS.map((key, i) => ({
+    value: String(i + 1).padStart(2, "0"),
+    label: t(`common.months.${key}`),
+  }));
+}
+
+/** Back-entry window: next year down to ten years back, newest first. */
+export function buildDepositYearOptions() {
+  return Array.from({ length: 12 }, (_, i) => {
+    const y = new Date().getFullYear() + 1 - i;
+    return { value: String(y), label: String(y) };
+  });
+}
+
 export interface MemberOption {
   id: string;
   memberId: string;
   name: string;
   email?: string | null;
   status: string;
+  // Deposit form: amount autofill = shares × tenant share value.
+  shares?: number;
 }
 
 export interface FundOption {
@@ -63,6 +88,8 @@ export function useDepositsList(params: {
   status: string | null;
   startDate: string | null;
   endDate: string | null;
+  /** Deposit month (YYYY-MM) — filters on the month a deposit is FOR. */
+  monthKey?: string | null;
 }) {
   return useQuery({
     queryKey: ["deposits", params],
@@ -80,8 +107,9 @@ export function useDepositsList(params: {
           memberId: params.memberId || undefined,
           fundId: params.fundId || undefined,
           status: params.status || undefined,
-          startDate: params.startDate || undefined,
-          endDate: params.endDate || undefined,
+          startDate: params.monthKey ? undefined : params.startDate || undefined,
+          endDate: params.monthKey ? undefined : params.endDate || undefined,
+          depositMonth: params.monthKey || undefined,
         },
       });
       return { data: res.data ?? [], total: res.pagination?.total ?? 0, sum: res.sum };
@@ -97,15 +125,20 @@ export function useDepositsList(params: {
  * joins) and summed them in the browser — a heavy round trip for one number.
  * Now it asks the server for a SUM aggregate: one row back.
  */
-export function useDepositsMonthlyTotal(startDate: string | null, endDate: string | null) {
+export function useDepositsMonthlyTotal(
+  startDate: string | null,
+  endDate: string | null,
+  memberId: string | null = null,
+) {
   return useQuery({
-    queryKey: ["deposits", "aggregate", { startDate, endDate }],
+    queryKey: ["deposits", "aggregate", { startDate, endDate, memberId }],
     queryFn: async (): Promise<string> => {
       const res = await apiClient<{ success: boolean; data: { total: string; count: number } }>("/deposits", {
         params: {
           aggregateOnly: "true",
           startDate: startDate || undefined,
           endDate: endDate || undefined,
+          memberId: memberId || undefined,
         },
       });
       return res.data?.total ?? "0";

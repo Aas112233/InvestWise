@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   Building2,
+  Calendar,
   Check,
   ChevronDown,
   Globe,
@@ -17,7 +18,10 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/lib/auth-context";
+import { useTenantSettings, useTenantDateFormat } from "@/lib/use-tenant-settings";
+import { formatDatePattern } from "@/lib/formatters";
 import { LOCALES, useLocale, type Locale } from "@/lib/i18n";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export interface TenantOption {
@@ -64,22 +68,25 @@ export function TopNav({
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const { user, logout, tenantId, setTenantId } = useAuth();
+  const { user, isLoading: authLoading, logout, tenantId, setTenantId } = useAuth();
+  // Settings own the tenant display name (single ["settings"] query, shared
+  // cache — no extra fetch) so the pill can skeleton while /api/settings
+  // resolves instead of flashing the uuid fallback.
+  const { data: tenantSettings, isLoading: tenantNameLoading } = useTenantSettings();
   const { locale, setLocale, t } = useLocale();
 
-  const [mounted, setMounted] = useState(false);
   const [localeOpen, setLocaleOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [tenantMenuOpen, setTenantMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  // Today's date renders client-side only — a server/client `new Date()`
+  // mismatch across midnight would trip React hydration.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const localeDropdownRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const tenantMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -114,9 +121,18 @@ export function TopNav({
   const breadcrumbKey = getBreadcrumbKey(pathname);
   const pageTitle = t(breadcrumbKey, { defaultValue: "Dashboard" });
 
+  // Current date in the tenant's display format (§8 — default DD/MM/YYYY).
+  const dateFormat = useTenantDateFormat();
+  const todayLabel = formatDatePattern(new Date(), dateFormat);
+
   const currentTenant = tenants.find((item) => item.id === tenantId);
+  // Header carries the TENANT identity (user spec, 2026-10-04): multi-tenant
+  // list match first, then settings companyName, then a scoped uuid, then the
+  // app name for SuperAdmin (no tenant scope). While settings resolve, the
+  // pill renders as a skeleton instead of flashing the uuid fallback.
   const tenantDisplay =
     currentTenant?.name ??
+    tenantSettings?.organization?.companyName ??
     (user?.tenantId ? `Tenant ${user.tenantId.slice(0, 8)}` : "InvestWise");
 
   const initials = (user?.name ?? "?")
@@ -126,7 +142,9 @@ export function TopNav({
     .join("")
     .toUpperCase();
 
-  const userRole = user?.role ? user.role.replace("_", " ") : "MEMBER";
+  // No fake identity fallbacks: an empty state must look empty, or a dead
+  // session renders as a "logged in" demo user (the Dr. Garrison Spinka bug).
+  const userRole = user?.role ? user.role.replace("_", " ") : "";
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/50 bg-background/95 px-6 backdrop-blur-md">
@@ -187,10 +205,29 @@ export function TopNav({
               </div>
             )}
           </div>
+        ) : tenantNameLoading ? (
+          <div
+            className="hidden sm:flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1.5 w-fit"
+            aria-busy="true"
+          >
+            <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+            <Skeleton width="7rem" height="0.75rem" borderRadius="0.25rem" />
+          </div>
         ) : (
           <div className="hidden sm:flex items-center gap-2 rounded-lg border border-emerald-200/90 bg-emerald-50/90 px-2.5 py-1 text-xs font-medium text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300 w-fit max-w-full truncate">
             <Building2 className="h-3.5 w-3.5 shrink-0 text-emerald-700 dark:text-emerald-400" />
             <span className="whitespace-nowrap tracking-tight truncate">{tenantDisplay}</span>
+          </div>
+        )}
+
+        {/* Current date (tenant display format) */}
+        {mounted && (
+          <div
+            className="hidden lg:flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap shrink-0"
+            title={todayLabel}
+          >
+            <Calendar className="h-3.5 w-3.5" />
+            {todayLabel}
           </div>
         )}
       </div>
@@ -279,28 +316,32 @@ export function TopNav({
             aria-expanded={profileOpen}
           >
             <div className="relative">
-              <div
-                suppressHydrationWarning
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#064E3B] dark:bg-emerald-800 text-xs font-bold text-white shadow-2xs"
-              >
-                {mounted && initials ? initials : "D"}
+              {authLoading ? (
+                <Skeleton variant="circular" width="2rem" height="2rem" className="shrink-0" />
+              ) : (
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#064E3B] dark:bg-emerald-800 text-xs font-bold text-white shadow-2xs">
+                  {initials}
+                </div>
+              )}
+              {!authLoading && (
+                <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-background" />
+              )}
+            </div>
+            {authLoading ? (
+              <div className="hidden lg:flex flex-col gap-1.5" aria-busy="true">
+                <Skeleton width="6rem" height="0.625rem" borderRadius="0.25rem" />
+                <Skeleton width="3.25rem" height="0.5625rem" borderRadius="0.25rem" />
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-background" />
-            </div>
-            <div className="hidden lg:flex flex-col text-left">
-              <span
-                suppressHydrationWarning
-                className="text-xs font-semibold text-foreground leading-tight max-w-[140px] truncate"
-              >
-                {mounted && user?.name ? user.name : "Dr. Garrison Spinka"}
-              </span>
-              <span
-                suppressHydrationWarning
-                className="text-[11px] text-muted-foreground capitalize leading-tight"
-              >
-                {mounted && userRole ? userRole : "Admin"}
-              </span>
-            </div>
+            ) : (
+              <div className="hidden lg:flex flex-col text-left">
+                <span className="text-xs font-semibold text-foreground leading-tight max-w-[140px] truncate">
+                  {user?.name ?? ""}
+                </span>
+                <span className="text-[11px] text-muted-foreground capitalize leading-tight">
+                  {userRole}
+                </span>
+              </div>
+            )}
             <ChevronDown
               className={cn(
                 "h-3.5 w-3.5 text-muted-foreground transition-transform",

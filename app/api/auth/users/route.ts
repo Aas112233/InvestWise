@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { users } from '@/db/schema/index';
-import { desc } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
@@ -45,7 +45,7 @@ function toUserResponse(row: Record<string, unknown>) {
 
 export async function GET(request: NextRequest) {
   try {
-    const { user: authUser, error } = await getAuthContext(request);
+    const { user: authUser, tenantId, error } = await getAuthContext(request);
     if (error || !authUser) {
       return error || NextResponse.json(
         { success: false, message: 'Authentication required', code: 'UNAUTHORIZED' },
@@ -59,10 +59,18 @@ export async function GET(request: NextRequest) {
     }
 
     const db = getDb();
-    const rows = await db
-      .select(USER_SELECT)
-      .from(users)
-      .orderBy(desc(users.createdAt));
+    // §6: a tenant's Admin/Manager sees their own tenant's directory only.
+    // Platform operators (no tenant context) retain the full directory.
+    const rows = tenantId
+      ? await db
+          .select(USER_SELECT)
+          .from(users)
+          .where(eq(users.tenantId, tenantId))
+          .orderBy(desc(users.createdAt))
+      : await db
+          .select(USER_SELECT)
+          .from(users)
+          .orderBy(desc(users.createdAt));
 
     return NextResponse.json(rows.map(toUserResponse));
   } catch (error: any) {

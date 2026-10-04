@@ -17,4 +17,7 @@ export const memberArrears = pgTable('member_arrears', {
 }, (table) => [
   index('idx_arrears_member_period').on(table.memberId, table.periodKey),
   index('idx_arrears_status').on(table.status),
+  // Arrears recalculation and list views filter by period_key directly; the
+  // (memberId, periodKey) composite cannot serve those (leftmost-prefix rule).
+  index('idx_arrears_period').on(table.periodKey),
 ]);

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { formatMoney, formatDate } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { usePermissions } from "@/lib/use-permissions";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
 import {
@@ -31,6 +32,7 @@ export interface ExpenseRecord {
   referenceNumber: string;
   date: string;
   type: string;
+  expenseName?: string;
   category?: string;
   amount: string | number;
   status: string;
@@ -39,11 +41,18 @@ export interface ExpenseRecord {
   fundName?: string;
   projectId?: string;
   projectName?: string;
+  memberId?: string;
+  memberName?: string;
   handlingOfficer?: string;
+  approvedByName?: string;
 }
 
 export function ExpensesView() {
   const { t } = useLocale();
+  const { can } = usePermissions();
+  // Write-gated via the shared evaluator; the POST /api/expenses API
+  // enforces the same screen server-side, so this only hides dead buttons.
+  const canWrite = can("EXPENSES", "WRITE");
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -136,6 +145,15 @@ export function ExpensesView() {
       ),
     },
     {
+      key: "expenseName",
+      header: t("expenses.expenseName", { defaultValue: "Expense Name" }),
+      render: (row) => (
+        <span className="text-xs font-medium text-slate-900 dark:text-slate-100">
+          {row.expenseName || "-"}
+        </span>
+      ),
+    },
+    {
       key: "category",
       header: t("expenses.category"),
       render: (row) => {
@@ -146,6 +164,15 @@ export function ExpensesView() {
           </span>
         );
       },
+    },
+    {
+      key: "memberName",
+      header: t("expenses.expenseBy", { defaultValue: "Expense By" }),
+      render: (row) => (
+        <span className="text-xs text-slate-600 dark:text-slate-400">
+          {row.memberName || "-"}
+        </span>
+      ),
     },
     {
       key: "amount",
@@ -173,6 +200,15 @@ export function ExpensesView() {
       render: (row) => (
         <span className="text-xs text-slate-600 dark:text-slate-400">
           {row.projectName || "-"}
+        </span>
+      ),
+    },
+    {
+      key: "approvedByName",
+      header: t("expenses.approvedBy", { defaultValue: "Approved By" }),
+      render: (row) => (
+        <span className="text-xs text-slate-600 dark:text-slate-400">
+          {row.approvedByName || "-"}
         </span>
       ),
     },
@@ -217,14 +253,16 @@ export function ExpensesView() {
             <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isFetching ? "animate-spin" : ""}`} />
             {t("common.update")}
           </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setIsExpenseModalOpen(true)}
-          >
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            {t("expenses.strategicAllocation")}
-          </Button>
+          {canWrite && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setIsExpenseModalOpen(true)}
+            >
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              {t("expenses.strategicAllocation")}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -330,8 +368,8 @@ export function ExpensesView() {
             setPageSize(newSize);
             setPage(1);
           }}
-          emptyActionLabel={t("expenses.strategicAllocation")}
-          onEmptyAction={() => setIsExpenseModalOpen(true)}
+          emptyActionLabel={canWrite ? t("expenses.strategicAllocation") : undefined}
+          onEmptyAction={canWrite ? () => setIsExpenseModalOpen(true) : undefined}
         />
       </div>
 

@@ -14,6 +14,10 @@ export async function GET(request: NextRequest) {
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6: penalties are tenant business data — fail closed without a tenant context.
+    if (!tenantId) {
+      return NextResponse.json({ success: false, message: 'Tenant context required' }, { status: 403 });
+    }
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
@@ -25,7 +29,10 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
 
     const db = getDb();
-    const conditions: ReturnType<typeof sql>[] = [];
+    const conditions: ReturnType<typeof sql>[] = [
+      // §6: tenant scope — never list penalties outside the caller's tenant.
+      sql`${memberPenalties.tenantId} = ${tenantId}`,
+    ];
 
     if (tier) {
       conditions.push(sql`${memberPenalties.tier} = ${parseInt(tier, 10)}`);
@@ -102,6 +109,10 @@ export async function POST(request: NextRequest) {
     if (error || !user) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
+    // §6: penalties are tenant business data — fail closed without a tenant context.
+    if (!tenantId) {
+      return NextResponse.json({ success: false, message: 'Tenant context required' }, { status: 403 });
+    }
 
     if (normalizeRole(user.role) === 'Member') {
       throw new ForbiddenError('Insufficient permissions to issue penalties');
@@ -117,17 +128,21 @@ export async function POST(request: NextRequest) {
     const db = getDb();
 
     const result = await db.transaction(async (tx) => {
-      // 1. Verify member
+      // 1. Verify member (§6: must belong to the caller's tenant)
       const [member] = await tx
         .select()
         .from(members)
-        .where(eq(members.id, memberId))
+        .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId)))
         .limit(1);
 
       if (!member) throw new NotFoundError('Member');
 
-      // 2. Fetch penalty rules configuration
-      const [settings] = await tx.select().from(systemSettings).limit(1);
+      // 2. Fetch penalty rules configuration (§6: scoped to the tenant's settings row)
+      const [settings] = await tx
+        .select()
+        .from(systemSettings)
+        .where(eq(systemSettings.tenantId, tenantId))
+        .limit(1);
       const configuredRules = (settings?.penaltyRules as PenaltyRuleConfig[] | undefined) || DEFAULT_PENALTY_RULES;
       const tierRule = configuredRules.find((r) => r.tier === tier) || {
         tier,
@@ -158,7 +173,8 @@ export async function POST(request: NextRequest) {
             const [defaultFund] = await tx
               .select({ id: funds.id })
               .from(funds)
-              .where(eq(funds.status, 'ACTIVE'))
+              // §6: default fund must come from the caller's tenant
+              .where(and(eq(funds.status, 'ACTIVE'), eq(funds.tenantId, tenantId)))
               .limit(1);
             if (defaultFund) targetFundId = defaultFund.id;
           }
@@ -188,6 +204,7 @@ export async function POST(request: NextRequest) {
       const [penalty] = await tx
         .insert(memberPenalties)
         .values({
+          tenantId,
           memberId,
           meetingId: meetingId || null,
           tier,
@@ -213,6 +230,7 @@ export async function POST(request: NextRequest) {
       resourceType: 'MemberPenalty',
       resourceId: result?.id,
       details: { memberId, tier, calculatedDeduction: result?.calculatedDeduction },
+      tenantId,
     });
 
     return NextResponse.json({

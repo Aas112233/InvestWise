@@ -46,6 +46,11 @@ function getSecret(type: 'access' | 'refresh'): string {
   return jwtSecret;
 }
 
+// HMAC-SHA256 everywhere: the secrets are symmetric strings, so pinning the
+// algorithm at both sign and verify removes any future algorithm-confusion
+// surface (jsonwebtoken already rejects alg=none, this makes it explicit).
+const JWT_ALGORITHM = 'HS256' as const;
+
 export function generateAccessToken(
   userId: string,
   claims?: AccessTokenClaims,
@@ -56,12 +61,14 @@ export function generateAccessToken(
     throw new Error('JWT_SECRET is not set');
   }
   return jwt.sign({ id: userId, type: 'access', ...claims } satisfies TokenPayload, jwtSecret, {
+    algorithm: JWT_ALGORITHM,
     expiresIn,
   });
 }
 
 export function generateRefreshToken(userId: string): string {
   return jwt.sign({ id: userId, type: 'refresh' } satisfies TokenPayload, getSecret('refresh'), {
+    algorithm: JWT_ALGORITHM,
     expiresIn: REFRESH_TOKEN_EXPIRY,
   });
 }
@@ -75,7 +82,9 @@ export function generateTokenPair(userId: string, claims?: AccessTokenClaims): {
 
 export function verifyToken(token: string, type: 'access' | 'refresh'): TokenPayload {
   try {
-    const decoded = jwt.verify(token, getSecret(type)) as TokenPayload;
+    const decoded = jwt.verify(token, getSecret(type), {
+      algorithms: [JWT_ALGORITHM],
+    }) as TokenPayload;
     if (decoded.type !== type) {
       throw new Error('Invalid token type');
     }

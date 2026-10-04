@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/app-shell";
 import {
@@ -20,7 +20,17 @@ export default function TransactionsPage() {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  // Keystrokes update searchInput; only the debounced value enters the query
+  // key — every keystroke would otherwise fire a ~250ms-RT round trip.
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
   const [typeFilter, setTypeFilter] = useState("");
 
   const [selectedVoucher, setSelectedVoucher] = useState<TransactionVoucherData | null>(null);
@@ -118,10 +128,9 @@ export default function TransactionsPage() {
           setPageSize(newSize);
           setPage(1);
         }}
-        searchQuery={search}
+        searchQuery={searchInput}
         onSearchChange={(q) => {
-          setSearch(q);
-          setPage(1);
+          setSearchInput(q);
         }}
         typeFilter={typeFilter}
         onTypeFilterChange={(val) => {

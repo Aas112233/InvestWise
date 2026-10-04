@@ -5,6 +5,7 @@
 /* ── Pathshala-Pro ERP Design System Tokens (Ink & Teal Theme) ── */
 
 :root {
+  color-scheme: light;
   --font-sans: var(--font-jakarta-local), var(--font-bengali-local), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-bengali: var(--font-bengali-local), serif;
   --font-mono: var(--font-jakarta-local), var(--font-bengali-local), -apple-system, BlinkMacSystemFont, monospace;
@@ -83,77 +84,80 @@
 }
 
 .dark {
-  --background: oklch(0.13 0.015 264);
-  --foreground: oklch(0.94 0.008 264);
-  --card: oklch(0.175 0.018 264);
-  --card-foreground: oklch(0.94 0.008 264);
-  --popover: oklch(0.175 0.018 264);
-  --popover-foreground: oklch(0.94 0.008 264);
-  --primary: oklch(0.62 0.14 190);
-  --primary-foreground: oklch(0.14 0.02 260);
-  --secondary: oklch(0.225 0.025 190);
-  --secondary-foreground: oklch(0.9 0.01 190);
-  --muted: oklch(0.225 0.02 250);
-  --muted-foreground: oklch(0.62 0.02 250);
-  --accent: oklch(0.25 0.035 190);
-  --accent-foreground: oklch(0.9 0.01 190);
-  --destructive: oklch(0.65 0.2 25);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.28 0.02 250);
-  --input: oklch(0.28 0.025 250);
-  --ring: oklch(0.62 0.14 190);
+  color-scheme: dark;
+  /* Elevated, cooler ink canvas with clear surface separation */
+  --background: oklch(0.155 0.02 265);
+  --foreground: oklch(0.965 0.008 260);
+  --card: oklch(0.205 0.025 265);
+  --card-foreground: oklch(0.965 0.008 260);
+  --popover: oklch(0.215 0.027 265);
+  --popover-foreground: oklch(0.965 0.008 260);
+  /* Brighter teal for dark-mode vibrancy while keeping brand identity */
+  --primary: oklch(0.72 0.135 185);
+  --primary-foreground: oklch(0.18 0.03 200);
+  --secondary: oklch(0.28 0.03 195);
+  --secondary-foreground: oklch(0.93 0.012 190);
+  --muted: oklch(0.27 0.022 260);
+  --muted-foreground: oklch(0.72 0.022 250);
+  --accent: oklch(0.32 0.05 190);
+  --accent-foreground: oklch(0.95 0.01 190);
+  --destructive: oklch(0.68 0.21 25);
+  --destructive-foreground: oklch(0.98 0.01 20);
+  --border: oklch(0.31 0.022 260);
+  --input: oklch(0.33 0.026 255);
+  --ring: oklch(0.72 0.135 185);
 
-  --sidebar: oklch(0.155 0.018 250);
-  --sidebar-foreground: oklch(0.9 0.01 250);
-  --sidebar-border: oklch(0.25 0.02 250);
-  --sidebar-accent: oklch(0.22 0.03 190);
-  --sidebar-primary: oklch(0.62 0.14 190);
-  --sidebar-primary-foreground: oklch(0.14 0.02 260);
-  --sidebar-accent-foreground: oklch(0.9 0.01 190);
-  --sidebar-ring: oklch(0.62 0.14 190);
+  --sidebar: oklch(0.185 0.022 258);
+  --sidebar-foreground: oklch(0.93 0.01 250);
+  --sidebar-border: oklch(0.3 0.02 250);
+  --sidebar-accent: oklch(0.27 0.045 190);
+  --sidebar-primary: oklch(0.72 0.135 185);
+  --sidebar-primary-foreground: oklch(0.18 0.03 200);
+  --sidebar-accent-foreground: oklch(0.93 0.012 190);
+  --sidebar-ring: oklch(0.72 0.135 185);
 
-  --chart-1: oklch(0.62 0.14 190);
-  --chart-2: oklch(0.68 0.13 165);
-  --chart-3: oklch(0.58 0.16 220);
-  --chart-4: oklch(0.7 0.12 90);
-  --chart-5: oklch(0.65 0.12 30);
+  --chart-1: oklch(0.72 0.135 185);
+  --chart-2: oklch(0.72 0.15 160);
+  --chart-3: oklch(0.66 0.16 225);
+  --chart-4: oklch(0.78 0.14 90);
+  --chart-5: oklch(0.72 0.14 20);
 
-  /* Semantic status colors (dark mode) */
-  --status-success-bg: oklch(0.25 0.08 150);
-  --status-success-text: oklch(0.5 0.2 150);
-  --status-success-border: oklch(0.4 0.12 150);
-  --status-warning-bg: oklch(0.24 0.08 45);
-  --status-warning-text: oklch(0.55 0.15 45);
-  --status-warning-border: oklch(0.45 0.1 45);
-  --status-error-bg: oklch(0.25 0.1 30);
-  --status-error-text: oklch(0.7 0.25 30);
-  --status-error-border: oklch(0.5 0.18 30);
-  --status-info-bg: oklch(0.23 0.08 210);
-  --status-info-text: oklch(0.6 0.15 210);
-  --status-info-border: oklch(0.4 0.12 210);
-  --status-neutral-bg: oklch(0.22 0.02 250);
-  --status-neutral-text: oklch(0.62 0.02 250);
-  --status-neutral-border: oklch(0.3 0.02 250);
-  --status-emerald-bg: oklch(0.23 0.08 150);
-  --status-emerald-text: oklch(0.5 0.2 150);
-  --status-emerald-border: oklch(0.4 0.12 150);
-  --status-amber-bg: oklch(0.24 0.08 45);
-  --status-amber-text: oklch(0.55 0.15 45);
-  --status-amber-border: oklch(0.45 0.1 45);
-  --status-orange-bg: oklch(0.26 0.1 25);
-  --status-orange-text: oklch(0.6 0.18 25);
-  --status-orange-border: oklch(0.5 0.15 25);
-  --status-purple-bg: oklch(0.28 0.08 280);
-  --status-purple-text: oklch(0.6 0.15 280);
-  --status-purple-border: oklch(0.5 0.12 280);
+  /* Semantic status colors (dark mode) — lifted text for AA contrast on ink surfaces */
+  --status-success-bg: oklch(0.26 0.07 150);
+  --status-success-text: oklch(0.8 0.16 150);
+  --status-success-border: oklch(0.45 0.12 150);
+  --status-warning-bg: oklch(0.28 0.07 85);
+  --status-warning-text: oklch(0.85 0.13 85);
+  --status-warning-border: oklch(0.5 0.11 85);
+  --status-error-bg: oklch(0.28 0.09 30);
+  --status-error-text: oklch(0.8 0.17 30);
+  --status-error-border: oklch(0.5 0.16 30);
+  --status-info-bg: oklch(0.27 0.07 225);
+  --status-info-text: oklch(0.8 0.13 220);
+  --status-info-border: oklch(0.47 0.11 220);
+  --status-neutral-bg: oklch(0.26 0.02 250);
+  --status-neutral-text: oklch(0.78 0.02 250);
+  --status-neutral-border: oklch(0.36 0.02 250);
+  --status-emerald-bg: oklch(0.26 0.07 150);
+  --status-emerald-text: oklch(0.8 0.16 150);
+  --status-emerald-border: oklch(0.45 0.12 150);
+  --status-amber-bg: oklch(0.28 0.07 85);
+  --status-amber-text: oklch(0.85 0.13 85);
+  --status-amber-border: oklch(0.5 0.11 85);
+  --status-orange-bg: oklch(0.28 0.09 45);
+  --status-orange-text: oklch(0.82 0.16 45);
+  --status-orange-border: oklch(0.52 0.14 45);
+  --status-purple-bg: oklch(0.29 0.07 300);
+  --status-purple-text: oklch(0.8 0.13 300);
+  --status-purple-border: oklch(0.5 0.11 300);
 
   /* Metric breakdown category colors (dark mode) */
-  --metric-emerald: oklch(0.65 0.18 150);
-  --metric-amber: oklch(0.7 0.15 45);
-  --metric-rose: oklch(0.7 0.22 30);
-  --metric-cyan: oklch(0.65 0.18 190);
-  --metric-indigo: oklch(0.68 0.18 264);
-  --metric-purple: oklch(0.68 0.18 280);
+  --metric-emerald: oklch(0.75 0.16 150);
+  --metric-amber: oklch(0.82 0.14 85);
+  --metric-rose: oklch(0.76 0.18 20);
+  --metric-cyan: oklch(0.75 0.14 190);
+  --metric-indigo: oklch(0.72 0.15 265);
+  --metric-purple: oklch(0.75 0.15 300);
 }
 
 * {
@@ -200,6 +204,14 @@ select {
 
 ::-webkit-scrollbar-thumb:hover {
   background: oklch(0.5 0.02 264 / 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(0.72 0.02 260 / 0.28);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.78 0.03 260 / 0.45);
 }
 
 .no-scrollbar::-webkit-scrollbar {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { users, blacklistedTokens, tenants } from '@/db/schema/index';
+import { users, blacklistedTokens, tenants, platformSettings, PLATFORM_SETTINGS_ID } from '@/db/schema/index';
 import { eq, and, gt } from 'drizzle-orm';
 import { verifyToken } from '@/lib/utils/jwt';
 import { COOKIE_NAMES } from '@/lib/utils/cookies';
@@ -9,6 +9,7 @@ import { isPlatformOwnerEmail } from '@/lib/platform-owner';
 import { getTenantSubscriptionBlocked } from '@/lib/subscription-guard';
 import { normalizeRole, isSuperAdminRole, type Role } from '@/lib/roles';
 import { hasScreenPermission, hasAnyScreenPermission } from '@/lib/permissions';
+import { moduleForApiPath, resolveModuleAccess } from '@/lib/tenant-modules';
 import crypto from 'node:crypto';
 
 // In-memory blacklist cache
@@ -23,7 +24,6 @@ let blacklistLastSweep = 0;
 // multi-instance (Vercel) is extra DB reads, never a stale grant beyond TTL.
 // ponytail: swap to Redis/Upstash if multi-instance hit rate ever matters.
 const MAINT_CACHE_TTL_MS = 30_000;
-let maintCache: { value: { isMaintenance: boolean; message?: string }; expiresAt: number } | null = null;
 
 const AUTH_CACHE_TTL_MS = 30_000;
 let authLastSweep = 0;
@@ -109,30 +109,65 @@ const ADMIN_PATHS = [
   '/api/settings',
 ];
 
-// Maintenance mode check (30s cached: 1 DB hit per 30s instead of per request)
-async function checkMaintenanceMode(): Promise<{ isMaintenance: boolean; message?: string }> {
+// Maintenance flags, cached 30s (1 DB hit per 30s instead of per request).
+// The CACHE holds the raw flags only — never the verdict — because the verdict
+// depends on the caller's role and a single shared entry would leak a platform
+// operator's "not in maintenance" answer to a tenant user, or vice versa.
+interface MaintenanceFlags {
+  tenantMaintenance: boolean;
+  globalMaintenance: boolean;
+  globalMessage: string | null;
+}
+let maintFlagsCache: { value: MaintenanceFlags; expiresAt: number } | null = null;
+
+const DEFAULT_MAINTENANCE_MESSAGE = 'System is under maintenance. Please try again later.';
+
+async function getMaintenanceFlags(): Promise<MaintenanceFlags> {
   const now = Date.now();
-  if (maintCache && maintCache.expiresAt > now) return maintCache.value;
-  let result: { isMaintenance: boolean; message?: string };
+  if (maintFlagsCache && maintFlagsCache.expiresAt > now) return maintFlagsCache.value;
+  let value: MaintenanceFlags;
   try {
     const db = getDb();
-    const [settings] = await db
-      .select({ isMaintenanceMode: tenants.isMaintenanceMode })
+    const [row] = await db
+      .select({
+        isMaintenanceMode: tenants.isMaintenanceMode,
+        globalMaintenanceMode: platformSettings.globalMaintenanceMode,
+        maintenanceMessage: platformSettings.maintenanceMessage,
+      })
       .from(tenants)
+      .leftJoin(platformSettings, eq(platformSettings.id, PLATFORM_SETTINGS_ID))
       .where(eq(tenants.slug, 'default'))
       .limit(1);
-    
-    if (settings?.isMaintenanceMode) {
-      result = { isMaintenance: true, message: 'System is under maintenance. Please try again later.' };
-    } else {
-      result = { isMaintenance: false };
-    }
+    value = {
+      tenantMaintenance: Boolean(row?.isMaintenanceMode),
+      globalMaintenance: Boolean(row?.globalMaintenanceMode),
+      globalMessage: row?.maintenanceMessage ?? null,
+    };
   } catch {
     // If we can't check, allow through
-    result = { isMaintenance: false };
+    value = { tenantMaintenance: false, globalMaintenance: false, globalMessage: null };
   }
-  maintCache = { value: result, expiresAt: now + MAINT_CACHE_TTL_MS };
-  return result;
+  maintFlagsCache = { value, expiresAt: now + MAINT_CACHE_TTL_MS };
+  return value;
+}
+
+/**
+ * Verdict for one caller. Platform operators bypass BOTH switches — otherwise
+ * turning on global maintenance would lock the operator out of the one screen
+ * that can turn it off.
+ */
+function maintenanceVerdict(
+  flags: MaintenanceFlags,
+  isOperator: boolean
+): { isMaintenance: boolean; message?: string } {
+  if (isOperator) return { isMaintenance: false };
+  if (flags.globalMaintenance) {
+    return { isMaintenance: true, message: flags.globalMessage || DEFAULT_MAINTENANCE_MESSAGE };
+  }
+  if (flags.tenantMaintenance) {
+    return { isMaintenance: true, message: DEFAULT_MAINTENANCE_MESSAGE };
+  }
+  return { isMaintenance: false };
 }
 
 // Authentication middleware
@@ -141,15 +176,6 @@ export async function authenticateRequest(request: NextRequest): Promise<{
   tenant: TenantInfo | null;
   error?: NextResponse;
 }> {
-  const { isMaintenance, message } = await checkMaintenanceMode();
-  if (isMaintenance) {
-    return {
-      user: null,
-      tenant: null,
-      error: NextResponse.json({ success: false, message }, { status: 503 }),
-    };
-  }
-
   // Check for access token in cookies or Authorization header
   let token: string | undefined = request.cookies.get(COOKIE_NAMES.ACCESS_TOKEN)?.value;
   if (!token) {
@@ -271,24 +297,50 @@ export async function authenticateRequest(request: NextRequest): Promise<{
     };
   }
 
+  // Maintenance verdict, now that the caller's role is known. Runs after the
+  // identity checks so an unauthenticated request still gets 401 rather than
+  // a 503 that would leak that maintenance is on.
+  {
+    const flags = await getMaintenanceFlags();
+    const verdict = maintenanceVerdict(flags, isSuperAdminRole(user.role));
+    if (verdict.isMaintenance) {
+      return {
+        user: null,
+        tenant: null,
+        error: NextResponse.json(
+          { success: false, message: verdict.message },
+          { status: 503 }
+        ),
+      };
+    }
+  }
+
   // Fetch tenant info
   let tenant: TenantInfo | null = null;
   if (user.tenantId) {
-    const tenantRows = await db
+      const tenantRows = await db
       .select({
         id: tenants.id,
         slug: tenants.slug,
         name: tenants.name,
         status: tenants.status,
         isMaintenanceMode: tenants.isMaintenanceMode,
+        moduleAccess: tenants.moduleAccess,
       })
       .from(tenants)
       .where(eq(tenants.id, user.tenantId))
       .limit(1);
 
-    if (tenantRows.length > 0 && tenantRows[0]) {
-      tenant = tenantRows[0];
-      
+    const tenantRow = tenantRows[0];
+    if (tenantRow) {
+      tenant = {
+        ...tenantRow,
+        moduleAccess:
+          typeof tenantRow.moduleAccess === 'object' && tenantRow.moduleAccess !== null
+            ? (tenantRow.moduleAccess as Record<string, unknown>)
+            : null,
+      };
+
       // Check tenant status
       if (tenant.status === 'suspended') {
         return {
@@ -310,6 +362,31 @@ export async function authenticateRequest(request: NextRequest): Promise<{
             { status: 503 }
           ),
         };
+      }
+
+      // Module entitlement gate. A module the tenant is not licensed for is
+      // rejected at the API, not merely hidden in the sidebar — a hidden link
+      // is not an entitlement. Platform operators (SuperAdmin) bypass, matching
+      // the maintenance-mode rule above, so support can always reach a tenant.
+      if (!isSuperAdminRole(user.role)) {
+        const required = moduleForApiPath(request.nextUrl.pathname);
+        if (required) {
+          const access = resolveModuleAccess(tenant.moduleAccess);
+          if (access[required] === false) {
+            return {
+              user: null,
+              tenant: null,
+              error: NextResponse.json(
+                {
+                  success: false,
+                  message: `Module '${required}' is not enabled for this organisation`,
+                  code: 'MODULE_NOT_LICENSED',
+                },
+                { status: 403 }
+              ),
+            };
+          }
+        }
       }
     }
   }
@@ -361,6 +438,7 @@ export interface TenantInfo {
   name: string;
   status: string;
   isMaintenanceMode: boolean;
+  moduleAccess: unknown;
 }
 
 // Authorization helpers

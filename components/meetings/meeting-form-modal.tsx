@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
+import { useTenantMeetingTypes } from "@/lib/use-tenant-settings";
 import { Meeting } from "@/types";
 
 interface MeetingFormModalProps {
@@ -19,6 +20,7 @@ export function MeetingFormModal({
   initialData,
 }: MeetingFormModalProps) {
   const { t } = useLocale();
+  const configuredMeetingTypes = useTenantMeetingTypes();
 
   const [title, setTitle] = useState(initialData?.title || "");
   const [meetingType, setMeetingType] = useState<string>(initialData?.meetingType || "");
@@ -32,12 +34,16 @@ export function MeetingFormModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const meetingTypeOptions: DropdownOption[] = [
-    { value: "FOUNDING_MEMBER", label: t("meetings.types.foundingMember", { defaultValue: "Founding Member" }) },
-    { value: "SHAREHOLDER", label: t("meetings.types.shareholder", { defaultValue: "Shareholder" }) },
-    { value: "INVESTOR", label: t("meetings.types.investor", { defaultValue: "Investor" }) },
-    { value: "GENERAL", label: t("meetings.types.general", { defaultValue: "General Member" }) },
-  ];
+  const meetingTypeOptions: DropdownOption[] = configuredMeetingTypes.map((typeKey) => {
+    const formatted = typeKey
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+    return {
+      value: typeKey,
+      label: formatted,
+    };
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,7 +87,7 @@ export function MeetingFormModal({
       title={initialData ? t("meetings.editMeeting", { defaultValue: "Edit Meeting" }) : t("meetings.scheduleMeeting", { defaultValue: "Schedule Meeting" })}
       description={t("meetings.formDescription", { defaultValue: "Set meeting agenda, participant group, and scheduling time." })}
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form method="post" onSubmit={handleSubmit} className="space-y-6">
         {errorMessage && (
           <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs rounded-md">
             {errorMessage}

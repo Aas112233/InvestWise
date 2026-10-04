@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { users } from './users.js';
 
 export const blacklistedTokens = pgTable('blacklisted_tokens', {
@@ -13,4 +13,9 @@ export const blacklistedTokens = pgTable('blacklisted_tokens', {
 }, (table) => ({
   expiresAtIdx: index('idx_blacklisted_tokens_expires_at').on(table.expiresAt),
   userIdIdx: index('idx_blacklisted_tokens_user_id').on(table.userId),
+  // Hot auth-path lookup `WHERE token = ? AND expires_at > ?` (per cold cache
+  // miss in authenticateRequest + refresh rotation) previously seq-scanned.
+  // Unique also enforces one row per token, matching the 23505 replay guard
+  // in the refresh route.
+  tokenIdx: uniqueIndex('uq_blacklisted_tokens_token').on(table.token),
 }));

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Mail, Pencil, Phone } from "lucide-react";
+import { ArrowLeftRight, Mail, Pencil, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
@@ -44,8 +44,12 @@ function initials(name: string): string {
 }
 
 function depositTotal(m: MemberDetail): number {
-  return Number(m.successfulDepositTotal ?? m.totalDeposits ?? m.totalContributed ?? 0) || 0;
+  return Number(m.totalDeposits ?? m.totalContributed ?? 0) || 0;
 }
+
+// The detail endpoint returns the stored row, so this figure is member EQUITY
+// (deposits plus reinvested dividends). It is labeled as such rather than
+// "Total Contributed", which the directory derives from deposits alone.
 
 // Full member profile drawer: identity, share certificates summary, deposit
 // history and warning record. Read-only; edits go through the form modal.
@@ -53,10 +57,13 @@ export function MemberDetailSheet({
   memberId,
   onClose,
   onEdit,
+  onDivide,
 }: {
   memberId: string | null;
   onClose: () => void;
   onEdit: (m: Member) => void;
+  /** Present only for roles allowed to move equity; renders the divide action. */
+  onDivide?: (m: Member) => void;
 }) {
   const { t } = useLocale();
 
@@ -79,9 +86,21 @@ export function MemberDetailSheet({
       subtitle={member ? member.memberId : undefined}
       footer={
         member ? (
-          <Button variant="outline" size="sm" icon={<Pencil size={13} />} onClick={() => onEdit(member)}>
-            {t("members.rowMenu.edit")}
-          </Button>
+          <div className="flex items-center gap-2">
+            {onDivide && (
+              <Button
+                variant="outline"
+                size="sm"
+                icon={<ArrowLeftRight size={13} />}
+                onClick={() => onDivide(member)}
+              >
+                {t("dividends.migrationEngine")}
+              </Button>
+            )}
+            <Button variant="primary" size="sm" icon={<Pencil size={13} />} onClick={() => onEdit(member)}>
+              {t("members.rowMenu.edit")}
+            </Button>
+          </div>
         ) : undefined
       }
     >
@@ -136,7 +155,7 @@ export function MemberDetailSheet({
                 <p className="text-lg font-semibold font-mono mt-0.5">{member.shares}</p>
               </div>
               <div className="p-3 rounded-lg border border-border/80 bg-muted/20">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("members.detail.contributed")}</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("members.equity")}</p>
                 <p className="text-lg font-semibold font-mono mt-0.5">{formatMoney(depositTotal(member), currency)}</p>
               </div>
               <div className="p-3 rounded-lg border border-border/80 bg-muted/20">
@@ -165,7 +184,7 @@ export function MemberDetailSheet({
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      <th className="text-left px-3 py-2 font-semibold">{t("audit.columns.timestamp")}</th>
+                      <th className="text-left px-3 py-2 font-semibold">{t("members.detail.date")}</th>
                       <th className="text-left px-3 py-2 font-semibold">{t("members.detail.contributed")}</th>
                       <th className="text-right px-3 py-2 font-semibold">{t("members.columns.status")}</th>
                     </tr>
@@ -181,7 +200,7 @@ export function MemberDetailSheet({
                         </td>
                         <td className="px-3 py-2 font-mono font-medium text-foreground">{formatMoney(d.amount, currency)}</td>
                         <td className="px-3 py-2 text-right">
-                          <StatusBadge tone="emerald">{d.status || "Completed"}</StatusBadge>
+                          <StatusBadge tone="emerald">{d.status || t("members.statusLabels.completed")}</StatusBadge>
                         </td>
                       </tr>
                     ))}

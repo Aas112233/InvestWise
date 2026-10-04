@@ -20,11 +20,17 @@ export const depositSchema = z.object({
   fundId: uuidField,
   description: z.string().max(500, 'Description max 500 characters').nullish(),
   date: z.string().nullish(),
+  collectedDate: z.string().nullish(),
+  submittedDate: z.string().nullish(),
   shareNumber: z.coerce.number().nullish(),
   status: z.enum(['Completed', 'Processing', 'Pending']).nullish(),
   cashierName: z.string().nullish(),
   depositMethod: z.string().nullish(),
   depositMonth: z.string().nullish(),
+});
+
+export const revertDepositSchema = z.object({
+  reason: z.string().min(1, 'Reason is required').max(500, 'Reason max 500 characters'),
 });
 
 export const bulkDepositSchema = z.object({
@@ -70,6 +76,7 @@ export const transferSchema = z.object({
   targetFundId: uuidField,
   amount: positiveAmount,
   description: z.string().max(500).optional(),
+  referenceNumber: z.string().max(100).optional(),
 });
 
 const dividendSchemaBase = z.object({
@@ -113,6 +120,11 @@ export const equityTransferSchema = z.object({
     )
     .min(1, 'At least one transfer recipient is required'),
   reason: z.string().min(1, 'Reason is required').max(500),
+  /** Client retry key. A repeat of an already-recorded key is rejected rather
+   *  than moving the same equity a second time. */
+  referenceNumber: z.string().trim().min(3).max(120).optional(),
+  /** Must be true when any row transfers shares with no contribution behind it. */
+  giftAcknowledged: z.boolean().optional(),
 });
 
 export const deleteTransactionSchema = z.object({

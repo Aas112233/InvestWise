@@ -11,6 +11,7 @@ import {
 } from '@/db/schema/index';
 import { eq, and, desc, asc, sql, gte, lte, aliasedTable } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
+import { requireTenant } from '@/lib/tenant';
 import { logAudit } from '@/lib/utils/audit';
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/utils/errors';
 
@@ -46,6 +47,8 @@ export async function GET(
 
     const { type } = await params;
     const reportType = decodeURIComponent(type);
+    // §6 fail-closed: CSV exports dump ledger/member PII — null tenant must 403.
+    const scopedTenantId = requireTenant(tenantId, user);
 
     const { searchParams } = new URL(request.url);
     const format = (searchParams.get('format') || 'csv').toLowerCase();
@@ -64,6 +67,7 @@ export async function GET(
       const authorizer = aliasedTable(users, 'report_authorizer');
       const conditions: ReturnType<typeof sql>[] = [];
 
+      conditions.push(eq(transactions.tenantId, scopedTenantId));
       if (startDate) conditions.push(gte(transactions.date, new Date(startDate)));
       if (endDate) conditions.push(lte(transactions.date, new Date(endDate)));
       if (memberId) conditions.push(eq(transactions.memberId, memberId));
@@ -84,9 +88,11 @@ export async function GET(
           status: transactions.status,
         })
         .from(transactions)
-        .leftJoin(members, eq(transactions.memberId, members.id))
-        .leftJoin(funds, eq(transactions.fundId, funds.id))
-        .leftJoin(projects, eq(transactions.projectId, projects.id))
+        // §6: joined entities must belong to the same tenant — joining on id
+        // alone would render another tenant's member/fund/project names.
+        .leftJoin(members, and(eq(transactions.memberId, members.id), eq(members.tenantId, scopedTenantId)))
+        .leftJoin(funds, and(eq(transactions.fundId, funds.id), eq(funds.tenantId, scopedTenantId)))
+        .leftJoin(projects, and(eq(transactions.projectId, projects.id), eq(projects.tenantId, scopedTenantId)))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(transactions.date))
         .limit(2000);
@@ -119,6 +125,7 @@ export async function GET(
           joinDate: members.createdAt,
         })
         .from(members)
+        .where(eq(members.tenantId, scopedTenantId))
         .orderBy(asc(members.name));
 
       exportData = rows.map((m) => ({
@@ -151,6 +158,7 @@ export async function GET(
           completionDate: projects.completionDate,
         })
         .from(projects)
+        .where(eq(projects.tenantId, scopedTenantId))
         .orderBy(desc(projects.createdAt));
 
       exportData = rows.map((p) => ({
@@ -186,7 +194,8 @@ export async function GET(
           waiveReason: memberPenalties.waiveReason,
         })
         .from(memberPenalties)
-        .leftJoin(members, eq(memberPenalties.memberId, members.id))
+        .leftJoin(members, and(eq(memberPenalties.memberId, members.id), eq(members.tenantId, scopedTenantId)))
+        .where(eq(memberPenalties.tenantId, scopedTenantId))
         .orderBy(desc(memberPenalties.createdAt));
 
       exportData = rows.map((pen) => ({

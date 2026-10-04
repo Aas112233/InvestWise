@@ -7,11 +7,22 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     try {
-      const { connectDB } = await import("@/db/index");
+      const { connectDB, getSql } = await import("@/db/index");
       await connectDB();
+      const sql = getSql();
+      await sql`
+        ALTER TABLE "system_settings"
+          ADD COLUMN IF NOT EXISTS "late_deposit_grace_months" integer DEFAULT 1,
+          ADD COLUMN IF NOT EXISTS "inactive_after_months"     integer DEFAULT 3,
+          ADD COLUMN IF NOT EXISTS "suspended_after_months"    integer DEFAULT 6;
+      `;
+      await sql`
+        ALTER TABLE "transactions"
+          ADD COLUMN IF NOT EXISTS "deposit_month" varchar(7);
+      `;
     } catch (err) {
       console.error(
-        "[DB] Boot connection failed; will retry on demand:",
+        "[DB] Boot connection or column verification notice:",
         err instanceof Error ? err.message : err,
       );
     }

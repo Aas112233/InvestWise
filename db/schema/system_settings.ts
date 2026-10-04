@@ -47,7 +47,7 @@ export const systemSettings = pgTable('system_settings', {
   lastFiscalCloseDate: timestamp('last_fiscal_close_date', { withTimezone: true }),
   language: varchar('language', { length: 50 }).default('English'),
   refreshInterval: varchar('refresh_interval', { length: 50 }).default('Real-time'),
-  theme: varchar('theme', { length: 50 }).default('System Default'),
+  theme: varchar('theme', { length: 50 }).default('Light'),
   dateFormat: varchar('date_format', { length: 50 }).default('DD/MM/YYYY'),
   isMaintenanceMode: boolean('is_maintenance_mode').default(false),
 
@@ -55,6 +55,21 @@ export const systemSettings = pgTable('system_settings', {
   monthlyMeetingDay: integer('monthly_meeting_day').default(5),
   depositDueDate: integer('deposit_due_date').default(10),
   gracePeriodDays: integer('grace_period_days').default(3),
+  /**
+   * Month-granularity tolerance for submitting a PAST period's deposit.
+   * Distinct from `gracePeriodDays`, which is the day-level buffer on the
+   * current period's deadline. With 1, a January deposit still counts as
+   * on-time if it lands any time in February.
+   */
+  lateDepositGraceMonths: integer('late_deposit_grace_months').default(1),
+  /** Months without a deposit before a member is auto-held (status -> inactive). */
+  inactiveAfterMonths: integer('inactive_after_months').default(3),
+  /**
+   * Months without a deposit before a member becomes SUSPENSION-ELIGIBLE.
+   * Suspension is never automatic — the sweep only marks eligibility and an
+   * admin confirms. Must be > inactiveAfterMonths.
+   */
+  suspendedAfterMonths: integer('suspended_after_months').default(6),
   meetingTypes: jsonb('meeting_types').$type<string[]>().default(DEFAULT_MEETING_TYPES),
   penaltyRules: jsonb('penalty_rules').$type<PenaltyRuleConfig[]>().default(DEFAULT_PENALTY_RULES),
 

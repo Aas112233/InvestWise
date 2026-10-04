@@ -53,7 +53,7 @@ export function WaivePenaltyModal({
       title={t("governance.waivePenaltyTitle", { defaultValue: "Waive Escalated Penalty" })}
       description={t("governance.waiveAuditNotice", { defaultValue: "Waiving leaves an immutable audit trail with your timestamp and justification." })}
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form method="post" onSubmit={handleSubmit} className="space-y-6">
         {errorMessage && (
           <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs rounded-md">
             {errorMessage}

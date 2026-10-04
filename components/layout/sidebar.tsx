@@ -6,6 +6,7 @@ import { ChevronLeft, Crown, Search, X } from "lucide-react";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useLocale } from "@/lib/i18n";
+import { hasScreenPermission, type PermissionUser } from "@/lib/permissions";
 import { isSuperAdminRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { NAVIGATION, NavItem } from "./navigation";
@@ -16,11 +17,12 @@ interface SidebarProps {
   onToggle?: () => void;
 }
 
-function canRead(permissions: Record<string, string> | undefined, id: string): boolean {
+function canRead(user: PermissionUser | null | undefined, id: string): boolean {
+  // DASHBOARD stays visible as the landing shell; every other item goes
+  // through the shared evaluator (role baseline + explicit overrides +
+  // parent fallback). Fail-closed: unknown role or NONE grant hides the item.
   if (id === "DASHBOARD") return true;
-  if (!permissions) return true;
-  const level = permissions[id];
-  return level === "READ" || level === "WRITE";
+  return hasScreenPermission(user, id, "READ");
 }
 
 function isSuperAdmin(role?: string): boolean {
@@ -82,7 +84,7 @@ export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: e
     const query = searchQuery.toLowerCase().trim();
 
     return NAVIGATION.map((group) => {
-      const allowedItems = group.items.filter((item) => canRead(user?.permissions, item.id));
+      const allowedItems = group.items.filter((item) => canRead(user as PermissionUser | null, item.id));
       if (!query) return { ...group, items: allowedItems };
 
       const matchedItems = allowedItems.filter((item) => {
@@ -92,7 +94,7 @@ export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: e
 
       return { ...group, items: matchedItems };
     }).filter((group) => group.items.length > 0);
-  }, [searchQuery, user?.permissions, t]);
+  }, [searchQuery, user, t]);
 
   return (
     <aside

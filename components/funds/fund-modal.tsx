@@ -14,9 +14,11 @@ import { ApiError, apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
 import { fundTypeLabelKey, type FundRow } from "./shared";
 
-// Backend fund types (server/src/modules/funds/service.ts). PROJECT funds
-// are auto-created with projects, so creation offers the other three.
-const FUND_TYPES = ["DEPOSIT", "PRIMARY", "OTHER"] as const;
+// Backend fund types (server/src/modules/funds/service.ts). PROJECT funds are
+// auto-created with projects, so creation offers the other four — including
+// RESERVE, without which dividend distribution cannot retain its statutory
+// reserve and always aborts.
+const FUND_TYPES = ["DEPOSIT", "PRIMARY", "RESERVE", "EMERGENCY", "OTHER"] as const;
 const FUND_STATUSES = ["ACTIVE", "INACTIVE", "CLOSED"] as const;
 
 const fundSchema = z.object({
@@ -100,9 +102,7 @@ export function FundModal({
             type: values.type,
             description: values.description || null,
             status: values.status || undefined,
-            // minimumBalance is carried for treasury policy; the current
-            // update contract ignores unknown fields (column exists, transfer
-            // enforcement reads it).
+            // minimumBalance is enforced by treasury policy and persisted by the backend service.
             minimumBalance: values.minimumBalance?.trim() || undefined,
           }),
         });
@@ -129,7 +129,7 @@ export function FundModal({
 
   return (
     <TopSheet open={open} onClose={onClose} title={isEdit ? t("funds.modal.titleEdit") : t("funds.modal.titleNew")}>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <form method="post" onSubmit={handleSubmit(onSubmit)} noValidate>
         <ERPFormLayout>
           <ERPFormSection title={isEdit ? t("funds.modal.titleEdit") : t("funds.modal.titleNew")}>
             <ERPFormGrid columns={2}>

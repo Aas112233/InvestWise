@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, MoreVertical, Plus, RefreshCw, Search, ShieldCheck, Trash2, Users, XCircle } from "lucide-react";
+import { Eye, MoreVertical, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2, Undo2, Users, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -34,9 +34,8 @@ import {
 
 const MONTH_SHORT = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const;
 
-function MonthLabel({ iso, t }: { iso: string; t: (k: string) => string }) {
-  const key = monthKeyOf(iso);
-  const m = /^(\d{4})-(\d{2})$/.exec(key);
+function MonthLabel({ monthKey, t }: { monthKey: string; t: (k: string) => string }) {
+  const m = /^(\d{4})-(\d{2})$/.exec(monthKey);
   if (!m) return <span>—</span>;
   const short = MONTH_SHORT[Number(m[2]) - 1] ?? "jan";
   return (
@@ -50,23 +49,32 @@ type ConfirmState =
   | { kind: "verify"; row: DepositRow }
   | { kind: "reject"; row: DepositRow }
   | { kind: "delete"; row: DepositRow }
+  | { kind: "revert"; row: DepositRow }
   | null;
 
 function DepositActionsMenu({
   row,
   canVerify,
+  canEdit,
   canDelete,
+  canRevert,
   onView,
+  onEdit,
   onVerify,
   onReject,
+  onRevert,
   onDelete,
 }: {
   row: DepositRow;
   canVerify: boolean;
+  canEdit: boolean;
   canDelete: boolean;
+  canRevert: boolean;
   onView: () => void;
+  onEdit: () => void;
   onVerify: () => void;
   onReject: () => void;
+  onRevert: () => void;
   onDelete: () => void;
 }) {
   const { t } = useLocale();
@@ -75,6 +83,7 @@ function DepositActionsMenu({
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const pending = (row.status || "").toUpperCase() === "PENDING";
+  const completed = (row.status || "").toUpperCase() === "COMPLETED" || (row.status || "").toUpperCase() === "SUCCESS";
 
   useEffect(() => {
     if (!open) return;
@@ -99,9 +108,12 @@ function DepositActionsMenu({
 
   const items = [
     { label: t("deposits.actions.view"), icon: <Eye size={13} />, run: onView, danger: false, show: true },
+    { label: t("deposits.actions.edit"), icon: <Pencil size={13} />, run: onEdit, danger: false, show: canEdit },
     { label: t("deposits.actions.verify"), icon: <ShieldCheck size={13} />, run: onVerify, danger: false, show: canVerify && pending },
     { label: t("deposits.actions.reject"), icon: <XCircle size={13} />, run: onReject, danger: false, show: canVerify && pending },
-    { label: t("deposits.actions.delete"), icon: <Trash2 size={13} />, run: onDelete, danger: true, show: canDelete },
+    { label: t("deposits.actions.revert"), icon: <Undo2 size={13} />, run: onRevert, danger: false, show: canRevert && completed },
+    // Completed deposits cannot be deleted — they must revert first (§12).
+    { label: t("deposits.actions.delete"), icon: <Trash2 size={13} />, run: onDelete, danger: true, show: canDelete && !completed },
   ];
 
   return (
@@ -157,9 +169,34 @@ function DepositActionsMenu({
   );
 }
 
+/**
+ * Member-facing scope for the same directory. When present the screen renders
+ * with the deposits layout but is locked to one member: no bulk action, no
+ * verify/reject/delete, and the member filter shows (or resolves to) that
+ * member only.
+ */
+export interface DepositsMemberScope {
+  /** Member uuid; null while it is still being resolved (filter stays open). */
+  id: string | null;
+  name?: string | null;
+}
+
 // Deposits management desk: server-filtered directory with verify/reject
-// review flow (PENDING → Completed/REJECTED) and admin soft-delete.
-export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk: () => void }) {
+// review flow (PENDING → Completed/REJECTED), edit via the finance service
+// (atomic fund/member reversal), revert Completed → PENDING with reversal,
+// and soft-delete for non-Completed only. Rendered member-scoped by the
+// Request Deposit screen so both screens share one UI.
+export function DepositsListView({
+  onAdd,
+  onBulk,
+  onEdit,
+  memberScope,
+}: {
+  onAdd: () => void;
+  onBulk?: () => void;
+  onEdit?: (row: DepositRow) => void;
+  memberScope?: DepositsMemberScope;
+}) {
   const { t } = useLocale();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -176,6 +213,8 @@ export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk:
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [receipt, setReceipt] = useState<DepositRow | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
+  const [reason, setReason] = useState("");
+  const [reasonError, setReasonError] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -187,52 +226,104 @@ export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk:
 
   const range = month.fiscalYear && month.month ? monthRange(`${month.fiscalYear}-${month.month}`) : null;
 
+  const scopedMemberId = memberScope?.id ?? null;
+  const selfOnly = !!memberScope;
+  // Scope id resolves after first render (email → member match), so it is
+  // derived, never seeded into state.
+  const lockedMember = selfOnly && !!scopedMemberId;
+  const filterMemberId = selfOnly ? scopedMemberId ?? memberId : memberId;
+
   const canWrite = hasScreenPermission(user, "DEPOSITS", "WRITE");
+  // Member-facing screen: submitting a slip is REQUEST_DEPOSIT write, and the
+  // directory stays read-only (no verify/reject/delete, AGENTS.md §6).
+  const canAct = selfOnly ? hasScreenPermission(user, "REQUEST_DEPOSIT", "WRITE") : canWrite;
+  const canEdit = !selfOnly && canWrite;
+  const canRevert = !selfOnly && canWrite;
   const canDelete =
-    isSuperAdminRole(user?.role) || normalizeRole(user?.role) === "Admin";
+    !selfOnly && (isSuperAdminRole(user?.role) || normalizeRole(user?.role) === "Admin");
+  // Status is review-flow info — Admin/Manager-only per user spec (2026-10-04;
+  // corrected same day: Manager, not Member): Member/Auditor render the
+  // directory without the Status column. Fail-closed while the user hydrates.
+  const showStatusColumn =
+    !!user && (normalizeRole(user.role) === "Admin" || normalizeRole(user.role) === "Manager");
 
   const currency = useTenantCurrency();
   const dateFormat = useTenantDateFormat();
   const membersQuery = useMemberOptions();
   const fundsQuery = useFundOptions();
 
+  // Month filter matches the month a deposit is FOR (the Month column's
+  // value), not the collected date — back-entered deposits appear under the
+  // month they were selected for.
+  const pickedMonthKey = month.fiscalYear && month.month ? `${month.fiscalYear}-${month.month}` : null;
+
   const list = useDepositsList({
     page,
     pageSize,
     search,
-    memberId,
+    memberId: filterMemberId,
     fundId,
     status,
     startDate: range?.start ?? null,
     endDate: range?.end ?? null,
+    monthKey: pickedMonthKey,
   });
 
   // Monthly collection badge: server-side SUM aggregate (one row) instead of
   // fetching up to 1000 full deposit rows to add up client-side.
   const nowKey = monthKeyOf(new Date().toISOString());
   const nowRange = monthRange(nowKey);
-  const monthly = useDepositsMonthlyTotal(nowRange?.start ?? null, nowRange?.end ?? null);
+  const monthly = useDepositsMonthlyTotal(
+    nowRange?.start ?? null,
+    nowRange?.end ?? null,
+    selfOnly ? filterMemberId : null,
+  );
   const monthlyTotal = monthly.data ?? "0.00";
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["deposits"] });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["deposits"] });
+    queryClient.invalidateQueries({ queryKey: ["members"] });
+    queryClient.invalidateQueries({ queryKey: ["funds"] });
+  };
+
+  const closeConfirm = () => {
+    setConfirm(null);
+    setReason("");
+    setReasonError(false);
+  };
 
   const reviewMutation = useMutation({
-    mutationFn: ({ id, decision }: { id: string; decision: "approve" | "reject" }) =>
-      apiClient(`/deposits/${id}/${decision}`, { method: "POST" }),
+    mutationFn: ({ id, decision, reason }: { id: string; decision: "approve" | "reject"; reason?: string }) =>
+      apiClient(`/deposits/${id}/${decision}`, {
+        method: "POST",
+        body: JSON.stringify(decision === "reject" ? { rejectionReason: reason } : {}),
+      }),
     onSuccess: (_, vars) => {
       invalidate();
       toast.success(t(vars.decision === "approve" ? "deposits.verifiedToast" : "deposits.rejectedToast"));
-      setConfirm(null);
+      closeConfirm();
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : t("deposits.loadFailed")),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiClient(`/finance/transactions/${id}`, { method: "DELETE" }),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiClient(`/transactions/${id}`, { method: "DELETE", body: JSON.stringify({ reason }) }),
     onSuccess: () => {
       invalidate();
       toast.success(t("deposits.deletedToast"));
-      setConfirm(null);
+      closeConfirm();
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : t("deposits.loadFailed")),
+  });
+
+  const revertMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiClient(`/deposits/${id}/revert`, { method: "POST", body: JSON.stringify({ reason }) }),
+    onSuccess: () => {
+      invalidate();
+      toast.success(t("deposits.revertedToast"));
+      closeConfirm();
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : t("deposits.loadFailed")),
   });
@@ -319,7 +410,9 @@ export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk:
     {
       key: "month",
       header: t("deposits.columns.month"),
-      render: (r) => <MonthLabel iso={r.date} t={t} />,
+      // The month the deposit is FOR (explicitly selected in the form) —
+      // collected date is only the fallback for rows without one.
+      render: (r) => <MonthLabel monthKey={r.depositMonth || monthKeyOf(r.date)} t={t} />,
     },
     {
       key: "amount",
@@ -346,22 +439,44 @@ export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk:
       render: (r) => (
         <DepositActionsMenu
           row={r}
-          canVerify={canWrite}
+          canVerify={canWrite && !selfOnly}
+          canEdit={canEdit && !!onEdit}
           canDelete={canDelete}
+          canRevert={canRevert}
           onView={() => setReceipt(r)}
+          onEdit={() => onEdit?.(r)}
           onVerify={() => setConfirm({ kind: "verify", row: r })}
-          onReject={() => setConfirm({ kind: "reject", row: r })}
-          onDelete={() => setConfirm({ kind: "delete", row: r })}
+          onReject={() => {
+            setReason("");
+            setReasonError(false);
+            setConfirm({ kind: "reject", row: r });
+          }}
+          onRevert={() => {
+            setReason("");
+            setReasonError(false);
+            setConfirm({ kind: "revert", row: r });
+          }}
+          onDelete={() => {
+            setReason("");
+            setReasonError(false);
+            setConfirm({ kind: "delete", row: r });
+          }}
         />
       ),
     },
   ];
 
-  const memberOptions = (membersQuery.data ?? []).map((m) => ({
+  const tableColumns = showStatusColumn ? columns : columns.filter((c) => c.key !== "status");
+
+  const allMemberOptions = (membersQuery.data ?? []).map((m) => ({
     value: m.id,
     label: m.name,
     caption: m.memberId,
   }));
+  // Locked scope shows only its own member — no hidden directory of everyone.
+  const memberOptions = lockedMember
+    ? allMemberOptions.filter((o) => o.value === scopedMemberId)
+    : allMemberOptions;
   const fundOptions = (fundsQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
   const statusOptions = [
     { value: "PENDING", label: t("deposits.statusPending") },
@@ -374,14 +489,15 @@ export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk:
     label: t(`common.months.${s}`),
   }));
 
-  const busy = reviewMutation.isPending || deleteMutation.isPending;
+  const busy = reviewMutation.isPending || deleteMutation.isPending || revertMutation.isPending;
+  const needsReason = confirm?.kind === "reject" || confirm?.kind === "delete" || confirm?.kind === "revert";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
-            {t("deposits.title")}
+            {selfOnly ? t("requestDeposit.title") : t("deposits.title")}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {t("deposits.monthlyCollection")}:{" "}
@@ -394,13 +510,15 @@ export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk:
           <Button variant="outline" size="sm" onClick={() => list.refetch()} loading={list.isFetching} icon={<RefreshCw size={13} />}>
             {t("deposits.refresh")}
           </Button>
-          {canWrite && (
+          {canAct && (
             <>
-              <Button variant="outline" size="sm" icon={<Users size={13} />} onClick={onBulk}>
-                {t("deposits.bulkDeposit")}
-              </Button>
+              {!selfOnly && onBulk && (
+                <Button variant="outline" size="sm" icon={<Users size={13} />} onClick={onBulk}>
+                  {t("deposits.bulkDeposit")}
+                </Button>
+              )}
               <Button variant="primary" size="sm" icon={<Plus size={14} />} onClick={onAdd}>
-                {t("deposits.addDeposit")}
+                {selfOnly ? t("requestDeposit.title") : t("deposits.addDeposit")}
               </Button>
             </>
           )}
@@ -421,12 +539,14 @@ export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk:
         </div>
         <AppDropdown
           options={memberOptions}
-          value={memberId}
+          value={filterMemberId}
           onChange={(v) => {
             setMemberId(v);
             setPage(1);
           }}
-          placeholder={t("deposits.allMembers")}
+          placeholder={lockedMember ? memberScope?.name ?? t("deposits.allMembers") : t("deposits.allMembers")}
+          disabled={lockedMember}
+          clearable={!lockedMember}
         />
         <AppDropdown
           options={fundOptions}
@@ -460,7 +580,7 @@ export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk:
 
       <ERPDataTable
         data={rows}
-        columns={columns}
+        columns={tableColumns}
         isLoading={list.isLoading}
         loadingRowCount={pageSize}
         sortBy={sortBy}
@@ -475,11 +595,17 @@ export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk:
           setPageSize(s);
           setPage(1);
         }}
-        emptyMessage={list.isError ? t("deposits.loadFailed") : t("common.noData")}
+        emptyMessage={
+          list.isError
+            ? t("deposits.loadFailed")
+            : selfOnly
+              ? t("requestDeposit.emptyHistory")
+              : t("common.noData")
+        }
         emptyAction={
-          canWrite && !list.isError ? (
+          canAct && !list.isError ? (
             <Button variant="outline" size="sm" icon={<Plus size={13} />} onClick={onAdd}>
-              {t("deposits.addDeposit")}
+              {selfOnly ? t("requestDeposit.title") : t("deposits.addDeposit")}
             </Button>
           ) : undefined
         }
@@ -494,12 +620,13 @@ export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk:
         {receipt && (
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-xs">
             {[
-              [t("deposits.columns.date"), formatDatePattern(receipt.date, dateFormat, true)],
+              [t("deposits.modal.collectedDate"), formatDatePattern(receipt.date, dateFormat, true)],
+              [t("deposits.modal.submittedDate"), receipt.submittedDate ? formatDatePattern(receipt.submittedDate, dateFormat, true) : "—"],
               [t("deposits.columns.member"), `${receipt.memberName || "—"}${receipt.memberIdStr ? ` (${receipt.memberIdStr})` : ""}`],
               [t("deposits.columns.fund"), receipt.fundName || "—"],
               [t("deposits.columns.amount"), formatMoney(receipt.amount, currency)],
               [t("deposits.columns.method"), receipt.depositMethod || "—"],
-              [t("deposits.columns.month"), monthKeyOf(receipt.date)],
+              [t("deposits.columns.month"), receipt.depositMonth || monthKeyOf(receipt.date)],
               [t("deposits.modal.cashier"), receipt.handlingOfficer || "—"],
               [t("deposits.modal.notes"), receipt.description || "—"],
             ].map(([label, value]) => (
@@ -525,32 +652,73 @@ export function DepositsListView({ onAdd, onBulk }: { onAdd: () => void; onBulk:
             ? t("deposits.verifyTitle")
             : confirm?.kind === "reject"
               ? t("deposits.rejectTitle")
-              : t("deposits.deleteTitle")
+              : confirm?.kind === "revert"
+                ? t("deposits.revertTitle")
+                : t("deposits.deleteTitle")
         }
         description={
           confirm?.kind === "verify"
             ? t("deposits.verifyMessage", { amount: formatMoney(confirm.row.amount, currency), member: confirm.row.memberName || "" })
             : confirm?.kind === "reject"
               ? t("deposits.rejectMessage", { amount: formatMoney(confirm.row.amount, currency), member: confirm.row.memberName || "" })
-              : t("deposits.deleteMessage", { ref: confirm?.row.referenceNumber || "" })
+              : confirm?.kind === "revert"
+                ? t("deposits.revertMessage", { amount: formatMoney(confirm.row.amount, currency), member: confirm.row.memberName || "" })
+                : t("deposits.deleteMessage", { ref: confirm?.row.referenceNumber || "" })
         }
         confirmLabel={
           confirm?.kind === "verify"
             ? t("deposits.actions.verify")
             : confirm?.kind === "reject"
               ? t("deposits.actions.reject")
-              : t("deposits.actions.delete")
+              : confirm?.kind === "revert"
+                ? t("deposits.actions.revert")
+                : t("deposits.actions.delete")
         }
         cancelLabel={t("common.cancel")}
-        confirmVariant={confirm?.kind === "verify" ? "primary" : "destructive"}
+        confirmVariant={confirm?.kind === "verify" || confirm?.kind === "revert" ? "primary" : "destructive"}
         pending={busy}
+        extra={
+          needsReason && confirm ? (
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500" htmlFor="deposit-reason">
+                {confirm.kind === "revert" ? t("deposits.revertReason") : confirm.kind === "reject" ? t("deposits.rejectReason") : t("deposits.deleteReason")}
+              </label>
+              <textarea
+                id="deposit-reason"
+                autoFocus
+                value={reason}
+                onChange={(e) => {
+                  setReason(e.target.value);
+                  setReasonError(false);
+                }}
+                rows={3}
+                placeholder={t("deposits.reasonPlaceholder")}
+                className="mt-1.5 w-full px-3 py-2 rounded-xl border text-xs bg-card border-border/80 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40"
+              />
+              {reasonError && (
+                <p role="alert" className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                  {t("deposits.reasonRequired")}
+                </p>
+              )}
+            </div>
+          ) : undefined
+        }
         onClose={() => {
-          if (!busy) setConfirm(null);
+          if (!busy) closeConfirm();
         }}
         onConfirm={() => {
           if (!confirm) return;
-          if (confirm.kind === "delete") deleteMutation.mutate(confirm.row.id);
-          else reviewMutation.mutate({ id: confirm.row.id, decision: confirm.kind === "verify" ? "approve" : "reject" });
+          if (confirm.kind === "verify") {
+            reviewMutation.mutate({ id: confirm.row.id, decision: "approve" });
+            return;
+          }
+          if (!reason.trim()) {
+            setReasonError(true);
+            return;
+          }
+          if (confirm.kind === "reject") reviewMutation.mutate({ id: confirm.row.id, decision: "reject", reason: reason.trim() });
+          else if (confirm.kind === "revert") revertMutation.mutate({ id: confirm.row.id, reason: reason.trim() });
+          else deleteMutation.mutate({ id: confirm.row.id, reason: reason.trim() });
         }}
       />
 

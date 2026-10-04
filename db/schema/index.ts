@@ -20,3 +20,5 @@ export { meetingAttendees } from './meeting_attendees.js';
 export { memberPenalties } from './member_penalties.js';
 export { superAdminActionLog, type SuperAdminActionLog } from './super_admin_action_log.js';
 export { subscriptionPlans, tenantSubscriptions, subscriptionChangeLog, type SubscriptionPlan, type TenantSubscription, type SubscriptionChangeLog } from './subscriptions.js';
+export { platformSettings, PLATFORM_SETTINGS_ID, type PlatformSetting } from './platform_settings.js';
+export { rateLimitBuckets, type RateLimitBucket } from './rate_limit_buckets.js';

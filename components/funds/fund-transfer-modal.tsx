@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppDropdown } from "@/components/ui/app-dropdown";
@@ -47,6 +47,16 @@ export function FundTransferModal({
   const [touched, setTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (open) {
+      setSourceId(presetSourceId ?? null);
+      setDestId(null);
+      setAmount("");
+      setReason("");
+      setTouched(false);
+    }
+  }, [open, presetSourceId]);
+
   const active = funds.filter((f) => (f.status || "ACTIVE") === "ACTIVE");
   const source = active.find((f) => f.id === sourceId) ?? null;
   const sourceOptions = active.map((f) => ({ value: f.id, label: f.name }));
@@ -90,8 +100,8 @@ export function FundTransferModal({
       await apiClient("/funds/transfer", {
         method: "POST",
         body: JSON.stringify({
-          fromFundId: sourceId,
-          toFundId: destId,
+          sourceFundId: sourceId,
+          targetFundId: destId,
           amount: amount.trim(),
           description: reason.trim() || undefined,
         }),
