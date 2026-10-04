@@ -254,3 +254,6 @@ projects.yaml
 txns.yaml
 root?
 root*
+
+.vercel
+.env*
