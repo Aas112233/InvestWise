@@ -221,6 +221,7 @@ web_modules/
 # =====================================
 .gemini/
 .antigravityignore
+.workbuddy-ai/
 .vercel
 .vercel/
 client/.vercel/
