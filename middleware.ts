@@ -9,6 +9,13 @@ import { verifyEdgeAccessToken, isPlatformEdge } from '@/lib/edge-auth';
 // APIs keep the historic presence check; authoritative auth (signature,
 // blacklist, user + tenant + subscription load) runs per-request in
 // getAuthContext() on the Node runtime.
+//
+// Next 16 deprecates this filename in favour of `proxy.ts`, and `next dev` /
+// `next build` warn about it on every boot. Kept deliberately: `proxy` can only
+// run on the Node runtime, and the matcher below puts this code in front of
+// every page and every /api/* request. Renaming would move per-request fencing
+// off the edge and onto a serverless function (cold starts, added latency).
+// Nothing here requires the edge runtime — it is a cost/placement choice.
 const ACCESS_COOKIE = 'accessToken';
 const REFRESH_COOKIE = 'refreshToken';
 
