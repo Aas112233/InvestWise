@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AuthError, ConflictError, ForbiddenError, AppError } from '@/lib/utils/errors';
+import { AuthError, ConflictError, ForbiddenError, AppError, readJsonBody } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
 import { logSuperAdminAction } from '@/lib/superadmin-service';
 import { provisionTenant } from '@/lib/tenant-provision';
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const platformUser = await requireAuthUser(request);
     requireSuperAdmin(platformUser);
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const { slug, name, plan = 'standard', maxUsers = 100, adminName, adminEmail, adminPassword } = body;
 
     if (!slug || !name || !adminEmail || !adminPassword) {

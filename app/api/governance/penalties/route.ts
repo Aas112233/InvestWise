@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { memberPenalties, members, systemSettings, funds, DEFAULT_PENALTY_RULES, PenaltyRuleConfig } from '@/db/schema/index';
+import { memberPenalties, members, meetings, systemSettings, funds, DEFAULT_PENALTY_RULES, PenaltyRuleConfig } from '@/db/schema/index';
 import { eq, and, desc, sql, ilike } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
 import { getPaginationParams, formatPaginatedResponse } from '@/lib/utils/types';
-import { AppError, NotFoundError, ValidationError, ForbiddenError } from '@/lib/utils/errors';
+import { AppError, NotFoundError, ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,8 +20,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
+    // Clamp pagination at the boundary — unbounded limit returns the whole
+    // tenant penalty book plus its count in one response.
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const skip = (page - 1) * limit;
     const tier = searchParams.get('tier');
     const status = searchParams.get('status');
@@ -75,7 +77,7 @@ export async function GET(request: NextRequest) {
           createdAt: memberPenalties.createdAt,
         })
         .from(memberPenalties)
-        .leftJoin(members, eq(memberPenalties.memberId, members.id))
+        .leftJoin(members, and(eq(memberPenalties.memberId, members.id), eq(members.tenantId, tenantId)))
         .where(whereClause)
         .orderBy(desc(memberPenalties.createdAt))
         .limit(limit)
@@ -118,7 +120,7 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError('Insufficient permissions to issue penalties');
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const { memberId, meetingId, tier, title, type, deductionAmount, isPercentage, fundId, reason } = body;
 
     if (!memberId || !tier || !reason) {
@@ -136,6 +138,26 @@ export async function POST(request: NextRequest) {
         .limit(1);
 
       if (!member) throw new NotFoundError('Member');
+
+      // Optional foreign keys are untrusted request input. Validate ownership
+      // before inserting them; otherwise the penalty's references can cross
+      // tenants even though the penalty row itself is scoped.
+      if (meetingId) {
+        const [meeting] = await tx
+          .select({ id: meetings.id })
+          .from(meetings)
+          .where(and(eq(meetings.id, meetingId), eq(meetings.tenantId, tenantId)))
+          .limit(1);
+        if (!meeting) throw new NotFoundError('Meeting');
+      }
+      if (fundId) {
+        const [ownedFund] = await tx
+          .select({ id: funds.id })
+          .from(funds)
+          .where(and(eq(funds.id, fundId), eq(funds.tenantId, tenantId)))
+          .limit(1);
+        if (!ownedFund) throw new NotFoundError('Fund');
+      }
 
       // 2. Fetch penalty rules configuration (§6: scoped to the tenant's settings row)
       const [settings] = await tx

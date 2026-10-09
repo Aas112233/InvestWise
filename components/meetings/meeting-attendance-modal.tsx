@@ -12,7 +12,7 @@ import {
   Play,
   Save,
 } from "lucide-react";
-import { TopSheet, Button, StatusBadge } from "@/components/ui";
+import { TopSheet, Button, StatusBadge, ERPConfirmDialog } from "@/components/ui";
 import { Meeting, MeetingAttendee, Member } from "@/types";
 import { useLocale } from "@/lib/i18n";
 
@@ -61,6 +61,7 @@ export function MeetingAttendanceModal({
   const [meetingNotes, setMeetingNotes] = useState(meeting?.notes || "");
   const [isSaving, setIsSaving] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isConfirmingComplete, setIsConfirmingComplete] = useState(false);
 
   if (!meeting) return null;
 
@@ -98,10 +99,10 @@ export function MeetingAttendanceModal({
     }
   };
 
+  // Finalizing is irreversible (it evaluates penalties), so it goes through
+  // the app's confirm dialog rather than the browser's native confirm().
   const handleComplete = async () => {
-    if (!confirm(t("meetings.confirmComplete", { defaultValue: "Finalize this meeting and process penalty evaluations?" }))) {
-      return;
-    }
+    setIsConfirmingComplete(false);
     setIsCompleting(true);
     try {
       await handleSave();
@@ -241,7 +242,7 @@ export function MeetingAttendanceModal({
             <Button
               variant="primary"
               size="sm"
-              onClick={handleComplete}
+              onClick={() => setIsConfirmingComplete(true)}
               loading={isCompleting}
               icon={CheckCircle2}
             >
@@ -250,6 +251,20 @@ export function MeetingAttendanceModal({
           </div>
         </div>
       </div>
+
+      <ERPConfirmDialog
+        isOpen={isConfirmingComplete}
+        title={t("meetings.completeAndEscalate", { defaultValue: "Finalize & Complete Meeting" })}
+        description={t("meetings.confirmComplete", {
+          defaultValue: "Finalize this meeting and process penalty evaluations?",
+        })}
+        confirmLabel={t("common.confirm", { defaultValue: "Confirm" })}
+        cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
+        confirmVariant="primary"
+        pending={isCompleting}
+        onConfirm={handleComplete}
+        onClose={() => setIsConfirmingComplete(false)}
+      />
     </TopSheet>
   );
 }

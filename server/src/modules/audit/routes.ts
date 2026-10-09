@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { protect, admin } from '../../middleware/auth.js';
+import { protect, admin } from '../../middleware/auth';
 import {
   getAuditLogsHandler,
   getAuditMetadataHandler,
   getNotificationsHandler,
-} from './controller.js';
+} from './controller';
 
 const router = Router();
 

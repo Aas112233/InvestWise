@@ -1,7 +1,7 @@
 import { pgTable, uuid, varchar, decimal, integer, timestamp, index } from 'drizzle-orm/pg-core';
-import { members } from './members.js';
-import { fiscalPeriods } from './fiscal_periods.js';
-import { users } from './users.js';
+import { members } from './members';
+import { fiscalPeriods } from './fiscal_periods';
+import { users } from './users';
 
 export const profitAllocations = pgTable('profit_allocations', {
   id: uuid('id').defaultRandom().primaryKey(),

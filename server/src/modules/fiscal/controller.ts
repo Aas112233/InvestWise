@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import * as fiscalService from './service.js';
-import * as allocationService from './profit-allocation.js';
+import { asyncHandler } from '../../shared/asyncHandler';
+import * as fiscalService from './service';
+import * as allocationService from './profit-allocation';
 
 export const createFiscalPeriodHandler = asyncHandler(async (req: Request, res: Response) => {
   const result = await fiscalService.createFiscalPeriod(req.body);

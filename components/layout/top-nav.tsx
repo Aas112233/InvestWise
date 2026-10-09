@@ -3,25 +3,29 @@
 import { useState, useRef, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Bell,
   Building2,
   Calendar,
+  CalendarRange,
   Check,
   ChevronDown,
   Globe,
   Loader2,
   LogOut,
   Moon,
-  Search,
   Shield,
+  ShieldAlert,
   Sun,
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
+import { apiClient, ApiError } from "@/lib/api-client";
 import { useTenantSettings, useTenantDateFormat } from "@/lib/use-tenant-settings";
 import { formatDatePattern } from "@/lib/formatters";
+import { fiscalStartYearForDate, resolveFiscalBounds } from "@/lib/fiscal-periods";
 import { LOCALES, useLocale, type Locale } from "@/lib/i18n";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NotificationsMenu } from "./notifications-menu";
 import { cn } from "@/lib/utils";
 
 export interface TenantOption {
@@ -48,12 +52,14 @@ function getBreadcrumbKey(pathname: string): string {
     deposits: "nav.deposits",
     transactions: "nav.transactions",
     dividends: "nav.dividends",
+    fiscal: "nav.fiscal",
     expenses: "nav.expenses",
     projects: "nav.projectMgmt",
     funds: "nav.fundsMgmt",
     analysis: "nav.analysis",
     reports: "nav.reports",
     settings: "nav.settings",
+    admin: "nav.superadminPanel",
   };
   return map[segment ?? ""] ?? "nav.dashboard";
 }
@@ -79,6 +85,7 @@ export function TopNav({
   const [profileOpen, setProfileOpen] = useState(false);
   const [tenantMenuOpen, setTenantMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isExitingImpersonation, setIsExitingImpersonation] = useState(false);
   // Today's date renders client-side only — a server/client `new Date()`
   // mismatch across midnight would trip React hydration.
   const [mounted, setMounted] = useState(false);
@@ -121,9 +128,57 @@ export function TopNav({
   const breadcrumbKey = getBreadcrumbKey(pathname);
   const pageTitle = t(breadcrumbKey, { defaultValue: "Dashboard" });
 
+  // Browser tab reflects the open module ("Reports | InvestWise"), reactive to
+  // both route and locale switches. Brand suffix matches the layout metadata
+  // template ("%s | InvestWise"), which stays as the SSR/hydration default.
+  useEffect(() => {
+    document.title = `${pageTitle} | InvestWise`;
+  }, [pageTitle]);
+
+  // Support session (impersonation) bar: the /api/auth/me payload carries the
+  // admin's impersonatedBy claim. Exiting restores the stashed admin cookies
+  // server-side (DELETE /api/admin/impersonate) and returns to the platform
+  // panel via full navigation, so the server layout re-reads swapped cookies.
+  const impersonating = !!user?.impersonatedBy;
+  const handleExitImpersonation = async () => {
+    setIsExitingImpersonation(true);
+    try {
+      await apiClient("/admin/impersonate", { method: "DELETE" });
+      window.location.href = "/admin";
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : t("layout.exitImpersonationFailed", { defaultValue: "Could not exit the session" })
+      );
+      setIsExitingImpersonation(false);
+    }
+  };
+
   // Current date in the tenant's display format (§8 — default DD/MM/YYYY).
   const dateFormat = useTenantDateFormat();
   const todayLabel = formatDatePattern(new Date(), dateFormat);
+
+  // Header context line reads "Today - 05/10/2026": the relative word carries
+  // the meaning, the tenant-formatted date stays the precise value.
+  const todayText = mounted
+    ? `${t("common.today", { defaultValue: "Today" })} - ${todayLabel}`
+    : todayLabel;
+
+  // Current fiscal year, derived from the tenant's configured start/end months
+  // (§ fiscal periods). Defaults match signup/settings so the pill is correct
+  // even before /api/settings resolves. A malformed month name in settings must
+  // not take the whole header down, so the helpers are allowed to throw and
+  // degrade to the start year alone.
+  const fiscalStartMonth = tenantSettings?.financial?.fiscalYearStart || "July";
+  const fiscalEndMonth = tenantSettings?.financial?.fiscalYearEnd || "June";
+  let currentFiscalYear = "";
+  try {
+    const startYear = fiscalStartYearForDate(new Date(), fiscalStartMonth);
+    currentFiscalYear = resolveFiscalBounds(startYear, fiscalStartMonth, fiscalEndMonth).label;
+  } catch {
+    currentFiscalYear = "";
+  }
 
   const currentTenant = tenants.find((item) => item.id === tenantId);
   // Header carries the TENANT identity (user spec, 2026-10-04): multi-tenant
@@ -147,7 +202,32 @@ export function TopNav({
   const userRole = user?.role ? user.role.replace("_", " ") : "";
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/50 bg-background/95 px-6 backdrop-blur-md">
+    <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-md">
+      {impersonating && (
+        <div className="flex items-center justify-center gap-2 bg-amber-400 px-4 py-1.5 text-[11px] font-semibold tracking-wide text-amber-950 dark:bg-amber-500/90">
+          <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">
+            {t("layout.impersonationBanner", {
+              defaultValue: "Support session active — you are viewing as {email}. All actions are audit-logged.",
+              email: user?.email ?? "",
+            })}
+          </span>
+          <button
+            type="button"
+            onClick={handleExitImpersonation}
+            disabled={isExitingImpersonation}
+            className="flex shrink-0 items-center gap-1.5 rounded-md border border-amber-900/30 bg-amber-300/70 px-2 py-0.5 text-[11px] font-semibold text-amber-950 transition-colors hover:bg-amber-200 disabled:opacity-50"
+          >
+            {isExitingImpersonation ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <LogOut className="h-3 w-3" />
+            )}
+            <span>{t("layout.exitImpersonation", { defaultValue: "Exit impersonation" })}</span>
+          </button>
+        </div>
+      )}
+      <div className="flex h-16 items-center justify-between border-b border-border/50 px-6">
       {/* Left - Route Breadcrumb & Tenant Context */}
       <div className="flex items-center gap-3 min-w-0 flex-1 mr-4">
         <h1 className="text-base font-bold tracking-tight text-foreground whitespace-nowrap shrink-0">
@@ -220,14 +300,27 @@ export function TopNav({
           </div>
         )}
 
-        {/* Current date (tenant display format) */}
+        {/* Current fiscal year (tenant start/end months) */}
+        {mounted && currentFiscalYear && (
+          <div
+            className="hidden xl:flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0"
+            title={t("layout.currentFiscalYear", { defaultValue: "Current fiscal year" })}
+          >
+            <CalendarRange className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              {t("layout.fiscalYearAbbrev", { defaultValue: "FY" })} {currentFiscalYear}
+            </span>
+          </div>
+        )}
+
+        {/* Today - dd/mm/yyyy (tenant display format) */}
         {mounted && (
           <div
             className="hidden lg:flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap shrink-0"
             title={todayLabel}
           >
             <Calendar className="h-3.5 w-3.5" />
-            {todayLabel}
+            {todayText}
           </div>
         )}
       </div>
@@ -235,13 +328,7 @@ export function TopNav({
       {/* Right - Global Controls */}
       <div className="flex items-center gap-2.5 shrink-0">
         {/* Notifications */}
-        <button
-          type="button"
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/60 bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground relative"
-          aria-label={t("layout.notifications", { defaultValue: "Notifications" })}
-        >
-          <Bell className="h-4 w-4" />
-        </button>
+        <NotificationsMenu />
 
         {/* Locale Switcher */}
         <div className="relative" ref={localeDropdownRef}>
@@ -382,6 +469,7 @@ export function TopNav({
             </div>
           )}
         </div>
+      </div>
       </div>
     </header>
   );

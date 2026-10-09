@@ -4,7 +4,7 @@ import { users } from '@/db/schema/index';
 import { eq } from 'drizzle-orm';
 import { comparePassword, hashPassword, validatePasswordStrength } from '@/lib/utils/password';
 import { getAuthContext } from '@/lib/middleware/auth';
-import { AuthError, NotFoundError, ValidationError } from '@/lib/utils/errors';
+import { AuthError, NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 
 export async function PUT(request: NextRequest) {
   try {
@@ -17,7 +17,7 @@ export async function PUT(request: NextRequest) {
     }
     const userId = authUser.id;
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const { currentPassword, newPassword } = body;
 
     if (!currentPassword || !newPassword) {

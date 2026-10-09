@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { AppError } from "../shared/errors.js";
+import { AppError } from "../shared/errors";
 
 // PostgreSQL error codes -> human-readable messages
 const PG_ERROR_MAP: Record<string, { status: number; message: string; code: string }> = {

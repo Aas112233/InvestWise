@@ -107,6 +107,10 @@ export function useDepositsList(params: {
           memberId: params.memberId || undefined,
           fundId: params.fundId || undefined,
           status: params.status || undefined,
+          // The `sum` this response carries feeds the "Collected this month"
+          // header — a money figure — so it must exclude unsettled rows even
+          // when the table itself is showing every status (report issue 27).
+          settledOnly: "true",
           startDate: params.monthKey ? undefined : params.startDate || undefined,
           endDate: params.monthKey ? undefined : params.endDate || undefined,
           depositMonth: params.monthKey || undefined,
@@ -136,6 +140,9 @@ export function useDepositsMonthlyTotal(
       const res = await apiClient<{ success: boolean; data: { total: string; count: number } }>("/deposits", {
         params: {
           aggregateOnly: "true",
+          // "Collected" is settled money only — a PENDING request or a REJECTED
+          // slip is not cash in hand (report issue 27).
+          settledOnly: "true",
           startDate: startDate || undefined,
           endDate: endDate || undefined,
           memberId: memberId || undefined,
@@ -169,6 +176,26 @@ export function useFundOptions() {
         params: { page: 1, limit: 200 },
       });
       return res.data ?? [];
+    },
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * #65: lightweight look-up of whether ANY fiscal period is OPEN. The deposit
+ * write path fails closed without one (lib/fiscal-guard.ts), so the form warns
+ * BEFORE the user fills everything in and hits a toast they may never connect
+ * to the missing fiscal year. Shares the ["fiscalPeriods"] cache key with the
+ * Fiscal screen, so starting a year there updates the banner immediately.
+ */
+export function useHasOpenFiscalPeriod() {
+  return useQuery({
+    queryKey: ["fiscalPeriods", "open-check"],
+    queryFn: async (): Promise<boolean> => {
+      const res = await apiClient<{ success: boolean; data: Array<{ status: string | null }> }>(
+        "/fiscal/periods",
+      );
+      return (res.data ?? []).some((p) => p.status === "OPEN" || p.status === "ACTIVE");
     },
     staleTime: 60_000,
   });

@@ -6,10 +6,17 @@ import { AppShell } from "@/components/layout/app-shell";
 import { AnalysisView } from "@/components/analysis";
 import { apiClient } from "@/lib/api-client";
 import { AnalysisData, Member } from "@/types";
+import { useTenantSettings } from "@/lib/use-tenant-settings";
+import { fiscalStartYearForDate } from "@/lib/fiscal-periods";
 
 export default function AnalysisPage() {
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState<number | null>(null);
   const [selectedMemberId, setSelectedMemberId] = useState<string>("all");
+  const { data: tenantSettings, isLoading: settingsLoading } = useTenantSettings();
+  const fiscalStartMonth = tenantSettings?.financial?.fiscalYearStart || "July";
+  const fiscalEndMonth = tenantSettings?.financial?.fiscalYearEnd || "June";
+  const currentFiscalStartYear = fiscalStartYearForDate(new Date(), fiscalStartMonth);
+  const activeFiscalYear = selectedFiscalYear ?? currentFiscalStartYear;
 
   // TanStack Query v5 - Hierarchical noun-first keys (AGENTS.md §7)
   const {
@@ -17,14 +24,15 @@ export default function AnalysisPage() {
     isLoading: analysisLoading,
     refetch,
   } = useQuery<AnalysisData>({
-    queryKey: ["analytics", "analysis", { year: selectedYear, memberId: selectedMemberId }],
+    queryKey: ["analytics", "analysis", { year: activeFiscalYear, memberId: selectedMemberId }],
     queryFn: async () => {
       const params = new URLSearchParams({
-        year: String(selectedYear),
+        year: String(activeFiscalYear),
         memberId: selectedMemberId,
       });
       return await apiClient<AnalysisData>(`/analytics/analysis?${params.toString()}`);
     },
+    enabled: !settingsLoading,
     staleTime: 60_000,
   });
 
@@ -46,10 +54,12 @@ export default function AnalysisPage() {
       <AnalysisView
         data={analysisData}
         members={members}
-        isLoading={analysisLoading}
-        selectedYear={selectedYear}
+        isLoading={settingsLoading || analysisLoading}
+        selectedYear={activeFiscalYear}
+        fiscalStartMonth={fiscalStartMonth}
+        fiscalEndMonth={fiscalEndMonth}
         selectedMemberId={selectedMemberId}
-        onYearChange={setSelectedYear}
+        onYearChange={setSelectedFiscalYear}
         onMemberChange={setSelectedMemberId}
         onRefresh={() => refetch()}
       />

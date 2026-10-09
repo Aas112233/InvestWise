@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import type { AsyncHandler } from '../shared/types.js';
+import type { AsyncHandler } from '../shared/types';
 
 /**
  * Wraps an async route handler to catch errors and forward them to Express error handler.

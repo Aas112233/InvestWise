@@ -57,6 +57,7 @@ export const NAVIGATION: NavGroup[] = [
         icon: ArrowLeftRight,
       },
       { id: "DIVIDENDS", labelKey: "nav.dividends", route: "/dividends", icon: PieChart },
+      { id: "FISCAL", labelKey: "nav.fiscal", route: "/fiscal", icon: Calendar },
       { id: "EXPENSES", labelKey: "nav.expenses", route: "/expenses", icon: CreditCard },
     ],
   },

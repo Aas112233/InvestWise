@@ -5,7 +5,7 @@ import { eq, and, sql, inArray } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/utils/errors';
+import { NotFoundError, ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 
 export async function POST(
   request: NextRequest,
@@ -24,11 +24,22 @@ export async function POST(
     }
 
     const { id } = await params;
-    const body = await request.json();
-    const attendeesList = body.attendees || body;
+    const body = await readJsonBody(request);
+    // Accept every shape the UI has shipped: a bare array, `{ attendees }`,
+    // or `{ records }` (what app/meetings/page.tsx posts today). Anything
+    // else falls through to the validation error below.
+    const attendeesList = Array.isArray(body)
+      ? body
+      : body?.attendees || body?.records || body;
 
     if (!Array.isArray(attendeesList) || attendeesList.length === 0) {
       throw new ValidationError('A non-empty array of attendees is required');
+    }
+    // Cap the array at the boundary. Each entry becomes a row in an IN-list
+    // and a multi-row upsert, so an unbounded array is a per-request DoS.
+    // A tenant meeting cannot legitimately exceed its member count.
+    if (attendeesList.length > 2000) {
+      throw new ValidationError('Too many attendees in one request (maximum 2000)');
     }
 
     const db = getDb();
@@ -51,6 +62,22 @@ export async function POST(
       const uniqueItems = Array.from(
         new Map(validItems.map((item: any) => [item.memberId, item])).values(),
       ) as Array<{ memberId: string; attendanceStatus?: string; depositStatus?: string; notes?: string }>;
+      if (uniqueItems.some((item) => typeof item.memberId !== 'string' || !item.memberId)) {
+        throw new ValidationError('Each attendee must have a valid memberId');
+      }
+
+      // Resolve and lock only members owned by this tenant before linking them
+      // to a meeting or changing warning counts. A meeting id alone does not
+      // establish ownership of the client-supplied member ids.
+      const memberIds = uniqueItems.map((item) => item.memberId);
+      const ownedMembers = await tx
+        .select({ id: members.id })
+        .from(members)
+        .where(and(inArray(members.id, memberIds), eq(members.tenantId, tenantId)))
+        .for('update');
+      if (ownedMembers.length !== memberIds.length) {
+        throw new NotFoundError('One or more attendees');
+      }
 
       // One multi-row upsert on uq_meeting_member instead of a per-attendee
       // SELECT + UPDATE/INSERT (previously 2 round trips per attendee).
@@ -58,6 +85,7 @@ export async function POST(
         .insert(meetingAttendees)
         .values(
           uniqueItems.map((item) => ({
+            tenantId,
             meetingId: id,
             memberId: item.memberId,
             attendanceStatus: item.attendanceStatus || 'PRESENT',
@@ -68,6 +96,7 @@ export async function POST(
         .onConflictDoUpdate({
           target: [meetingAttendees.meetingId, meetingAttendees.memberId],
           set: {
+            tenantId,
             attendanceStatus: sql`excluded.attendance_status`,
             depositStatus: sql`excluded.deposit_status`,
             notes: sql`excluded.notes`,
@@ -88,12 +117,13 @@ export async function POST(
             warningCount: sql<number>`COALESCE(${members.warningCount}, 0) + 1`,
             updatedAt: new Date(),
           })
-          .where(inArray(members.id, absentMemberIds));
+          .where(and(inArray(members.id, absentMemberIds), eq(members.tenantId, tenantId)));
       }
     });
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'RECORD_MEETING_ATTENDANCE',
       resourceType: 'Meeting',
       resourceId: id,

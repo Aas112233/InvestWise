@@ -1,8 +1,8 @@
-import { getDb } from '../../config/database.js';
-import { memberArrears, members, transactions, auditLogs, systemSettings } from '../../db/schema/index.js';
+import { getDb } from '../../config/database';
+import { memberArrears, members, transactions, auditLogs, systemSettings } from '../../db/schema/index';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
-import { NotFoundError, AppError } from '../../shared/errors.js';
-import { getPaginationParams, formatPaginatedResponse } from '../../shared/types.js';
+import { NotFoundError, AppError } from '../../shared/errors';
+import { getPaginationParams, formatPaginatedResponse } from '../../shared/types';
 
 export async function calculateMonthlyArrears(
   periodKey?: string,

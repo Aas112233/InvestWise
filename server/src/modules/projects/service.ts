@@ -1,6 +1,6 @@
 import { eq, and, desc } from 'drizzle-orm';
-import { getDb } from '../../lib/db.js';
-import { projects } from '../../db/schema/index.js';
+import { getDb } from '../../lib/db';
+import { projects } from '../../db/schema/index';
 
 /** Projects read service — supports Fund → Project cascading selectors (§5). */
 

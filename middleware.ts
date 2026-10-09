@@ -10,6 +10,21 @@ import { verifyEdgeAccessToken, isPlatformEdge } from '@/lib/edge-auth';
 // blacklist, user + tenant + subscription load) runs per-request in
 // getAuthContext() on the Node runtime.
 const ACCESS_COOKIE = 'accessToken';
+const REFRESH_COOKIE = 'refreshToken';
+
+// Same-origin only. The app serves its own UI and API from one origin and
+// never accepts cross-site credentialed requests; a hostile page therefore has
+// no reason to send a form POST / XHR carrying the session cookie. State-
+// changing methods are additionally Origin-checked below (CSRF).
+function sameOrigin(request: NextRequest): boolean {
+  const origin = request.headers.get('origin');
+  if (!origin) return true; // same-origin fetch/XHR may omit Origin
+  try {
+    return new URL(origin).host === request.nextUrl.host;
+  } catch {
+    return false;
+  }
+}
 
 // Exact public pages + public auth endpoints. Everything else requires a
 // valid session token to even load.
@@ -26,6 +41,10 @@ const PUBLIC_PATHS = [
   '/api/auth/login',
   '/api/auth/refresh',
   '/api/auth/forgot-password',
+  // Liveness probe (#50). Must answer without a session: its whole purpose is
+  // telling the offline banner whether the server process is reachable again
+  // after an outage — including the case where the session just died.
+  '/api/health',
 ];
 
 export async function middleware(request: NextRequest) {
@@ -52,6 +71,21 @@ export async function middleware(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some(
     (path) => pathname === path || pathname.startsWith(path + '/'),
   );
+
+  // CSRF: reject a cross-site form POST / fetch that carries our cookie.
+  // Server-side enforcement — the SameSite cookie attribute alone is only a
+  // browser-side signal and is not honoured by every client. Login/refresh and
+  // other public endpoints are exempt because they are reached before a
+  // session exists (and login itself is rate-limited + credential-checked).
+  const method = request.method.toUpperCase();
+  const isStateChanging = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
+  if (isStateChanging && !isPublic && !sameOrigin(request)) {
+    return NextResponse.json(
+      { success: false, message: 'Cross-site request blocked', code: 'CSRF_BLOCKED' },
+      { status: 403 },
+    );
+  }
+
   if (isPublic) {
     return forward();
   }
@@ -76,6 +110,19 @@ export async function middleware(request: NextRequest) {
 
   const token = request.cookies.get(ACCESS_COOKIE)?.value;
   const claims = token ? await verifyEdgeAccessToken(token) : null;
+
+  // A session with a fresh refresh token but an expired access token must be
+  // allowed through to /login so the client can call /api/auth/refresh instead
+  // of being hard-redirected to a page that throws away the still-valid
+  // session. Without this, a 15-minute access token made refresh unreachable
+  // from any page navigation (the client only mints a new one on a 401 from a
+  // loaded page).
+  if (!claims && request.cookies.has(REFRESH_COOKIE)) {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('refresh', '1');
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
   if (!claims) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);

@@ -76,3 +76,48 @@ export function extractDbError(error: unknown): { code?: string; message?: strin
   }
   return { message: (error as { message?: string } | null)?.message };
 }
+
+/**
+ * Parse a JSON request body, failing CLOSED with a 400 rather than letting a
+ * malformed or non-object body surface as a 500.
+ *
+ * Two failure modes are both client errors, never server errors:
+ *   - the body is not valid JSON (empty body, truncated payload, wrong
+ *     Content-Type) → `request.json()` throws a SyntaxError;
+ *   - the body is valid JSON but not an object (`null`, a bare string/number)
+ *     → destructuring it later throws a TypeError.
+ *
+ * Every caller's catch maps `err.statusCode || 500`, so throwing a
+ * ValidationError here yields exactly the right 400 for both cases.
+ *
+ * Returns `any` deliberately: this is a drop-in replacement for
+ * `await request.json()` (which is `any`), so existing field access at the call
+ * sites keeps compiling exactly as before while the failure mode changes from
+ * 500 to 400.
+ */
+export async function readJsonBody(request: Request): Promise<any> {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    throw new ValidationError('Request body must be valid JSON');
+  }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new ValidationError('Request body must be a JSON object');
+  }
+  return raw;
+}
+
+/**
+ * Like `readJsonBody`, but for routes that validate themselves with a Zod
+ * `safeParse` (rather than throwing on the first bad field). Parse failures
+ * still become a 400 instead of escaping as a 500. Zod `safeParse` accepts
+ * `unknown`, so the return type stays `unknown` here.
+ */
+export async function readJsonUnknown(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    throw new ValidationError('Request body must be valid JSON');
+  }
+}

@@ -1,8 +1,12 @@
 import { pgTable, uuid, varchar, text, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
-import { users } from './users.js';
+import { users } from './users';
 
 export const blacklistedTokens = pgTable('blacklisted_tokens', {
   id: uuid('id').defaultRandom().primaryKey(),
+  // Stores sha256(token) hex — NOT the raw JWT (which was stored historically).
+  // Hashing keeps a database/backup leak from yielding replayable credentials;
+  // every writer (refresh rotation, logout, impersonation revoke) and every
+  // reader (lib/middleware/auth.ts, refresh route) keys on the same hash.
   token: text('token').notNull(),
   type: varchar('type', { length: 20 }).notNull(),
   userId: uuid('user_id').notNull().references(() => users.id),

@@ -19,8 +19,16 @@ export async function GET(request: NextRequest) {
       throw new ForbiddenError('Admin access required');
     }
 
-    // In production, this would list from R2. For now, return empty.
-    return NextResponse.json({ success: true, backups: [] });
+    // Object-storage backup listing is not implemented in this build. An empty
+    // array with `success: true` reads as "no backups exist" — a dangerous
+    // false negative for recovery planning. Answer honestly instead.
+    return NextResponse.json({
+      success: true,
+      implemented: false,
+      backups: [],
+      message:
+        'Backup listing is not available in this build. Inspect the managed database snapshot console for available restore points.',
+    });
   } catch (error: any) {
     console.error('[BACKUP LIST ERROR]', error);
     

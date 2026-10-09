@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb, withDbRetry } from '@/db/index';
 import { users, tenants } from '@/db/schema/index';
 import { desc, count, ilike, or, eq, and, type SQL } from 'drizzle-orm';
-import { AuthError, ForbiddenError, AppError, extractDbError } from '@/lib/utils/errors';
+import { AuthError, ForbiddenError, AppError, extractDbError, readJsonBody } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
 import { getClientIp } from '@/lib/request-meta';
 import { ROLES, normalizeRole, isSuperAdminRole } from '@/lib/roles';
@@ -165,7 +165,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const parsed = validateUserUpdateInput(body);
     if (!parsed.ok) {
       return NextResponse.json(
@@ -311,7 +311,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const parsed = validatePasswordResetInput(body);
     if (!parsed.ok) {
       return NextResponse.json(

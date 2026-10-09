@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, decimal, integer, boolean, jsonb, timestamp, index, unique } from 'drizzle-orm/pg-core';
-import { users } from './users.js';
-import { tenants } from './tenants.js';
+import { users } from './users';
+import { tenants } from './tenants';
 
 // Lean billing model: plans, one subscription row per tenant, append-only change log.
 // No payment-provider integration — status transitions are platform-driven.

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb, withDbRetry } from '@/db/index';
 import { tenants } from '@/db/schema/index';
 import { asc, eq, ilike, or, type SQL } from 'drizzle-orm';
-import { AuthError, ForbiddenError } from '@/lib/utils/errors';
+import { AuthError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
 import { getClientIp } from '@/lib/request-meta';
 import {
@@ -100,7 +100,7 @@ export async function PUT(request: NextRequest) {
     const platformUser = await requireAuthUser(request);
     requireSuperAdmin(platformUser);
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const { tenantId, moduleAccess } = (body ?? {}) as {
       tenantId?: string;
       moduleAccess?: unknown;

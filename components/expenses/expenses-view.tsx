@@ -118,10 +118,12 @@ export function ExpensesView() {
   const records = responseData?.data || [];
   const totalCount = responseData?.pagination?.total || 0;
 
-  const totalExpenseSum = records.reduce(
-    (acc, curr) => acc + (parseFloat(String(curr.amount)) || 0),
-    0
-  );
+  // KPI aggregates come from the server (whole result set, filters applied).
+  // Summing `records` here would only ever describe the current page.
+  const metrics = responseData?.metrics;
+  const totalExpenseSum = metrics?.totalExpenses ?? 0;
+  const operationalTotal = metrics?.operationalTotal ?? 0;
+  const projectTotal = metrics?.projectTotal ?? 0;
 
   const columns: ERPColumn<ExpenseRecord>[] = [
     {
@@ -277,14 +279,14 @@ export function ExpensesView() {
         />
         <ERPMetricCard
           label={t("expenses.categories.operational")}
-          value="Primary Liquid"
+          value={formatMoney(operationalTotal, "BDT")}
           icon={<Building2 className="w-4 h-4" />}
           tone="slate"
           description="Treasury fund deductions"
         />
         <ERPMetricCard
           label="Direct Disbursements"
-          value="Project-linked"
+          value={formatMoney(projectTotal, "BDT")}
           icon={<Briefcase className="w-4 h-4" />}
           tone="slate"
           description="Capital expenditure allocations"

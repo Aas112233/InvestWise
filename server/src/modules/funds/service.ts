@@ -1,8 +1,8 @@
 import { eq, and, desc, asc, sql, type SQL } from 'drizzle-orm';
-import { getDb } from '../../lib/db.js';
-import { funds, transactions } from '../../db/schema/index.js';
-import { getPaginationParams, formatPaginatedResponse, type SessionUser } from '../../middleware/api.js';
-import { AppError, NotFoundError } from '../../shared/errors.js';
+import { getDb } from '../../lib/db';
+import { funds, transactions } from '../../db/schema/index';
+import { getPaginationParams, formatPaginatedResponse, type SessionUser } from '../../middleware/api';
+import { AppError, NotFoundError } from '../../shared/errors';
 import { parsePositiveAmount, fromCents, toCents } from '@/lib/money';
 
 /** Fund balances, creation and inter-fund operations support. */

@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import { isProduction } from '../config/env.js';
+import { isProduction } from '../config/env';
 
 export const COOKIE_NAMES = {
   ACCESS_TOKEN: 'accessToken',

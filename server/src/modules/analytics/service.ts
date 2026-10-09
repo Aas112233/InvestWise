@@ -1,13 +1,13 @@
-import { getDb, getSql as getRawSql } from '../../config/database.js';
+import { getDb, getSql as getRawSql } from '../../config/database';
 import {
   members,
   projects,
   globalStats,
   globalStatsTrends,
   globalStatsSectors,
-} from '../../db/schema/index.js';
+} from '../../db/schema/index';
 import { eq, count, sql } from 'drizzle-orm';
-import { cache } from '../../lib/cache.js';
+import { cache } from '../../lib/cache';
 
 const STATS_CACHE_KEY = 'analytics:stats';
 const STATS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes

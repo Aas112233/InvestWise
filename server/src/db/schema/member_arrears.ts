@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, decimal, timestamp, index } from 'drizzle-orm/pg-core';
-import { members } from './members.js';
-import { users } from './users.js';
+import { members } from './members';
+import { users } from './users';
 
 export const memberArrears = pgTable('member_arrears', {
   id: uuid('id').defaultRandom().primaryKey(),

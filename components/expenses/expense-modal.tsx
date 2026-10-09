@@ -15,7 +15,7 @@ import {
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/i18n";
-import { formatMoney } from "@/lib/formatters";
+import { formatMoney, todayLocalIso } from "@/lib/formatters";
 import { Plus, Loader2 } from "lucide-react";
 
 interface FundOption {
@@ -59,7 +59,9 @@ export function ExpenseModal({ isOpen, onClose, currency = "BDT" }: ExpenseModal
 
   useEffect(() => {
     if (isOpen) {
-      setDate(new Date().toISOString().slice(0, 10));
+      // Local calendar day, not UTC — otherwise the default date is yesterday
+      // for any user east of Greenwich (report issue 18).
+      setDate(todayLocalIso());
     } else {
       setCategory("");
       setExpenseName("");

@@ -31,6 +31,12 @@ import { useAuth } from "@/lib/auth-context";
 import { useLocale } from "@/lib/i18n";
 import { hasScreenPermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import {
+  PAYMENT_TYPES,
+  PAYMENT_TYPE_LABEL_KEY,
+  type PaymentMethodConfig,
+  type PaymentType,
+} from "@/lib/payment-methods";
 
 type SettingsTab = "organization" | "financial" | "governance" | "system";
 
@@ -81,6 +87,7 @@ interface SettingsResponse {
     suspendedAfterMonths: number;
     meetingTypes: string[];
     penaltyRules: PenaltyRule[];
+    paymentMethods: PaymentMethodConfig[];
   };
   system: {
     language: string;
@@ -159,6 +166,7 @@ export default function SettingsPage() {
     suspendedAfterMonths: "6",
     meetingTypes: [] as string[],
     penaltyRules: [] as PenaltyRule[],
+    paymentMethods: [] as PaymentMethodConfig[],
   });
 
   const [sys, setSys] = useState({
@@ -204,6 +212,7 @@ export default function SettingsPage() {
       suspendedAfterMonths: String(data.governance?.suspendedAfterMonths ?? 6),
       meetingTypes: [...(data.governance?.meetingTypes ?? [])],
       penaltyRules: [...(data.governance?.penaltyRules ?? [])],
+      paymentMethods: [...(data.governance?.paymentMethods ?? [])],
     });
     setSys({
       language: data.system?.language || "English",
@@ -293,6 +302,7 @@ interface BodyProps {
     suspendedAfterMonths: string;
     meetingTypes: string[];
     penaltyRules: PenaltyRule[];
+    paymentMethods: PaymentMethodConfig[];
   };
   setGov: React.Dispatch<React.SetStateAction<BodyProps["gov"]>>;
   sys: {
@@ -730,6 +740,24 @@ function GovernanceTab({
     { value: "SUSPENSION", label: t("settings.governance.suspension") },
   ];
 
+  // New payment-method row (name the org sets + channel type it picks).
+  const [newMethodName, setNewMethodName] = useState("");
+  const [newMethodType, setNewMethodType] = useState<PaymentType>("MOBILE");
+  const paymentTypeOptions = PAYMENT_TYPES.map((v) => ({
+    value: v,
+    label: t(PAYMENT_TYPE_LABEL_KEY[v], { defaultValue: v }),
+  }));
+  const addPaymentMethod = () => {
+    const name = newMethodName.trim();
+    if (!name) return;
+    if (gov.paymentMethods.some((m) => m.name.toLowerCase() === name.toLowerCase())) {
+      toast.error(t("settings.paymentMethods.duplicate", { defaultValue: "That payment method name already exists" }));
+      return;
+    }
+    setGov((p) => ({ ...p, paymentMethods: [...p.paymentMethods, { name, type: newMethodType }] }));
+    setNewMethodName("");
+  };
+
   const onSave = () => {
     const inactive = Math.max(1, parseInt(gov.inactiveAfterMonths, 10) || 3);
     const suspended = Math.max(2, parseInt(gov.suspendedAfterMonths, 10) || 6);
@@ -750,6 +778,20 @@ function GovernanceTab({
         inactiveAfterMonths: inactive,
         suspendedAfterMonths: suspended,
         meetingTypes: gov.meetingTypes,
+        // Trimmed, deduped (case-insensitive), empty rows dropped — the Zod
+        // schema server-side rejects duplicates too; this keeps the payload
+        // honest before it ever leaves the browser.
+        paymentMethods: (() => {
+          const seen = new Set<string>();
+          const out: PaymentMethodConfig[] = [];
+          for (const m of gov.paymentMethods) {
+            const name = (m.name ?? "").trim();
+            if (!name || seen.has(name.toLowerCase())) continue;
+            seen.add(name.toLowerCase());
+            out.push({ name, type: m.type });
+          }
+          return out;
+        })(),
         penaltyRules: gov.penaltyRules.map((r) => ({
           tier: r.tier,
           title: r.title,
@@ -914,6 +956,89 @@ function GovernanceTab({
               }}
             >
               {t("settings.governance.addType")}
+            </Button>
+          </div>
+        </ERPFormSection>
+
+        {/* Payment Methods — names the org sets, channel types it picks; the
+            deposit forms' method pickers read exactly this list. */}
+        <ERPFormSection
+          title={t("settings.paymentMethods.title", { defaultValue: "Payment methods" })}
+          description={t("settings.paymentMethods.desc", { defaultValue: "Methods offered on the deposit and deposit-request forms. The stored ledger value is the method name, so renaming keeps history but changes future entries." })}
+        >
+          {gov.paymentMethods.length === 0 && (
+            <p className="text-xs text-muted-foreground mb-2">
+              {t("settings.paymentMethods.empty", { defaultValue: "No methods configured — the platform defaults will be offered." })}
+            </p>
+          )}
+          <div className="space-y-2 mb-3">
+            {gov.paymentMethods.map((m, idx) => (
+              <div key={`${m.name}-${idx}`} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  maxLength={40}
+                  value={m.name}
+                  onChange={(e) =>
+                    setGov((p) => ({
+                      ...p,
+                      paymentMethods: p.paymentMethods.map((x, i) => (i === idx ? { ...x, name: e.target.value } : x)),
+                    }))
+                  }
+                  aria-label={t("settings.paymentMethods.name", { defaultValue: "Payment method name" })}
+                  className={cn(inputCls, "flex-1")}
+                />
+                <div className="w-40 shrink-0">
+                  <AppDropdown
+                    options={paymentTypeOptions}
+                    value={m.type}
+                    clearable={false}
+                    onChange={(v) =>
+                      setGov((p) => ({
+                        ...p,
+                        paymentMethods: p.paymentMethods.map((x, i) =>
+                          i === idx ? { ...x, type: (v as PaymentType) ?? x.type } : x,
+                        ),
+                      }))
+                    }
+                  />
+                </div>
+                <button
+                  type="button"
+                  aria-label={`Remove ${m.name}`}
+                  onClick={() => setGov((p) => ({ ...p, paymentMethods: p.paymentMethods.filter((_, i) => i !== idx) }))}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              maxLength={40}
+              value={newMethodName}
+              onChange={(e) => setNewMethodName(e.target.value)}
+              placeholder={t("settings.paymentMethods.namePlaceholder", { defaultValue: "e.g. DBBL Bank Transfer" })}
+              aria-label={t("settings.paymentMethods.name", { defaultValue: "Payment method name" })}
+              className={cn(inputCls, "flex-1")}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addPaymentMethod();
+                }
+              }}
+            />
+            <div className="w-40 shrink-0">
+              <AppDropdown
+                options={paymentTypeOptions}
+                value={newMethodType}
+                clearable={false}
+                onChange={(v) => setNewMethodType((v as PaymentType) ?? "OTHER")}
+              />
+            </div>
+            <Button variant="outline" size="sm" icon={<Plus size={13} />} onClick={addPaymentMethod}>
+              {t("settings.paymentMethods.add", { defaultValue: "Add method" })}
             </Button>
           </div>
         </ERPFormSection>

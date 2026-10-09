@@ -1,7 +1,23 @@
-import { getDb } from '../../config/database.js';
-import { fiscalPeriods, transactions, auditLogs, systemSettings } from '../../db/schema/index.js';
+import { getDb } from '../../config/database';
+import { fiscalPeriods, transactions, auditLogs, systemSettings } from '../../db/schema/index';
 import { eq, desc, and, sql, inArray } from 'drizzle-orm';
-import { NotFoundError, AppError } from '../../shared/errors.js';
+import { NotFoundError, AppError } from '../../shared/errors';
+
+/**
+ * ⚠️ NOT TENANT-SAFE — DO NOT WIRE INTO A TENANT-FACING ROUTE.
+ *
+ * This legacy Express fiscal service was written before multi-tenancy. Every
+ * lookup filters by id (or nothing) without a tenantId predicate, and
+ * createFiscalPeriod does not stamp one at all. It is currently UNREACHABLE
+ * from the Next.js app (only `server/src/modules/{finance,members}` are
+ * imported by app/api). If this module is ever mounted, it is a cross-tenant
+ * financial read/write on day one.
+ *
+ * Before mounting: add a tenantId parameter to every function, thread it from
+ * the request, and add `eq(fiscalPeriods.tenantId, tenantId)` to every read,
+ * write and aggregate. Prefer porting to app/api/fiscal/** (which already does
+ * this correctly) instead of reviving this file.
+ */
 
 export async function createFiscalPeriod(data: {
   year: number;

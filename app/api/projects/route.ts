@@ -7,7 +7,8 @@ import { projectCreateSchema } from '@/lib/utils/validation';
 import { requireProjectContext, zodMessage } from './_helpers';
 import { toCents, fromCents } from '@/lib/money';
 import crypto from 'node:crypto';
-import { ValidationError, ForbiddenError } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
+import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 
 export const dynamic = 'force-dynamic';
 // A multi-shareholder creation locks, validates and writes in a handful of
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
     if ('error' in ctx) return ctx.error;
     const { user, tenantId } = ctx;
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const parsed = projectCreateSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
@@ -100,6 +101,11 @@ export async function POST(request: NextRequest) {
     const db = getDb();
 
     const createdProject = await db.transaction(async (tx) => {
+      const now = new Date();
+      if ((data.shareholders || []).length > 0) {
+        await assertFiscalPeriodOpen(tx, tenantId, now);
+      }
+
       // 1. Resolve tenant share value from system_settings
       const [settingRow] = await tx
         .select({ shareValueBdt: systemSettings.shareValueBdt })
@@ -214,8 +220,6 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const now = new Date();
-
       if (processedShareholders.length > 0) {
         // Grouped equity deduction: one round-trip under the row locks held
         // above. The §6 tenant predicate stays in the WHERE — a VALUES join
@@ -223,7 +227,7 @@ export async function POST(request: NextRequest) {
         await tx.execute(sql`
           UPDATE ${members} AS m
           SET total_contributed = v.balance::numeric,
-              updated_at = ${now}
+              updated_at = ${now.toISOString()}::timestamptz
           FROM (VALUES ${sql.join(
             processedShareholders.map((ps) => sql`(${ps.memberId}::uuid, ${ps.memberEquityAfter}::numeric)`),
             sql`, `,
@@ -331,6 +335,7 @@ export async function POST(request: NextRequest) {
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'CREATE_PROJECT',
       resourceType: 'Project',
       resourceId: createdProject.id,

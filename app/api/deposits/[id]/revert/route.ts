@@ -8,6 +8,7 @@ import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/utils/errors';
 import { toCents, fromCents } from '@/lib/money';
+import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 
 // POST /api/deposits/[id]/revert — Completed -> PENDING with amount reversal.
 // Request-origin deposits cannot be deleted; they revert instead. Per confirmed
@@ -28,7 +29,11 @@ export async function POST(
     }
 
     const { id } = await params;
-    const body = await request.json().catch(() => ({}));
+    // A JSON `null` body parses successfully, so `.catch()` does not fire and
+    // `body` stays null — guard it so the reason check below is reached with a
+    // real object instead of throwing a TypeError (→ 500).
+    const parsed = await request.json().catch(() => ({}));
+    const body = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     const reason = body.reason || body.revertReason;
 
     if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
@@ -93,6 +98,21 @@ export async function POST(
     // transfer, or expense can never lose an update. The outer unlocked read
     // only serves the pre-checks above. All math in integer cents (§12).
     const { newFundBalance, newMemberContributed } = await db.transaction(async (tx) => {
+      // Reverting changes balances and removes a completed ledger movement, so
+      // serialize it against closing and reject any closed-period correction.
+      if (!deposit.date) throw new ValidationError('Deposit transaction is missing its date');
+      await assertFiscalPeriodOpen(tx, scopedTenantId, deposit.date);
+      const [lockedDeposit] = await tx
+        .select({ status: transactions.status, isDeleted: transactions.isDeleted })
+        .from(transactions)
+        .where(and(eq(transactions.id, id), eq(transactions.tenantId, scopedTenantId)))
+        .for('update')
+        .limit(1);
+      if (!lockedDeposit || lockedDeposit.isDeleted) throw new NotFoundError('Deposit transaction');
+      if (lockedDeposit.status !== 'Completed' && lockedDeposit.status !== 'Success') {
+        throw new ValidationError('Only completed deposits can be reverted to request');
+      }
+
       const [lockedFund] = await tx
         .select()
         .from(funds)
@@ -162,7 +182,7 @@ export async function POST(
             AND t.is_deleted = false
             AND t.status IN ('Completed', 'Success')
         ),
-        updated_at = ${now}
+        updated_at = ${now.toISOString()}::timestamptz
         WHERE ${members.id} = ${deposit.memberId}::uuid
           AND ${members.tenantId} = ${scopedTenantId}::uuid
       `);
@@ -175,6 +195,7 @@ export async function POST(
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'REVERT_DEPOSIT',
       resourceType: 'Transaction',
       resourceId: id,

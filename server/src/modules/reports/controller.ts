@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import * as reportsService from './service.js';
-import { logAudit } from '../../lib/audit.js';
+import { asyncHandler } from '../../shared/asyncHandler';
+import * as reportsService from './service';
+import { logAudit } from '../../lib/audit';
 
 /**
  * GET /api/reports/generate/:type

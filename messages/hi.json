@@ -67,7 +67,7 @@
     "confirm": "पुष्टि करें",
     "clear": "साफ़ करें",
     "today": "आज",
-    "retry": "पुनः प्रयास करें",
+    "retry": "अभी पुनः प्रयास करें",
     "weekdays": {
       "mon": "सोम",
       "tue": "मंगल",
@@ -117,7 +117,8 @@
     },
     "refresh": "रिफ्रेश",
     "enabled": "सक्षम",
-    "disabled": "अक्षम"
+    "disabled": "अक्षम",
+    "connectionLost": "आप ऑफ़लाइन लगते हैं। सर्वर तक नहीं पहुँच पा रहे — स्वतः पुनः प्रयास हो रहा है।"
   },
   "nav": {
     "management": "Members",
@@ -136,10 +137,57 @@
     "reports": "Reports",
     "settings": "Settings",
     "dividends": "Dividends",
+    "fiscal": "वित्तीय वर्ष",
     "meetings": "Meetings & Performance",
     "governance": "Governance",
     "platform": "Platform",
     "superadminPanel": "SuperAdmin Panel"
+  },
+  "fiscal": {
+    "title": "वित्तीय वर्ष प्रबंधन",
+    "subtitle": "{start} से {end} तक की वार्षिक अवधि प्रबंधित करें। नई अवधि इस संगठन के निर्धारित वित्तीय महीनों का पालन करेगी।",
+    "yearLabel": "वित्तीय वर्ष {year}",
+    "columns": {
+      "year": "वित्तीय वर्ष",
+      "period": "अवधि",
+      "status": "स्थिति",
+      "earnings": "आय",
+      "expenses": "व्यय",
+      "reserve": "वैधानिक आरक्षित निधि",
+      "distributable": "वितरण योग्य अधिशेष",
+      "actions": "कार्रवाई"
+    },
+    "status": {
+      "open": "खुला",
+      "closed": "बंद"
+    },
+    "actions": {
+      "selectYear": "वित्तीय वर्ष चुनें",
+      "startYear": "वित्तीय वर्ष शुरू करें",
+      "close": "वर्ष बंद करें",
+      "reopen": "फिर खोलें"
+    },
+    "empty": "अभी कोई वित्तीय अवधि नहीं है। वर्ष-अंत के योग और बंद स्थिति ट्रैक करने के लिए वित्तीय वर्ष शुरू करें।",
+    "onboarding": {
+      "title": "वर्ष-अंत प्रक्रिया",
+      "description": "अगली अवधि बनाएँ, लंबित लेन-देन निपटाएँ, फिर कुल और वैधानिक आरक्षित निधि की गणना के लिए अवधि बंद करें। बंद अवधि में फिर से खोलने तक नई प्रविष्टियाँ स्वीकार नहीं होंगी।"
+    },
+    "confirm": {
+      "startTitle": "वित्तीय वर्ष शुरू करें",
+      "startDescription": "निर्धारित आरंभ और समाप्ति महीनों के अनुसार FY {year} बनाएँ? अवधि में प्रविष्टियाँ की जा सकेंगी।",
+      "closeTitle": "वित्तीय वर्ष बंद करें",
+      "closeDescription": "इससे पूर्ण लेजर योग सुरक्षित होंगे, वैधानिक आरक्षित निधि की गणना होगी और इस अवधि में नई प्रविष्टियाँ रुकेंगी। पहले लंबित लेन-देन निपटाएँ।",
+      "reopenTitle": "वित्तीय वर्ष फिर खोलें",
+      "reopenDescription": "फिर खोलने पर इस अवधि में नई प्रविष्टियाँ की जा सकेंगी। दोबारा बंद होने तक पिछली समापन गणनाएँ बनी रहेंगी।"
+    },
+    "messages": {
+      "started": "वित्तीय वर्ष शुरू हो गया।",
+      "closed": "वित्तीय वर्ष बंद हो गया।",
+      "reopened": "वित्तीय वर्ष फिर खोल दिया गया।"
+    },
+    "errors": {
+      "load": "वित्तीय अवधि लोड नहीं हो सकी।"
+    }
   },
   "auth": {
     "terminal": "Sign In",
@@ -390,7 +438,8 @@
     "healthGood": "अच्छा",
     "healthStable": "स्थिर",
     "healthAtRisk": "जोखिम में",
-    "healthCritical": "गंभीर"
+    "healthCritical": "गंभीर",
+    "fundsHealthMethod": "रनवे = शुद्ध भंडार ÷ मासिक व्यय। मासिक व्यय चालू कैलेंडर माह का व्यय है, या जब इस माह कोई व्यय न हो तो पिछले 3 माह का औसत।"
   },
   "members": {
     "stakeholders": "Members",
@@ -415,7 +464,7 @@
     "updated": "{name} updated successfully.",
     "deleted": "{name} deleted successfully.",
     "deleteConfirm": "Confirm Deletion",
-    "deleteMessage": "क्या आप {name} को स्थायी रूप से हटाना चाहते हैं? यह वापस नहीं होगा।",
+    "deleteMessage": "{name} को डायरेक्टरी से हटाएँ? केवल बिना लेजर इतिहास वाले सदस्य हटाए जा सकते हैं। उपस्थिति और दंड रिकॉर्ड ऑडिट के लिए सुरक्षित रहेंगे; सदस्य सूचियों, ड्रॉपडाउन और लाभांश वितरण से हट जाएगा।",
     "reviewTitle": "Review Member Details",
     "reviewMessage": "Please verify the information below before saving.",
     "systemAccessControl": "System Access",
@@ -486,7 +535,8 @@
       "suspend": "निलंबित करें",
       "activate": "सक्रिय करें",
       "delete": "हटाएँ",
-      "actions": "पंक्ति क्रियाएँ"
+      "actions": "पंक्ति क्रियाएँ",
+      "deleteDisabledHint": "लेजर इतिहास है — इसके बजाय निलंबित करें"
     },
     "suspendTitle": "सदस्य निलंबित करें",
     "suspendMessage": "क्या आप {name} को निलंबित करना चाहते हैं? वे साइन इन नहीं कर पाएँगे।",
@@ -517,7 +567,15 @@
       "save": "सदस्य सहेजें",
       "saving": "सहेजा जा रहा है...",
       "createdToast": "{name} सफलतापूर्वक जोड़ा गया।",
-      "updatedToast": "{name} अपडेट किया गया।"
+      "updatedToast": "{name} अपडेट किया गया।",
+      "validation": {
+        "nameMin": "नाम कम से कम 2 अक्षरों का होना चाहिए",
+        "emailRequired": "ईमेल आवश्यक है",
+        "emailInvalid": "मान्य ईमेल पता दर्ज करें",
+        "sharesRequired": "शेयर एक संख्या होनी चाहिए",
+        "sharesWhole": "शेयर पूर्ण संख्या होनी चाहिए",
+        "sharesMin": "शेयर कम से कम 1 होना चाहिए"
+      }
     },
     "detail": {
       "profile": "सदस्य प्रोफ़ाइल",
@@ -856,7 +914,18 @@
     "capitalUsed": "Capital Used",
     "currentValue": "Current Value",
     "totalReturn": "Total Return",
-    "roiLabel": "ROI"
+    "roiLabel": "ROI",
+    "totalCapitalInvested": "कुल निवेशित पूंजी",
+    "consolidatedPortfolioValue": "समेकित पोर्टफोलियो मूल्य",
+    "portfolioNetReturn": "पोर्टफोलियो शुद्ध रिटर्न",
+    "realizedReturn": "वसूल रिटर्न: {value}%",
+    "collectionEfficiency": "संग्रह दक्षता",
+    "collectionEfficiencyHelperOne": "{count} सक्रिय पोर्टफोलियो परियोजना",
+    "collectionEfficiencyHelperOther": "{count} सक्रिय पोर्टफोलियो परियोजनाएं",
+    "capitalInvestedHelper": "आज तक की सभी सत्यापित जमा का योग",
+    "consolidatedPortfolioHelper": "कुल कोष: सक्रिय फंड शेष (परियोजना पूंजी सहित)",
+    "sectorAllocationTitle": "क्षेत्र के अनुसार पूंजी आवंटन",
+    "sectorAllocationSubtitle": "उद्योग के अनुसार प्रतिबद्ध पूंजी (परियोजना बजट)"
   },
   "reports": {
     "extractionProtocol": "Report Configuration",
@@ -902,7 +971,9 @@
       "projectPerformance": "Project Performance",
       "roiAnalysis": "ROI Analysis",
       "ventureGrowth": "Project Growth Matrix",
-      "fundLedger": "Fund Ledger"
+      "fundLedger": "Fund Ledger",
+      "penaltiesAudit": "बकाया एवं दंड ऑडिट",
+      "disbursements": "वितरण विवरणी"
     },
     "descs": {
       "comprehensiveLedger": "Complete transaction history — all deposits, expenses, and transfers.",
@@ -921,16 +992,19 @@
       "projectPerformance": "ROI tracking, milestone status, and fund health by project.",
       "roiAnalysis": "Projected and actual return on investment analysis.",
       "ventureGrowth": "Comparative growth analysis across all projects.",
-      "fundLedger": "Transaction audit trail for a specific fund."
+      "fundLedger": "Transaction audit trail for a specific fund.",
+      "penaltiesAudit": "चयनित अवधि के दंड, कटौती और माफी का विवरण।",
+      "disbursements": "परियोजनाओं में निवेश और इक्विटी आवंटन का विवरण।"
     },
     "exportSpecification": "Export Configuration",
     "specificationDesc": "Reports conform to 4-locale UTF-8 formatting with tenant currency.",
     "reportTypeTitle": "1. Select Report Template",
     "periodTitle": "2. Period & Scope",
     "periodType": "Timeframe Period",
-    "month": "Fiscal Month",
+    "month": "कैलेंडर माह",
     "quarter": "Fiscal Quarter",
     "year": "Fiscal Year",
+    "calendarYear": "कैलेंडर वर्ष",
     "startDate": "Start Date",
     "endDate": "End Date",
     "linkedProject": "Target Project",
@@ -938,16 +1012,127 @@
     "selectMemberPlaceholder": "Select member...",
     "selectFundPlaceholder": "Select fund...",
     "formatTitle": "3. Output Document Format",
-    "downloadButton": "Generate & Export Document",
+    "downloadButton": "दस्तावेज़ बनाएँ और निर्यात करें",
     "validation": {
       "selectProject": "Please select a target project for this report.",
       "selectMember": "Please select a target member for this report.",
-      "selectFund": "Please select a target fund for this report."
+      "selectFund": "Please select a target fund for this report.",
+      "selectRange": "कस्टम अवधि के लिए प्रारंभ और अंत दोनों तिथियाँ चुनें।"
     },
     "format": {
       "excel": "Microsoft Excel (.xlsx)",
       "pdf": "Printable PDF (.pdf)",
       "csv": "Raw CSV Data (.csv)"
+    },
+    "quarters": {
+      "q1": "तिमाही १",
+      "q2": "तिमाही २",
+      "q3": "तिमाही ३",
+      "q4": "तिमाही ४"
+    },
+    "summary": {
+      "period": "अवधि",
+      "asOf": "तक",
+      "project": "परियोजना",
+      "member": "सदस्य",
+      "fund": "निधि",
+      "totalInflow": "कुल प्रवाह",
+      "totalOutflow": "कुल निर्गम",
+      "netCashFlow": "शुद्ध नकद प्रवाह",
+      "closingBalance": "समापन शेष",
+      "totalDeposits": "कुल जमा",
+      "totalContributions": "कुल योगदान",
+      "totalRevenue": "कुल राजस्व",
+      "totalEarnings": "कुल आय",
+      "totalInterest": "कुल ब्याज",
+      "totalDividends": "कुल लाभांश",
+      "totalExpenses": "कुल व्यय",
+      "totalProjectExpenses": "परियोजना का कुल व्यय",
+      "totalDisbursements": "कुल वितरण",
+      "totalPenalties": "कुल दंड कटौती",
+      "totalLiquidity": "कुल तरलता",
+      "activeFunds": "सक्रिय निधियाँ",
+      "partners": "भागीदार",
+      "projects": "परियोजनाएँ",
+      "sharesHeld": "धारित शेयर",
+      "totalContributed": "कुल योगदान",
+      "rowCount": "लेनदेन",
+      "truncatedNote": "नोट: डेटा सीमा से अधिक होने के कारण नवीनतम ५,००० पंक्तियों तक सीमित किया गया।",
+      "generatedBy": "निर्माता",
+      "total": "कुल",
+      "confidential": "गोपनीय — केवल आंतरिक एवं अधिकृत भागीदारों के लिए।"
+    },
+    "columns": {
+      "date": "तिथि",
+      "depositMonth": "जमा माह",
+      "reference": "संदर्भ सं.",
+      "type": "प्रकार",
+      "member": "सदस्य",
+      "memberCode": "सदस्य आईडी",
+      "email": "ईमेल",
+      "phone": "फ़ोन",
+      "role": "भूमिका",
+      "shares": "शेयर",
+      "totalContributed": "कुल योगदान",
+      "joinDate": "जुड़ने की तिथि",
+      "fund": "निधि",
+      "project": "परियोजना",
+      "category": "श्रेणी",
+      "description": "विवरण",
+      "depositMethod": "जमा माध्यम",
+      "amount": "राशि",
+      "debit": "डेबिट",
+      "credit": "क्रेडिट",
+      "runningBalance": "चालू शेष",
+      "handlingOfficer": "संचालक अधिकारी",
+      "authorizedBy": "अधिकृतकर्ता",
+      "status": "स्थिति",
+      "expenseName": "व्यय",
+      "fundName": "निधि नाम",
+      "fundType": "निधि प्रकार",
+      "balance": "शेष",
+      "currency": "मुद्रा",
+      "custodian": "रक्षक",
+      "accountNumber": "खाता सं.",
+      "depositsCount": "जमा संख्या",
+      "totalDeposited": "कुल जमा",
+      "contributionShare": "योगदान हिस्सा (%)",
+      "tier": "स्तर",
+      "penaltyTitle": "दंड",
+      "penaltyType": "दंड प्रकार",
+      "deduction": "कटौती",
+      "issuedAt": "जारी",
+      "waivedAt": "माफ",
+      "waiveReason": "माफी का कारण",
+      "projectName": "परियोजना",
+      "health": "स्वास्थ्य",
+      "initialInvestment": "प्रारंभिक निवेश",
+      "budget": "बजट",
+      "totalEarnings": "कुल आय",
+      "totalExpenses": "कुल व्यय",
+      "netProfit": "शुद्ध लाभ",
+      "netPosition": "शुद्ध स्थिति",
+      "fundBalance": "निधि शेष",
+      "expectedRoi": "अपेक्षित ROI (%)",
+      "actualRoi": "वास्तविक ROI (%)",
+      "variance": "विचरण (pp)",
+      "growthPercentage": "वृद्धि (%)",
+      "totalShares": "कुल शेयर",
+      "startDate": "प्रारंभ तिथि",
+      "completionDate": "समाप्ति",
+      "ongoing": "जारी"
+    },
+    "viewButton": "रिपोर्ट देखें",
+    "downloadSuccess": "दस्तावेज़ सफलतापूर्वक डाउनलोड हुआ",
+    "generatingNotice": "रिपोर्ट दस्तावेज़ तैयार किया जा रहा है...",
+    "viewer": {
+      "back": "रिपोर्ट्स पर वापस जाएँ",
+      "refresh": "ताज़ा करें",
+      "retry": "पुनः प्रयास करें",
+      "loading": "रिपोर्ट लोड हो रही है...",
+      "loadError": "रिपोर्ट लोड करने में विफल।",
+      "empty": "इस अवधि के लिए कोई रिकॉर्ड नहीं।",
+      "unknownReport": "अज्ञात रिपोर्ट प्रकार।"
     }
   },
   "transactions": {
@@ -1106,7 +1291,8 @@
       "depositMonth": "जमा माह",
       "depositYear": "जमा वर्ष",
       "selectMonth": "माह चुनें...",
-      "selectYear": "वर्ष चुनें..."
+      "selectYear": "वर्ष चुनें...",
+      "noOpenFiscalPeriod": "कोई वित्तीय वर्ष खुला नहीं है। जमा दर्ज करने से पहले वित्तीय वर्ष में एक वर्ष प्रारंभ करें — अन्यथा सहेजना अस्वीकृत हो जाएगा।"
     },
     "bulk": {
       "title": "बल्क जमा",
@@ -1408,7 +1594,13 @@
     "noGoalsFound": "No goals match the criteria.",
     "confirmDelete": "Delete this goal?",
     "allStatuses": "All Statuses",
-    "allTypes": "All Types"
+    "allTypes": "All Types",
+    "progressManual": "मैनुअल · असत्यापित",
+    "progressManualHint": "यह राशि हाथ से दर्ज की गई है और किसी फंड शेष से जुड़ी नहीं है।",
+    "currentAmountHint": "मैनुअल रूप से दर्ज — यह राशि किसी फंड से जुड़ी नहीं है और असत्यापित दिखाई जाती है।",
+    "metrics": {
+      "currentAccumulatedHint": "मैनुअल प्रविष्टियाँ — फंड शेष से जुड़ी नहीं"
+    }
   },
   "settings": {
     "title": "सेटिंग्स",
@@ -1425,6 +1617,22 @@
     "loadFailed": "सेटिंग्स लोड विफल।",
     "refresh": "रिफ़्रेश",
     "synced": "सेटिंग्स डेटाबेस से समन्वित।",
+    "paymentMethods": {
+      "title": "भुगतान के तरीके",
+      "desc": "डिपॉज़िट और डिपॉज़िट अनुरोध फ़ॉर्म में दिखने वाले तरीके। लेजर में तरीके का नाम ही सहेजा जाता है, इसलिए नाम बदलने पर पुराना रिकॉर्ड सुरक्षित रहेगा पर नई प्रविष्टियों में नया नाम आएगा।",
+      "empty": "कोई तरीका सेट नहीं — प्लेटफ़ॉर्म के डिफ़ॉल्ट तरीके दिखाए जाएँगे।",
+      "name": "तरीके का नाम",
+      "namePlaceholder": "जैसे DBBL Bank Transfer",
+      "add": "तरीका जोड़ें",
+      "duplicate": "यह नाम पहले से मौजूद है",
+      "types": {
+        "cash": "नकद",
+        "bank": "बैंक",
+        "mobile": "मोबाइल",
+        "check": "चेक",
+        "other": "अन्य"
+      }
+    },
     "forbidden": "पहुँच प्रतिबंधित",
     "forbiddenDetails": "आपको यह अनुभाग देखने की अनुमति नहीं है।",
     "organization": {
@@ -1640,12 +1848,77 @@
     "language": "भाषा",
     "languageSelection": "भाषा चयन",
     "toggleTheme": "थीम बदलें",
-    "organization": "संगठन"
+    "organization": "संगठन",
+    "impersonationBanner": "सपोर्ट सेशन सक्रिय है — आप {email} के रूप में देख रहे हैं। सभी कार्य ऑडिट लॉग में दर्ज होंगे।",
+    "exitImpersonation": "प्रतिरूपण समाप्त करें",
+    "exitImpersonationFailed": "सेशन समाप्त नहीं हो सका",
+    "currentFiscalYear": "वर्तमान वित्तीय वर्ष",
+    "fiscalYearAbbrev": "FY",
+    "notificationsEmpty": "आप पूरी तरह अपडेट हैं",
+    "notificationsEmptyHint": "पिछले 48 घंटों के बदलाव यहाँ दिखेंगे।",
+    "notificationsRestricted": "आपकी भूमिका के लिए कोई गतिविधि फ़ीड नहीं",
+    "notificationsRestrictedHint": "व्यवस्थापक और प्रबंधक हाल के बदलाव देख सकते हैं।",
+    "notificationsLoadFailed": "सूचनाएँ लोड नहीं हो सकीं",
+    "notificationsRetry": "पुनः प्रयास करें",
+    "notificationsRefresh": "ताज़ा करें",
+    "notificationsViewAll": "पूरा ऑडिट लॉग देखें",
+    "notificationsNew": "नई",
+    "notificationsUnknownUser": "सिस्टम",
+    "notificationsJustNow": "अभी-अभी",
+    "notificationsMinutesAgo": "{count} मिनट पहले",
+    "notificationsHoursAgo": "{count} घंटे पहले",
+    "notificationsDaysAgo": "{count} दिन पहले",
+    "notificationsActor": "{name}",
+    "notificationsActorSystem": "सिस्टम",
+    "notificationsActions": {
+      "ADD_DEPOSIT": "एक जमा दर्ज की",
+      "EDIT_DEPOSIT": "एक जमा संपादित की",
+      "APPROVE_DEPOSIT": "एक जमा स्वीकृत की",
+      "REVERT_DEPOSIT": "जमा को अनुरोध में वापस किया",
+      "RECORD_DEPOSIT": "एक जमा दर्ज की",
+      "REQUEST_DEPOSIT": "एक जमा का अनुरोध किया",
+      "BULK_DEPOSIT": "एकाधिक जमाएँ दर्ज कीं",
+      "ADD_EARNING": "एक आय दर्ज की",
+      "ADD_EXPENSE": "एक व्यय दर्ज किया",
+      "ADD_PROJECT_UPDATE": "परियोजना का बहीखाता अद्यतन किया",
+      "CREATE_MEMBER": "एक सदस्य जोड़ा",
+      "DELETE_MEMBER": "एक सदस्य हटाया",
+      "CREATE_MEETING": "एक बैठक निर्धारित की",
+      "DELETE_MEETING": "एक बैठक हटाई",
+      "START_MEETING": "एक बैठक शुरू की",
+      "COMPLETE_MEETING": "एक बैठक पूरी की",
+      "RECORD_ATTENDANCE": "बैठक की उपस्थिति दर्ज की",
+      "RECORD_MEETING_ATTENDANCE": "बैठक की उपस्थिति दर्ज की",
+      "ISSUE_PENALTY": "एक जुर्माना लगाया",
+      "CREATE_FISCAL_PERIOD": "एक वित्त वर्ष शुरू किया",
+      "CLOSE_FISCAL_PERIOD": "एक वित्त वर्ष बंद किया",
+      "REOPEN_FISCAL_PERIOD": "एक वित्त वर्ष पुनः खोला",
+      "DISTRIBUTE_DIVIDEND": "लाभांश वितरित किया",
+      "DISTRIBUTE_DIVIDENDS": "लाभांश वितरित किया",
+      "FUND_TRANSFER": "निधियों के बीच स्थानांतरण किया",
+      "DELETE_GOAL": "एक लक्ष्य हटाया",
+      "UPDATE_GOAL": "एक लक्ष्य अद्यतन किया",
+      "CREATE_GOAL": "एक लक्ष्य बनाया",
+      "UPDATE_SETTINGS": "सेटिंग्स अद्यतन कीं",
+      "UPDATE_USER": "एक उपयोगकर्ता अद्यतन किया",
+      "DELETE_TRANSACTION": "एक लेनदेन हटाया",
+      "GENERATE_REPORT": "एक रिपोर्ट बनाई",
+      "CREATE_PROJECT": "एक परियोजना बनाई",
+      "LOGIN": "साइन इन किया",
+      "LOGIN_SUCCESS": "साइन इन किया",
+      "LOGIN_FAILED": "साइन इन प्रयास विफल",
+      "LOGOUT": "साइन आउट किया",
+      "UPDATE": "एक रिकॉर्ड अद्यतन किया"
+    }
   },
   "ui": {
     "closeDialog": "संवाद बंद करें",
     "rowActions": "पंक्ति क्रियाएँ",
-    "clearSelection": "चयन साफ़ करें"
+    "clearSelection": "चयन साफ़ करें",
+    "unsavedTitle": "बिना सहेजे बदलाव छोड़ दें?",
+    "unsavedBody": "इस फ़ॉर्म में कुछ जानकारी है जिसे अभी सहेजा नहीं गया है। अभी बंद करने पर वह जानकारी खो जाएगी।",
+    "discardConfirm": "छोड़ दें",
+    "discardCancel": "संपादन जारी रखें"
   },
   "admin": {
     "nav": {

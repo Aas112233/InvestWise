@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { AuthError } from '../shared/errors.js';
+import { AuthError } from '../shared/errors';
 
 const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';
@@ -7,6 +7,7 @@ const REFRESH_TOKEN_EXPIRY = '7d';
 export interface TokenPayload {
   id: string;
   type: 'access' | 'refresh';
+  sessionId?: string;
 }
 
 export const COOKIE_NAMES = {
@@ -25,16 +26,23 @@ function getSecret(type: 'access' | 'refresh'): string {
   return base;
 }
 
-export function generateAccessToken(userId: string): string {
-  return jwt.sign({ id: userId, type: 'access' } satisfies TokenPayload, getSecret('access'), {
+export function generateAccessToken(userId: string, sessionId?: string): string {
+  return jwt.sign({ id: userId, type: 'access', ...(sessionId ? { sessionId } : {}) } satisfies TokenPayload, getSecret('access'), {
     expiresIn: ACCESS_TOKEN_EXPIRY,
   });
 }
 
-export function generateRefreshToken(userId: string): string {
-  return jwt.sign({ id: userId, type: 'refresh' } satisfies TokenPayload, getSecret('refresh'), {
+export function generateRefreshToken(userId: string, sessionId?: string): string {
+  return jwt.sign({ id: userId, type: 'refresh', ...(sessionId ? { sessionId } : {}) } satisfies TokenPayload, getSecret('refresh'), {
     expiresIn: REFRESH_TOKEN_EXPIRY,
   });
+}
+
+export function generateTokenPair(userId: string, sessionId?: string): { accessToken: string; refreshToken: string } {
+  return {
+    accessToken: generateAccessToken(userId, sessionId),
+    refreshToken: generateRefreshToken(userId, sessionId),
+  };
 }
 
 export function verifyToken(token: string, type: 'access' | 'refresh'): TokenPayload {

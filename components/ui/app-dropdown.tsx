@@ -167,6 +167,29 @@ export function AppDropdown({
     [onChange, close],
   );
 
+  // Selection is committed on POINTERDOWN, not click.
+  //
+  // The panel is a portal and the outside-dismiss listener is also a
+  // pointerdown handler on `document`. React re-renders synchronously when a
+  // `pointerdown` handler calls setState, so committing on `click` meant the
+  // pointerdown (dismiss) could unmount the panel a beat before the click —
+  // and the click then landed on whatever row had reflowed into that screen
+  // position, selecting a DIFFERENT option than the one under the cursor
+  // (report issue 5: "clicking Salam selected Karim"). Committing on
+  // pointerdown, before any dismissal can run, makes the picked row the row
+  // the user actually pressed. `pointerdown` is suppressed in favour of a
+  // plain click on disabled rows so they stay unselectable.
+  const onOptionPointerDown = useCallback(
+    (e: React.PointerEvent, option: DropdownOption) => {
+      if (e.button !== 0) return; // primary button only
+      if (option.disabled) return;
+      e.preventDefault();
+      e.stopPropagation();
+      pick(option);
+    },
+    [pick],
+  );
+
   const onTriggerKeyDown = (e: React.KeyboardEvent) => {
     if (disabled) return;
     if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
@@ -303,7 +326,13 @@ export function AppDropdown({
                       aria-selected={isSelected}
                       data-highlight={isHighlighted}
                       disabled={option.disabled}
-                      onClick={() => pick(option)}
+                      onPointerDown={(e) => onOptionPointerDown(e, option)}
+                      // Keyboard/assistive activation path. A pointer press has
+                      // already committed via pointerdown, so only a
+                      // detail===0 (synthetic / keyboard) click re-picks.
+                      onClick={(e) => {
+                        if (e.detail === 0) pick(option);
+                      }}
                       onMouseEnter={() => setHighlight(index)}
                       className={cn(
                         "w-full flex items-center justify-between gap-2 px-3 py-2 text-xs text-left transition-colors",

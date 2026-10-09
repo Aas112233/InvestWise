@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { transactions, funds, members } from '@/db/schema/index';
+import { transactions, funds, members, systemSettings } from '@/db/schema/index';
+import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-methods';
 import { eq, and, desc, sql, gte, lte, ilike, inArray } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
-import { ValidationError, ForbiddenError, NotFoundError, LockedError } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError, NotFoundError, LockedError, readJsonBody } from '@/lib/utils/errors';
 import { toCents, fromCents } from '@/lib/money';
+
+/** Single-deposit ceiling = the shared money-module maximum (10,000,000). */
+const MAX_AMOUNT_CENTS = 10_000_000 * 100;
+import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
 
 export async function GET(request: NextRequest) {
@@ -26,8 +31,12 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
+    // Clamp pagination at the boundary: an unbounded `limit` lets an
+    // authenticated caller force a full-tenant scan across the member/fund
+    // joins plus count/SUM aggregates, and a large `page` produces a huge
+    // OFFSET that Postgres still walks. The UI needs ≤500 for its pickers.
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const skip = (page - 1) * limit;
     const memberId = searchParams.get('memberId');
     const fundId = searchParams.get('fundId');
@@ -40,6 +49,16 @@ export async function GET(request: NextRequest) {
     // raw collected-date range.
     const depositMonthParam = searchParams.get('depositMonth');
     const search = searchParams.get('search');
+
+    // The "Collected this month" header is a MONEY figure, so it must never be
+    // computed from the same unfiltered predicate as the audit table below it.
+    // The table legitimately lists PENDING/REJECTED rows (an officer reviews
+    // them there), but summing those into "collected" made the header disagree
+    // with the fund balance on the same screen — and with the Dashboard, the
+    // Analysis page and the Transactions KPI, each of which had its own
+    // predicate and its own answer (report issues 27 / 47). Callers that want
+    // the money total pass `settledOnly=true`; the row list does not.
+    const settledOnly = searchParams.get('settledOnly') === 'true';
 
     const db = getDb();
     const conditions: ReturnType<typeof sql>[] = [];
@@ -60,7 +79,7 @@ export async function GET(request: NextRequest) {
     if (fundId) {
       conditions.push(sql`${transactions.fundId} = ${fundId}`);
     }
-    if (status) {
+    if (status && status !== 'All') {
       conditions.push(sql`${transactions.status} = ${status}`);
     }
     if (depositMonthParam) {
@@ -83,6 +102,12 @@ export async function GET(request: NextRequest) {
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    // The money-aggregate predicate: the row predicate, narrowed to settled
+    // rows when the caller asks for a "collected" figure. Kept separate from
+    // `whereClause` so the table can still list PENDING/REJECTED rows.
+    const sumWhereClause = settledOnly
+      ? and(whereClause, sql`${transactions.status} IN ('Completed', 'Success')`)
+      : whereClause;
 
     // Aggregate-only mode: the deposits header needs just the summed total for
     // a month. Previously the client fetched up to 1000 full rows (with joins)
@@ -94,7 +119,7 @@ export async function GET(request: NextRequest) {
           count: sql<number>`count(*)::int`,
         })
         .from(transactions)
-        .where(whereClause);
+        .where(sumWhereClause);
 
       return NextResponse.json({
         success: true,
@@ -112,7 +137,7 @@ export async function GET(request: NextRequest) {
       db
         .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
         .from(transactions)
-        .where(whereClause),
+        .where(sumWhereClause),
       db
         .select({
           id: transactions.id,
@@ -138,10 +163,13 @@ export async function GET(request: NextRequest) {
           fundName: funds.name,
         })
         .from(transactions)
-        .leftJoin(members, eq(transactions.memberId, members.id))
-        .leftJoin(funds, eq(transactions.fundId, funds.id))
+        // Relation joins stay in the transaction's tenant; a malformed or
+        // legacy cross-tenant FK can never disclose another tenant's labels.
+        .leftJoin(members, and(eq(transactions.memberId, members.id), eq(members.tenantId, scopedTenantId)))
+        .leftJoin(funds, and(eq(transactions.fundId, funds.id), eq(funds.tenantId, scopedTenantId)))
         .where(whereClause)
-        .orderBy(desc(transactions.date))
+        // Deterministic newest-first (same rationale as the transactions list).
+        .orderBy(desc(transactions.date), desc(transactions.createdAt), desc(transactions.id))
         .limit(limit)
         .offset(skip),
     ]);
@@ -184,7 +212,7 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError('Write permission required for: DEPOSITS');
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const {
       memberId,
       fundId,
@@ -224,6 +252,15 @@ export async function POST(request: NextRequest) {
     if (amountCents <= 0) {
       throw new ValidationError("[Field 'amount', Code: too_small] Deposit amount must be a positive number");
     }
+    // Upper bound (§12 / report issue 23). Without this the single-deposit path
+    // accepted a 999,999,999,999 typo and pushed the fund balance to ~1 trillion
+    // — one keystroke could destroy the books. The ceiling matches the shared
+    // MAX_AMOUNT used by parsePositiveAmount and the Zod schemas.
+    if (amountCents > MAX_AMOUNT_CENTS) {
+      throw new ValidationError(
+        `[Field 'amount', Code: too_big] Deposit amount may not exceed ${fromCents(MAX_AMOUNT_CENTS)}`,
+      );
+    }
 
     const formattedAmount = fromCents(amountCents);
 
@@ -262,8 +299,11 @@ export async function POST(request: NextRequest) {
     // Reference/member/fund lookups are independent of each other (all keyed
     // off the request payload) — batch them into one round-trip group instead
     // of three sequential ones. Error checks below preserve the original
-    // precedence (duplicate ref → missing member → missing fund).
-    const [existingDeposit, [member], [fund]] = await Promise.all([
+    // precedence (duplicate ref → missing member → missing fund). The
+    // duplicate-ref check here is only a fast-path defense: the authoritative
+    // guard is the in-transaction re-check + ON CONFLICT handling below,
+    // because two concurrent posts can both pass an outside-the-tx check.
+    const [existingDeposit, [member], [fund], [pmSettings]] = await Promise.all([
       // Duplicate reference number check (idempotency, tenant-scoped: a
       // global check leaks existence of other tenants' refs + lets one tenant
       // squat another's idempotency key).
@@ -291,6 +331,12 @@ export async function POST(request: NextRequest) {
         .from(funds)
         .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)))
         .limit(1),
+      // Tenant-configured payment methods — validates depositMethod below.
+      db
+        .select({ paymentMethods: systemSettings.paymentMethods })
+        .from(systemSettings)
+        .where(eq(systemSettings.tenantId, scopedTenantId))
+        .limit(1),
     ]);
 
     if (existingDeposit.length > 0) {
@@ -305,6 +351,13 @@ export async function POST(request: NextRequest) {
       throw new NotFoundError('Fund');
     }
 
+    // depositMethod must be a method this tenant configured (Settings →
+    // Governance), a legacy/internal value, or absent — a fixed DB CHECK
+    // cannot track per-tenant data, so the gate lives here now.
+    if (!isAllowedDepositMethod(depositMethod ?? null, normalizePaymentMethods(pmSettings?.paymentMethods))) {
+      throw new ValidationError("[Field 'depositMethod', Code: invalid_payment_method] Unknown payment method — configure it in Settings → Governance first");
+    }
+
     const now = new Date();
 
     // Execute atomic deposit transaction (§6: every write re-asserts the
@@ -316,6 +369,7 @@ export async function POST(request: NextRequest) {
     // transfer, or expense can never lose an update. The outer unlocked read
     // only serves the existence checks above. All math in integer cents (§12).
     const { newFundBalance, newMemberContributed } = await db.transaction(async (tx) => {
+      await assertFiscalPeriodOpen(tx, scopedTenantId, depositDate);
       const [lockedFund] = await tx
         .select()
         .from(funds)
@@ -330,6 +384,25 @@ export async function POST(request: NextRequest) {
         .limit(1);
       if (!lockedFund) throw new NotFoundError('Fund');
       if (!lockedMember) throw new NotFoundError('Member');
+
+      // §12 idempotency: re-check the reference INSIDE the tx (the outer
+      // pre-check races with concurrent posts). Any duplicate found here or by
+      // the unique index below aborts the whole tx, so balances can never be
+      // credited twice for one reference number.
+      const [dupRef] = await tx
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.referenceNumber, refNumber),
+            eq(transactions.isDeleted, false),
+            eq(transactions.tenantId, scopedTenantId),
+          ),
+        )
+        .limit(1);
+      if (dupRef) {
+        throw new ValidationError("[Field 'referenceNumber', Code: DUPLICATE] Transaction with this reference number already exists");
+      }
 
       const fundBalanceCents = toCents(lockedFund.balance ?? '0');
       const memberContributedCents = toCents(lockedMember.totalContributed ?? '0');
@@ -349,34 +422,52 @@ export async function POST(request: NextRequest) {
         .update(members)
         .set({
           totalContributed: sql`(${members.totalContributed}::numeric + ${amountCents / 100})::numeric(15,2)`,
-          lastDepositMonth: depositMonthKey,
+          lastDepositMonth: sql`GREATEST(COALESCE(${members.lastDepositMonth}, ''), ${depositMonthKey})`,
           lastActive: now,
           updatedAt: now,
         })
         .where(and(eq(members.id, memberId), eq(members.tenantId, scopedTenantId)));
 
       // Create deposit transaction — date = collected, submittedDate = recorded.
-      await tx.insert(transactions).values({
-        tenantId: scopedTenantId,
-        type: 'Deposit',
-        amount: formattedAmount,
-        description: description || 'Member deposit',
-        category: 'Deposit',
-        referenceNumber: refNumber,
-        date: depositDate,
-        submittedDate: submissionDate,
-        status: 'Completed',
-        memberId: memberId,
-        fundId: fundId,
-        handlingOfficer: user.name,
-        depositMethod: depositMethod || null,
-        depositMonth: depositMonthKey,
-        authorizedBy: user.id,
-        balanceBefore: fromCents(fundBalanceCents),
-        balanceAfter: fromCents(newFundBalanceCents),
-        createdBy: user.id,
-        updatedBy: user.id,
-      });
+      // ON CONFLICT with NO named target: uq_trans_tenant_reference is a
+      // partial unique index ((tenant_id, reference_number) WHERE is_deleted =
+      // false AND reference_number IS NOT NULL) added by migration — naming
+      // columns before it exists would fail with 42P10 and break every
+      // deposit. A bare ON CONFLICT DO NOTHING absorbs the 23505 from that
+      // index (it only ever swallows unique violations) whether or not the
+      // migration has run; the empty returning() below is the mapping.
+      const [inserted] = await tx
+        .insert(transactions)
+        .values({
+          tenantId: scopedTenantId,
+          type: 'Deposit',
+          amount: formattedAmount,
+          description: description || 'Member deposit',
+          category: 'Deposit',
+          referenceNumber: refNumber,
+          date: depositDate,
+          submittedDate: submissionDate,
+          status: 'Completed',
+          memberId: memberId,
+          fundId: fundId,
+          handlingOfficer: user.name,
+          depositMethod: depositMethod || null,
+          depositMonth: depositMonthKey,
+          authorizedBy: user.id,
+          balanceBefore: fromCents(fundBalanceCents),
+          balanceAfter: fromCents(newFundBalanceCents),
+          createdBy: user.id,
+          updatedBy: user.id,
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      if (!inserted) {
+        // 23505 (unique_violation): a concurrent request committed the same
+        // reference number between the pre-check and this insert — the tx
+        // (fund/member balances included) rolls back with it.
+        throw new ValidationError("[Field 'referenceNumber', Code: DUPLICATE] Transaction with this reference number already exists");
+      }
 
       return {
         newFundBalance: fromCents(newFundBalanceCents),
@@ -386,6 +477,7 @@ export async function POST(request: NextRequest) {
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'RECORD_DEPOSIT',
       resourceType: 'Transaction',
       resourceId: refNumber,

@@ -25,6 +25,7 @@ import {
   AppDropdown,
   DropdownOption,
   StatusTone,
+  ERPConfirmDialog,
 } from "@/components/ui";
 import { formatDate } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
@@ -53,6 +54,8 @@ export function MeetingsListView({
   const [selectedType, setSelectedType] = useState<string>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  // Deletion is destructive — confirm through the app dialog, not window.confirm.
+  const [pendingDelete, setPendingDelete] = useState<Meeting | null>(null);
 
   // Compute Metrics
   const metrics = useMemo(() => {
@@ -207,9 +210,7 @@ export function MeetingsListView({
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                if (confirm(t("meetings.confirmDelete", { defaultValue: "Delete this meeting?" }))) {
-                  onDeleteMeeting(m.id);
-                }
+                setPendingDelete(m);
               }}
               icon={Trash2}
             />
@@ -312,6 +313,21 @@ export function MeetingsListView({
         emptyMessage={t("meetings.noMeetingsFound", { defaultValue: "No meetings found." })}
         emptyActionLabel={t("meetings.scheduleButton", { defaultValue: "Schedule Meeting" })}
         onEmptyAction={onOpenCreate}
+      />
+
+      <ERPConfirmDialog
+        isOpen={!!pendingDelete}
+        title={t("common.delete", { defaultValue: "Delete" })}
+        description={t("meetings.confirmDelete", { defaultValue: "Delete this meeting?" })}
+        confirmLabel={t("common.delete", { defaultValue: "Delete" })}
+        cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
+        confirmVariant="destructive"
+        onConfirm={() => {
+          const target = pendingDelete;
+          setPendingDelete(null);
+          if (target && onDeleteMeeting) void onDeleteMeeting(target.id);
+        }}
+        onClose={() => setPendingDelete(null)}
       />
     </div>
   );

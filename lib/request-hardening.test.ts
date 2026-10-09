@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { ValidationError } from "./utils/errors";
 import { clampText, readCappedJson } from "./request-meta";
 import { authorizeCronRequest } from "./cron-auth";
-import { generateAccessToken, verifyToken } from "./utils/jwt";
+import { generateAccessToken, generateTokenPair, verifyToken } from "./utils/jwt";
 
 function requestWith(headers: Record<string, string>, body?: string): NextRequest {
   return new Request("http://localhost/test", {
@@ -82,6 +82,15 @@ describe("jwt algorithm pinning", () => {
     const decoded = verifyToken(token, "access");
     expect(decoded.id).toBe("user-1");
     expect(decoded.type).toBe("access");
+    delete process.env.JWT_SECRET;
+  });
+
+  it("binds access and refresh tokens to the same server-side session", () => {
+    process.env.JWT_SECRET = "test-jwt-secret-for-vitest-0123456789";
+    const pair = generateTokenPair("user-1", { sessionId: "session-1" });
+
+    expect(verifyToken(pair.accessToken, "access").sessionId).toBe("session-1");
+    expect(verifyToken(pair.refreshToken, "refresh").sessionId).toBe("session-1");
     delete process.env.JWT_SECRET;
   });
 

@@ -1,4 +1,4 @@
-import { getDb } from '../../config/database.js';
+import { getDb } from '../../config/database';
 import {
   memberPenalties,
   members,
@@ -8,11 +8,26 @@ import {
   auditLogs,
   DEFAULT_PENALTY_RULES,
   type PenaltyRuleConfig,
-} from '../../db/schema/index.js';
+} from '../../db/schema/index';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { NotFoundError, AppError } from '../../shared/errors.js';
-import { getPaginationParams, formatPaginatedResponse } from '../../shared/types.js';
-import { recalculateMemberPerformance } from './performance.js';
+import { NotFoundError, AppError } from '../../shared/errors';
+import { getPaginationParams, formatPaginatedResponse } from '../../shared/types';
+import { recalculateMemberPerformance } from './performance';
+
+/**
+ * ⚠️ NOT TENANT-SAFE — DO NOT WIRE INTO A TENANT-FACING ROUTE.
+ *
+ * Pre-multitenancy Express code: member/fund lookups filter by id only (or by
+ * "first ACTIVE fund" platform-wide) and every member update is id-only, with
+ * no tenantId predicate. It is UNREACHABLE from the Next.js app today — the
+ * live penalty logic is re-implemented tenant-safely in
+ * app/api/governance/penalties/**. If this module is ever mounted it allows a
+ * cross-tenant financial write (deduct/suspend a member in any tenant).
+ *
+ * Before mounting: thread a tenantId through IssuePenaltyInput/waivePenalty and
+ * add `eq(members.tenantId, tenantId)` / `eq(funds.tenantId, tenantId)` to
+ * every read and write. Prefer porting to app/api/governance/** instead.
+ */
 
 export interface IssuePenaltyInput {
   memberId: string;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { logAudit } from '@/lib/utils/audit';
-import { ValidationError } from '@/lib/utils/errors';
+import { ValidationError, readJsonBody } from '@/lib/utils/errors';
 
 /**
  * Convert arbitrary table rows to CSV with UTF-8 BOM.
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const { title = 'export', data = [] } = body;
 
     if (!Array.isArray(data) || data.length === 0) {

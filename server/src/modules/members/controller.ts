@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
+import { asyncHandler } from '../../shared/asyncHandler';
 import {
   listMembers,
   getMemberById,
@@ -9,8 +9,8 @@ import {
   deleteMember,
   onboardMember,
   recalculateFinancials,
-} from './service.js';
-import type { ListMembersQuery } from './service.js';
+} from './service';
+import type { ListMembersQuery } from './service';
 
 // ---------------------------------------------------------------------------
 // GET /api/members/me — current logged in member profile

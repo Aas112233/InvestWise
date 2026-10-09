@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { apiClient } from "./api-client";
 import { formatMoney, formatDatePattern } from "./formatters";
+import { DEFAULT_PAYMENT_METHODS, type PaymentMethodConfig } from "./payment-methods";
 
 export interface PenaltyRuleSetting {
   tier: number;
@@ -46,6 +47,7 @@ export interface TenantSettings {
     suspendedAfterMonths?: number;
     meetingTypes?: string[];
     penaltyRules?: PenaltyRuleSetting[];
+    paymentMethods?: PaymentMethodConfig[];
   };
   system?: {
     language?: string;
@@ -117,6 +119,18 @@ export function useTenantPenaltyRules(): PenaltyRuleSetting[] {
   return data?.governance?.penaltyRules && data.governance.penaltyRules.length > 0
     ? data.governance.penaltyRules
     : DEFAULT_TENANT_PENALTY_RULES;
+}
+
+/**
+ * Tenant-configured payment methods (Settings → Governance). Deposit forms
+ * build their method pickers from this; falls back to the platform defaults
+ * so a tenant that never configured any still gets a working, sane list.
+ */
+export function useTenantPaymentMethods(): PaymentMethodConfig[] {
+  const { data } = useTenantSettings();
+  return data?.governance?.paymentMethods && data.governance.paymentMethods.length > 0
+    ? data.governance.paymentMethods
+    : DEFAULT_PAYMENT_METHODS;
 }
 
 /** Formats a numeric amount using the active tenant's base currency. */

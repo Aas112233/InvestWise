@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
 import { Goal, Project } from "@/types";
 import { useLocale } from "@/lib/i18n";
@@ -38,6 +38,21 @@ export function GoalFormModal({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Edit forms must reflect the CURRENT record: field state initialized
+  // once at mount goes stale (or stays empty) when the modal is reused for
+  // another goal, so re-sync on every open.
+  useEffect(() => {
+    if (!isOpen) return;
+    setTitle(initialData?.title || "");
+    setDescription(initialData?.description || "");
+    setTargetAmount(initialData?.targetAmount ? String(initialData.targetAmount) : "");
+    setCurrentAmount(initialData?.currentAmount ? String(initialData.currentAmount) : "0");
+    setDeadline(initialData?.deadline || "");
+    setType(initialData?.type || "Savings");
+    setSelectedProjectId(initialData?.linkedProjectId || initialData?.linkedProject || null);
+    setErrorMessage(null);
+  }, [isOpen, initialData]);
 
   const projectOptions: DropdownOption[] = projects.map((p) => ({
     value: p.id,
@@ -161,6 +176,14 @@ export function GoalFormModal({
                 onChange={(e) => setCurrentAmount(e.target.value)}
                 className="w-full px-3 py-2 text-xs font-mono bg-card border border-border/80 text-foreground rounded-xl placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
               />
+              {/* #48 — this number is not tied to any fund; say so at the point
+                  of entry so it is never mistaken for a ledger balance. */}
+              <p className="mt-1 text-[10px] leading-snug text-amber-600 dark:text-amber-400">
+                {t("goals.currentAmountHint", {
+                  defaultValue:
+                    "Entered manually — this amount is not linked to a fund and is shown as unverified.",
+                })}
+              </p>
             </ERPFormField>
           </ERPFormGrid>
 

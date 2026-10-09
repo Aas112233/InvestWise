@@ -70,3 +70,32 @@ export function maskMemberPII<T extends MemberWithPII>(member: T, canView: boole
   masked.piiMasked = true;
   return masked;
 }
+
+/**
+ * Governance review metrics — visible to Admin/Manager only (directory spec,
+ * 2026-10-04). The list view already hides the Warnings column from other
+ * roles; this makes the API match, so hidden-in-UI does not mean
+ * still-in-the-JSON.
+ */
+const REVIEW_FIELDS = ['warningCount', 'performanceScore'] as const;
+
+export interface MemberWithReview {
+  warningCount?: number | null;
+  performanceScore?: number | string | null;
+  /** True when the server hid the review metrics from this viewer. */
+  reviewMasked?: boolean;
+}
+
+export function canViewMemberReviewData(role: string | undefined): boolean {
+  return role === 'Admin' || role === 'Manager';
+}
+
+export function maskMemberReviewData<T extends MemberWithReview>(member: T, canView: boolean): T {
+  if (canView) return member;
+  const masked = { ...member };
+  for (const field of REVIEW_FIELDS) {
+    (masked as Record<string, unknown>)[field] = undefined;
+  }
+  masked.reviewMasked = true;
+  return masked;
+}

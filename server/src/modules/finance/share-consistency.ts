@@ -1,5 +1,5 @@
-import { getDb } from '../../config/database.js';
-import { members, projects, projectMembers } from '../../db/schema/index.js';
+import { getDb } from '../../config/database';
+import { members, projects, projectMembers } from '../../db/schema/index';
 import { eq, sql, and } from 'drizzle-orm';
 
 export async function recalculateAllMemberShares(): Promise<{ updated: number }> {

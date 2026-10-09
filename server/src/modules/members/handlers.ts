@@ -4,6 +4,7 @@ import {
   requireSession,
   requireTenant,
   validateQuery,
+  readJsonObject,
   errorResponse,
   assertUuid,
 } from '@/server/middleware/api';
@@ -69,7 +70,7 @@ export async function handleCreateFund(request: NextRequest) {
   try {
     const user = await requirePermission('FUNDS_MANAGEMENT', 'WRITE');
     const tenantId = requireTenant(user);
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonObject(request);
     const name = String(body.name || '').trim();
     if (!name) {
       return Response.json(
@@ -101,7 +102,7 @@ export async function handleUpdateFund(request: NextRequest, id: string) {
     assertUuid(id);
     const user = await requirePermission('FUNDS_MANAGEMENT', 'WRITE');
     const tenantId = requireTenant(user);
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonObject(request);
     const fund = await fundsService.updateFund(id, body as never, tenantId);
     return Response.json(fund);
   } catch (err) {

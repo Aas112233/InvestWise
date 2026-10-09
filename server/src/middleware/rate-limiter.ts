@@ -1,5 +1,5 @@
 import rateLimit from 'express-rate-limit';
-import { isProduction } from '../config/env.js';
+import { isProduction } from '../config/env';
 
 /**
  * Rate limiters.

@@ -139,7 +139,19 @@ function RowActionsMenu({
       danger: false,
       show: canDivide,
     },
-    { label: t("members.rowMenu.delete"), icon: <Trash2 size={13} />, run: onDelete, danger: true, show: canWrite },
+    // HARD RULE: members with ledger history are never deletable (the API
+    // refuses too). Suspend is the alternative for anyone with transactions.
+    {
+      label: t("members.rowMenu.delete"),
+      icon: <Trash2 size={13} />,
+      run: onDelete,
+      danger: true,
+      show: canWrite,
+      disabled: member.hasTransactions === true,
+      disabledHint: t("members.rowMenu.deleteDisabledHint", {
+        defaultValue: "Has ledger history — suspend instead",
+      }),
+    },
   ];
 
   return (
@@ -174,14 +186,19 @@ function RowActionsMenu({
                   key={item.label}
                   type="button"
                   role="menuitem"
+                  disabled={item.disabled}
+                  title={item.disabled ? item.disabledHint : undefined}
                   onClick={() => {
+                    if (item.disabled) return;
                     setOpen(false);
                     item.run();
                   }}
                   className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${
-                    item.danger
-                      ? "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                      : "text-foreground hover:bg-muted/60"
+                    item.disabled
+                      ? "text-muted-foreground/50 cursor-not-allowed"
+                      : item.danger
+                        ? "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                        : "text-foreground hover:bg-muted/60"
                   }`}
                 >
                   {item.icon}

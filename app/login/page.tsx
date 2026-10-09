@@ -22,8 +22,9 @@ import { Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import type { z } from "zod";
-import { ApiError, apiClient } from "@/lib/api-client";
+import { ApiError, apiClient, clearSessionGone } from "@/lib/api-client";
 import { useAuth, type AuthUser } from "@/lib/auth-context";
+import { getQueryClient } from "@/lib/query-client";
 import { LOCALES, useLocale, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { loginSchema } from "@/lib/utils/validation";
@@ -170,6 +171,13 @@ function LoginForm() {
       } catch {
         // storage unavailable
       }
+      // Identity handoff: this tab's QueryClient is a singleton keyed without
+      // any user stamp, and a session that ended via the expired-redirect
+      // path never ran logout(). Purge before entering the shell so the first
+      // screen can never render the PREVIOUS account's cached rows.
+      getQueryClient().clear();
+      // Re-arm the expiry-redirect machinery that a prior sign-out disarmed.
+      clearSessionGone();
       setUser({
         id: data.id,
         name: data.name,
@@ -243,13 +251,18 @@ function LoginForm() {
             aria-hidden="true"
             className="absolute inset-0 bg-gradient-to-br from-primary/[0.1] via-secondary/40 to-background dark:from-[#0b1222] dark:via-[#080d17] dark:to-[#080d17]"
           />
-          {/* Ledger column rules */}
+          {/* Ledger column rules — texture only.
+              #53: the light-mode variant drew 1px rules every 120px at 5%
+              black, which read as hard vertical lines slicing through the
+              marketing headline on a fresh desktop load. Dropped to a much
+              fainter, wider-spaced rule so it registers as a surface, never as
+              a grid over the text. */}
           <div
             aria-hidden="true"
             className="absolute inset-0 hidden dark:block"
             style={{
               backgroundImage:
-                "repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0px, rgba(255,255,255,0.04) 1px, transparent 1px, transparent 120px)",
+                "repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 160px)",
             }}
           />
           <div
@@ -257,16 +270,16 @@ function LoginForm() {
             className="absolute inset-0 dark:hidden"
             style={{
               backgroundImage:
-                "repeating-linear-gradient(90deg, rgba(15,23,42,0.05) 0px, rgba(15,23,42,0.05) 1px, transparent 1px, transparent 120px)",
+                "repeating-linear-gradient(90deg, rgba(15,23,42,0.02) 0px, rgba(15,23,42,0.02) 1px, transparent 1px, transparent 160px)",
             }}
           />
-          {/* Dot grid */}
+          {/* Dot grid (dark mode only — a light-mode dot grid muddies the tint) */}
           <div
             aria-hidden="true"
             className="absolute inset-0 hidden dark:block"
             style={{
               backgroundImage:
-                "radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px)",
+                "radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px)",
               backgroundSize: "26px 26px",
             }}
           />

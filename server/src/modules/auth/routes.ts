@@ -1,14 +1,14 @@
 import { Router } from 'express';
-import { protect, admin, managerOrAdmin } from '../../middleware/auth.js';
-import { validate } from '../../middleware/validate.js';
-import { authLimiter } from '../../middleware/rate-limiter.js';
+import { protect, admin, managerOrAdmin } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
+import { authLimiter } from '../../middleware/rate-limiter';
 import {
   loginSchema,
   registerSchema,
   updateUserSchema,
   changePasswordSchema,
   adminPasswordResetSchema,
-} from './validation.js';
+} from './validation';
 import {
   authUser,
   registerUser,
@@ -24,7 +24,7 @@ import {
   getActiveSessions,
   revokeSession,
   getLoginHistory,
-} from './controller.js';
+} from './controller';
 
 const router = Router();
 

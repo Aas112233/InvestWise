@@ -6,7 +6,7 @@
  * shared cache invalidation across instances.
  *
  * @example
- *   import { cache } from '../lib/cache.js';
+ *   import { cache } from '../lib/cache';
  *   const stats = await cache.get('analytics:stats', async () => {
  *     return analyticsService.recalculateAllStats();
  *   }, 300_000); // 5 min TTL

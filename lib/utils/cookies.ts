@@ -38,10 +38,15 @@ export function setAuthCookies(
 }
 
 export function clearAuthCookies(
-  cookies: { delete: (name: string) => any } | any,
+  cookies: { delete: (name: string, options?: { path?: string }) => any } | any,
 ): void {
-  cookies.delete(COOKIE_NAMES.ACCESS_TOKEN);
-  cookies.delete(COOKIE_NAMES.REFRESH_TOKEN);
+  // A cookie can only be deleted by a Set-Cookie whose path matches the one it
+  // was written with. The refresh cookie is scoped to path='/api/auth' (see
+  // setAuthCookies), so deleting it with the default path='/' left it in the
+  // jar — a stale refresh token survived logout and could still be exchanged
+  // for a fresh session. Delete each cookie on the exact path it was set on.
+  cookies.delete(COOKIE_NAMES.ACCESS_TOKEN, { path: '/' });
+  cookies.delete(COOKIE_NAMES.REFRESH_TOKEN, { path: '/api/auth' });
 }
 
 interface CookieOptions {

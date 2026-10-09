@@ -2,15 +2,14 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { members } from '@/db/schema/index';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { getAuthContext, requirePermission } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { logAudit } from '@/lib/utils/audit';
-import { normalizeEmail, optionalStringField } from '@/lib/utils/types';
-import { ValidationError, ConflictError, ForbiddenError } from '@/lib/utils/errors';
+import { normalizeEmail } from '@/lib/utils/types';
+import { ConflictError, ForbiddenError, readJsonUnknown } from '@/lib/utils/errors';
+import { memberCreateSchema, memberFieldError } from '@/lib/member-schema';
 import { handleListMembers } from '@/server/modules/members/handlers';
-import { isMemberRole } from '@/lib/member-roles';
-import crypto from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,18 +17,24 @@ export async function GET(request: NextRequest) {
   return handleListMembers(request);
 }
 
-async function generateMemberId(db: ReturnType<typeof getDb>): Promise<string> {
+// Sequential member code, PER TENANT: uniqueness lives on (tenant_id,
+// member_id), so one org's MEM-0007 says nothing about another's and the code
+// no longer leaks a platform-wide member count. Only the strict 4-digit shape
+// feeds MAX+1 — legacy random-code rows are skipped rather than breaking the
+// CAST, and they can never collide with a fresh sequential code anyway.
+async function generateMemberId(
+  db: ReturnType<typeof getDb>,
+  tenantId: string,
+): Promise<string> {
   const [row] = await db
     .select({
       maxNum: sql<number>`COALESCE(MAX(CAST(SUBSTRING(${members.memberId} FROM 5) AS INTEGER)), 0)`,
     })
     .from(members)
-    .where(sql`${members.memberId} ~ '^MEM-[0-9]{4}$'`);
+    .where(and(eq(members.tenantId, tenantId), sql`${members.memberId} ~ '^MEM-[0-9]{4}$'`));
   const next = Number(row?.maxNum ?? 0) + 1;
   return `MEM-${String(next).padStart(4, '0')}`;
 }
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // POST /api/members — create a member (server generates the MEM-XXXX code;
 // shares are set once at creation and locked afterwards).
@@ -48,46 +53,29 @@ export async function POST(request: NextRequest) {
     // an insert without tenantId would create an orphan row no tenant can see.
     const tenantId = requireTenant(user.tenantId, user);
 
-    const body = await request.json();
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    const email = typeof body.email === 'string' ? normalizeEmail(body.email) : '';
-    const phone = typeof body.phone === 'string' && body.phone.trim() ? body.phone.trim() : null;
-    // Absent role means the standard category. A role that is present but
-    // unrecognized is rejected instead of being quietly rewritten to 'Member' —
-    // that coercion used to overwrite seeded categories (Board Member, Founding
-    // Member) with no signal to the client (AGENTS.md §11).
-    let role = 'Member';
-    if (body.role !== undefined && body.role !== null && body.role !== '') {
-      if (!isMemberRole(body.role)) {
-        throw new ValidationError(`[Field 'role', Code: invalid_role] Not a recognized member role`);
-      }
-      role = body.role;
+    const parsed = memberCreateSchema.safeParse(await readJsonUnknown(request));
+    if (!parsed.success) {
+      return NextResponse.json(memberFieldError(parsed.error), { status: 400 });
     }
-    const shares = body.shares === undefined ? 1 : Number(body.shares);
-    const status = body.status === 'inactive' ? 'inactive' : 'active';
-    // KYC/nominee fields — the member form sends these; they were silently
-    // dropped in an earlier migration (Express validation accepted them).
-    // Length limits are shared with PUT /api/members/[id], so a value that
-    // creates cleanly can never be rejected (or truncated) on the first edit.
-    const nidOrPassport = optionalStringField(body.nidOrPassport, 'NID/Passport', 100);
-    const fatherName = optionalStringField(body.fatherName, "Father's name", 255);
-    const address = optionalStringField(body.address, 'Address', 500);
-    const nomineeName = optionalStringField(body.nomineeName, 'Nominee name', 255);
-    const nomineeRelation = optionalStringField(body.nomineeRelation, 'Nominee relation', 100);
-    const nomineeNidOrPassport = optionalStringField(body.nomineeNidOrPassport, 'Nominee NID/Passport', 100);
-    const nomineePhone = optionalStringField(body.nomineePhone, 'Nominee phone', 50);
-
-    if (!name) throw new ValidationError('Name is required');
-    if (!EMAIL_RE.test(email)) throw new ValidationError('Valid email is required');
-    if (!phone) throw new ValidationError('Phone is required');
-    if (phone.length > 50) throw new ValidationError('Phone must be at most 50 characters');
-    if (!Number.isInteger(shares) || shares < 1) throw new ValidationError('Shares must be at least 1');
+    const d = parsed.data;
+    const name = d.name;
+    const email = normalizeEmail(d.email);
+    const phone = d.phone;
+    // Absent role means the standard membership category; anything outside
+    // the lib/member-roles vocabulary was rejected by the schema above.
+    const role = d.role ?? 'Member';
+    const shares = d.shares ?? 1;
+    const status = d.status ?? 'active';
 
     const db = getDb();
+    // Duplicate check is TENANT-scoped and ignores soft-deleted rows: the old
+    // global probe confirmed to any tenant whether ANOTHER tenant held an
+    // address (cross-tenant existence oracle), and a removed member's email
+    // must be reusable by policy.
     const [existing] = await db
       .select({ id: members.id })
       .from(members)
-      .where(eq(members.email, email))
+      .where(and(eq(members.tenantId, tenantId), eq(members.email, email), eq(members.isDeleted, false)))
       .limit(1);
     if (existing) throw new ConflictError('A member with this email already exists');
 
@@ -99,31 +87,40 @@ export async function POST(request: NextRequest) {
       role,
       shares,
       status,
-      nidOrPassport,
-      fatherName,
-      address,
-      nomineeName,
-      nomineeRelation,
-      nomineeNidOrPassport,
-      nomineePhone,
+      nidOrPassport: d.nidOrPassport,
+      fatherName: d.fatherName,
+      address: d.address,
+      nomineeName: d.nomineeName,
+      nomineeRelation: d.nomineeRelation,
+      nomineeNidOrPassport: d.nomineeNidOrPassport,
+      nomineePhone: d.nomineePhone,
     };
 
-    let memberId = await generateMemberId(db);
+    // Concurrent creates can read the same MAX+1. Retry once by RECOMPUTING
+    // (the rival's row has committed by then, so the fresh code is strictly
+    // higher). A duplicate email or a persistent code clash surfaces as a clean
+    // 409 — NEVER a raw 23505/500 that would leak the failed SQL. Drizzle may
+    // wrap the driver error, so read code/constraint from the error, its cause,
+    // and the message text.
+    let memberId = await generateMemberId(db, tenantId);
     let created;
-    try {
-      [created] = await db
-        .insert(members)
-        .values({ memberId, ...insertValues })
-        .returning();
-    } catch (e: unknown) {
-      // Unique violation on memberId under concurrency — retry once with a random code.
-      const code = (e as { code?: string })?.code;
-      if (code !== '23505') throw e;
-      memberId = `MEM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      [created] = await db
-        .insert(members)
-        .values({ memberId, ...insertValues })
-        .returning();
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        [created] = await db.insert(members).values({ memberId, ...insertValues }).returning();
+        break;
+      } catch (e: unknown) {
+        const err = e as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
+        const code = err.code ?? err.cause?.code;
+        const constraint = err.constraint ?? err.cause?.constraint ?? (typeof (e as { message?: string })?.message === 'string' ? (e as { message: string }).message : '');
+        if (code !== '23505') throw e;
+        if (typeof constraint === 'string' && constraint.includes('tenant_email')) {
+          throw new ConflictError('A member with this email already exists');
+        }
+        if (attempt >= 1) {
+          throw new ConflictError('Could not allocate a member code — please retry.');
+        }
+        memberId = await generateMemberId(db, tenantId);
+      }
     }
 
     await logAudit({
@@ -132,7 +129,7 @@ export async function POST(request: NextRequest) {
       action: 'CREATE_MEMBER',
       resourceType: 'Member',
       resourceId: created?.id,
-      details: { memberId, name, email },
+      details: { memberId, name, email, role },
     });
 
     return NextResponse.json(

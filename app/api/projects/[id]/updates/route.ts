@@ -3,10 +3,11 @@ import { getDb } from '@/db/index';
 import { projects, projectUpdates, funds, transactions } from '@/db/schema/index';
 import { eq, and, sql } from 'drizzle-orm';
 import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError, ValidationError } from '@/lib/utils/errors';
+import { NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { disbursementSchema } from '@/lib/utils/validation';
 import { requireProjectContext, zodMessage } from '../../_helpers';
 import { parsePositiveAmount, toCents, fromCents } from '@/lib/money';
+import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
 
 // Money routes span several round-trips in one transaction — keep headroom
@@ -24,7 +25,7 @@ export async function POST(
     const { user, tenantId } = ctx;
 
     const { id } = await params;
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const parsed = disbursementSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
@@ -47,7 +48,16 @@ export async function POST(
     // client-supplied reference is dup-checked inside the transaction; a
     // generated one is date + uuid-suffixed (same shape as dividend runs).
     const refPrefix = type === 'Earning' ? 'PRJ-REV' : 'PRJ-EXP';
-    const refNumber = parsed.data.referenceNumber?.trim() ||
+    const callerRef = parsed.data.referenceNumber?.trim();
+    // #36: the reference is user-facing (Transactions, Expenses, project
+    // timeline). A caller-supplied value must look like a business reference,
+    // never a bare UUID — reject rather than persist noise into the register.
+    if (callerRef && !/^(PRJ-(EXP|REV|RET)|EXP|DEP|TXN)-/i.test(callerRef)) {
+      throw new ValidationError(
+        'referenceNumber must be a business reference (e.g. PRJ-EXP-… / PRJ-REV-…); omit it to have one generated',
+      );
+    }
+    const refNumber = callerRef ||
       `${refPrefix}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
     const db = getDb();
@@ -61,6 +71,15 @@ export async function POST(
         .limit(1);
 
       if (!project) throw new NotFoundError('Project');
+
+      // #74: a posting with no fund is money that exists nowhere. The project's
+      // currentFundBalance would rise while every fund balance stayed flat, so
+      // the project view and the treasury could never be reconciled.
+      if (!project.linkedFundId) {
+        throw new ValidationError(
+          'This project has no linked fund, so its earnings and expenses cannot be posted. Link an existing fund or create its dedicated fund first.',
+        );
+      }
 
       // §12 idempotency: a retry with the same reference must not post twice.
       const [dupe] = await tx
@@ -94,6 +113,7 @@ export async function POST(
       const balanceAfterStr = fromCents(balanceAfterCents);
 
       const now = new Date();
+      await assertFiscalPeriodOpen(tx, tenantId, now);
       const [updateRecord] = await tx
         .insert(projectUpdates)
         .values({
@@ -137,12 +157,16 @@ export async function POST(
           .where(and(eq(funds.id, project.linkedFundId), eq(funds.tenantId, tenantId)));
       }
 
-      // Record corresponding ledger transaction for project timeline
+      // Record corresponding ledger transaction for project timeline.
+      // #36: the Expenses register groups by `expense_name` and shows
+      // `authorized_by` — without them a project disbursement rendered as an
+      // unattributed "—" voucher in the audit trail.
       await tx.insert(transactions).values({
         tenantId,
         type: type === 'Earning' ? 'Earning' : 'Expense',
         amount: amountStr,
         description: `${description.trim()} (${project.title})`,
+        expenseName: type === 'Earning' ? null : description.trim(),
         category: type === 'Earning' ? 'Project Revenue' : 'Project Expense',
         referenceNumber: refNumber,
         date: now,
@@ -151,6 +175,9 @@ export async function POST(
         projectId: id,
         fundId: project.linkedFundId ?? null,
         handlingOfficer: user.name,
+        // The user performing the disbursement is the approver of record for
+        // project postings (there is no separate approval step on this route).
+        authorizedBy: user.id,
         balanceBefore: balanceBeforeStr,
         balanceAfter: balanceAfterStr,
         createdBy: user.id,
@@ -161,6 +188,7 @@ export async function POST(
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'ADD_PROJECT_UPDATE',
       resourceType: 'Project',
       resourceId: id,

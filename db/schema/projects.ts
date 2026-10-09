@@ -1,8 +1,8 @@
 import { pgTable, uuid, varchar, text, integer, decimal, date, timestamp, index, primaryKey } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { tenants } from './tenants.js';
-import { members } from './members.js';
-import { funds } from './funds.js';
+import { tenants } from './tenants';
+import { members } from './members';
+import { funds } from './funds';
 export const projects = pgTable('projects', {
   id: uuid('id').defaultRandom().primaryKey(),
   tenantId: uuid('tenant_id').references(() => tenants.id),

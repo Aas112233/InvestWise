@@ -5,7 +5,7 @@ import { eq, and } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError, ForbiddenError } from '@/lib/utils/errors';
+import { NotFoundError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 
 /** §6 guard: tenant business route — resolve tenantId or fail closed. */
 async function requireTenantContext(request: NextRequest) {
@@ -48,7 +48,7 @@ export async function GET(
         createdAt: meetings.createdAt,
       })
       .from(meetings)
-      .leftJoin(users, eq(meetings.conductedBy, users.id))
+      .leftJoin(users, and(eq(meetings.conductedBy, users.id), eq(users.tenantId, tenantId)))
       .where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)))
       .limit(1);
 
@@ -65,8 +65,10 @@ export async function GET(
         notes: meetingAttendees.notes,
       })
       .from(meetingAttendees)
-      .leftJoin(members, eq(meetingAttendees.memberId, members.id))
-      .where(eq(meetingAttendees.meetingId, id));
+      // Inner join prevents a stale cross-tenant memberId in attendee data from
+      // leaking even the foreign member identifier or name.
+      .innerJoin(members, and(eq(meetingAttendees.memberId, members.id), eq(members.tenantId, tenantId)))
+      .where(and(eq(meetingAttendees.meetingId, id), eq(meetingAttendees.tenantId, tenantId)));
 
     return NextResponse.json({
       success: true,
@@ -98,7 +100,7 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const db = getDb();
 
     const [existing] = await db
@@ -138,6 +140,7 @@ export async function PUT(
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'UPDATE_MEETING',
       resourceType: 'Meeting',
       resourceId: id,
@@ -187,6 +190,7 @@ export async function DELETE(
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'DELETE_MEETING',
       resourceType: 'Meeting',
       resourceId: id,

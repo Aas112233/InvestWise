@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import * as schema from '../db/schema/index.js';
+import * as schema from '../db/schema/index';
 
 /**
  * Lazy singleton Postgres pool + Drizzle instance for the Next.js runtime.

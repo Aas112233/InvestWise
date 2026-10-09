@@ -1,19 +1,19 @@
-import { eq, and, desc, gte, ne, count } from 'drizzle-orm';
+import { eq, and, desc, gte, gt, isNull, ne, or, count } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
-import { getDb } from '../../config/database.js';
+import { getDb } from '../../config/database';
 import {
   users,
   sessions,
   blacklistedTokens,
   loginAttempts,
-} from '../../db/schema/index.js';
-import { generateTokenPair, verifyToken } from '../../lib/jwt.js';
-import { hashPassword, comparePassword } from '../../lib/password.js';
-import { logAudit } from '../../lib/audit.js';
-import { AppError, AuthError, NotFoundError, ConflictError, LockedError } from '../../shared/errors.js';
-import { normalizeEmail } from '../../shared/utils.js';
-import { normalizeRole, isPlatformOwnerEmail } from '../../shared/roles.js';
+} from '../../db/schema/index';
+import { generateTokenPair, verifyToken } from '../../lib/jwt';
+import { hashPassword, comparePassword } from '../../lib/password';
+import { logAudit } from '../../lib/audit';
+import { AppError, AuthError, NotFoundError, ConflictError, LockedError } from '../../shared/errors';
+import { normalizeEmail } from '../../shared/utils';
+import { normalizeRole, isPlatformOwnerEmail } from '../../shared/roles';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -293,9 +293,7 @@ export async function loginUser(
     .set({ lastLogin: now, updatedAt: now })
     .where(eq(users.id, userRow.id));
 
-  const tokens = generateTokenPair(userRow.id);
-
-  // Create session
+  // Create the server-side session first; both JWTs are bound to this id.
   const sessionId = crypto.randomUUID();
   const { deviceInfo, osInfo, browserInfo } = parseUserAgent(userAgent);
   await db.insert(sessions).values({
@@ -314,6 +312,7 @@ export async function loginUser(
     osInfo,
     browserInfo,
   });
+  const tokens = generateTokenPair(userRow.id, sessionId);
 
   await logAudit({
     action: 'LOGIN',
@@ -631,8 +630,30 @@ export async function changePassword(
 export async function refreshTokens(refreshToken: string): Promise<RefreshResult> {
   const db = getDb();
 
-  // Verify JWT
+  // Verify JWT and require its server-side session binding. Legacy tokens
+  // without a session id fail closed and require the user to sign in again.
   const decoded = verifyToken(refreshToken, 'refresh');
+  if (!decoded.sessionId) {
+    throw new AuthError('Refresh token is not bound to an active session', 'TOKEN_REVOKED');
+  }
+  const [activeSession] = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.sessionId, decoded.sessionId),
+        eq(sessions.userId, decoded.id),
+        eq(sessions.isActive, true),
+        eq(sessions.isExpired, false),
+        or(
+          isNull(sessions.deviceInfo),
+          ne(sessions.deviceInfo, 'Support'),
+          gt(sessions.loginTime, new Date(Date.now() - 30 * 60_000)),
+        ),
+      ),
+    )
+    .limit(1);
+  if (!activeSession) throw new AuthError('Refresh token session has been revoked', 'TOKEN_REVOKED');
 
   // Check blacklist
   const [blacklisted] = await db
@@ -693,7 +714,7 @@ export async function refreshTokens(refreshToken: string): Promise<RefreshResult
     throw insertError;
   }
 
-  const tokens = generateTokenPair(decoded.id);
+  const tokens = generateTokenPair(decoded.id, decoded.sessionId);
 
   return tokens;
 }

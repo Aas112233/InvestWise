@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getDb, withDbRetry } from '@/db/index';
 import { subscriptionPlans, tenantSubscriptions } from '@/db/schema/index';
 import { asc, eq, sql } from 'drizzle-orm';
-import { AuthError, ForbiddenError } from '@/lib/utils/errors';
+import { AuthError, ForbiddenError, readJsonUnknown } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
 import { getClientIp } from '@/lib/request-meta';
 import { logSuperAdminAction } from '@/lib/superadmin-service';
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     const platformUser = await requireAuthUser(request);
     requireSuperAdmin(platformUser);
 
-    const parsed = planCreateSchema.safeParse(await request.json());
+    const parsed = planCreateSchema.safeParse(await readJsonUnknown(request));
     if (!parsed.success) {
       return NextResponse.json(fieldError(parsed.error), { status: 400 });
     }
@@ -186,7 +186,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const parsed = planUpdateSchema.safeParse(await request.json());
+    const parsed = planUpdateSchema.safeParse(await readJsonUnknown(request));
     if (!parsed.success) {
       return NextResponse.json(fieldError(parsed.error), { status: 400 });
     }

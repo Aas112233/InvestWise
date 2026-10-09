@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { convertToCsv } from '../modules/reports/service.js';
+import { convertToCsv } from '../modules/reports/service';
 
 describe('Reports CSV Exporter', () => {
   it('converts array of objects to CSV format correctly', () => {

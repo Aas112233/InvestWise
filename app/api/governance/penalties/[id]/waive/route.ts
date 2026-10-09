@@ -5,7 +5,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
-import { AppError, NotFoundError, ForbiddenError, ValidationError } from '@/lib/utils/errors';
+import { AppError, NotFoundError, ForbiddenError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 
 export async function POST(
   request: NextRequest,
@@ -25,7 +25,7 @@ export async function POST(
     }
 
     const { id } = await params;
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const waiveReason = body.waiveReason || body.reason;
 
     if (!waiveReason || typeof waiveReason !== 'string' || waiveReason.trim().length === 0) {
@@ -39,6 +39,7 @@ export async function POST(
         .select()
         .from(memberPenalties)
         .where(and(eq(memberPenalties.id, id), eq(memberPenalties.tenantId, tenantId)))
+        .for('update')
         .limit(1);
 
       if (!penalty) throw new NotFoundError('Penalty');
@@ -57,7 +58,7 @@ export async function POST(
             warningCount: sql<number>`GREATEST(0, COALESCE(${members.warningCount}, 0) - 1)`,
             updatedAt: new Date(),
           })
-          .where(eq(members.id, penalty.memberId));
+          .where(and(eq(members.id, penalty.memberId), eq(members.tenantId, tenantId)));
       } else {
         await tx
           .update(members)
@@ -65,7 +66,7 @@ export async function POST(
             warningCount: sql<number>`GREATEST(0, COALESCE(${members.warningCount}, 0) - 1)`,
             updatedAt: new Date(),
           })
-          .where(eq(members.id, penalty.memberId));
+          .where(and(eq(members.id, penalty.memberId), eq(members.tenantId, tenantId)));
       }
 
       const [waived] = await tx
@@ -77,7 +78,7 @@ export async function POST(
           waiveReason: waiveReason.trim(),
           updatedAt: new Date(),
         })
-        .where(eq(memberPenalties.id, id))
+        .where(and(eq(memberPenalties.id, id), eq(memberPenalties.tenantId, tenantId)))
         .returning();
 
       return waived;

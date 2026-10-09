@@ -5,7 +5,7 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
-import { ValidationError, ForbiddenError } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
 
 export async function GET(request: NextRequest) {
   try {
@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
         description: goals.description,
         targetAmount: goals.targetAmount,
         currentAmount: goals.currentAmount,
+        progressSource: goals.progressSource,
         deadline: goals.deadline,
         status: goals.status,
         type: goals.type,
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
         updatedAt: goals.updatedAt,
       })
       .from(goals)
-      .leftJoin(projects, eq(goals.linkedProjectId, projects.id))
+      .leftJoin(projects, and(eq(goals.linkedProjectId, projects.id), eq(projects.tenantId, tenantId)))
       .where(whereClause)
       .orderBy(desc(goals.createdAt));
 
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
     }
     if (!tenantId) throw new ForbiddenError('Tenant context required');
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const { title, description, targetAmount, currentAmount, deadline, type, linkedProjectId } = body;
 
     if (!title || targetAmount === undefined) {
@@ -92,6 +93,15 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb();
+    if (linkedProjectId !== undefined && linkedProjectId !== null && linkedProjectId !== '') {
+      if (typeof linkedProjectId !== 'string') throw new ValidationError('linkedProjectId must be a string');
+      const [linkedProject] = await db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(and(eq(projects.id, linkedProjectId), eq(projects.tenantId, tenantId)))
+        .limit(1);
+      if (!linkedProject) throw new NotFoundError('Project');
+    }
 
     const [created] = await db
       .insert(goals)
@@ -111,6 +121,7 @@ export async function POST(request: NextRequest) {
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'CREATE_GOAL',
       resourceType: 'Goal',
       resourceId: created?.id,

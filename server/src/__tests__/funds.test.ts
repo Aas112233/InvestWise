@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createFundSchema, updateFundSchema } from '../modules/funds/validation.js';
+import { createFundSchema, updateFundSchema } from '../modules/funds/validation';
 import { parsePositiveAmount, toCents, fromCents } from '@/lib/money';
 
 describe('Funds Validation & Governance Rules', () => {

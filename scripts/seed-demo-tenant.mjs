@@ -258,18 +258,33 @@ for (const pd of projectDefs) {
   projects.push({ ...pd, initial, startDate, sY: s.y, sM: s.m, earnings: 0, expenses: 0, returned: false });
 }
 // fund project starts: DEPOSIT → PROJECT
+// Every inter-fund move is written as a PAIRED Transfer Out / Transfer In with
+// a shared transfer_group_id. A single row tagged only to the receiving fund is
+// unsignable by the app's canonical inflow/outflow classifier
+// (app/api/transactions/route.ts), which makes the stored fund balance
+// unreconstructable from the ledger.
 for (const p of projects) {
   const date = new Date(Date.UTC(p.sY, p.sM, 18, 10, 0, 0));
   const before = bal.DEPOSIT;
   bal.DEPOSIT -= p.initial; assertBal('DEPOSIT');
   bal.PROJECT += p.initial;
   totals.withdrawals += 0; // pool transfer, not a member withdrawal
+  const group = uuid();
   transactions.push({
-    type: 'Transfer', amount: p.initial,
+    type: 'Transfer Out', amount: p.initial,
     description: `Capital allocation to project “${p.title}” (DEPOSIT → PROJECT)`,
     category: 'Project Funding', reference_number: ref('TRF'),
+    transfer_group_id: group,
+    date, status: 'Completed', fund: 'DEPOSIT',
+    handling_officer: 'Rafiq Ahmed', balance_before: before, balance_after: bal.DEPOSIT,
+  });
+  transactions.push({
+    type: 'Transfer In', amount: p.initial,
+    description: `Capital allocation to project “${p.title}” (DEPOSIT → PROJECT)`,
+    category: 'Project Funding', reference_number: ref('TRF'),
+    transfer_group_id: group,
     date, status: 'Completed', fund: 'PROJECT',
-    handling_officer: 'Rafiq Ahmed', balance_before: before, balance_after: bal.PROJECT,
+    handling_officer: 'Rafiq Ahmed',
   });
 }
 // project economics: earnings + expenses while running
@@ -278,9 +293,13 @@ for (const p of projects) {
   const nEarnings = ri(3, 5), nExpenses = ri(3, 6);
   let profE = 0, profX = 0;
   for (let k = 0; k < nEarnings; k++) {
-    const mm = Math.min(p.start + ri(2, Math.max(2, endM - p.start)), MONTHS - 1);
+    const mm = Math.min(p.start + ri(1, Math.max(1, endM - p.start)), MONTHS - 1);
     const { y, m } = addMonths(START.y, START.m, mm);
-    const amount = ri(15, 60) * 1000;
+    // A 121-member society runs its deposit pool and projects at a profit:
+    // revenue has to clear the 135 operating/project expense rows or both closed
+    // years settle at a loss, the statutory reserve is 0, and the fixture can
+    // never demonstrate a dividend run at all.
+    const amount = ri(60, 145) * 1000;
     const date = dayIn(y, m, 10, 27);
     const before = bal.PROJECT;
     bal.PROJECT += amount; assertBal('PROJECT');
@@ -322,12 +341,22 @@ for (const p of projects) {
       const before = bal.PROJECT;
       bal.PROJECT -= capped; assertBal('PROJECT');
       bal.DEPOSIT += capped;
+      const group = uuid();
       transactions.push({
-        type: 'Transfer', amount: capped,
+        type: 'Transfer Out', amount: capped,
         description: `Settlement — “${p.title}” returns capital + surplus (PROJECT → DEPOSIT)`,
         category: 'Project Settlement', reference_number: ref('TRF'),
+        transfer_group_id: group,
+        date, status: 'Completed', fund: 'PROJECT',
+        handling_officer: 'Rafiq Ahmed', balance_before: before, balance_after: bal.PROJECT,
+      });
+      transactions.push({
+        type: 'Transfer In', amount: capped,
+        description: `Settlement — “${p.title}” returns capital + surplus (PROJECT → DEPOSIT)`,
+        category: 'Project Settlement', reference_number: ref('TRF'),
+        transfer_group_id: group,
         date, status: 'Completed', fund: 'DEPOSIT',
-        handling_officer: 'Rafiq Ahmed', balance_before: before, balance_after: bal.DEPOSIT,
+        handling_officer: 'Rafiq Ahmed',
       });
       p.completionDate = `${y}-${String(m + 1).padStart(2, '0')}-${String(ri(20, 27)).padStart(2, '0')}`;
     }
@@ -366,12 +395,22 @@ for (let mm = 0; mm < MONTHS; mm++) {
     const before = bal.DEPOSIT;
     bal.DEPOSIT -= amt; assertBal('DEPOSIT');
     bal[fund] += amt;
+    const group = uuid();
     transactions.push({
-      type: 'Transfer', amount: amt,
+      type: 'Transfer Out', amount: amt,
       description: `Allocation to ${fund.toLowerCase()} fund (DEPOSIT → ${fund})`,
       category: cat, reference_number: ref('TRF'),
-      date, status: 'Completed', fund,
+      transfer_group_id: group,
+      date, status: 'Completed', fund: 'DEPOSIT',
       handling_officer: 'Rafiq Ahmed', balance_before: before, balance_after: bal.DEPOSIT,
+    });
+    transactions.push({
+      type: 'Transfer In', amount: amt,
+      description: `Allocation to ${fund.toLowerCase()} fund (DEPOSIT → ${fund})`,
+      category: cat, reference_number: ref('TRF'),
+      transfer_group_id: group,
+      date, status: 'Completed', fund,
+      handling_officer: 'Rafiq Ahmed',
     });
   }
 }
@@ -387,14 +426,50 @@ for (const t of transactions) {
   if (t.type === 'Earning') fy1.earnings += t.amount;
   if (t.type === 'Expense') fy1.expenses += t.amount;
 }
-const fy1Net = fy1.deposits + fy1.earnings - fy1.withdrawals - fy1.expenses;
-const fy1Reserve = Math.round(fy1Net * statutoryReservePct / 100);
-const fy1Distributable = fy1Net - fy1Reserve;
-// adaptive rate: distribute what the cash position actually supports (keep a 150k buffer)
-const eligibleShares = members.filter(m => m.joinDate < new Date(Date.UTC(2025, 8, 20))).reduce((s, m) => s + m.shares, 0);
-const dividendRatePerShareEff = Math.max(100, Math.min(dividendRatePerShare, Math.floor((bal.DEPOSIT - 150000) / Math.max(1, eligibleShares))));
-let fy1Distributed = 0;
+const fy1Net = fy1.earnings - fy1.expenses;   // statutory surplus: NEVER member deposits (lib/fiscal-totals.ts)
+// A loss year reserves and distributes NOTHING — `lib/fiscal-totals.ts` wraps
+// every one of these in GREATEST(0, ...), so the fixture must never write a
+// negative statutory reserve (the app cannot produce one).
+const fy1Reserve = Math.max(0, Math.round(Math.max(0, fy1Net) * statutoryReservePct / 100));
+const fy1Distributable = Math.max(0, fy1Net - fy1Reserve);
+// The demo replays the FY1 dividend run exactly as
+// `app/api/dividends/distribute/route.ts` writes it: the payout fund is debited
+// by the GROSS (reserve + distributed), the sweep lands on RESERVE as a
+// `Statutory Reserve` row, the payout fund gets its matching `Transfer Out` leg
+// (#97), and the run carries one `Dividend Distribution` row alongside the
+// per-member `Dividend` rows. Anything else seeds books no fund statement can
+// reconcile.
 const dividendDate = new Date(Date.UTC(2025, 8, 20, 10, 0, 0));   // 20 Sep 2025
+const runRef = ref('DIV');
+if (fy1Reserve > 0) {
+  const reserveBefore = bal.RESERVE;
+  bal.DEPOSIT -= fy1Reserve; assertBal('DEPOSIT');   // app: payoutFund -= grossCents
+  bal.RESERVE += fy1Reserve;
+  transactions.push({
+    type: 'Statutory Reserve', amount: fy1Reserve,
+    description: `Statutory reserve (${statutoryReservePct}%) for dividend run ${runRef}`,
+    category: 'Reserve', reference_number: `${runRef}-RESERVE`,
+    date: dividendDate, status: 'Completed', fund: 'RESERVE',
+    handling_officer: 'Rafiq Ahmed',
+    balance_before: reserveBefore, balance_after: bal.RESERVE,
+  });
+  transactions.push({
+    type: 'Transfer Out', amount: fy1Reserve,
+    description: `Statutory reserve sweep to Statutory Reserve Fund (${statutoryReservePct}%) for dividend run ${runRef}`,
+    category: 'Reserve', reference_number: `${runRef}-RESERVE-OUT`,
+    date: dividendDate, status: 'Completed', fund: 'DEPOSIT',
+    handling_officer: 'Rafiq Ahmed',
+    balance_before: bal.DEPOSIT + fy1Reserve, balance_after: bal.DEPOSIT,
+  });
+}
+// adaptive rate: distribute what the cash position actually supports (keep a 150k buffer)
+const eligibleShares = members.filter(m => m.joinDate < dividendDate).reduce((s, m) => s + m.shares, 0);
+// Same two-cap rule as FY1: never exceed the year's distributable surplus.
+const fy1SolvencyRate = Math.floor(fy1Distributable / Math.max(1, eligibleShares));
+const dividendRatePerShareEff = Math.max(0, Math.min(dividendRatePerShare, fy1SolvencyRate,
+  Math.floor((bal.DEPOSIT - 150000) / Math.max(1, eligibleShares))));
+let fy1Distributed = 0;
+let fy1Recipients = 0;
 for (const mem of members) {
   const joinedBeforeFYClose = mem.joinDate < dividendDate;
   if (!joinedBeforeFYClose) continue;
@@ -403,6 +478,7 @@ for (const mem of members) {
   const before = bal.DEPOSIT;
   bal.DEPOSIT -= amount; assertBal('DEPOSIT');
   fy1Distributed += amount;
+  fy1Recipients += 1;
   transactions.push({
     type: 'Dividend', amount,
     description: `FY2024-25 dividend — ${mem.shares} shares @ ${dividendRatePerShareEff} BDT`,
@@ -412,6 +488,28 @@ for (const mem of members) {
     balance_before: before, balance_after: bal.DEPOSIT,
   });
 }
+if (fy1Distributed > 0) {
+  transactions.push({
+    type: 'Dividend Distribution', amount: fy1Distributed,
+    description: `Dividend distribution to ${fy1Recipients} members`,
+    category: 'Dividend', reference_number: `${runRef}-DIST`,
+    date: dividendDate, status: 'Completed', fund: 'DEPOSIT',
+    handling_officer: 'Rafiq Ahmed',
+    balance_before: bal.DEPOSIT + fy1Distributed, balance_after: bal.DEPOSIT,
+  });
+}
+
+// FY2025-26 (Jul 2025 – Jun 2026) has now ENDED relative to TODAY, so it is
+// CLOSED with its real ledger sums and no distribution (the demo's single
+// dividend run sits in FY1). The period anchored on the current date is the
+// one left OPEN for writes. Sums are computed in the fiscal-periods section
+// below, alongside the other period data.
+
+// Fiscal year that CONTAINS today, using the tenant's July–June year. Derived
+// from TODAY so the fixture never expires.
+const CURRENT_FY_START_YEAR = TODAY.getUTCMonth() >= 6 ? TODAY.getUTCFullYear() : TODAY.getUTCFullYear() - 1;
+const currentFyStart = new Date(Date.UTC(CURRENT_FY_START_YEAR, 6, 1));
+const currentFyEnd = new Date(Date.UTC(CURRENT_FY_START_YEAR + 1, 5, 30, 23, 59, 59));
 
 // ── fiscal periods ──────────────────────────────────────────────────────────
 const fy2 = { deposits: 0, withdrawals: 0, earnings: 0, expenses: 0 };
@@ -424,6 +522,13 @@ for (const t of transactions) {
   if (t.type === 'Earning') fy2.earnings += t.amount;
   if (t.type === 'Expense') fy2.expenses += t.amount;
 }
+// FY2 is now a completed year: derive its reserve / distributable the same way
+// FY1 does. It paid no dividend (FY1 carried the only run), so everything it
+// earned stays as retained earnings.
+const fy2Net = fy2.earnings - fy2.expenses;   // same rule as FY1
+const fy2Reserve = Math.max(0, Math.round(Math.max(0, fy2Net) * statutoryReservePct / 100));
+const fy2Distributable = Math.max(0, fy2Net - fy2Reserve);
+const fy2Distributed = 0;
 
 // ── meetings + attendance + penalties (24 monthly) ──────────────────────────
 const meetings = [];
@@ -460,7 +565,7 @@ const passwordHash = await bcrypt.hash('pass-12345678', 12);
 const fundIds = { DEPOSIT: uuid(), PRIMARY: uuid(), PROJECT: uuid(), RESERVE: uuid(), EMERGENCY: uuid(), OTHER: uuid() };
 const projectIds = projects.map(() => uuid());
 const meetingIds = meetings.map(() => uuid());
-const fy1Id = uuid(), fy2Id = uuid();
+const fy1Id = uuid(), fy2Id = uuid(), fy3Id = uuid();
 const memberIds = members.map(() => uuid());
 
 // pick 3 members (active, early joiners) to get user accounts
@@ -513,7 +618,8 @@ await sql.begin(async (tx) => {
     await tx`delete from meeting_attendees where tenant_id = ${tid}`;
     await tx`delete from meetings where tenant_id = ${tid}`;
     await tx`delete from project_updates where tenant_id = ${tid}`;
-    await tx`delete from project_members where tenant_id = ${tid}`;
+    // project_members carries no tenant_id column — scope it through its project.
+    await tx`delete from project_members where project_id in (select id from projects where tenant_id = ${tid})`;
     await tx`delete from goals where tenant_id = ${tid}`;
     await tx`delete from transactions where tenant_id = ${tid}`;
     await tx`delete from projects where tenant_id = ${tid}`;
@@ -521,6 +627,13 @@ await sql.begin(async (tx) => {
     await tx`delete from funds where tenant_id = ${tid}`;
     await tx`delete from system_settings where tenant_id = ${tid}`;
     await tx`delete from fiscal_periods where tenant_id = ${tid}`;
+    // These reference tenants (and users) — without them the tenant/user deletes
+    // below abort with 23503 and the script's promised re-runnability fails.
+    await tx`delete from audit_logs where tenant_id = ${tid}`;
+    await tx`delete from subscription_change_log where tenant_id = ${tid}`;
+    await tx`delete from super_admin_action_log where tenant_id = ${tid}`;
+    await tx`delete from blacklisted_tokens where user_id in (select id from users where tenant_id = ${tid})`;
+    await tx`delete from deleted_records where deleted_by in (select id from users where tenant_id = ${tid})`;
     await tx`delete from users where tenant_id = ${tid}`;
     await tx`delete from tenant_subscriptions where tenant_id = ${tid}`;
     await tx`delete from tenants where id = ${tid}`;
@@ -595,8 +708,21 @@ await sql.begin(async (tx) => {
         created_at: createdBase, updated_at: TODAY }),
     mk(fyCols,
       { id: fy2Id, year: 2025, period_start: new Date(Date.UTC(2025, 6, 1)), period_end: new Date(Date.UTC(2026, 5, 30)),
-        status: 'OPEN', total_deposits: fy2.deposits, total_withdrawals: fy2.withdrawals,
-        total_earnings: fy2.earnings, total_expenses: fy2.expenses, net_surplus: 0,
+        status: 'CLOSED', total_deposits: fy2.deposits, total_withdrawals: fy2.withdrawals,
+        total_earnings: fy2.earnings, total_expenses: fy2.expenses, net_surplus: fy2Net,
+        statutory_reserve: fy2Reserve, distributable_surplus: fy2Distributable,
+        actual_distributed: fy2Distributed, retained_earnings: fy2Distributable - fy2Distributed,
+        closed_by: adminUserId, closed_at: new Date(Date.UTC(2026, 6, 15, 10, 0, 0)),
+        notes: 'Second operating year.', tenant_id: tenantId, created_at: createdBase, updated_at: TODAY }),
+    // The current fiscal year must be present and OPEN, and it must FOLLOW the
+    // calendar: the fiscal guard is fail-closed, so a fixture whose newest
+    // period has already ended makes the whole tenant read-only ("No fiscal
+    // period is defined for <year>"). Anchoring on `now` keeps the demo
+    // writable as time passes instead of silently expiring.
+    mk(fyCols,
+      { id: fy3Id, year: CURRENT_FY_START_YEAR, period_start: currentFyStart, period_end: currentFyEnd,
+        status: 'OPEN', total_deposits: 0, total_withdrawals: 0,
+        total_earnings: 0, total_expenses: 0, net_surplus: 0,
         statutory_reserve: 0, distributable_surplus: 0, actual_distributed: 0, retained_earnings: 0,
         notes: 'Current fiscal year — open.', tenant_id: tenantId, created_at: createdBase, updated_at: TODAY }),
   ];

@@ -1,4 +1,4 @@
-import { getDb } from '../../config/database.js';
+import { getDb } from '../../config/database';
 import {
   meetings,
   meetingAttendees,
@@ -7,11 +7,11 @@ import {
   transactions,
   systemSettings,
   auditLogs,
-} from '../../db/schema/index.js';
+} from '../../db/schema/index';
 import { eq, and, desc, sql, inArray, ilike } from 'drizzle-orm';
-import { NotFoundError, AppError } from '../../shared/errors.js';
-import { getPaginationParams, formatPaginatedResponse } from '../../shared/types.js';
-import { recalculateMemberPerformance } from '../governance/performance.js';
+import { NotFoundError, AppError } from '../../shared/errors';
+import { getPaginationParams, formatPaginatedResponse } from '../../shared/types';
+import { recalculateMemberPerformance } from '../governance/performance';
 
 export interface CreateMeetingInput {
   title: string;

@@ -57,6 +57,11 @@ export interface Member {
   userId?: string | null;
   /** True when the server hid the KYC/nominee fields from this viewer. */
   piiMasked?: boolean;
+  /** True when the server hid the governance review metrics from this viewer. */
+  reviewMasked?: boolean;
+  /** True when any ledger transaction references this member — Delete is
+   *  disabled in the directory and refused by the API (suspend instead). */
+  hasTransactions?: boolean;
   /** KYC/nominee fields — only present on unmasked (full) records. */
   nidOrPassport?: string | null;
   fatherName?: string | null;
@@ -201,6 +206,11 @@ export interface Goal {
   description?: string;
   targetAmount: number;
   currentAmount: number;
+  /**
+   * #48 — provenance of `currentAmount`. `Manual` = hand-typed, not backed by a
+   * fund balance (rendered as "Manual — unverified"). `Allocation` reserved.
+   */
+  progressSource?: "Manual" | "Allocation" | string;
   deadline?: string;
   status: "In Progress" | "Achieved" | "Cancelled";
   type: "Savings" | "Investment" | "Other" | string;

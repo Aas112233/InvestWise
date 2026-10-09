@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { members, transactions, memberPenalties, profitAllocations } from '@/db/schema/index';
-import { eq, and, desc, count, sql, or } from 'drizzle-orm';
+import { members, transactions, users } from '@/db/schema/index';
+import { eq, and, desc, sql, or } from 'drizzle-orm';
 import { getAuthContext, requirePermission, type AuthenticatedUser } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
-import { canViewMemberPII, maskMemberPII } from '@/lib/member-privacy';
+import { canViewMemberPII, maskMemberPII, canViewMemberReviewData, maskMemberReviewData } from '@/lib/member-privacy';
+import { memberUpdateSchema, memberFieldError } from '@/lib/member-schema';
 import { logAudit } from '@/lib/utils/audit';
-import { normalizeEmail, optionalStringField } from '@/lib/utils/types';
-import { isMemberRole } from '@/lib/member-roles';
-import { NotFoundError, ValidationError, ConflictError, ForbiddenError, LockedError } from '@/lib/utils/errors';
+import { normalizeEmail } from '@/lib/utils/types';
+import { NotFoundError, ValidationError, ConflictError, ForbiddenError, LockedError, readJsonUnknown } from '@/lib/utils/errors';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -44,10 +44,12 @@ export async function GET(
     const db = getDb();
     const idMatch = UUID_RE.test(id) ? or(eq(members.id, id), eq(members.memberId, id)) : eq(members.memberId, id);
     const scope = tenantScope(user.tenantId, user);
+    // Soft-deleted rows read as 404 everywhere except the audit trail — the
+    // detail sheet must not resurrect a removed member.
     const [member] = await db
       .select()
       .from(members)
-      .where(and(idMatch, scope))
+      .where(and(idMatch, scope, eq(members.isDeleted, false)))
       .limit(1);
     if (!member) throw new NotFoundError('Member');
 
@@ -80,14 +82,19 @@ export async function GET(
       .orderBy(desc(transactions.date))
       .limit(20);
 
-    return NextResponse.json({ success: true, data: { ...maskMemberPII(member, canView), deposits } });
+    return NextResponse.json({
+      success: true,
+      // Review metrics follow the same rule as the directory's hidden
+      // Warnings column: Admin/Manager only, list and detail in lockstep.
+      data: {
+        ...maskMemberReviewData(maskMemberPII(member, canView), canViewMemberReviewData(user.role)),
+        deposits,
+      },
+    });
   } catch (err: unknown) {
     return errJson(err, 'Failed to fetch member');
   }
 }
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const UPDATABLE_STATUS = ['active', 'inactive', 'pending', 'suspended'];
 
 // PUT /api/members/[id] — update profile fields. Shares are fixed equity ownership units
 // locked after creation, so any shares payload is rejected once transactions exist.
@@ -113,69 +120,56 @@ export async function PUT(
     const [existing] = await db
       .select({ id: members.id })
       .from(members)
-      .where(and(idMatch, scope))
+      .where(and(idMatch, scope, eq(members.isDeleted, false)))
       .limit(1);
     if (!existing) throw new NotFoundError('Member');
 
-    const body = await request.json();
+    // Zod body validation shared with POST /api/members (lib/member-schema.ts)
+    // — same vocabulary, same length limits on both doors (§11 field errors).
+    const parsed = memberUpdateSchema.safeParse(await readJsonUnknown(request));
+    if (!parsed.success) {
+      return NextResponse.json(memberFieldError(parsed.error), { status: 400 });
+    }
+    const d = parsed.data;
+
     const patch: Partial<typeof members.$inferInsert> = {};
     let sharesUpdated = false;
-    if (body.name !== undefined) {
-      const name = String(body.name).trim();
-      if (!name) throw new ValidationError('Name is required');
-      patch.name = name;
-    }
-    if (body.email !== undefined) {
-      const email = normalizeEmail(String(body.email));
-      if (!EMAIL_RE.test(email)) throw new ValidationError('Valid email is required');
+    if (d.name !== undefined) patch.name = d.name;
+    if (d.email !== undefined) {
+      const email = normalizeEmail(d.email);
+      // TENANT-scoped, live-rows-only duplicate check: the old global probe
+      // confirmed whether ANOTHER tenant holds the address, and a
+      // soft-deleted member's email is free again.
       const [clash] = await db
         .select({ id: members.id })
         .from(members)
-        .where(eq(members.email, email))
+        .where(and(eq(members.tenantId, requireTenant(user.tenantId, user)), eq(members.email, email), eq(members.isDeleted, false)))
         .limit(1);
       if (clash && clash.id !== existing.id) throw new ConflictError('A member with this email already exists');
       patch.email = email;
     }
-    if (body.phone !== undefined) {
-      // phone is NOT NULL in the schema; null (previously written as the
-      // literal string "null") or empty is rejected, not coerced.
-      const phone = body.phone === null ? '' : String(body.phone).trim();
-      if (!phone) throw new ValidationError('Phone is required');
-      if (phone.length > 50) throw new ValidationError('Phone must be at most 50 characters');
-      patch.phone = phone;
-    }
-    if (body.role !== undefined) {
-      // Same vocabulary as POST /api/members (lib/member-roles.ts), so a role
-      // one of them accepts cannot be rejected by the other.
-      if (!isMemberRole(body.role)) {
-        throw new ValidationError(`[Field 'role', Code: invalid_role] Not a recognized member role`);
-      }
-      patch.role = body.role;
-    }
-    if (body.status !== undefined) {
-      if (!UPDATABLE_STATUS.includes(String(body.status))) throw new ValidationError('Invalid status');
-      patch.status = String(body.status);
-    }
-    if (body.avatar !== undefined) patch.avatar = body.avatar || null;
-    // KYC/nominee fields go through the same length-checked coercion as POST
+    if (d.phone !== undefined) patch.phone = d.phone;
+    if (d.role !== undefined) patch.role = d.role;
+    if (d.status !== undefined) patch.status = d.status;
+    if (d.avatar !== undefined) patch.avatar = d.avatar || null;
+    // KYC/nominee fields carry the same length-checked coercion as POST
     // /api/members. nomineeNidOrPassport used to be missing here entirely: the
     // create route stored it, the edit route silently dropped it, so the value
-    // was write-once and unfixable (and the form had no field for it at all).
-    if (body.nidOrPassport !== undefined) patch.nidOrPassport = optionalStringField(body.nidOrPassport, 'NID/Passport', 100);
-    if (body.fatherName !== undefined) patch.fatherName = optionalStringField(body.fatherName, "Father's name", 255);
-    if (body.address !== undefined) patch.address = optionalStringField(body.address, 'Address', 500);
-    if (body.nomineeName !== undefined) patch.nomineeName = optionalStringField(body.nomineeName, 'Nominee name', 255);
-    if (body.nomineeRelation !== undefined) patch.nomineeRelation = optionalStringField(body.nomineeRelation, 'Nominee relation', 100);
-    if (body.nomineeNidOrPassport !== undefined) patch.nomineeNidOrPassport = optionalStringField(body.nomineeNidOrPassport, 'Nominee NID/Passport', 100);
-    if (body.nomineePhone !== undefined) patch.nomineePhone = optionalStringField(body.nomineePhone, 'Nominee phone', 50);
+    // was write-once and unfixable.
+    if (d.nidOrPassport !== undefined) patch.nidOrPassport = d.nidOrPassport;
+    if (d.fatherName !== undefined) patch.fatherName = d.fatherName;
+    if (d.address !== undefined) patch.address = d.address;
+    if (d.nomineeName !== undefined) patch.nomineeName = d.nomineeName;
+    if (d.nomineeRelation !== undefined) patch.nomineeRelation = d.nomineeRelation;
+    if (d.nomineeNidOrPassport !== undefined) patch.nomineeNidOrPassport = d.nomineeNidOrPassport;
+    if (d.nomineePhone !== undefined) patch.nomineePhone = d.nomineePhone;
     // One-time setup: shares may only be set or corrected before the member
     // has any transaction. Afterwards they are locked. The check and the
     // update run inside one transaction with the member row locked — a
     // concurrent first deposit updates members on the same row, so the lock
     // closes the count-then-write race.
-    if (body.shares !== undefined) {
-      const sharesNum = Number(body.shares);
-      if (!Number.isInteger(sharesNum) || sharesNum < 1) throw new ValidationError('Shares must be at least 1');
+    if (d.shares !== undefined) {
+      const sharesNum = d.shares;
       await db.transaction(async (tx) => {
         await tx.execute(sql`SELECT id FROM members WHERE id = ${existing.id} FOR UPDATE`);
         const [txnCount] = await tx
@@ -210,7 +204,7 @@ export async function PUT(
       action: 'UPDATE_MEMBER',
       resourceType: 'Member',
       resourceId: existing.id,
-      details: { fields: body.shares !== undefined ? [...Object.keys(patch), 'shares'] : Object.keys(patch) },
+      details: { fields: d.shares !== undefined ? [...Object.keys(patch), 'shares'] : Object.keys(patch) },
     });
 
     return NextResponse.json({ success: true, data: updated, message: 'Member updated successfully.' });
@@ -219,7 +213,11 @@ export async function PUT(
   }
 }
 
-// DELETE /api/members/[id] — blocked while non-deleted ledger entries exist.
+// DELETE /api/members/[id] — SOFT delete (§12, same pattern as transactions).
+// The row survives: ledger history, meeting attendance, project membership and
+// arrears keep their FK references intact. The old hard delete silently
+// cascaded all of that away (ON DELETE CASCADE) whenever a member happened to
+// have no completed transactions — history vanished with no guard or warning.
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -240,46 +238,69 @@ export async function DELETE(
     const idMatch = UUID_RE.test(id) ? or(eq(members.id, id), eq(members.memberId, id)) : eq(members.memberId, id);
     const scope = tenantScope(user.tenantId, user);
     const [existing] = await db
-      .select({ id: members.id, name: members.name })
+      .select({
+        id: members.id,
+        name: members.name,
+        memberId: members.memberId,
+        userId: members.userId,
+      })
       .from(members)
-      .where(and(idMatch, scope))
+      .where(and(idMatch, scope, eq(members.isDeleted, false)))
       .limit(1);
     if (!existing) throw new NotFoundError('Member');
 
-    // FK guards: transactions (restrict) and member_penalties /
-    // profit_allocations (restrict) would make the hard DELETE fail with a
-    // raw FK violation (500). Fail with a clear 400 instead. Soft-deleted
-    // transactions still hold FK references, so count ALL ledger rows.
-    // The three counts are independent — batch them into one round-trip
-    // group; checks below preserve the original precedence.
-    const [[linked], [penalties], [allocations]] = await Promise.all([
-      db
-        .select({ count: count() })
-        .from(transactions)
-        .where(eq(transactions.memberId, existing.id)),
-      db
-        .select({ count: count() })
-        .from(memberPenalties)
-        .where(eq(memberPenalties.memberId, existing.id)),
-      db
-        .select({ count: count() })
-        .from(profitAllocations)
-        .where(eq(profitAllocations.memberId, existing.id)),
-    ]);
-
-    if (Number(linked?.count ?? 0) > 0) {
-      throw new ValidationError('Member has ledger history and cannot be deleted. Suspend the member instead.');
+    // HARD RULE: a member with ANY linked transaction can never leave the
+    // directory — the ledger is immutable financial history and every row
+    // (including soft-deleted ones) keeps its member reference. Suspension is
+    // the alternative. Only a transaction-free member may be removed.
+    const [txnCount] = await db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(transactions)
+      .where(eq(transactions.memberId, existing.id));
+    if ((txnCount?.total ?? 0) > 0) {
+      throw new ValidationError(
+        `${existing.name} has ${txnCount?.total ?? 0} linked transaction(s) and cannot be deleted. Suspend the member instead.`,
+      );
     }
 
-    if (Number(penalties?.count ?? 0) > 0) {
-      throw new ValidationError('Member has penalty records and cannot be deleted. Resolve or waive the penalties first.');
+    // Optional reason (audit trail). DELETE may arrive with no body at all.
+    let reason: string | null = null;
+    try {
+      const raw = await request.text();
+      if (raw) {
+        const b = JSON.parse(raw) as { reason?: unknown };
+        if (typeof b?.reason === 'string' && b.reason.trim()) reason = b.reason.trim().slice(0, 500);
+      }
+    } catch {
+      // A bodyless or malformed delete is still a valid removal — the reason
+      // is best-effort, the audit row records the actor either way.
     }
 
-    if (Number(allocations?.count ?? 0) > 0) {
-      throw new ValidationError('Member has profit allocations and cannot be deleted.');
+    // Guard: a member whose code is claimed by a login cannot disappear from
+    // under it — users.member_id is an un-FK'd varchar, so a hard removal here
+    // would leave the account pointing at a ghost identity.
+    const linkConds = [eq(users.memberId, existing.memberId)];
+    if (existing.userId) linkConds.push(eq(users.id, existing.userId));
+    const [linkedLogin] = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(or(...linkConds))
+      .limit(1);
+    if (linkedLogin) {
+      throw new ValidationError(
+        `${existing.name} is linked to the login ${linkedLogin.email}. Remove the login access first, or suspend the member instead.`,
+      );
     }
 
-    await db.delete(members).where(eq(members.id, existing.id));
+    await db
+      .update(members)
+      .set({
+        isDeleted: true,
+        deletedBy: user.id,
+        deletionReason: reason,
+        updatedAt: new Date(),
+      })
+      .where(eq(members.id, existing.id));
 
     await logAudit({
       user: { id: user.id, name: user.name },
@@ -287,10 +308,13 @@ export async function DELETE(
       action: 'DELETE_MEMBER',
       resourceType: 'Member',
       resourceId: existing.id,
-      details: { name: existing.name },
+      details: { name: existing.name, reason },
     });
 
-    return NextResponse.json({ success: true, message: 'Member deleted successfully.' });
+    return NextResponse.json({
+      success: true,
+      message: 'Member removed from the directory. Attendance and penalty records were retained for audit.',
+    });
   } catch (err: unknown) {
     return errJson(err, 'Failed to delete member');
   }

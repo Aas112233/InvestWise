@@ -70,6 +70,25 @@ export const toIsoDateString = (date: Date): string => {
   return date.toISOString().split("T")[0]!;
 };
 
+/**
+ * 'YYYY-MM-DD' for a Date in the VIEWER'S LOCAL timezone.
+ *
+ * Use this — never `toISOString().split('T')[0]` — for anything that means
+ * "the calendar day the user is looking at": today's date defaults, date-input
+ * values, and date-only comparisons. `toISOString()` converts to UTC first, so
+ * east of Greenwich every local evening produced YESTERDAY (and the header and
+ * the date inputs disagreed about "Today" — report issue 18).
+ */
+export const toLocalIsoDate = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+/** "Today" in the viewer's local timezone as 'YYYY-MM-DD'. */
+export const todayLocalIso = (): string => toLocalIsoDate(new Date());
+
 // Manual token formatting against a tenant dateFormat pattern
 // (default DD/MM/YYYY). Never toLocaleDateString (Rule §8).
 export const formatDatePattern = (

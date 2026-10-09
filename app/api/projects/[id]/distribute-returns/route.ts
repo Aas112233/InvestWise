@@ -3,10 +3,11 @@ import { getDb } from '@/db/index';
 import { projects, projectMembers, members, funds, transactions } from '@/db/schema/index';
 import { eq, and, inArray, or, like, sql } from 'drizzle-orm';
 import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError, ValidationError } from '@/lib/utils/errors';
+import { NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { projectReturnDistributionSchema } from '@/lib/utils/validation';
 import { requireProjectContext, zodMessage } from '../../_helpers';
 import { parsePositiveAmount, splitDividendByShares, toCents, fromCents } from '@/lib/money';
+import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
 
 // The run locks the project + every recipient row and writes grouped ledger
@@ -23,7 +24,7 @@ export async function POST(
     const { user, tenantId } = ctx;
 
     const { id } = await params;
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const parsed = projectReturnDistributionSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
@@ -64,6 +65,18 @@ export async function POST(
         throw new ValidationError('Project has zero total shares; cannot distribute returns');
       }
 
+      // #74 (same rule, second door): a distribution without a fund pays members
+      // from money that exists nowhere. The equity write-back below still raises
+      // every recipient's `total_contributed` and the ledger rows land with
+      // `fund_id IS NULL`, so no fund statement can show the payout and the
+      // treasury never shrinks — 18 such rows (1,179,999.92 BDT) are sitting in
+      // the default tenant's ledger from before this guard existed.
+      if (!project.linkedFundId) {
+        throw new ValidationError(
+          'This project has no linked fund, so its returns cannot be distributed. Link an existing fund or create its dedicated fund first.',
+        );
+      }
+
       // §12 idempotency: a retry with the same reference must not pay twice.
       // The project row lock above serializes same-project retries.
       const likeEscaped = refBase.replace(/[\\%_]/g, (m) => `\\${m}`);
@@ -85,7 +98,25 @@ export async function POST(
         throw new ValidationError('Transaction with this reference number already exists');
       }
 
-      // 2. Fetch project shareholders (deterministic order)
+      // 2. Lock the linked fund before member rows (single id, so the lock set
+      //    is trivially deterministic) — the same funds-before-members order the
+      //    dividend run uses, so a concurrent profit distribution and dividend
+      //    run can never deadlock across routes. Both the profit payout and the
+      //    loss write-down move this fund's balance; the locked row is the
+      //    source of truth for the sufficiency checks below.
+      let linkedFundBalanceCents = 0;
+      if (project.linkedFundId) {
+        const [linkedFund] = await tx
+          .select({ id: funds.id, balance: funds.balance })
+          .from(funds)
+          .where(and(eq(funds.id, project.linkedFundId), eq(funds.tenantId, tenantId)))
+          .for('update')
+          .limit(1);
+        if (!linkedFund) throw new NotFoundError('Linked fund');
+        linkedFundBalanceCents = toCents(linkedFund.balance || '0');
+      }
+
+      // 3. Fetch project shareholders (deterministic order)
       const shareholders = await tx
         .select({
           memberId: projectMembers.memberId,
@@ -125,7 +156,17 @@ export async function POST(
         );
       }
 
+      // §12: the linked fund must absorb the full payout at its locked balance.
+      // The old GREATEST(0, ...) clamp silently absorbed any shortfall between
+      // fund and project books; that drift is now a hard, unmasked failure.
+      if (type === 'Profit' && project.linkedFundId && linkedFundBalanceCents < distributionAmountCents) {
+        throw new ValidationError(
+          `Insufficient linked fund balance for profit payout (Available: ${fromCents(linkedFundBalanceCents)}, Required: ${fromCents(distributionAmountCents)})`,
+        );
+      }
+
       const now = new Date();
+      await assertFiscalPeriodOpen(tx, tenantId, now);
 
       // 3. Pro-rata split by shares in exact cents (deterministic
       //    largest-remainder; sum(payouts) === requested total).
@@ -209,13 +250,34 @@ export async function POST(
         })
         .filter((r) => r.applied > 0);
 
+      // §12 loss mirror: the equity shareholders surrender must be written down
+      // through the project fund, the linked fund and the project's expense
+      // books by the same cents. Pre-validate sufficiency at the locked
+      // balances BEFORE any ledger write — an unabsorbable loss fails the whole
+      // run with an unmasked error instead of silently clamping a book negative.
+      const lossTotalCents = type === 'Loss'
+        ? recipients.reduce((acc, r) => acc + r.applied, 0)
+        : 0;
+      if (lossTotalCents > 0) {
+        if (currentBalanceCents < lossTotalCents) {
+          throw new ValidationError(
+            `Insufficient project fund balance to absorb the loss (Available: ${fromCents(currentBalanceCents)}, Required: ${fromCents(lossTotalCents)})`,
+          );
+        }
+        if (project.linkedFundId && linkedFundBalanceCents < lossTotalCents) {
+          throw new ValidationError(
+            `Insufficient linked fund balance to absorb the loss (Available: ${fromCents(linkedFundBalanceCents)}, Required: ${fromCents(lossTotalCents)})`,
+          );
+        }
+      }
+
       if (recipients.length > 0) {
         // Grouped equity write-back under the row locks held above — the §6
         // tenant predicate stays in the WHERE.
         await tx.execute(sql`
           UPDATE ${members} AS m
           SET total_contributed = v.balance::numeric,
-              updated_at = ${now}
+              updated_at = ${now.toISOString()}::timestamptz
           FROM (VALUES ${sql.join(
             recipients.map((r) => sql`(${r.sh.memberId}::uuid, ${fromCents(r.afterCents)}::numeric)`),
             sql`, `,
@@ -258,7 +320,13 @@ export async function POST(
         }
       }
 
-      // 6. Update project balance if Profit payout was disbursed
+      // 6. Project + linked-fund books. Profit pays out of the project fund;
+      //    Loss mirrors it — the equity debited from shareholders leaves the
+      //    project's fund balance and the linked fund, and lands in
+      //    totalExpenses so Project Performance net profit (earnings -
+      //    expenses) reports the loss truthfully. Sufficiency was
+      //    pre-validated against the locked balances, so every write below is
+      //    an exact decrement with no clamping (§12).
       if (type === 'Profit') {
         const newBalanceStr = fromCents(currentBalanceCents - distributionAmountCents);
         await tx
@@ -273,7 +341,26 @@ export async function POST(
           await tx
             .update(funds)
             .set({
-              balance: sql<string>`GREATEST(0, (${funds.balance}::numeric - ${fromCents(distributionAmountCents)}::numeric))::numeric(15,2)`,
+              balance: fromCents(linkedFundBalanceCents - distributionAmountCents),
+              updatedAt: now,
+            })
+            .where(and(eq(funds.id, project.linkedFundId), eq(funds.tenantId, tenantId)));
+        }
+      } else if (lossTotalCents > 0) {
+        await tx
+          .update(projects)
+          .set({
+            currentFundBalance: fromCents(currentBalanceCents - lossTotalCents),
+            totalExpenses: fromCents(toCents(project.totalExpenses || '0') + lossTotalCents),
+            updatedAt: now,
+          })
+          .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)));
+
+        if (project.linkedFundId) {
+          await tx
+            .update(funds)
+            .set({
+              balance: fromCents(linkedFundBalanceCents - lossTotalCents),
               updatedAt: now,
             })
             .where(and(eq(funds.id, project.linkedFundId), eq(funds.tenantId, tenantId)));
@@ -297,6 +384,7 @@ export async function POST(
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'DISTRIBUTE_PROJECT_RETURNS',
       resourceType: 'Project',
       resourceId: id,

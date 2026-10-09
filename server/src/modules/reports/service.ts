@@ -1,11 +1,11 @@
-import { getDb } from '../../config/database.js';
+import { getDb } from '../../config/database';
 import {
   transactions,
   members,
   projects,
   funds,
   users,
-} from '../../db/schema/index.js';
+} from '../../db/schema/index';
 import { eq, and, desc, asc, sql, gte, lte, sum, aliasedTable } from 'drizzle-orm';
 
 /** Convert array of objects to CSV string with UTF-8 BOM for Excel compatibility. */

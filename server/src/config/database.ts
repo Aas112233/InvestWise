@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { env, isServerless } from '../config/env.js';
-import * as schema from '../db/schema/index.js';
+import { env, isServerless } from '../config/env';
+import * as schema from '../db/schema/index';
 
 const poolOptions = {
   max: 10,              // Optimal concurrent connection pool for Supabase PgBouncer pooler

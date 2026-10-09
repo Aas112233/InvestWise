@@ -271,7 +271,12 @@ export function DepositsListView({
 
   // Monthly collection badge: server-side SUM aggregate (one row) instead of
   // fetching up to 1000 full deposit rows to add up client-side.
-  const nowKey = monthKeyOf(new Date().toISOString());
+  // Current month key in the VIEWER'S local timezone. Deriving it from
+  // `new Date().toISOString()` would key off the UTC month, so a user in a
+  // positive-offset timezone would see the wrong "this month" total on the
+  // last day of the month (report issue 18).
+  const now = new Date();
+  const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const nowRange = monthRange(nowKey);
   const monthly = useDepositsMonthlyTotal(
     nowRange?.start ?? null,

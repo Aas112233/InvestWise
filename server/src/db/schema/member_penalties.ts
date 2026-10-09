@@ -1,9 +1,9 @@
 import { pgTable, uuid, varchar, text, integer, decimal, boolean, timestamp, index } from 'drizzle-orm/pg-core';
-import { members } from './members.js';
-import { meetings } from './meetings.js';
-import { transactions } from './transactions.js';
-import { funds } from './funds.js';
-import { users } from './users.js';
+import { members } from './members';
+import { meetings } from './meetings';
+import { transactions } from './transactions';
+import { funds } from './funds';
+import { users } from './users';
 
 export const memberPenalties = pgTable('member_penalties', {
   id: uuid('id').defaultRandom().primaryKey(),

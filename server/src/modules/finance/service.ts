@@ -1,6 +1,6 @@
 import { eq, and, or, desc, asc, count, ilike, inArray, gte, lte, sql, aliasedTable } from 'drizzle-orm';
 import crypto from 'node:crypto';
-import { getDb, getSql } from '../../lib/db.js';
+import { getDb, getSql } from '../../lib/db';
 import {
   transactions,
   funds,
@@ -10,15 +10,15 @@ import {
   auditLogs,
   deletedRecords,
   users,
-} from '../../db/schema/index.js';
+} from '../../db/schema/index';
 import type { SQL } from 'drizzle-orm';
 import {
   AppError,
   NotFoundError,
   ConflictError,
   ForbiddenError,
-} from '../../shared/errors.js';
-import { getPaginationParams, formatPaginatedResponse, requireTenant, type SessionUser } from '../../middleware/api.js';
+} from '../../shared/errors';
+import { getPaginationParams, formatPaginatedResponse, requireTenant, type SessionUser } from '../../middleware/api';
 import {
   parsePositiveAmount,
   splitDividendByShares,
@@ -75,6 +75,20 @@ function resolveDepositDate(date?: string | null, depositMonth?: string | null):
   const iso = parseDepositMonthToIso(depositMonth);
   if (iso) return new Date(`${iso}T00:00:00.000Z`);
   return new Date();
+}
+
+/**
+ * Month the deposit is FOR (YYYY-MM). The explicitly selected month wins;
+ * the collected-date month is only the fallback when none was sent. An
+ * explicit but unparseable value is rejected, never silently replaced.
+ */
+function resolveDepositMonthKey(depositMonth: string | null | undefined, fallback: Date): string {
+  if (!depositMonth) return fallback.toISOString().slice(0, 7);
+  const iso = parseDepositMonthToIso(depositMonth);
+  if (!iso) {
+    throw new AppError("[Field 'depositMonth', Code: invalid_string] Deposit month must be in YYYY-MM format", 400, 'VALIDATION_ERROR');
+  }
+  return iso.slice(0, 7);
 }
 
 /**
@@ -460,9 +474,10 @@ export async function addDeposit(
     const isCompleted = status === 'Completed';
     const balanceBeforeCents = toCents(fund.balance ?? '0');
 
-    // Collected date is canonical for ledger/month; submission date is audit.
-    // depositMonth is legacy — kept for backward compat but collected date wins.
+    // Collected date is the ledger date; the selected deposit month is the
+    // month the deposit is FOR (may differ for back-entry).
     const collectedDate = resolveDepositDate(data.collectedDate ?? data.date, data.depositMonth);
+    const depositMonthKey = resolveDepositMonthKey(data.depositMonth, collectedDate);
     const submittedDate = resolveSubmittedDate(data.submittedDate);
 
     const [txn] = await tx
@@ -482,6 +497,7 @@ export async function addDeposit(
         updatedBy: user.id,
         handlingOfficer: user.name || data.cashierName || 'System',
         depositMethod: data.depositMethod || 'Cash',
+        depositMonth: depositMonthKey,
         balanceBefore: fmt(balanceBeforeCents),
         balanceAfter: isCompleted ? fmt(balanceBeforeCents + amountCents) : fmt(balanceBeforeCents),
       })
@@ -497,13 +513,12 @@ export async function addDeposit(
         })
         .where(eq(funds.id, data.fundId));
 
-      // Month auto-derived from collected date (no separate picker).
-      const billingPeriodIso = collectedDate.toISOString().slice(0, 10);
+      // Back-entry of an older month must never regress lastDepositMonth.
       await tx
         .update(members)
         .set({
           totalContributed: sql`(${members.totalContributed}::numeric + ${amountCents / 100})::numeric(15,2)`,
-          lastDepositMonth: billingPeriodIso ? billingPeriodIso.slice(0, 7) : null,
+          lastDepositMonth: sql`GREATEST(COALESCE(${members.lastDepositMonth}, ''), ${depositMonthKey})`,
           updatedAt: new Date(),
         })
         .where(eq(members.id, targetMemberId));
@@ -593,6 +608,14 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
       }
     }
 
+    // Collected date stays the ledger date; the selected month (or the
+    // existing stored month) is what the deposit is FOR.
+    const depositDate = resolveDepositDate(
+      data.collectedDate ?? data.date,
+      data.depositMonth || existing.depositMonth || existing.description,
+    );
+    const depositMonthKey = resolveDepositMonthKey(data.depositMonth || existing.depositMonth, depositDate);
+
     // 2. Apply new financial impact
     if (isNowCompleted) {
       const [newFund] = await tx.select().from(funds).where(and(eq(funds.id, newFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
@@ -604,27 +627,33 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
 
       const [newMember] = await tx.select().from(members).where(and(eq(members.id, newMemberId), eq(members.tenantId, tenantId))).for('update').limit(1);
       if (!newMember) throw new NotFoundError('Member');
-      const editCollected = resolveDepositDate(
-        data.collectedDate ?? data.date,
-        data.depositMonth || existing.description,
-      );
       await tx
         .update(members)
         .set({
           totalContributed: sql`(${members.totalContributed}::numeric + ${newAmountCents / 100})::numeric(15,2)`,
-          lastDepositMonth: editCollected.toISOString().slice(0, 7),
           lastActive: new Date(),
           updatedAt: new Date(),
         })
         .where(eq(members.id, newMemberId));
     }
 
-    // 3. Update transaction record — collected date is canonical, month
-    // auto-derived. submittedDate override allowed for back-entry correction.
-    const depositDate = resolveDepositDate(
-      data.collectedDate ?? data.date,
-      data.depositMonth || existing.description,
-    );
+    // 3. Update transaction record. submittedDate override allowed for
+    // back-entry correction.
+    //
+    // #60: the fund balance was just reverted + re-applied, so this row's
+    // balanceBefore/balanceAfter snapshot is stale. Recompute it from the
+    // target fund's live balance (post-apply) so the running-balance column
+    // in reports/statements stops printing a value from the pre-edit state.
+    const [liveFund] = isNowCompleted
+      ? await tx
+          .select({ balance: funds.balance })
+          .from(funds)
+          .where(and(eq(funds.id, newFundId), eq(funds.tenantId, tenantId)))
+          .limit(1)
+      : [];
+    const newFundBalanceCents = isNowCompleted ? toCents(liveFund?.balance ?? '0') : 0;
+    const balanceBeforeStr = isNowCompleted ? fmt(newFundBalanceCents - newAmountCents) : undefined;
+    const balanceAfterStr = isNowCompleted ? fmt(newFundBalanceCents) : undefined;
 
     const [updated] = await tx
       .update(transactions)
@@ -637,13 +666,35 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
         submittedDate: data.submittedDate ? resolveSubmittedDate(data.submittedDate) : existing.submittedDate ?? undefined,
         status: newStatus,
         depositMethod: data.depositMethod || existing.depositMethod,
+        depositMonth: depositMonthKey,
         handlingOfficer: user.name || data.cashierName || existing.handlingOfficer || 'System',
+        ...(isNowCompleted
+          ? { balanceBefore: balanceBeforeStr, balanceAfter: balanceAfterStr }
+          : {}),
         updatedBy: user.id,
         updatedAt: new Date(),
       })
       .where(eq(transactions.id, id))
       .returning();
     if (!updated) throw new NotFoundError('Transaction');
+
+    // Month or member may have changed — recompute lastDepositMonth for both
+    // affected members from their completed deposits (same rule as revert).
+    for (const mid of new Set([oldMemberId, newMemberId])) {
+      await tx.execute(sql`
+        UPDATE ${members}
+        SET last_deposit_month = (
+          SELECT MAX(COALESCE(t.deposit_month, to_char(t.date AT TIME ZONE 'UTC', 'YYYY-MM')))
+          FROM ${transactions} t
+          WHERE t.member_id = ${mid}::uuid
+            AND t.tenant_id = ${tenantId}::uuid
+            AND t.type = 'Deposit'
+            AND t.is_deleted = false
+            AND t.status IN ('Completed', 'Success')
+        )
+        WHERE ${members.id} = ${mid}::uuid AND ${members.tenantId} = ${tenantId}::uuid
+      `);
+    }
 
     await tx.insert(auditLogs).values({
       userId: user.id,
@@ -1540,7 +1591,14 @@ export async function distributeDividends(data: DividendInput, user: SessionUser
     const activeMembers = await tx
       .select()
       .from(members)
-      .where(and(eq(members.tenantId, tenantId), eq(members.status, 'active'), sql`${members.shares} > 0`));
+      .where(
+        and(
+          eq(members.tenantId, tenantId),
+          eq(members.status, 'active'),
+          eq(members.isDeleted, false),
+          sql`${members.shares} > 0`,
+        ),
+      );
 
     // Exact largest-remainder split in cents — sum(payouts) === disbursement
     // never exceeds amountCents (verified in lib/money.test.ts).
@@ -1972,12 +2030,10 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
       // The explicitly selected month wins for the deposit-month record,
       // duplicate checks and lastDepositMonth; the resolved collected date
       // remains the ledger date (§12 accuracy — month ≠ collection day).
-      const monthKey = month || depositDate.toISOString().slice(0, 7);
+      const monthKey = resolveDepositMonthKey(month, depositDate);
 
-      // Duplicate deposit check for this month
-      const startOfMonth = new Date(depositDate.getFullYear(), depositDate.getMonth(), 1);
-      const endOfMonth = new Date(depositDate.getFullYear(), depositDate.getMonth() + 1, 0, 23, 59, 59);
-
+      // Duplicate deposit check for the month the deposit is FOR (stored
+      // month first, collected-date month for legacy rows without one).
       const [existingDeposit] = await tx
         .select({ id: transactions.id })
         .from(transactions)
@@ -1987,8 +2043,8 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
             eq(transactions.type, 'Deposit'),
             eq(transactions.memberId, dep.memberId),
             eq(transactions.fundId, data.fundId),
-            gte(transactions.date, startOfMonth),
-            lte(transactions.date, endOfMonth),
+            eq(transactions.isDeleted, false),
+            sql`COALESCE(${transactions.depositMonth}, to_char(${transactions.date} AT TIME ZONE 'UTC', 'YYYY-MM')) = ${monthKey}`,
             inArray(transactions.status, ['Completed']),
           ),
         )
@@ -2045,7 +2101,7 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
         .update(members)
         .set({
           totalContributed: sql`(${members.totalContributed}::numeric + ${addedCents / 100})::numeric(15,2)`,
-          lastDepositMonth: memberLastMonth.get(memberId) ?? null,
+          lastDepositMonth: sql`GREATEST(COALESCE(${members.lastDepositMonth}, ''), ${memberLastMonth.get(memberId) ?? ''})`,
           lastActive: new Date(),
           updatedAt: new Date(),
         })

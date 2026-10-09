@@ -5,7 +5,7 @@ import { eq, and, desc, sql, ilike } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
-import { ValidationError, ForbiddenError } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,8 +17,10 @@ export async function GET(request: NextRequest) {
     if (!tenantId) throw new ForbiddenError('Tenant context required');
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
+    // Clamp pagination at the boundary — an unbounded `limit` returns every
+    // meeting plus its count in one response.
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const skip = (page - 1) * limit;
     const status = searchParams.get('status');
     const meetingType = searchParams.get('meetingType');
@@ -63,7 +65,7 @@ export async function GET(request: NextRequest) {
           createdAt: meetings.createdAt,
         })
         .from(meetings)
-        .leftJoin(users, eq(meetings.conductedBy, users.id))
+        .leftJoin(users, and(eq(meetings.conductedBy, users.id), eq(users.tenantId, tenantId)))
         .where(whereClause)
         .orderBy(desc(meetings.meetingDate))
         .limit(limit)
@@ -103,7 +105,7 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError('Insufficient permissions to schedule meetings');
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const { title, meetingDate, meetingType, location, agenda, notes } = body;
 
     if (!title || !meetingDate || !meetingType) {
@@ -130,6 +132,7 @@ export async function POST(request: NextRequest) {
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'SCHEDULE_MEETING',
       resourceType: 'Meeting',
       resourceId: created?.id,

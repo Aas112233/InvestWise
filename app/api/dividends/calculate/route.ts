@@ -5,7 +5,7 @@ import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { MoneyError } from '@/lib/money';
 import { planDividendRun } from '@/server/modules/finance/dividend-engine';
-import { ValidationError, ForbiddenError } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 
 /**
  * POST /api/dividends/calculate — preview a dividend run without writing.
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError('Read permission required for: DIVIDENDS');
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const { grossEarnings, distributableFundId, statutoryReservePercent, reserveFundId, fiscalPeriodId } = body;
 
     if (!grossEarnings || !distributableFundId) {

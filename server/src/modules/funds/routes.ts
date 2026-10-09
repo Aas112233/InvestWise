@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { protect, requirePermission } from '../../middleware/auth.js';
-import { validate } from '../../middleware/validate.js';
-import { createFundSchema, updateFundSchema } from './validation.js';
-import { getFunds, getFundById, createFund, updateFund } from './controller.js';
+import { protect, requirePermission } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
+import { createFundSchema, updateFundSchema } from './validation';
+import { getFunds, getFundById, createFund, updateFund } from './controller';
 
 const router = Router();
 

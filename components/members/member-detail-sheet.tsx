@@ -34,6 +34,17 @@ function statusTone(status: string): StatusTone {
   return "slate";
 }
 
+// Deposit rows keep their real status (the query does not filter to
+// Completed), so the pill must color by state — a hard-coded emerald made
+// Pending and Rejected payouts look settled.
+function depositStatusTone(status?: string | null): StatusTone {
+  const s = (status || "").toLowerCase();
+  if (s === "completed") return "emerald";
+  if (s === "pending") return "amber";
+  if (s === "rejected" || s === "reverted") return "rose";
+  return "slate";
+}
+
 function initials(name: string): string {
   return name
     .split(" ")
@@ -200,7 +211,9 @@ export function MemberDetailSheet({
                         </td>
                         <td className="px-3 py-2 font-mono font-medium text-foreground">{formatMoney(d.amount, currency)}</td>
                         <td className="px-3 py-2 text-right">
-                          <StatusBadge tone="emerald">{d.status || t("members.statusLabels.completed")}</StatusBadge>
+                          <StatusBadge tone={depositStatusTone(d.status)}>
+                            {d.status || t("members.statusLabels.completed")}
+                          </StatusBadge>
                         </td>
                       </tr>
                     ))}
@@ -210,6 +223,7 @@ export function MemberDetailSheet({
             )}
           </section>
 
+          {!member.reviewMasked && (
           <section>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
               {t("members.detail.warnings")}
@@ -222,6 +236,7 @@ export function MemberDetailSheet({
               <StatusBadge tone="amber">{member.warningCount}</StatusBadge>
             )}
           </section>
+          )}
         </div>
       )}
     </TopSheet>

@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { protect, requirePermission } from '../../middleware/auth.js';
-import { generateReportHandler, exportGenericReportHandler } from './controller.js';
+import { protect, requirePermission } from '../../middleware/auth';
+import { generateReportHandler, exportGenericReportHandler } from './controller';
 
 const router = Router();
 

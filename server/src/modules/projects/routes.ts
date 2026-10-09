@@ -1,12 +1,12 @@
 import { Router } from 'express';
-import { protect, requirePermission } from '../../middleware/auth.js';
-import { validate } from '../../middleware/validate.js';
+import { protect, requirePermission } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
 import {
   createProjectSchema,
   updateProjectSchema,
   projectUpdateSchema,
-} from './validation.js';
-import * as projectController from './controller.js';
+} from './validation';
+import * as projectController from './controller';
 
 const router = Router();
 

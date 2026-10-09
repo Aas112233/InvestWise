@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb, withDbRetry } from '@/db/index';
 import { superAdminActionLog } from '@/db/schema/index';
 import { eq } from 'drizzle-orm';
-import { AuthError, ForbiddenError } from '@/lib/utils/errors';
+import { AuthError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
 import { getClientIp } from '@/lib/request-meta';
 import { logSuperAdminAction } from '@/lib/superadmin-service';
@@ -68,7 +68,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     requireSuperAdmin(user);
     const { id } = await params;
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const parsed = validateNoticeInput(body, { partial: true });
     if (!parsed.ok) {
       return NextResponse.json(

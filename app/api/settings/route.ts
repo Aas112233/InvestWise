@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { systemSettings, transactions, DEFAULT_MEETING_TYPES, DEFAULT_PENALTY_RULES } from '@/db/schema/index';
+import { fiscalPeriods, systemSettings, transactions, DEFAULT_MEETING_TYPES, DEFAULT_PENALTY_RULES } from '@/db/schema/index';
 import { eq, and, count } from 'drizzle-orm';
 import { getAuthContext, type AuthenticatedUser } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
-import { AuthError, ForbiddenError, LockedError } from '@/lib/utils/errors';
+import { AuthError, ForbiddenError, LockedError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { updateSettingsSchema, UpdateSettingsInput } from '@/lib/utils/validation';
+import { normalizePaymentMethods } from '@/lib/payment-methods';
 import { logAudit } from '@/lib/utils/audit';
 
 const SETTINGS_CACHE_TTL = 5 * 60_000; // 5 minutes
@@ -49,6 +50,10 @@ function formatSettingsResponse(settings: any): Record<string, unknown> {
       suspendedAfterMonths: settings.suspendedAfterMonths ?? 6,
       meetingTypes: settings.meetingTypes && settings.meetingTypes.length > 0 ? settings.meetingTypes : DEFAULT_MEETING_TYPES,
       penaltyRules: settings.penaltyRules && settings.penaltyRules.length > 0 ? settings.penaltyRules : DEFAULT_PENALTY_RULES,
+      // Tenant-configured payment methods for the deposit forms; normalizes
+      // null/garbage jsonb to the platform defaults instead of shipping an
+      // empty picker.
+      paymentMethods: normalizePaymentMethods(settings.paymentMethods),
     },
     system: {
       language: settings.language || 'English',
@@ -182,7 +187,7 @@ export async function PUT(request: NextRequest) {
       throw new ForbiddenError('Write permission required for: SETTINGS');
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     
     // Validate input
     const validation = updateSettingsSchema.safeParse(body);
@@ -218,6 +223,25 @@ export async function PUT(request: NextRequest) {
     
     // current is guaranteed to exist at this point
     const currentSettings = current!;
+
+    if (data.financial?.fiscalYearStart !== undefined || data.financial?.fiscalYearEnd !== undefined) {
+      const nextStart = data.financial.fiscalYearStart ?? currentSettings.fiscalYearStart ?? 'July';
+      const nextEnd = data.financial.fiscalYearEnd ?? currentSettings.fiscalYearEnd ?? 'June';
+      if (nextStart === nextEnd) throw new ValidationError('Fiscal year start and end months must differ');
+      const fiscalConfigChanged =
+        nextStart !== (currentSettings.fiscalYearStart || 'July') ||
+        nextEnd !== (currentSettings.fiscalYearEnd || 'June');
+      if (fiscalConfigChanged) {
+        const [existingPeriod] = await db
+          .select({ id: fiscalPeriods.id })
+          .from(fiscalPeriods)
+          .where(eq(fiscalPeriods.tenantId, tenantId))
+          .limit(1);
+        if (existingPeriod) {
+          throw new LockedError('Fiscal year months cannot be changed after a fiscal period has been created');
+        }
+      }
+    }
 
     const updateData: Record<string, unknown> = {};
 
@@ -267,6 +291,20 @@ export async function PUT(request: NextRequest) {
         updateData.shareValueBdt = String(data.financial.shareValueBdt);
       }
       if (data.financial.isShareValueLocked !== undefined) {
+        // §12 share-value lock: the flag derives from ledger history, so a
+        // client can never write it back off once transactions exist (the
+        // auto-lock on GET/POST would otherwise be silently reversible).
+        // Unlocking is only meaningful with an empty ledger, where the next
+        // transaction re-locks it.
+        if (data.financial.isShareValueLocked === false) {
+          const [txCount] = await db
+            .select({ count: count() })
+            .from(transactions)
+            .where(and(eq(transactions.tenantId, tenantId), eq(transactions.isDeleted, false)));
+          if (Number(txCount?.count ?? 0) > 0) {
+            throw new ValidationError("[Field 'isShareValueLocked', Code: SHARE_VALUE_LOCKED] The share value lock derives from ledger history — transactions already exist for this tenant, so it cannot be unlocked");
+          }
+        }
         updateData.isShareValueLocked = data.financial.isShareValueLocked;
       }
       if (data.financial.withdrawalLimitPercent !== undefined) {
@@ -327,6 +365,9 @@ export async function PUT(request: NextRequest) {
       }
       if (data.governance.meetingTypes !== undefined) {
         updateData.meetingTypes = data.governance.meetingTypes;
+      }
+      if (data.governance.paymentMethods !== undefined) {
+        updateData.paymentMethods = normalizePaymentMethods(data.governance.paymentMethods);
       }
       if (data.governance.penaltyRules !== undefined) {
         updateData.penaltyRules = data.governance.penaltyRules;
@@ -391,7 +432,9 @@ export async function PUT(request: NextRequest) {
   } catch (error: any) {
     console.error('[UPDATE SETTINGS ERROR]', error);
     
-    if (error instanceof AuthError || error instanceof ForbiddenError || error instanceof LockedError) {
+    // ValidationError is surfaced with its real §11 message — falling through
+    // here would mask it as a generic 500 ("never a masked error", §11).
+    if (error instanceof AuthError || error instanceof ForbiddenError || error instanceof LockedError || error instanceof ValidationError) {
       return NextResponse.json(
         { success: false, message: error.message, code: error.code },
         { status: error.statusCode }

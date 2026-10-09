@@ -31,9 +31,12 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
+    // Clamp pagination: `limit` flows into listMemberGovernanceStatuses, which
+    // computes per-member compliance for every row on the page — an unbounded
+    // limit here is a per-request CPU DoS.
     const result = await listMemberGovernanceStatuses(tenantId, {
-      page: parseInt(searchParams.get('page') || '1', 10),
-      limit: parseInt(searchParams.get('limit') || '20', 10),
+      page: Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1),
+      limit: Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20)),
       search: searchParams.get('search'),
       status: searchParams.get('status'),
     });

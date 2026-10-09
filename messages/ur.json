@@ -67,7 +67,7 @@
     "confirm": "تصدیق کریں",
     "clear": "صاف کریں",
     "today": "آج",
-    "retry": "دوبارہ کوشش کریں",
+    "retry": "ابھی دوبارہ کوشش کریں",
     "weekdays": {
       "mon": "پیر",
       "tue": "منگل",
@@ -117,7 +117,8 @@
     },
     "refresh": "تازہ کریں",
     "enabled": "فعال",
-    "disabled": "غیر فعال"
+    "disabled": "غیر فعال",
+    "connectionLost": "آپ آف لائن لگتے ہیں۔ سرور تک رسائی نہیں — خودکار طور پر دوبارہ کوشش جاری ہے۔"
   },
   "nav": {
     "management": "Members",
@@ -136,10 +137,57 @@
     "reports": "Reports",
     "settings": "Settings",
     "dividends": "Dividends",
+    "fiscal": "مالی سال",
     "meetings": "Meetings & Performance",
     "governance": "Governance",
     "platform": "Platform",
     "superadminPanel": "SuperAdmin Panel"
+  },
+  "fiscal": {
+    "title": "مالی سال کا انتظام",
+    "subtitle": "{start} سے {end} تک سالانہ مدتوں کا انتظام کریں۔ نئی مدت تنظیم کے مقررہ مالی مہینوں کے مطابق بنے گی۔",
+    "yearLabel": "مالی سال {year}",
+    "columns": {
+      "year": "مالی سال",
+      "period": "مدت",
+      "status": "حیثیت",
+      "earnings": "آمدنی",
+      "expenses": "اخراجات",
+      "reserve": "قانونی ذخیرہ",
+      "distributable": "قابلِ تقسیم زائد رقم",
+      "actions": "اقدامات"
+    },
+    "status": {
+      "open": "کھلا",
+      "closed": "بند"
+    },
+    "actions": {
+      "selectYear": "مالی سال منتخب کریں",
+      "startYear": "مالی سال شروع کریں",
+      "close": "سال بند کریں",
+      "reopen": "دوبارہ کھولیں"
+    },
+    "empty": "ابھی کوئی مالی مدت موجود نہیں۔ سال کے اختتامی مجموعوں اور بند ہونے کی حالت کو ٹریک کرنے کے لیے مالی سال شروع کریں۔",
+    "onboarding": {
+      "title": "سال کے اختتام کا عمل",
+      "description": "اگلی مدت بنائیں، زیرِ التوا لین دین نمٹائیں، پھر مجموعوں اور قانونی ذخیرے کے حساب کے لیے اسے بند کریں۔ بند مدت میں دوبارہ کھولنے تک نئی اندراجات نہیں ہوں گی۔"
+    },
+    "confirm": {
+      "startTitle": "مالی سال شروع کریں",
+      "startDescription": "مقررہ آغاز اور اختتام کے مہینوں کے مطابق FY {year} بنائیں؟ اس مدت میں اندراجات کھلی رہیں گی۔",
+      "closeTitle": "مالی سال بند کریں",
+      "closeDescription": "اس سے مکمل لیجر مجموعے محفوظ ہوں گے، قانونی ذخیرہ شمار ہوگا اور اس مدت میں نئی اندراجات رک جائیں گی۔ پہلے زیرِ التوا لین دین نمٹائیں۔",
+      "reopenTitle": "مالی سال دوبارہ کھولیں",
+      "reopenDescription": "دوبارہ کھولنے سے اس مدت میں نئی اندراجات ممکن ہوں گی۔ دوبارہ بند ہونے تک پچھلے اختتامی حساب برقرار رہیں گے۔"
+    },
+    "messages": {
+      "started": "مالی سال شروع ہوگیا۔",
+      "closed": "مالی سال بند ہوگیا۔",
+      "reopened": "مالی سال دوبارہ کھول دیا گیا۔"
+    },
+    "errors": {
+      "load": "مالی مدتیں لوڈ نہیں ہوسکیں۔"
+    }
   },
   "auth": {
     "terminal": "Sign In",
@@ -390,7 +438,8 @@
     "healthGood": "اچھا",
     "healthStable": "مستحکم",
     "healthAtRisk": "خطرے میں",
-    "healthCritical": "نازک"
+    "healthCritical": "نازک",
+    "fundsHealthMethod": "رن وے = خالص ذخائر ÷ ماہانہ خرچ۔ ماہانہ خرچ موجودہ کیلنڈر ماہ کے اخراجات ہیں، یا اگر اس ماہ کوئی خرچ نہ ہو تو گزشتہ 3 ماہ کی اوسط۔"
   },
   "members": {
     "stakeholders": "Members",
@@ -415,7 +464,7 @@
     "updated": "{name} updated successfully.",
     "deleted": "{name} deleted successfully.",
     "deleteConfirm": "Confirm Deletion",
-    "deleteMessage": "کیا آپ {name} کو مستقل حذف کرنا چاہتے ہیں؟ یہ عمل واپس نہیں ہو سکتا۔",
+    "deleteMessage": "{name} کو ڈائریکٹری سے ہٹائیں؟ صرف وہی اراکین ہٹائے جا سکتے ہیں جن کا کوئی لیجر ریکارڈ نہیں۔ حاضری اور جرمانے کے ریکارڈ آڈٹ کے لیے محفوظ رہیں گے؛ رکن فہرستوں، ڈراپ ڈاؤنز اور منافع کی تقسیم سے نکل جائے گا۔",
     "reviewTitle": "Review Member Details",
     "reviewMessage": "Please verify the information below before saving.",
     "systemAccessControl": "System Access",
@@ -486,7 +535,8 @@
       "suspend": "معطل کریں",
       "activate": "فعال کریں",
       "delete": "حذف کریں",
-      "actions": "قطار کے اقدامات"
+      "actions": "قطار کے اقدامات",
+      "deleteDisabledHint": "لیجر تاریخ موجود ہے — اس کے بجائے معطل کریں"
     },
     "suspendTitle": "ممبر معطل کریں",
     "suspendMessage": "کیا آپ {name} کو معطل کرنا چاہتے ہیں؟ وہ سائن ان نہیں کر سکیں گے۔",
@@ -517,7 +567,15 @@
       "save": "ممبر محفوظ کریں",
       "saving": "محفوظ ہو رہا ہے...",
       "createdToast": "{name} کامیابی سے شامل ہوا۔",
-      "updatedToast": "{name} اپ ڈیٹ ہو گیا۔"
+      "updatedToast": "{name} اپ ڈیٹ ہو گیا۔",
+      "validation": {
+        "nameMin": "نام کم از کم 2 حروف کا ہونا چاہیے",
+        "emailRequired": "ای میل درکار ہے",
+        "emailInvalid": "درست ای میل پتہ درج کریں",
+        "sharesRequired": "حصص ایک عدد ہونا چاہیے",
+        "sharesWhole": "حصص مکمل عدد ہونا چاہیے",
+        "sharesMin": "حصص کم از کم 1 ہونے چاہیے"
+      }
     },
     "detail": {
       "profile": "ممبر پروفائل",
@@ -856,7 +914,18 @@
     "capitalUsed": "Capital Used",
     "currentValue": "Current Value",
     "totalReturn": "Total Return",
-    "roiLabel": "ROI"
+    "roiLabel": "ROI",
+    "totalCapitalInvested": "کل سرمایہ کاری شدہ",
+    "consolidatedPortfolioValue": "مجموعی پورٹ فولیو ویلیو",
+    "portfolioNetReturn": "پورٹ فولیو خالص منافع",
+    "realizedReturn": "حقیقی منافع: {value}%",
+    "collectionEfficiency": "وصولی کارکردگی",
+    "collectionEfficiencyHelperOne": "{count} فعال پورٹ فولیو پروجیکٹ",
+    "collectionEfficiencyHelperOther": "{count} فعال پورٹ فولیو پروجیکٹس",
+    "capitalInvestedHelper": "آج تک کی تمام تصدیق شدہ جمع کا مجموعہ",
+    "consolidatedPortfolioHelper": "کل خزانہ: فعال فنڈ بیلنس (پروجیکٹ سرمایہ شامل)",
+    "sectorAllocationTitle": "شعبے کے لحاظ سے سرمایہ مختص",
+    "sectorAllocationSubtitle": "صنعت کے لحاظ سے مختص سرمایہ (پروجیکٹ بجٹ)"
   },
   "reports": {
     "extractionProtocol": "رپورٹ کنفیگریشن",
@@ -902,7 +971,9 @@
       "projectPerformance": "پروجیکٹ پرفارمنس",
       "roiAnalysis": "ROI انالائسز",
       "ventureGrowth": "ونچر گروتھ میٹرکس",
-      "fundLedger": "فنڈ لیجر"
+      "fundLedger": "فنڈ لیجر",
+      "penaltiesAudit": "بقیہ و جرمانہ آڈٹ",
+      "disbursements": "سرمایہ کاری بیان"
     },
     "descs": {
       "comprehensiveLedger": "مکمل لینڈین ہسٹری — تمام جمع، خرچے اور ترانسفروں۔",
@@ -921,16 +992,19 @@
       "projectPerformance": "پروجیکٹ کے ذریعے ROI ٹریکنگ، مائلسٹون estatus اور فنڈ صحت۔",
       "roiAnalysis": "متوقع اور اصل رిటرن آن انویسٹمنٹ تجزیہ۔",
       "ventureGrowth": "تمام پروجیکٹس کا تقابلی crescimento تحلیل۔",
-      "fundLedger": "ایک مخصوص فنڈ کا لینڈین آڈٹ ٹریل۔"
+      "fundLedger": "ایک مخصوص فنڈ کا لینڈین آڈٹ ٹریل۔",
+      "penaltiesAudit": "منتخب مدت کے جرمانے، کٹوتیاں اور معافی کی تفصیل۔",
+      "disbursements": "منصوبوں میں سرمایہ کاری اور اکویٹی انجیکشن کا بیان۔"
     },
     "exportSpecification": "ایکسپورٹ کنفیگریشن",
     "specificationDesc": "رپورٹس 4-لوکیل یوٹیایف-8 فارمیٹنگ کے ساتھ ٹیننٹ کرنسی کے مطابق ہیں۔",
     "reportTypeTitle": "1. رپورٹ ٹیمپلیٹ منتخب کریں",
     "periodTitle": "2. پیریڈ اور وسعت",
     "periodType": "وقت کا دور",
-    "month": "ماہانہ مہینہ",
+    "month": "کیلنڈر کا مہینہ",
     "quarter": "تراۓ ماہی",
     "year": "مالی سال",
+    "calendarYear": "کیلنڈر کا سال",
     "startDate": "شروع کی تاریخ",
     "endDate": "اختتامی تاریخ",
     "linkedProject": "ٹار گٹ پروجیکٹ",
@@ -938,16 +1012,127 @@
     "selectMemberPlaceholder": "ممبر منتخب کریں...",
     "selectFundPlaceholder": "فنڈ منتخب کریں...",
     "formatTitle": "3. آؤٹ پٹ ڈاکومینٹ فارمیٹ",
-    "downloadButton": "جنریٹ اور ایکسپورٹ ڈاکومینٹ",
+    "downloadButton": "دستاویز بنائیں اور ایکسپورٹ کریں",
     "validation": {
       "selectProject": "براہ کرم اس رپورٹ کے لیے ٹار گٹ پروجیکٹ منتخب کریں۔",
       "selectMember": "براہ کرم اس رپورٹ کے لیے ٹار گٹ ممبر منتخب کریں۔",
-      "selectFund": "براہ کرم اس رپورٹ کے لیے ٹار گٹ فنڈ منتخب کریں۔"
+      "selectFund": "براہ کرم اس رپورٹ کے لیے ٹار گٹ فنڈ منتخب کریں۔",
+      "selectRange": "کسٹم رینج کے لیے آغاز اور اختتام دونوں تاریخیں منتخب کریں۔"
     },
     "format": {
       "excel": "مائیکروسافٹ ایکسل (.xlsx)",
       "pdf": "پرینٹ ایبل پی ڈی ایف (.pdf)",
       "csv": "کچا سی ایس وی ڈیٹا (.csv)"
+    },
+    "quarters": {
+      "q1": "سہ ماہی ۱",
+      "q2": "سہ ماہی ۲",
+      "q3": "سہ ماہی ۳",
+      "q4": "سہ ماہی ۴"
+    },
+    "summary": {
+      "period": "مدت",
+      "asOf": "تک",
+      "project": "منصوبہ",
+      "member": "رکن",
+      "fund": "فنڈ",
+      "totalInflow": "کل آمد",
+      "totalOutflow": "کل نکاسی",
+      "netCashFlow": "خالص نقد بہاؤ",
+      "closingBalance": "اختتامی بیلنس",
+      "totalDeposits": "کل جمع",
+      "totalContributions": "کل تعاون",
+      "totalRevenue": "کل آمدنی",
+      "totalEarnings": "کل آمدن",
+      "totalInterest": "کل سود",
+      "totalDividends": "کل منافع تقسیم",
+      "totalExpenses": "کل اخراجات",
+      "totalProjectExpenses": "منصوبے کے کل اخراجات",
+      "totalDisbursements": "کل سرمایہ کاری",
+      "totalPenalties": "کل جرمانہ کٹوتی",
+      "totalLiquidity": "کل لیکویڈیٹی",
+      "activeFunds": "متحرک فنڈز",
+      "partners": "شرکاء",
+      "projects": "منصوبے",
+      "sharesHeld": "زیر ملکیت شیئرز",
+      "totalContributed": "کل تعاون",
+      "rowCount": "لین دین",
+      "truncatedNote": "نوٹ: ڈیٹا حد سے تجاوز کر گیا، تازہ ترین ۵,۰۰۰ سطور تک محدود کر دیا گیا۔",
+      "generatedBy": "تیار کرنے والا",
+      "total": "کل",
+      "confidential": "محرم — صرف اندرونی اور مجاز شرکاء کے لیے۔"
+    },
+    "columns": {
+      "date": "تاریخ",
+      "depositMonth": "جمع کا مہینہ",
+      "reference": "حوالہ نمبر",
+      "type": "قسم",
+      "member": "رکن",
+      "memberCode": "رکن آئی ڈی",
+      "email": "ای میل",
+      "phone": "فون",
+      "role": "کردار",
+      "shares": "شیئرز",
+      "totalContributed": "کل تعاون",
+      "joinDate": "تاریخ شمولیت",
+      "fund": "فنڈ",
+      "project": "منصوبہ",
+      "category": "زمرہ",
+      "description": "تفصیل",
+      "depositMethod": "طریقہ جمع",
+      "amount": "رقم",
+      "debit": "ڈیبٹ",
+      "credit": "کریڈٹ",
+      "runningBalance": "چلتا بیلنس",
+      "handlingOfficer": "ہینڈلنگ افسر",
+      "authorizedBy": "منظور کرنے والا",
+      "status": "حالت",
+      "expenseName": "اخراجات",
+      "fundName": "فنڈ کا نام",
+      "fundType": "فنڈ کی قسم",
+      "balance": "بیلنس",
+      "currency": "کرنسی",
+      "custodian": "نگہبان",
+      "accountNumber": "اکاؤنٹ نمبر",
+      "depositsCount": "جمع کی تعداد",
+      "totalDeposited": "کل جمع شدہ",
+      "contributionShare": "حصہ تعاون (%)",
+      "tier": "درجہ",
+      "penaltyTitle": "جرمانہ",
+      "penaltyType": "جرمانے کی قسم",
+      "deduction": "کٹوتی",
+      "issuedAt": "جاری",
+      "waivedAt": "معاف",
+      "waiveReason": "معافی کی وجہ",
+      "projectName": "منصوبہ",
+      "health": "صحت",
+      "initialInvestment": "ابتدائی سرمایہ کاری",
+      "budget": "بجٹ",
+      "totalEarnings": "کل آمدن",
+      "totalExpenses": "کل اخراجات",
+      "netProfit": "خالص منافع",
+      "netPosition": "خالص پوزیشن",
+      "fundBalance": "فنڈ بیلنس",
+      "expectedRoi": "متوقع ROI (%)",
+      "actualRoi": "حقیقی ROI (%)",
+      "variance": "فرق (pp)",
+      "growthPercentage": "ترقی (%)",
+      "totalShares": "کل شیئرز",
+      "startDate": "تاریخ آغاز",
+      "completionDate": "تکمیل",
+      "ongoing": "جاری"
+    },
+    "viewButton": "رپورٹ دیکھیں",
+    "downloadSuccess": "دستاویز کامیابی سے ڈاؤن لوڈ ہو گئی",
+    "generatingNotice": "رپورٹ دستاویز تیار کی جا رہی ہے...",
+    "viewer": {
+      "back": "رپورٹس پر واپس جائیں",
+      "refresh": "تازہ کریں",
+      "retry": "دوبارہ کوشش کریں",
+      "loading": "رپورٹ لوڈ ہو رہی ہے...",
+      "loadError": "رپورٹ لوڈ کرنے میں ناکامی۔",
+      "empty": "اس مدت کے لیے کوئی ریکارڈ نہیں۔",
+      "unknownReport": "نامعلوم رپورٹ قسم۔"
     }
   },
   "transactions": {
@@ -1106,7 +1291,8 @@
       "depositMonth": "جمع کا مہینہ",
       "depositYear": "جمع کا سال",
       "selectMonth": "مہینہ منتخب کریں...",
-      "selectYear": "سال منتخب کریں..."
+      "selectYear": "سال منتخب کریں...",
+      "noOpenFiscalPeriod": "کوئی مالی سال کھلا نہیں ہے۔ جمع درج کرنے سے پہلے مالی سالوں میں ایک سال شروع کریں — ورنہ محفوظ کرنا مسترد ہو جائے گا۔"
     },
     "bulk": {
       "title": "بلک ڈپازٹ",
@@ -1408,7 +1594,13 @@
     "noGoalsFound": "No goals match the criteria.",
     "confirmDelete": "Delete this goal?",
     "allStatuses": "All Statuses",
-    "allTypes": "All Types"
+    "allTypes": "All Types",
+    "progressManual": "دستی · غیر تصدیق شدہ",
+    "progressManualHint": "یہ رقم دستی طور پر درج کی گئی ہے اور کسی فنڈ بیلنس سے منسلک نہیں۔",
+    "currentAmountHint": "دستی طور پر درج — یہ رقم کسی فنڈ سے منسلک نہیں اور غیر تصدیق شدہ دکھائی جاتی ہے۔",
+    "metrics": {
+      "currentAccumulatedHint": "دستی اندراجات — فنڈ بیلنس سے غیر منسلک"
+    }
   },
   "settings": {
     "title": "سیٹنگز",
@@ -1425,6 +1617,22 @@
     "loadFailed": "سیٹنگز لوڈ ناکام۔",
     "refresh": "ریفریش",
     "synced": "سیٹنگز ڈیٹابیس سے ہم آہنگ۔",
+    "paymentMethods": {
+      "title": "ادائیگی کے طریقے",
+      "desc": "وہ طریقے جو ڈپازٹ اور ڈپازٹ ریکویسٹ فارموں میں دکھائے جاتے ہیں۔ لیجر میں طریقے کا نام ہی محفوظ ہوتا ہے، اس لیے نام بدلنے سے پرانا ریکارڈ برقرار رہتا ہے مگر نئے اندراج نئے نام سے ہوں گے۔",
+      "empty": "کوئی طریقہ مقرر نہیں — پلیٹ فارم کے ڈیفالٹ طریقے دکھائے جائیں گے۔",
+      "name": "ادائیگی کے طریقے کا نام",
+      "namePlaceholder": "مثلاً DBBL Bank Transfer",
+      "add": "طریقہ شامل کریں",
+      "duplicate": "یہ نام پہلے سے موجود ہے",
+      "types": {
+        "cash": "نقد",
+        "bank": "بینک",
+        "mobile": "موبائل",
+        "check": "چیک",
+        "other": "دیگر"
+      }
+    },
     "forbidden": "رسائی محدود",
     "forbiddenDetails": "آپ کو یہ سیکشن دیکھنے کی اجازت نہیں۔",
     "organization": {
@@ -1597,12 +1805,77 @@
     "language": "زبان",
     "languageSelection": "زبان کا انتخاب",
     "toggleTheme": "تھیم تبدیل کریں",
-    "organization": "تنظیم"
+    "organization": "تنظیم",
+    "impersonationBanner": "سپورٹ سیشن فعال ہے — آپ {email} کے طور پر دیکھ رہے ہیں۔ تمام کارروائیاں آڈٹ لاگ میں درج ہوں گی۔",
+    "exitImpersonation": "روپ دھارنا بند کریں",
+    "exitImpersonationFailed": "سیشن ختم نہیں ہو سکا",
+    "currentFiscalYear": "موجودہ مالی سال",
+    "fiscalYearAbbrev": "FY",
+    "notificationsEmpty": "آپ سب کچھ دیکھ چکے ہیں",
+    "notificationsEmptyHint": "گزشتہ 48 گھنٹوں کی تبدیلیاں یہاں دکھائی دیں گی۔",
+    "notificationsRestricted": "آپ کے کردار کے لیے کوئی سرگرمی فیڈ نہیں",
+    "notificationsRestrictedHint": "ایڈمن اور مینیجر تازہ تبدیلیاں دیکھ سکتے ہیں۔",
+    "notificationsLoadFailed": "اطلاعات لوڈ نہیں ہو سکیں",
+    "notificationsRetry": "دوبارہ کوشش کریں",
+    "notificationsRefresh": "تازہ کریں",
+    "notificationsViewAll": "مکمل آڈٹ لاگ دیکھیں",
+    "notificationsNew": "نئی",
+    "notificationsUnknownUser": "سسٹم",
+    "notificationsJustNow": "ابھی ابھی",
+    "notificationsMinutesAgo": "{count} منٹ پہلے",
+    "notificationsHoursAgo": "{count} گھنٹے پہلے",
+    "notificationsDaysAgo": "{count} دن پہلے",
+    "notificationsActor": "{name}",
+    "notificationsActorSystem": "سسٹم",
+    "notificationsActions": {
+      "ADD_DEPOSIT": "ایک جمع رقم درج کی",
+      "EDIT_DEPOSIT": "ایک جمع رقم میں ترمیم کی",
+      "APPROVE_DEPOSIT": "ایک جمع رقم کی منظوری دی",
+      "REVERT_DEPOSIT": "جمع رقم کو درخواست میں واپس کیا",
+      "RECORD_DEPOSIT": "ایک جمع رقم درج کی",
+      "REQUEST_DEPOSIT": "ایک جمع رقم کی درخواست کی",
+      "BULK_DEPOSIT": "متعدد جمع رقوم درج کیں",
+      "ADD_EARNING": "ایک آمدنی درج کی",
+      "ADD_EXPENSE": "ایک خرچ درج کیا",
+      "ADD_PROJECT_UPDATE": "منصوبے کا کھاتہ اپ ڈیٹ کیا",
+      "CREATE_MEMBER": "ایک رکن شامل کیا",
+      "DELETE_MEMBER": "ایک رکن ہٹایا",
+      "CREATE_MEETING": "ایک میٹنگ طے کی",
+      "DELETE_MEETING": "ایک میٹنگ حذف کی",
+      "START_MEETING": "ایک میٹنگ شروع کی",
+      "COMPLETE_MEETING": "ایک میٹنگ مکمل کی",
+      "RECORD_ATTENDANCE": "میٹنگ کی حاضری درج کی",
+      "RECORD_MEETING_ATTENDANCE": "میٹنگ کی حاضری درج کی",
+      "ISSUE_PENALTY": "ایک جرمانہ عائد کیا",
+      "CREATE_FISCAL_PERIOD": "ایک مالی سال شروع کیا",
+      "CLOSE_FISCAL_PERIOD": "ایک مالی سال بند کیا",
+      "REOPEN_FISCAL_PERIOD": "ایک مالی سال دوبارہ کھولا",
+      "DISTRIBUTE_DIVIDEND": "منافع تقسیم کیا",
+      "DISTRIBUTE_DIVIDENDS": "منافع تقسیم کیا",
+      "FUND_TRANSFER": "فنڈز کے درمیان منتقلی کی",
+      "DELETE_GOAL": "ایک ہدف حذف کیا",
+      "UPDATE_GOAL": "ایک ہدف اپ ڈیٹ کیا",
+      "CREATE_GOAL": "ایک ہدف بنایا",
+      "UPDATE_SETTINGS": "ترتیبات اپ ڈیٹ کیں",
+      "UPDATE_USER": "ایک صارف اپ ڈیٹ کیا",
+      "DELETE_TRANSACTION": "ایک لین دین حذف کیا",
+      "GENERATE_REPORT": "ایک رپورٹ بنائی",
+      "CREATE_PROJECT": "ایک منصوبہ بنایا",
+      "LOGIN": "سائن ان کیا",
+      "LOGIN_SUCCESS": "سائن ان کیا",
+      "LOGIN_FAILED": "سائن ان کی کوشش ناکام",
+      "LOGOUT": "سائن آؤٹ کیا",
+      "UPDATE": "ایک ریکارڈ اپ ڈیٹ کیا"
+    }
   },
   "ui": {
     "closeDialog": "ڈائیلاگ بند کریں",
     "rowActions": "قطار کے اقدامات",
-    "clearSelection": "انتخاب صاف کریں"
+    "clearSelection": "انتخاب صاف کریں",
+    "unsavedTitle": "غیر محفوظ تبدیلیاں مسترد کریں؟",
+    "unsavedBody": "اس فارم میں ایسی معلومات ہیں جو ابھی محفوظ نہیں کی گئیں۔ ابھی بند کرنے پر وہ معلومات ضائع ہو جائیں گی۔",
+    "discardConfirm": "مسترد کریں",
+    "discardCancel": "ترمیم جاری رکھیں"
   },
   "requestDeposit": {
     "title": "جمع کی درخواست",

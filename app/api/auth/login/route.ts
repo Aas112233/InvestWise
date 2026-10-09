@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { users, sessions, blacklistedTokens, loginAttempts } from '@/db/schema/index';
-import { eq, and, gte, desc, count, ne } from 'drizzle-orm';
+import { eq, and, gte, desc, count, ne, sql } from 'drizzle-orm';
 import { generateTokenPair, verifyToken, blacklistToken } from '@/lib/utils/jwt';
 import { hashPassword, comparePassword, validatePasswordStrength } from '@/lib/utils/password';
 import { setAuthCookies, clearAuthCookies, COOKIE_NAMES } from '@/lib/utils/cookies';
@@ -216,7 +216,14 @@ export async function POST(request: NextRequest) {
       throw new LockedError('Account temporarily locked due to too many failed attempts. Please try again later.');
     }
 
-    // Find user with password
+    // Find user with password.
+    //
+    // Email is now unique PER TENANT (db/migrations/0009), so the same address
+    // may legitimately resolve to more than one row across tenants. Platform
+    // operators (tenant_id IS NULL) are matched first so the platform login
+    // always wins over a tenant that happens to reuse the address; within
+    // tenants the oldest account is the stable choice (email reuse across
+    // tenants is rare). Password verification below then disambiguates.
     const [userRow] = await db
       .select({
         ...USER_SELECT,
@@ -225,6 +232,7 @@ export async function POST(request: NextRequest) {
       })
       .from(users)
       .where(eq(users.email, normalizedEmail))
+      .orderBy(sql`${users.tenantId} IS NOT NULL`, users.createdAt)
       .limit(1);
 
     if (!userRow) {
@@ -342,13 +350,13 @@ export async function POST(request: NextRequest) {
       email: user.email,
       tenantId: userRow.tenantId ?? null,
       subscriptionBlocked,
+      sessionId,
     });
 
-    const response = NextResponse.json({
-      ...user,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-    });
+    // Tokens travel ONLY as HttpOnly cookies (setAuthCookies below). The body
+    // is profile-only: a JWT in the JSON response is readable by any injected
+    // script and lands in logs/proxies, defeating the cookie hardening.
+    const response = NextResponse.json({ ...user });
 
     setAuthCookies(response.cookies, tokens.accessToken, tokens.refreshToken);
 

@@ -1,5 +1,5 @@
-import { connectDB } from '../config/database.js';
-import { recalculateAllStats } from '../modules/analytics/service.js';
+import { connectDB } from '../config/database';
+import { recalculateAllStats } from '../modules/analytics/service';
 import dotenv from 'dotenv';
 dotenv.config();
 

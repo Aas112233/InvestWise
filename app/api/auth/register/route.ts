@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { users } from '@/db/schema/index';
-import { eq } from 'drizzle-orm';
+import { tenants, users } from '@/db/schema/index';
+import { and, count, eq } from 'drizzle-orm';
 import { hashPassword, validatePasswordStrength } from '@/lib/utils/password';
 import { logAudit } from '@/lib/utils/audit';
 import { normalizeEmail } from '@/lib/utils/types';
-import { AppError, AuthError, ForbiddenError, ConflictError, ValidationError } from '@/lib/utils/errors';
+import { AppError, AuthError, ForbiddenError, ConflictError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { normalizeRole, isSuperAdminRole } from '@/lib/roles';
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError('Admin access required');
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const { name, email, password, role, memberId, permissions } = body;
 
     // Validation
@@ -107,16 +107,46 @@ export async function POST(request: NextRequest) {
     const normalizedEmail = normalizeEmail(email);
     const db = getDb();
 
-    // Check for existing user
+    // Check for an existing user IN THIS TENANT. Email is unique per tenant
+    // (db/migrations/0009), so a global check would wrongly 409 when another
+    // organization already has a user with the same address — and would leak
+    // that cross-tenant existence through the error.
     const [existing] = await db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.email, normalizedEmail))
+      .where(and(eq(users.email, normalizedEmail), eq(users.tenantId, callerTenantId)))
       .limit(1);
 
     if (existing) {
       throw new ConflictError('A user with this email already exists');
     }
+
+    // Seat licence enforcement: tenants.maxUsers is the plan cap the platform
+    // set at onboarding (or later via billing). Without this check maxUsers was
+    // display-only — a tenant on a 5-seat plan could mint unlimited logins.
+    // Count includes suspended/inactive logins: they can be reactivated, so
+    // they keep occupying their seat.
+    const [tenantRow] = await db
+      .select({ maxUsers: tenants.maxUsers })
+      .from(tenants)
+      .where(eq(tenants.id, callerTenantId))
+      .limit(1);
+    const seatCap = Number(tenantRow?.maxUsers ?? 0);
+    if (seatCap > 0) {
+      const [seatCount] = await db
+        .select({ count: count() })
+        .from(users)
+        .where(eq(users.tenantId, callerTenantId))
+        .limit(1);
+      if (Number(seatCount?.count ?? 0) >= seatCap) {
+        throw new ConflictError(
+          `[Seat limit reached: ${seatCap} users] Remove a deactivated user or ask the platform operator to raise your plan's user limit.`
+        );
+      }
+    }
+    // ponytail: count-then-insert can race a few seats over under parallel
+    // creates; acceptable for a soft licence cap. Move to an advisory lock
+    // inside the insert transaction if billing needs exactness.
 
     const hashed = await hashPassword(password);
 

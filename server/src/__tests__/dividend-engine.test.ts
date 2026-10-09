@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeDividendPlan, fromMicros } from '../modules/finance/dividend-engine.js';
+import { computeDividendPlan, fromMicros } from '../modules/finance/dividend-engine';
 
 /** Members helper: three holders of 30 shares each. */
 const equalMembers = [

@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { protect, requirePermission, admin } from '../../middleware/auth.js';
-import { validate } from '../../middleware/validate.js';
-import { issuePenaltySchema, waivePenaltySchema, adjustScoreSchema } from './validation.js';
+import { protect, requirePermission, admin } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
+import { issuePenaltySchema, waivePenaltySchema, adjustScoreSchema } from './validation';
 import {
   issuePenaltyHandler,
   waivePenaltyHandler,
@@ -12,7 +12,7 @@ import {
   recalculateAllPerformanceHandler,
   getGovernanceLeaderboardHandler,
   adjustMemberPerformanceHandler,
-} from './controller.js';
+} from './controller';
 
 const router = Router();
 

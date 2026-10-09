@@ -1,4 +1,4 @@
-import { getDb } from '../../config/database.js';
+import { getDb } from '../../config/database';
 import {
   members,
   meetings,
@@ -7,9 +7,9 @@ import {
   transactions,
   systemSettings,
   auditLogs,
-} from '../../db/schema/index.js';
+} from '../../db/schema/index';
 import { eq, and, sql, desc, inArray } from 'drizzle-orm';
-import { NotFoundError } from '../../shared/errors.js';
+import { NotFoundError } from '../../shared/errors';
 
 export interface PerformanceBreakdown {
   memberId: string;

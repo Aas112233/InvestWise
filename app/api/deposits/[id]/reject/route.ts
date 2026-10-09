@@ -6,7 +6,7 @@ import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
-import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
 
@@ -50,7 +50,7 @@ export async function POST(
       throw new ValidationError('Transaction is not a deposit');
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const { rejectionReason } = body;
 
     if (!rejectionReason || rejectionReason.trim().length === 0) {
@@ -86,19 +86,37 @@ export async function POST(
 
     const now = new Date();
 
-    // Update deposit transaction status to REJECTED (§6: tenant-scoped write).
-    await db
-      .update(transactions)
-      .set({
-        status: 'REJECTED',
-        description: `${deposit.description} - REJECTED: ${rejectionReason.trim()}`,
-        updatedBy: user.id,
-        updatedAt: now,
-      })
-      .where(and(eq(transactions.id, id), eq(transactions.tenantId, scopedTenantId)));
+    // §12: read-then-write without a transaction raced with a concurrent
+    // approve/reject — two callers could both pass the PENDING check above and
+    // the last write would win. The FOR UPDATE row lock + in-tx re-verify
+    // (approve-route pattern) makes the status transition atomic: the checks
+    // above are only fast-fail UX; the transaction is the source of truth.
+    await db.transaction(async (tx) => {
+      const [lockedDeposit] = await tx
+        .select({ status: transactions.status, type: transactions.type, isDeleted: transactions.isDeleted })
+        .from(transactions)
+        .where(and(eq(transactions.id, id), eq(transactions.tenantId, scopedTenantId)))
+        .for('update')
+        .limit(1);
+      if (!lockedDeposit || lockedDeposit.isDeleted) throw new NotFoundError('Deposit transaction');
+      if (lockedDeposit.type !== 'Deposit') throw new ValidationError('Transaction is not a deposit');
+      if (lockedDeposit.status !== 'PENDING') throw new ValidationError('Only pending deposits can be rejected');
+
+      // Update deposit transaction status to REJECTED (§6: tenant-scoped write).
+      await tx
+        .update(transactions)
+        .set({
+          status: 'REJECTED',
+          description: `${deposit.description} - REJECTED: ${rejectionReason.trim()}`,
+          updatedBy: user.id,
+          updatedAt: now,
+        })
+        .where(and(eq(transactions.id, id), eq(transactions.tenantId, scopedTenantId)));
+    });
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'REJECT_DEPOSIT',
       resourceType: 'Transaction',
       resourceId: id,

@@ -3,6 +3,7 @@ import { getDb } from '@/db/index';
 import { sessions, blacklistedTokens } from '@/db/schema/index';
 import { eq, and } from 'drizzle-orm';
 import { verifyToken, blacklistToken } from '@/lib/utils/jwt';
+import { tokenHash } from '@/lib/middleware/auth';
 import { clearAuthCookies, COOKIE_NAMES } from '@/lib/utils/cookies';
 import { logAudit } from '@/lib/utils/audit';
 import { getTokenExpiry } from '@/lib/token-expiry';
@@ -26,9 +27,18 @@ export async function POST(request: NextRequest) {
     }
     const userId = authUser.id;
 
-    const body = await request.json().catch(() => ({}));
+    // A JSON `null` body parses fine so `.catch()` never fires — normalise to
+    // an object before reading fields, or a null body becomes a 500.
+    const rawBody = await request.json().catch(() => ({}));
+    const body = rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody) ? rawBody : {} as Record<string, unknown>;
     const refreshToken = request.cookies.get(COOKIE_NAMES.REFRESH_TOKEN)?.value || body.refreshToken;
-    const sessionId = body.sessionId;
+    const accessToken =
+      request.cookies.get(COOKIE_NAMES.ACCESS_TOKEN)?.value ||
+      request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+    // The session identifier comes only from the verified access token. Never
+    // trust a caller-supplied sessionId when deciding which credentials to end.
+    const sessionId = accessToken ? verifyToken(accessToken, 'access').sessionId : undefined;
+    if (!sessionId) throw new AuthError('Authenticated session is not available', 'TOKEN_REVOKED');
 
     const db = getDb();
 
@@ -41,7 +51,8 @@ export async function POST(request: NextRequest) {
           try {
             const expiry = getTokenExpiry(refreshToken);
             await db.insert(blacklistedTokens).values({
-              token: refreshToken,
+              // Store sha256(token) hex, never the raw JWT (leak-safe at rest).
+              token: tokenHash(refreshToken),
               type: 'refresh',
               userId,
               expiresAt: expiry,

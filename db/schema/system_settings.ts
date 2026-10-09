@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, decimal, integer, boolean, timestamp, jsonb, index, unique } from 'drizzle-orm/pg-core';
-import { users } from './users.js';
-import { tenants } from './tenants.js';
+import { users } from './users';
+import { tenants } from './tenants';
 
 export interface PenaltyRuleConfig {
   tier: number;
@@ -18,6 +18,19 @@ export const DEFAULT_PENALTY_RULES: PenaltyRuleConfig[] = [
 ];
 
 export const DEFAULT_MEETING_TYPES = ['FOUNDING_MEMBER', 'SHAREHOLDER', 'INVESTOR'];
+
+// Payment-method jsonb shape (canonical types live in lib/payment-methods.ts;
+// duplicated here as a plain default because schema files must not import app
+// libs — same pattern as DEFAULT_MEETING_TYPES being mirrored client-side).
+const DEFAULT_PAYMENT_METHODS = [
+  { name: 'Cash', type: 'CASH' },
+  { name: 'Bank Transfer', type: 'BANK' },
+  { name: 'bKash', type: 'MOBILE' },
+  { name: 'Nagad', type: 'MOBILE' },
+  { name: 'Rocket', type: 'MOBILE' },
+  { name: 'Check', type: 'CHECK' },
+  { name: 'Other', type: 'OTHER' },
+];
 
 export const systemSettings = pgTable('system_settings', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -72,6 +85,8 @@ export const systemSettings = pgTable('system_settings', {
   suspendedAfterMonths: integer('suspended_after_months').default(6),
   meetingTypes: jsonb('meeting_types').$type<string[]>().default(DEFAULT_MEETING_TYPES),
   penaltyRules: jsonb('penalty_rules').$type<PenaltyRuleConfig[]>().default(DEFAULT_PENALTY_RULES),
+  /** Tenant-configurable payment methods for deposit forms: name + channel type. */
+  paymentMethods: jsonb('payment_methods').$type<{ name: string; type: string }[]>().default(DEFAULT_PAYMENT_METHODS),
 
   lastUpdatedBy: uuid('last_updated_by').references(() => users.id),
   lastUpdatedAt: timestamp('last_updated_at', { withTimezone: true }).defaultNow(),

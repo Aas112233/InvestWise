@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import * as arrearsService from './service.js';
+import { asyncHandler } from '../../shared/asyncHandler';
+import * as arrearsService from './service';
 
 export const calculateArrearsHandler = asyncHandler(async (req: Request, res: Response) => {
   const { periodKey, monthlyDueAmount } = req.body;

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { transactions, funds, members } from '@/db/schema/index';
+import { transactions, funds, members, systemSettings } from '@/db/schema/index';
+import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-methods';
 import { eq, and, sql } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
-import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
+import { toCents, fromCents } from '@/lib/money';
 import crypto from 'node:crypto';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
@@ -26,7 +28,7 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError('Write permission required for: REQUEST_DEPOSIT');
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const {
       memberId,
       fundId,
@@ -53,17 +55,28 @@ export async function POST(request: NextRequest) {
       depositMonthKey = depositMonth;
     }
 
-    const depositAmount = parseFloat(amount);
-    if (isNaN(depositAmount) || depositAmount <= 0) {
+    // Integer-cents parsing (§12 — never parseFloat float math on money).
+    // Legacy message precedence is preserved: a clean decimal(15,2) literal
+    // parses exactly in cents; anything else keeps the old split between
+    // "positive number" (non-numeric / zero / negative) and "2 decimal
+    // places" (numeric but over-precise, e.g. 1.999 or 1e3).
+    let amountCents: number | null = null;
+    if (/^\d+(\.\d{1,2})?$/.test(String(amount ?? ''))) {
+      try {
+        amountCents = toCents(String(amount));
+      } catch {
+        amountCents = null;
+      }
+    }
+    if (amountCents === null || amountCents <= 0) {
+      const numeric = Number(amount);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        throw new ValidationError('Amount must have at most 2 decimal places');
+      }
       throw new ValidationError('Deposit amount must be a positive number');
     }
 
-    // Validate 2 decimal places
-    if (!/^\d+(\.\d{1,2})?$/.test(amount.toString())) {
-      throw new ValidationError('Amount must have at most 2 decimal places');
-    }
-
-    const formattedAmount = depositAmount.toFixed(2);
+    const formattedAmount = fromCents(amountCents);
     const refNumber = `DEP-REQ-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
     const db = getDb();
@@ -72,7 +85,7 @@ export async function POST(request: NextRequest) {
     // off the request payload) — batch them into one round-trip group instead
     // of three sequential ones. Error checks below preserve the original
     // precedence (duplicate ref → missing member → missing fund).
-    const [existingDeposit, [member], [fund]] = await Promise.all([
+    const [existingDeposit, [member], [fund], [pmSettings]] = await Promise.all([
       // Duplicate reference number check (idempotency, tenant-scoped so one
       // tenant cannot squat or probe another tenant's reference).
       db
@@ -98,6 +111,12 @@ export async function POST(request: NextRequest) {
         .from(funds)
         .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)))
         .limit(1),
+      // Tenant-configured payment methods — validates depositMethod below.
+      db
+        .select({ paymentMethods: systemSettings.paymentMethods })
+        .from(systemSettings)
+        .where(eq(systemSettings.tenantId, scopedTenantId))
+        .limit(1),
     ]);
 
     if (existingDeposit.length > 0) {
@@ -120,6 +139,14 @@ export async function POST(request: NextRequest) {
     // Check if fund is active
     if (fund.status !== 'ACTIVE') {
       throw new ValidationError('Fund is not active');
+    }
+
+    // Payment method must be one this tenant configured (Settings →
+    // Governance), a legacy/internal value, or absent. The old fixed DB
+    // CHECK rejected half the picker's vocabulary — validation moved to the
+    // tenant's own list, not a constant.
+    if (!isAllowedDepositMethod(depositMethod ?? null, normalizePaymentMethods(pmSettings?.paymentMethods))) {
+      throw new ValidationError("[Field 'depositMethod', Code: invalid_payment_method] Unknown payment method — configure it in Settings → Governance first");
     }
 
     const now = new Date();
@@ -151,6 +178,7 @@ export async function POST(request: NextRequest) {
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'REQUEST_DEPOSIT',
       resourceType: 'Transaction',
       resourceId: refNumber,

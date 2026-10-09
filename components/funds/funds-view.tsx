@@ -47,8 +47,14 @@ export function FundsView() {
   const operatingCents = sumCents(
     active.filter((f) => (f.type || "OTHER") !== "PROJECT").map((f) => f.balance),
   );
-  const bufferCents = sumCents(active.map((f) => f.minimumBalance));
-  const reserveRatio = totalCents > 0 ? (bufferCents / totalCents) * 100 : 0;
+  // #51: "Reserve Ratio" is the share of treasury actually held in RESERVE-type
+  // funds (e.g. the Statutory Reserve a dividend run credits). It was
+  // previously computed from per-fund MINIMUM BALANCE buffers, so a dividend
+  // that funded the reserve still read 0.00%.
+  const reserveCents = sumCents(
+    active.filter((f) => (f.type || "").toUpperCase() === "RESERVE").map((f) => f.balance),
+  );
+  const reserveRatio = totalCents > 0 ? (reserveCents / totalCents) * 100 : 0;
 
   const typeOptions = TYPE_FILTERS.map((v) => ({ value: v, label: t(fundTypeLabelKey(v)) }));
   const statusOptions = [

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft, Crown, Search, X } from "lucide-react";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -31,6 +31,7 @@ function isSuperAdmin(role?: string): boolean {
 
 export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: externalOnToggle }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useAuth();
   const { t } = useLocale();
 
@@ -47,6 +48,8 @@ export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: e
 
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // Index into the flattened match list, for arrow-key + Enter navigation.
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
 
   // Keyboard shortcut: Ctrl+K / Cmd+K to focus navigation search
   useEffect(() => {
@@ -95,6 +98,47 @@ export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: e
       return { ...group, items: matchedItems };
     }).filter((group) => group.items.length > 0);
   }, [searchQuery, user, t]);
+
+  // Flattened, in-render-order list of the currently visible nav items. Enter
+  // navigates to `matches[activeMatchIndex]`, so this must mirror `filteredNav`.
+  const matches = useMemo(
+    () => filteredNav.flatMap((group) => group.items),
+    [filteredNav],
+  );
+
+  // Reset the highlight whenever the match set changes so Enter can never jump
+  // to a route that is no longer on screen.
+  useEffect(() => {
+    setActiveMatchIndex(0);
+  }, [searchQuery]);
+
+  const goToMatch = useCallback(
+    (index: number) => {
+      const target = matches[index];
+      if (!target) return;
+      setSearchQuery("");
+      searchInputRef.current?.blur();
+      router.push(target.route);
+    },
+    [matches, router],
+  );
+
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!matches.length) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveMatchIndex((i) => (i + 1) % matches.length);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveMatchIndex((i) => (i - 1 + matches.length) % matches.length);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        goToMatch(activeMatchIndex);
+      }
+    },
+    [matches.length, activeMatchIndex, goToMatch],
+  );
 
   return (
     <aside
@@ -157,6 +201,7 @@ export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: e
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               placeholder={t("common.searchPlaceholder", { defaultValue: "Search navigation..." })}
               className="h-8 w-full rounded-lg border border-sidebar-border bg-slate-100/70 dark:bg-sidebar-accent/50 pl-8 pr-8 text-xs text-sidebar-foreground placeholder:text-muted-foreground/60 outline-none transition-all focus:border-emerald-600/50 focus:bg-sidebar-accent focus:ring-1 focus:ring-emerald-600/25"
             />
@@ -180,7 +225,12 @@ export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: e
 
       {/* Navigation Groups */}
       <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-3 no-scrollbar">
-        {filteredNav.map((group) => (
+        {filteredNav.map((group, groupIdx) => {
+          // Offset of this group within the flattened `matches` list.
+          const groupOffset = filteredNav
+            .slice(0, groupIdx)
+            .reduce((sum, g) => sum + g.items.length, 0);
+          return (
           <div key={group.groupKey}>
             {!collapsed ? (
               <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-2 mt-2">
@@ -191,10 +241,12 @@ export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: e
             )}
 
             <ul className="space-y-1">
-              {group.items.map((item: NavItem) => {
+              {group.items.map((item: NavItem, itemIdx: number) => {
                 const isActive =
                   pathname === item.route ||
                   (item.route !== "/" && pathname.startsWith(item.route));
+                const isHighlighted =
+                  !!searchQuery.trim() && groupOffset + itemIdx === activeMatchIndex;
                 const Icon = item.icon;
 
                 return (
@@ -208,6 +260,7 @@ export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: e
                         isActive
                           ? "bg-emerald-50 text-emerald-800 font-semibold dark:bg-emerald-950/50 dark:text-emerald-300 shadow-2xs"
                           : "text-sidebar-foreground/80 hover:bg-slate-100/80 dark:hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                        isHighlighted && "ring-1 ring-emerald-600/40 bg-emerald-50/60 dark:bg-emerald-950/30",
                       )}
                     >
                       <span className={cn(isActive ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground")}>
@@ -224,7 +277,8 @@ export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: e
               })}
             </ul>
           </div>
-        ))}
+          );
+        })}
 
         {/* SuperAdmin Platform Management Link */}
         {isSuperAdmin(user?.role) && (

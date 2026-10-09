@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
 import { useTenantMeetingTypes } from "@/lib/use-tenant-settings";
@@ -33,6 +33,22 @@ export function MeetingFormModal({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Edit forms must reflect the CURRENT record: field state initialized
+  // once at mount goes stale (or stays empty) when the modal is reused for
+  // another meeting, so re-sync on every open.
+  useEffect(() => {
+    if (!isOpen) return;
+    setTitle(initialData?.title || "");
+    setMeetingType(initialData?.meetingType || "");
+    setMeetingDate(
+      initialData?.meetingDate ? new Date(initialData.meetingDate).toISOString().slice(0, 16) : ""
+    );
+    setLocation(initialData?.location || "HQ / Online");
+    setAgenda(initialData?.agenda || "");
+    setNotes(initialData?.notes || "");
+    setErrorMessage(null);
+  }, [isOpen, initialData]);
 
   const meetingTypeOptions: DropdownOption[] = configuredMeetingTypes.map((typeKey) => {
     const formatted = typeKey

@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ZodSchema, ZodError } from 'zod';
-import { ValidationError } from '../shared/errors.js';
+import { ValidationError } from '../shared/errors';
 
 type ValidationTarget = 'body' | 'query' | 'params';
 

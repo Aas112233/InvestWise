@@ -14,6 +14,7 @@ import {
   Trash2,
   Edit2,
   Layers,
+  AlertTriangle,
 } from "lucide-react";
 import { Goal, Project } from "@/types";
 import {
@@ -25,6 +26,7 @@ import {
   AppDropdown,
   DropdownOption,
   StatusTone,
+  ERPConfirmDialog,
 } from "@/components/ui";
 import { formatMoney, formatDate } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
@@ -55,6 +57,8 @@ export function GoalsView({
   const [selectedType, setSelectedType] = useState<string>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  // Deletion is destructive — confirm through the app dialog, not window.confirm.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   // Compute Metrics
   const metrics = useMemo(() => {
@@ -161,6 +165,9 @@ export function GoalsView({
           g.targetAmount > 0
             ? Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100))
             : 0;
+        // #48 — progress is hand-typed unless a fund allocation backs it, so it
+        // is labelled as unverified rather than presented as an audited balance.
+        const isManual = (g.progressSource ?? "Manual") === "Manual";
 
         return (
           <div className="w-36 space-y-1">
@@ -176,6 +183,18 @@ export function GoalsView({
                 style={{ width: `${pct}%` }}
               />
             </div>
+            {isManual && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400"
+                title={t("goals.progressManualHint", {
+                  defaultValue:
+                    "This figure was entered by hand and is not backed by a fund balance.",
+                })}
+              >
+                <AlertTriangle className="h-3 w-3" />
+                {t("goals.progressManual", { defaultValue: "Manual · unverified" })}
+              </span>
+            )}
           </div>
         );
       },
@@ -217,9 +236,7 @@ export function GoalsView({
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm(t("goals.confirmDelete", { defaultValue: "Delete this goal?" }))) {
-                onDeleteGoal(g.id || g._id || "");
-              }
+              setPendingDeleteId(g.id || g._id || "");
             }}
             icon={Trash2}
             title={t("common.delete", { defaultValue: "Delete" })}
@@ -244,6 +261,10 @@ export function GoalsView({
           value={formatMoney(metrics.totalCurrent)}
           icon={DollarSign}
           tone="emerald"
+          // #48 — the sum is only as trustworthy as its source; say so.
+          description={t("goals.metrics.currentAccumulatedHint", {
+            defaultValue: "Manual entries — not backed by fund balances",
+          })}
         />
         <ERPMetricCard
           label={t("goals.metrics.overallProgress", { defaultValue: "Overall Progress" })}
@@ -320,6 +341,21 @@ export function GoalsView({
         emptyMessage={t("goals.noGoalsFound", { defaultValue: "No goals match the criteria." })}
         emptyActionLabel={t("goals.createButton", { defaultValue: "New Goal" })}
         onEmptyAction={onOpenCreate}
+      />
+
+      <ERPConfirmDialog
+        isOpen={!!pendingDeleteId}
+        title={t("common.delete", { defaultValue: "Delete" })}
+        description={t("goals.confirmDelete", { defaultValue: "Delete this goal?" })}
+        confirmLabel={t("common.delete", { defaultValue: "Delete" })}
+        cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
+        confirmVariant="destructive"
+        onConfirm={() => {
+          const target = pendingDeleteId;
+          setPendingDeleteId(null);
+          if (target) void onDeleteGoal(target);
+        }}
+        onClose={() => setPendingDeleteId(null)}
       />
     </div>
   );

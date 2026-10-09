@@ -1,7 +1,7 @@
-import { getDb } from '../../config/database.js';
-import { members, systemSettings, funds, transactions, auditLogs } from '../../db/schema/index.js';
+import { getDb } from '../../config/database';
+import { members, systemSettings, funds, transactions, auditLogs } from '../../db/schema/index';
 import { and, eq, sql } from 'drizzle-orm';
-import { AppError, NotFoundError } from '../../shared/errors.js';
+import { AppError, NotFoundError } from '../../shared/errors';
 import { fromCents, toCents } from '@/lib/money';
 import crypto from 'node:crypto';
 

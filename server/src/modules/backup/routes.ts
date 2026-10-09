@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { protect, admin } from '../../middleware/auth.js';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import { getDb, getSql } from '../../config/database.js';
-import { env } from '../../config/env.js';
+import { protect, admin } from '../../middleware/auth';
+import { asyncHandler } from '../../shared/asyncHandler';
+import { getDb, getSql } from '../../config/database';
+import { env } from '../../config/env';
 
 export const backupRouter = Router();
 

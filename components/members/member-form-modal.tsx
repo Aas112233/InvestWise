@@ -16,13 +16,23 @@ import { useLocale } from "@/lib/i18n";
 import { MEMBER_ROLES, memberRoleLabel } from "@/lib/member-roles";
 import type { Member } from "@/types";
 
+// #68: messages are i18n KEYS (not raw zod prose) so a Bangla treasurer never
+// sees "Too small: expected string to have >=2 characters". Rendered via t()
+// at the field; unknown keys fall back to themselves.
 const formSchema = z.object({
-  name: z.string().trim().min(2),
-  email: z.string().trim().email(),
+  name: z.string().trim().min(2, "members.validation.nameMin"),
+  email: z.string().trim().min(1, "members.validation.emailRequired").email("members.validation.emailInvalid"),
   // Phone is NOT NULL in the schema — required on create and edit alike.
-  phone: z.string().trim().min(1),
-  role: z.string().min(1),
-  shares: z.number().int().min(1),
+  phone: z.string().trim().min(1, "members.form.phoneRequired"),
+  // #4: role is OPTIONAL by design (server default-on-create / leave-alone-on-
+  // update — see lib/member-schema.ts memberRoleField). Requiring it here made
+  // "Save" a silent no-op whenever the dropdown was untouched, which read as
+  // "the form does nothing". Match the server: an empty role is a valid value.
+  role: z.string().optional(),
+  shares: z
+    .number({ error: "members.validation.sharesRequired" })
+    .int("members.validation.sharesWhole")
+    .min(1, "members.validation.sharesMin"),
   nidOrPassport: z.string().trim().optional(),
   fatherName: z.string().trim().optional(),
   address: z.string().trim().optional(),
@@ -146,7 +156,7 @@ export function MemberFormModal({
             name: values.name,
             email: values.email,
             phone: values.phone.trim(),
-            role: values.role,
+            role: values.role || undefined,
             shares: values.shares,
             nidOrPassport: values.nidOrPassport || null,
             fatherName: values.fatherName || null,
@@ -190,10 +200,10 @@ export function MemberFormModal({
         <ERPFormLayout>
           <ERPFormSection title={t("members.form.titleAdd")}>
             <ERPFormGrid columns={2}>
-              <ERPFormField label={t("members.form.name")} required error={errors.name?.message}>
+              <ERPFormField label={t("members.form.name")} required error={errors.name?.message ? t(errors.name.message) : undefined}>
                 <input type="text" autoComplete="name" {...register("name")} className={inputCls} />
               </ERPFormField>
-              <ERPFormField label={t("members.form.email")} required error={errors.email?.message}>
+              <ERPFormField label={t("members.form.email")} required error={errors.email?.message ? t(errors.email.message) : undefined}>
                 <input type="email" autoComplete="email" {...register("email")} className={inputCls} />
               </ERPFormField>
             </ERPFormGrid>
@@ -201,7 +211,7 @@ export function MemberFormModal({
               <ERPFormField label={t("members.form.phone")} required error={errors.phone ? t("members.form.phoneRequired") : undefined}>
                 <input type="tel" autoComplete="tel" {...register("phone")} className={inputCls} />
               </ERPFormField>
-              <ERPFormField label={t("members.form.role")} required error={errors.role ? t("members.form.selectRole") : undefined}>
+              <ERPFormField label={t("members.form.role")} error={errors.role ? t("members.form.selectRole") : undefined}>
                 <AppDropdown
                   options={roleOptions}
                   value={role || null}
@@ -212,7 +222,7 @@ export function MemberFormModal({
             </ERPFormGrid>
             {!isEdit ? (
               <ERPFormGrid columns={2}>
-                <ERPFormField label={t("members.form.shares")} required error={errors.shares?.message}>
+                <ERPFormField label={t("members.form.shares")} required error={errors.shares?.message ? t(errors.shares.message) : undefined}>
                   <input type="number" min={1} step={1} {...register("shares", { valueAsNumber: true })} className={inputCls} />
                 </ERPFormField>
                 <ERPFormField label={t("members.form.nid")}>

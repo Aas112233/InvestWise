@@ -17,6 +17,8 @@ export interface TokenPayload {
   tenantId?: string | null;
   subscriptionBlocked?: boolean;
   impersonatedBy?: string;
+  /** Binds both token types to one revocable server-side session. */
+  sessionId?: string;
 }
 
 export interface AccessTokenClaims {
@@ -25,6 +27,7 @@ export interface AccessTokenClaims {
   tenantId?: string | null;
   subscriptionBlocked?: boolean;
   impersonatedBy?: string;
+  sessionId?: string;
 }
 
 function getSecret(type: 'access' | 'refresh'): string {
@@ -66,17 +69,30 @@ export function generateAccessToken(
   });
 }
 
-export function generateRefreshToken(userId: string): string {
-  return jwt.sign({ id: userId, type: 'refresh' } satisfies TokenPayload, getSecret('refresh'), {
+export function generateRefreshToken(
+  userId: string,
+  sessionId?: string,
+  expiresIn: NonNullable<jwt.SignOptions['expiresIn']> = REFRESH_TOKEN_EXPIRY,
+  impersonatedBy?: string,
+): string {
+  return jwt.sign(
+    {
+      id: userId,
+      type: 'refresh',
+      ...(sessionId ? { sessionId } : {}),
+      ...(impersonatedBy ? { impersonatedBy } : {}),
+    } satisfies TokenPayload,
+    getSecret('refresh'),
+    {
     algorithm: JWT_ALGORITHM,
-    expiresIn: REFRESH_TOKEN_EXPIRY,
+    expiresIn,
   });
 }
 
 export function generateTokenPair(userId: string, claims?: AccessTokenClaims): { accessToken: string; refreshToken: string } {
   return {
     accessToken: generateAccessToken(userId, claims),
-    refreshToken: generateRefreshToken(userId),
+    refreshToken: generateRefreshToken(userId, claims?.sessionId, REFRESH_TOKEN_EXPIRY, claims?.impersonatedBy),
   };
 }
 

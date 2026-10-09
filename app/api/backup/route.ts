@@ -102,10 +102,10 @@ export async function GET(request: NextRequest) {
     const backup = await performBackup(scopedTenantId);
     const counts = rowCounts(backup);
 
-    // logAudit never throws; tenantId rides in details until the writer
-    // itself is tenant-scoped (API-023).
+    // A bulk PII export must be filterable by tenant in the audit trail.
     await logAudit({
       user: { id: authUser.id, name: authUser.name },
+      tenantId: scopedTenantId,
       action: 'EXPORT_BACKUP',
       resourceType: 'Backup',
       details: { tenantId: scopedTenantId, type, download, rowCounts: counts },

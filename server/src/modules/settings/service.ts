@@ -1,9 +1,9 @@
-import { getDb } from '../../config/database.js';
-import { systemSettings, transactions } from '../../db/schema/index.js';
+import { getDb } from '../../config/database';
+import { systemSettings, transactions } from '../../db/schema/index';
 import { eq, count } from 'drizzle-orm';
-import { LockedError } from '../../shared/errors.js';
-import type { UpdateSettingsInput } from './validation.js';
-import { cache } from '../../lib/cache.js';
+import { LockedError } from '../../shared/errors';
+import type { UpdateSettingsInput } from './validation';
+import { cache } from '../../lib/cache';
 
 const SETTINGS_CACHE_KEY = 'settings:singleton';
 const SETTINGS_CACHE_TTL = 5 * 60_000; // 5 minutes

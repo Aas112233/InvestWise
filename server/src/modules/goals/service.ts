@@ -1,10 +1,10 @@
-import { getDb } from '../../config/database.js';
-import { goals } from '../../db/schema/index.js';
+import { getDb } from '../../config/database';
+import { goals } from '../../db/schema/index';
 import { eq, desc, asc, sql } from 'drizzle-orm';
-import { NotFoundError, ForbiddenError } from '../../shared/errors.js';
-import { getPaginationParams, formatPaginatedResponse } from '../../shared/types.js';
-import type { PaginatedResponse } from '../../shared/types.js';
-import { cache } from '../../lib/cache.js';
+import { NotFoundError, ForbiddenError } from '../../shared/errors';
+import { getPaginationParams, formatPaginatedResponse } from '../../shared/types';
+import type { PaginatedResponse } from '../../shared/types';
+import { cache } from '../../lib/cache';
 
 const GOALS_CACHE_KEY = 'goals:list';
 const GOALS_CACHE_TTL = 30_000; // 30 seconds

@@ -1,15 +1,17 @@
 import { cookies } from 'next/headers';
 import crypto from 'node:crypto';
-import { eq, and, gt } from 'drizzle-orm';
-import { getDb } from './db.js';
-import { users, blacklistedTokens } from '../db/schema/index.js';
-import { verifyToken, COOKIE_NAMES } from './jwt.js';
-import { normalizeRole } from '../shared/roles.js';
+import { eq, and, gt, isNull, ne, or } from 'drizzle-orm';
+import { getDb } from './db';
+import { users, sessions, blacklistedTokens } from '../db/schema/index';
+import { verifyToken, COOKIE_NAMES } from './jwt';
+import { normalizeRole } from '../shared/roles';
 
 /**
  * Session/user cache — identical resolution logic to the Express `protect`
  * middleware: HttpOnly access cookie -> JWT verify -> user record lookup
- * (60s in-process cache) -> status checks.
+ * (60s in-process cache). Account-status, tenant and entitlement gates are
+ * enforced by requireSession (server/src/middleware/api.ts), which is this
+ * function's only caller.
  */
 interface CachedUser {
   id: string;
@@ -23,9 +25,9 @@ interface CachedUser {
 }
 
 const USER_CACHE_TTL = 60_000;
-// Keyed by sha256(token) (never the raw token): a rotated/logged-out token
-// gets its own entry and its own blacklist check — it never reuses another
-// token's cached identity.
+// Keyed by sha256(token) (never the raw token): distinct credentials never
+// share a cached identity. Active-session and blacklist state are rechecked
+// against PostgreSQL before this cache is consulted.
 const userCache = new Map<string, { user: CachedUser; expires: number }>();
 
 let cacheLastSweep = 0;
@@ -47,29 +49,47 @@ export async function getSessionUser(): Promise<CachedUser | null> {
   const token = (await cookies()).get(COOKIE_NAMES.ACCESS_TOKEN)?.value;
   if (!token) return null;
 
-  let userId: string;
+  let decoded: { id: string; sessionId?: string };
   try {
-    userId = verifyToken(token, 'access').id;
+    decoded = verifyToken(token, 'access');
   } catch {
     return null;
   }
 
-  const cached = userCache.get(cacheKey(token));
-  if (cached && cached.expires > Date.now()) return cached.user;
+  if (!decoded.sessionId) return null;
 
   const db = getDb();
 
-  // Blacklist check (parity with lib/middleware/auth.ts): a revoked access
-  // token — logout, logout-all, rotation — must not keep authenticating the
-  // server-module routes (funds transfer, finance handlers) until its 15m
-  // expiry. Checked on cache miss only: ≤1 extra DB read per 60s per token.
-  const [revoked] = await db
-    .select({ id: blacklistedTokens.id })
-    .from(blacklistedTokens)
-    .where(and(eq(blacklistedTokens.token, token), gt(blacklistedTokens.expiresAt, new Date())))
+  // Check both per-token revocation and active-session status before consulting
+  // the cached identity. This keeps logout-all and single-session revocation
+  // immediate across instances and prevents the user cache bypassing revocation.
+  const [sessionState] = await db
+    .select({ blacklistId: blacklistedTokens.id })
+    .from(sessions)
+    .leftJoin(
+      blacklistedTokens,
+      and(eq(blacklistedTokens.token, token), gt(blacklistedTokens.expiresAt, new Date())),
+    )
+    .where(
+      and(
+        eq(sessions.sessionId, decoded.sessionId),
+        eq(sessions.userId, decoded.id),
+        eq(sessions.isActive, true),
+        eq(sessions.isExpired, false),
+        or(
+          isNull(sessions.deviceInfo),
+          ne(sessions.deviceInfo, 'Support'),
+          gt(sessions.loginTime, new Date(Date.now() - 30 * 60_000)),
+        ),
+      ),
+    )
     .limit(1);
-  if (revoked) return null;
+  if (!sessionState || sessionState.blacklistId) return null;
 
+  const cached = userCache.get(cacheKey(token));
+  if (cached && cached.expires > Date.now()) return cached.user;
+
+  const userId = decoded.id;
   const [user] = await db
     .select({
       id: users.id,
@@ -86,7 +106,12 @@ export async function getSessionUser(): Promise<CachedUser | null> {
     .limit(1);
 
   if (!user) return null;
-  if (user.status === 'suspended' || user.status === 'inactive') return null;
+  // Account status (suspended/inactive) is deliberately NOT collapsed to null
+  // here: requireSession (server/src/middleware/api.ts) enforces it per request
+  // with the modern stack's exact codes (401 ACCOUNT_SUSPENDED /
+  // ACCOUNT_INACTIVE, mirroring lib/middleware/auth.ts) instead of a generic
+  // "Authentication required". The status rides on the cached identity, so the
+  // gate is evaluated on every call.
 
   const resolved: CachedUser = {
     id: user.id,

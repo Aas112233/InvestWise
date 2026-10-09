@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { users, blacklistedTokens, tenants, platformSettings, PLATFORM_SETTINGS_ID } from '@/db/schema/index';
-import { eq, and, gt } from 'drizzle-orm';
+import { users, sessions, blacklistedTokens, tenants, platformSettings, PLATFORM_SETTINGS_ID } from '@/db/schema/index';
+import { eq, and, gt, isNull, ne, or } from 'drizzle-orm';
 import { verifyToken } from '@/lib/utils/jwt';
 import { COOKIE_NAMES } from '@/lib/utils/cookies';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
@@ -16,13 +16,11 @@ import crypto from 'node:crypto';
 const blacklistCache = new Map<string, number>();
 let blacklistLastSweep = 0;
 
-// Auth hot-path caches (single-process, short TTL).
-// Collapses the per-request chain (maintenance + user + tenant lookups) to ~0
-// DB hits on hot path. Revocation stays immediate: blacklistToken() evicts the
-// cached identity, and logout/refresh/impersonate all funnel through it.
-// Status flips (suspend/maintenance) propagate within TTL (30s). Worst case on
-// multi-instance (Vercel) is extra DB reads, never a stale grant beyond TTL.
-// ponytail: swap to Redis/Upstash if multi-instance hit rate ever matters.
+// Identity and maintenance caches are process-local and short-lived. Each
+// authenticated request still performs one indexed session/blacklist query so
+// logout and session revocation propagate immediately across Vercel instances;
+// this cache only avoids repeating user/tenant lookups. Status changes can take
+// up to 30s to propagate through cached identity snapshots.
 const MAINT_CACHE_TTL_MS = 30_000;
 
 const AUTH_CACHE_TTL_MS = 30_000;
@@ -31,7 +29,10 @@ let authLastSweep = 0;
 // identity (post status checks), so hits skip straight to return.
 const authCache = new Map<string, { user: AuthenticatedUser; tenant: TenantInfo | null; expiresAt: number }>();
 
-function tokenHash(token: string): string {
+// sha256 hex of a token. blacklisted_tokens.token stores this hash, never the
+// raw JWT — a database/backup leak must not yield replayable credentials. The
+// in-memory caches below and every blacklist write site key on this same hash.
+export function tokenHash(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
@@ -42,7 +43,7 @@ export function blacklistToken(token: string, expiresAt: Date): void {
   authCache.delete(hash);
 }
 
-async function isBlacklisted(token: string): Promise<boolean> {
+async function isSessionTokenActive(token: string, userId: string, sessionId: string): Promise<boolean> {
   const hash = tokenHash(token);
   const now = Date.now();
 
@@ -53,25 +54,45 @@ async function isBlacklisted(token: string): Promise<boolean> {
     }
   }
 
-  const cachedExp = blacklistCache.get(hash);
-  if (cachedExp !== undefined) {
-    return cachedExp > now;
-  }
+  // A known revoked token is rejected without a round trip. Clean-token cache
+  // entries are deliberately not trusted: a different serverless instance may
+  // have revoked either this token or its session since that cache was filled.
+  const cachedExpiry = blacklistCache.get(hash);
+  if (cachedExpiry !== undefined && cachedExpiry > now) return false;
 
+  // Resolve token revocation and session revocation together. The active-session
+  // lookup is required on every request so logout-all and per-device revoke are
+  // immediate across Vercel instances rather than waiting for an in-memory TTL.
+  // The presented token is hashed before comparison: rows store sha256 hex.
   const db = getDb();
-  const rows = await db
-    .select({ id: blacklistedTokens.id, expiresAt: blacklistedTokens.expiresAt })
-    .from(blacklistedTokens)
-    .where(and(eq(blacklistedTokens.token, token), gt(blacklistedTokens.expiresAt, new Date())))
+  const [state] = await db
+    .select({ blacklistId: blacklistedTokens.id, blacklistExpiry: blacklistedTokens.expiresAt })
+    .from(sessions)
+    .leftJoin(
+      blacklistedTokens,
+      and(eq(blacklistedTokens.token, hash), gt(blacklistedTokens.expiresAt, new Date())),
+    )
+    .where(
+      and(
+        eq(sessions.sessionId, sessionId),
+        eq(sessions.userId, userId),
+        eq(sessions.isActive, true),
+        eq(sessions.isExpired, false),
+        or(
+          isNull(sessions.deviceInfo),
+          ne(sessions.deviceInfo, 'Support'),
+          gt(sessions.loginTime, new Date(Date.now() - 30 * 60_000)),
+        ),
+      ),
+    )
     .limit(1);
 
-  if (rows.length > 0 && rows[0]?.expiresAt) {
-    blacklistCache.set(hash, rows[0].expiresAt.getTime());
-    return true;
+  if (!state) return false;
+  if (state.blacklistId) {
+    if (state.blacklistExpiry) blacklistCache.set(hash, state.blacklistExpiry.getTime());
+    return false;
   }
-
-  blacklistCache.set(hash, now - 1);
-  return false;
+  return true;
 }
 
 export type { Role } from "@/lib/roles";
@@ -113,41 +134,76 @@ const ADMIN_PATHS = [
 // The CACHE holds the raw flags only — never the verdict — because the verdict
 // depends on the caller's role and a single shared entry would leak a platform
 // operator's "not in maintenance" answer to a tenant user, or vice versa.
+// Entries are keyed by tenant id (or '(platform)' for operators with no
+// tenant) so one tenant's flags can never answer for another.
 interface MaintenanceFlags {
   tenantMaintenance: boolean;
   globalMaintenance: boolean;
   globalMessage: string | null;
 }
-let maintFlagsCache: { value: MaintenanceFlags; expiresAt: number } | null = null;
+const maintFlagsCache = new Map<string, { value: MaintenanceFlags; expiresAt: number }>();
+let maintFlagsLastSweep = 0;
 
 const DEFAULT_MAINTENANCE_MESSAGE = 'System is under maintenance. Please try again later.';
 
-async function getMaintenanceFlags(): Promise<MaintenanceFlags> {
+/**
+ * Maintenance flags for ONE caller. `tenantId` is the caller's own tenant —
+ * the previous lookup pinned slug 'default', so every non-default tenant's
+ * maintenance flag was invisible here (and the check failed open on miss).
+ * Also consumed by the delegated-route kernel (server/src/middleware/api.ts)
+ * so both auth stacks enforce the same switches.
+ */
+export async function getMaintenanceFlags(tenantId: string | null): Promise<MaintenanceFlags> {
   const now = Date.now();
-  if (maintFlagsCache && maintFlagsCache.expiresAt > now) return maintFlagsCache.value;
+  const cacheKey = tenantId ?? '(platform)';
+  const cached = maintFlagsCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.value;
+  if (now - maintFlagsLastSweep > 5 * 60_000) {
+    maintFlagsLastSweep = now;
+    for (const [k, v] of maintFlagsCache) {
+      if (v.expiresAt < now) maintFlagsCache.delete(k);
+    }
+  }
   let value: MaintenanceFlags;
   try {
     const db = getDb();
-    const [row] = await db
-      .select({
-        isMaintenanceMode: tenants.isMaintenanceMode,
-        globalMaintenanceMode: platformSettings.globalMaintenanceMode,
-        maintenanceMessage: platformSettings.maintenanceMessage,
-      })
-      .from(tenants)
-      .leftJoin(platformSettings, eq(platformSettings.id, PLATFORM_SETTINGS_ID))
-      .where(eq(tenants.slug, 'default'))
-      .limit(1);
-    value = {
-      tenantMaintenance: Boolean(row?.isMaintenanceMode),
-      globalMaintenance: Boolean(row?.globalMaintenanceMode),
-      globalMessage: row?.maintenanceMessage ?? null,
-    };
+    if (tenantId) {
+      const [row] = await db
+        .select({
+          isMaintenanceMode: tenants.isMaintenanceMode,
+          globalMaintenanceMode: platformSettings.globalMaintenanceMode,
+          maintenanceMessage: platformSettings.maintenanceMessage,
+        })
+        .from(tenants)
+        .leftJoin(platformSettings, eq(platformSettings.id, PLATFORM_SETTINGS_ID))
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      value = {
+        tenantMaintenance: Boolean(row?.isMaintenanceMode),
+        globalMaintenance: Boolean(row?.globalMaintenanceMode),
+        globalMessage: row?.maintenanceMessage ?? null,
+      };
+    } else {
+      // Platform operators carry no tenant row: only the global switch applies.
+      const [row] = await db
+        .select({
+          globalMaintenanceMode: platformSettings.globalMaintenanceMode,
+          maintenanceMessage: platformSettings.maintenanceMessage,
+        })
+        .from(platformSettings)
+        .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
+        .limit(1);
+      value = {
+        tenantMaintenance: false,
+        globalMaintenance: Boolean(row?.globalMaintenanceMode),
+        globalMessage: row?.maintenanceMessage ?? null,
+      };
+    }
   } catch {
     // If we can't check, allow through
     value = { tenantMaintenance: false, globalMaintenance: false, globalMessage: null };
   }
-  maintFlagsCache = { value, expiresAt: now + MAINT_CACHE_TTL_MS };
+  maintFlagsCache.set(cacheKey, { value, expiresAt: now + MAINT_CACHE_TTL_MS });
   return value;
 }
 
@@ -191,7 +247,7 @@ export async function authenticateRequest(request: NextRequest): Promise<{
 
   // Verify JWT signature first (sync HMAC, free): forged/malformed tokens
   // never touch the DB. Previously the blacklist DB lookup ran first.
-  let decoded: { id: string; type: 'access' | 'refresh' };
+  let decoded: { id: string; type: 'access' | 'refresh'; sessionId?: string };
   try {
     decoded = verifyToken(token, 'access');
   } catch (error) {
@@ -205,8 +261,9 @@ export async function authenticateRequest(request: NextRequest): Promise<{
     };
   }
 
-  // Check blacklist (memory-cached; DB only on first miss per instance)
-  if (await isBlacklisted(token)) {
+  // Tokens without a server-side session binding are legacy credentials. Fail
+  // closed so every accepted access token can be revoked by session operations.
+  if (!decoded.sessionId || !(await isSessionTokenActive(token, decoded.id, decoded.sessionId))) {
     return {
       user: null,
       tenant: null,
@@ -301,7 +358,7 @@ export async function authenticateRequest(request: NextRequest): Promise<{
   // identity checks so an unauthenticated request still gets 401 rather than
   // a 503 that would leak that maintenance is on.
   {
-    const flags = await getMaintenanceFlags();
+    const flags = await getMaintenanceFlags(user.tenantId ?? null);
     const verdict = maintenanceVerdict(flags, isSuperAdminRole(user.role));
     if (verdict.isMaintenance) {
       return {

@@ -1,5 +1,5 @@
-import { getDb } from '../config/database.js';
-import { auditLogs } from '../db/schema/index.js';
+import { getDb } from '../config/database';
+import { auditLogs } from '../db/schema/index';
 
 interface AuditParams {
   user?: { id?: string; name?: string } | null;

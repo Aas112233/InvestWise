@@ -13,6 +13,8 @@ import { ApiError, apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
 import { formatMoney } from "@/lib/formatters";
 import { centsToAmount, recentYears, sumCents, useFundOptions, useMemberOptions, useTenantCurrency } from "./shared";
+import { useTenantPaymentMethods } from "@/lib/use-tenant-settings";
+import { PAYMENT_TYPE_LABEL_KEY, type PaymentType } from "@/lib/payment-methods";
 
 const MONTH_SHORT = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const;
 const AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
@@ -24,23 +26,6 @@ interface BulkRow {
 }
 
 let rowSeq = 1;
-
-const METHOD_VALUES = ["Cash", "Bank", "Mobile Banking", "Check", "Other"] as const;
-
-function methodLabelKey(m: string): string {
-  switch (m) {
-    case "Cash":
-      return "deposits.methods.cash";
-    case "Bank":
-      return "deposits.methods.bank";
-    case "Mobile Banking":
-      return "deposits.methods.mobile";
-    case "Check":
-      return "deposits.methods.check";
-    default:
-      return "deposits.methods.other";
-  }
-}
 
 // Batch monthly collection: one common fund + month, per-member amounts.
 // Amounts stay strings (2dp); the running total is summed in integer cents.
@@ -58,12 +43,26 @@ export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: ()
 
   const membersQuery = useMemberOptions();
   const fundsQuery = useFundOptions();
+  // #5c: bulk and single deposit must offer the SAME method list. Both now read
+  // the tenant's configured methods (Settings → Governance); the local
+  // Cash/Bank/Mobile/Check/Other enum is gone. The server accepts any
+  // configured name verbatim.
+  const paymentMethods = useTenantPaymentMethods();
 
   const memberOptions = (membersQuery.data ?? [])
     .filter((m) => m.status === "active")
     .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
   const fundOptions = (fundsQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
-  const methodOptions = METHOD_VALUES.map((m) => ({ value: m, label: t(methodLabelKey(m)) }));
+  const methodOptions = paymentMethods.map((m) => {
+    const typeLabel = t(
+      PAYMENT_TYPE_LABEL_KEY[m.type as PaymentType] ?? "settings.paymentMethods.types.other",
+      { defaultValue: m.type },
+    );
+    const label = m.name.trim().toLowerCase() === typeLabel.trim().toLowerCase()
+      ? m.name
+      : `${m.name} · ${typeLabel}`;
+    return { value: m.name, label };
+  });
   const years = recentYears(5);
   const monthOptions = MONTH_SHORT.map((s, i) => ({
     value: String(i + 1).padStart(2, "0"),
@@ -101,7 +100,12 @@ export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: ()
           depositMethod: method || undefined,
           deposits: validRows.map((r) => ({
             memberId: r.memberId,
-            amount: r.amount.trim(),
+            // The API contract is `amount: z.number()` (server/src/modules/
+            // finance/validation.ts). Sending the raw input string made Zod
+            // reject the whole batch with `invalid_type` -> 400, which is why
+            // bulk deposit never saved. Parse to a number here; the 2dp
+            // ceiling and "amount > 0" are still enforced server-side.
+            amount: parseFloat(r.amount.trim()),
             depositMonth: monthKey,
             date: `${monthKey}-01`,
           })),
@@ -118,7 +122,16 @@ export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: ()
   };
 
   return (
-    <TopSheet open={open} onClose={close} title={t("deposits.bulk.title")} subtitle={t("deposits.bulk.subtitle")} wide>
+    <TopSheet
+      open={open}
+      onClose={close}
+      title={t("deposits.bulk.title")}
+      subtitle={t("deposits.bulk.subtitle")}
+      wide
+      // Any populated field counts as unsaved work — the sheet confirms
+      // before discarding it (report issue 7).
+      isDirty={!!fundId || !!month.month || !!method || rows.some((r) => r.memberId || r.amount.trim())}
+    >
       <ERPFormLayout>
         <ERPFormSection title={t("deposits.bulk.title")}>
           <ERPFormGrid columns={3}>

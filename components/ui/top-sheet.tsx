@@ -1,9 +1,11 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/lib/i18n";
+import { ERPConfirmDialog } from "./erp-confirm-dialog";
 
 export interface TopSheetProps {
   open?: boolean;
@@ -17,6 +19,13 @@ export interface TopSheetProps {
   wide?: boolean;
   className?: string;
   maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "6xl" | "full";
+  /**
+   * When true, dismissing the sheet first asks for confirmation instead of
+   * silently discarding the user's input (report issue 7).
+   */
+  isDirty?: boolean;
+  /** Called after the user confirms discarding their input. */
+  onDiscard?: () => void;
 }
 
 const maxWidthClasses: Record<string, string> = {
@@ -48,10 +57,36 @@ export function TopSheet({
   wide = false,
   className,
   maxWidth,
+  isDirty = false,
+  onDiscard,
 }: TopSheetProps) {
+  const { t } = useLocale();
   const [mounted, setMounted] = useState(false);
   const isVisible = open ?? isOpen ?? false;
   const sub = subtitle ?? description;
+
+  /**
+   * Set on backdrop `pointerdown`, cleared on `pointerup`. The sheet closes
+   * only when the gesture BOTH starts and ends on the backdrop — a press that
+   * begins inside a portaled child (e.g. a dropdown menu) and releases over
+   * the backdrop used to fire `click` on the backdrop and destroy the form
+   * (report issue 6).
+   */
+  const backdropPointerDown = useRef(false);
+
+  // Unsaved-changes guard (report issue 7).
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  /** Gate every dismissal behind the unsaved-changes confirmation. */
+  const requestClose = () => {
+    if (isDirtyRef.current) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onClose();
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -61,14 +96,14 @@ export function TopSheet({
     if (!isVisible) return;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") requestClose();
     };
     document.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = "unset";
       document.removeEventListener("keydown", onKey);
     };
-  }, [isVisible, onClose]);
+  });
 
   if (!mounted || !isVisible || typeof document === "undefined") return null;
 
@@ -77,7 +112,14 @@ export function TopSheet({
       {/* High-contrast backdrop scrim: completely suppresses background lines and table grids */}
       <div
         className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm transition-opacity animate-in fade-in-50"
-        onClick={onClose}
+        onPointerDown={(e) => {
+          backdropPointerDown.current = e.button === 0 && e.target === e.currentTarget;
+        }}
+        onClick={(e) => {
+          const startOnBackdrop = backdropPointerDown.current;
+          backdropPointerDown.current = false;
+          if (e.target === e.currentTarget && startOnBackdrop) requestClose();
+        }}
         aria-hidden="true"
       />
 
@@ -104,7 +146,7 @@ export function TopSheet({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Close dialog"
             className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
           >
@@ -124,6 +166,22 @@ export function TopSheet({
           </div>
         )}
       </div>
+
+      {/* Unsaved-changes confirmation (report issue 7) — sibling portal so it
+          stacks above the sheet (z-[110] vs z-[100]). */}
+      <ERPConfirmDialog
+        isOpen={confirmDiscard}
+        title={t("ui.unsavedTitle")}
+        description={t("ui.unsavedBody")}
+        confirmLabel={t("ui.discardConfirm")}
+        cancelLabel={t("ui.discardCancel")}
+        onConfirm={() => {
+          setConfirmDiscard(false);
+          onDiscard?.();
+          onClose();
+        }}
+        onClose={() => setConfirmDiscard(false)}
+      />
     </div>
   );
 

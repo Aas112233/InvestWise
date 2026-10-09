@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, decimal, integer, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
-import { users } from './users.js';
-import { tenants } from './tenants.js';
+import { users } from './users';
+import { tenants } from './tenants';
 
 export interface PenaltyRuleConfig {
   tier: number;
@@ -59,6 +59,16 @@ export const systemSettings = pgTable('system_settings', {
   gracePeriodDays: integer('grace_period_days').default(3),
   meetingTypes: jsonb('meeting_types').$type<string[]>().default(DEFAULT_MEETING_TYPES),
   penaltyRules: jsonb('penalty_rules').$type<PenaltyRuleConfig[]>().default(DEFAULT_PENALTY_RULES),
+  /** Tenant-configurable payment methods for deposit forms: name + channel type. */
+  paymentMethods: jsonb('payment_methods').$type<{ name: string; type: string }[]>().default([
+    { name: 'Cash', type: 'CASH' },
+    { name: 'Bank Transfer', type: 'BANK' },
+    { name: 'bKash', type: 'MOBILE' },
+    { name: 'Nagad', type: 'MOBILE' },
+    { name: 'Rocket', type: 'MOBILE' },
+    { name: 'Check', type: 'CHECK' },
+    { name: 'Other', type: 'OTHER' },
+  ]),
 
   lastUpdatedBy: uuid('last_updated_by').references(() => users.id),
   lastUpdatedAt: timestamp('last_updated_at', { withTimezone: true }).defaultNow(),

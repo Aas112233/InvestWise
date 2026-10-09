@@ -3,11 +3,11 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
-import { env, isProduction } from './config/env.js';
-import { apiLimiter } from './middleware/rate-limiter.js';
-import { errorHandler, notFound } from './middleware/error-handler.js';
-import { checkDbHealth } from './config/database.js';
-import { cache } from './lib/cache.js';
+import { env, isProduction } from './config/env';
+import { apiLimiter } from './middleware/rate-limiter';
+import { errorHandler, notFound } from './middleware/error-handler';
+import { checkDbHealth } from './config/database';
+import { cache } from './lib/cache';
 
 const app = express();
 
@@ -133,21 +133,21 @@ app.get('/api/ping', (_req, res) => {
 });
 
 // Route imports
-import authRouter from './modules/auth/routes.js';
-import memberRouter from './modules/members/routes.js';
-import { fundRouter } from './modules/funds/routes.js';
-import { goalRouter } from './modules/goals/routes.js';
-import financeRouter from './modules/finance/routes.js';
-import projectRouter from './modules/projects/routes.js';
-import { analyticsRouter } from './modules/analytics/routes.js';
-import { auditRouter } from './modules/audit/routes.js';
-import { settingsRouter } from './modules/settings/routes.js';
-import { reportsRouter } from './modules/reports/routes.js';
-import backupRouter from './modules/backup/routes.js';
-import { arrearsRouter } from './modules/arrears/routes.js';
-import { fiscalRouter } from './modules/fiscal/routes.js';
-import { meetingsRouter } from './modules/meetings/routes.js';
-import { governanceRouter } from './modules/governance/routes.js';
+import authRouter from './modules/auth/routes';
+import memberRouter from './modules/members/routes';
+import { fundRouter } from './modules/funds/routes';
+import { goalRouter } from './modules/goals/routes';
+import financeRouter from './modules/finance/routes';
+import projectRouter from './modules/projects/routes';
+import { analyticsRouter } from './modules/analytics/routes';
+import { auditRouter } from './modules/audit/routes';
+import { settingsRouter } from './modules/settings/routes';
+import { reportsRouter } from './modules/reports/routes';
+import backupRouter from './modules/backup/routes';
+import { arrearsRouter } from './modules/arrears/routes';
+import { fiscalRouter } from './modules/fiscal/routes';
+import { meetingsRouter } from './modules/meetings/routes';
+import { governanceRouter } from './modules/governance/routes';
 
 // API routes
 app.use('/api/auth', authRouter);

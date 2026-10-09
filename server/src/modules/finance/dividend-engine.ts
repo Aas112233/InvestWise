@@ -1,7 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
-import { AppError } from '../../shared/errors.js';
-import { getDb } from '../../lib/db.js';
-import { funds, members, systemSettings } from '../../db/schema/index.js';
+import { AppError } from '../../shared/errors';
+import { getDb } from '../../lib/db';
+import { funds, members, systemSettings } from '../../db/schema/index';
 import { fromCents, parsePositiveAmount, splitDividendByShares, toCents } from '@/lib/money';
 
 /**
@@ -253,6 +253,9 @@ export async function planDividendRun(
       and(
         eq(members.tenantId, tenantId),
         eq(members.status, 'active'),
+        // Soft-deleted members keep their history but leave the roster — a
+        // removed partner must not accrue a new dividend run.
+        eq(members.isDeleted, false),
         sql`${members.shares} > 0`,
       ),
     )

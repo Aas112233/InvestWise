@@ -1,5 +1,5 @@
 import { pgTable, uuid, varchar, text, decimal, boolean, timestamp, index, unique } from 'drizzle-orm/pg-core';
-import { tenants } from './tenants.js';
+import { tenants } from './tenants';
 
 export const funds = pgTable('funds', {
   id: uuid('id').defaultRandom().primaryKey(),

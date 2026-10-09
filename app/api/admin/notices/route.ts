@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { superAdminActionLog } from '@/db/schema/index';
 import { desc, eq } from 'drizzle-orm';
-import { AuthError, ForbiddenError } from '@/lib/utils/errors';
+import { AuthError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
 import { getClientIp } from '@/lib/request-meta';
 import { validateNoticeInput } from '@/lib/admin/notice-schema';
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     const user = await requireAuthUser(request);
     requireSuperAdmin(user);
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const parsed = validateNoticeInput(body);
     if (!parsed.ok) {
       return NextResponse.json(

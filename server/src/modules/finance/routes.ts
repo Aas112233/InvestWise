@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { protect, requirePermission, requireAnyPermission, requireDepositWritePermission } from '../../middleware/auth.js';
-import { validate } from '../../middleware/validate.js';
+import { protect, requirePermission, requireAnyPermission, requireDepositWritePermission } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
 import {
   depositSchema,
   expenseSchema,
@@ -11,7 +11,7 @@ import {
   bulkDepositSchema,
   executeWithdrawalSchema,
   executeExitSettlementSchema,
-} from './validation.js';
+} from './validation';
 import {
   getTransactions,
   addDeposit,
@@ -32,7 +32,7 @@ import {
   executeExitSettlementHandler,
   getShareConsistencyHandler,
   recalculateSharesHandler,
-} from './controller.js';
+} from './controller';
 
 const router = Router();
 

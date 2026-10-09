@@ -8,11 +8,26 @@ import { z } from 'zod';
  */
 
 const uuidField = z.string().uuid('Must be a valid UUID');
-const positiveAmount = z
-  .number({ invalid_type_error: 'Amount must be a number' })
-  .positive('Amount must be positive')
-  .min(0.01, 'Minimum amount is 0.01')
-  .max(10_000_000, 'Maximum amount is 10,000,000');
+
+/**
+ * Money at the boundary. #22/#47: the UI has emitted amounts as BOTH `2000`
+ * and `"2000"` depending on the form, and the schemas disagreed about which was
+ * legal (`positiveAmount` rejected strings while `dividendSchema` accepted
+ * them) — so "works" vs "dead" was form-dependent. Coerce everywhere so a
+ * numeric string and a number are equally valid, and let the service layer's
+ * integer-cents validation own the real precision/ceiling rules.
+ *
+ * No `.refine()` in this chain: under zod v3 it degrades the whole object's
+ * inferred type to `unknown`. `z.coerce.number()` already rejects NaN/Infinity.
+ */
+const moneyField = (max: number, maxMessage: string) =>
+  z.coerce
+    .number({ invalid_type_error: 'Amount must be a number' })
+    .positive('Amount must be positive')
+    .min(0.01, 'Minimum amount is 0.01')
+    .max(max, maxMessage);
+
+const positiveAmount = moneyField(10_000_000, 'Maximum amount is 10,000,000');
 
 export const depositSchema = z.object({
   memberId: uuidField,
@@ -81,11 +96,9 @@ export const transferSchema = z.object({
 
 const dividendSchemaBase = z.object({
   type: z.enum(['Global', 'Project']),
-  amount: z.coerce
-    .number()
-    .positive('Amount must be positive')
-    .min(0.01, 'Minimum amount is 0.01')
-    .max(100_000_000, 'Maximum amount is 100,000,000'),
+  // Dividend runs span the whole membership, so the ceiling is higher than the
+  // per-member default — the sole intended difference from `positiveAmount`.
+  amount: moneyField(100_000_000, 'Maximum amount is 100,000,000'),
   projectId: uuidField.nullish(),
   sourceFundId: uuidField.nullish(),
   description: z.string().max(500).nullish(),
@@ -114,8 +127,10 @@ export const equityTransferSchema = z.object({
     .array(
       z.object({
         toMemberId: uuidField,
-        amount: z.number().min(0, 'Amount cannot be negative').optional(),
-        shares: z.number().int().min(1, 'Minimum shares is 1'),
+        // Optional: a shares-only transfer needs no cash leg. Coerced for the
+        // same reason as every other money field.
+        amount: z.coerce.number().min(0, 'Amount cannot be negative').optional(),
+        shares: z.coerce.number().int().min(1, 'Minimum shares is 1'),
       }),
     )
     .min(1, 'At least one transfer recipient is required'),

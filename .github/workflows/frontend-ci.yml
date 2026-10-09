@@ -1,22 +1,22 @@
 name: Frontend CI
 
+# The app under CI is the Next.js App Router project at the repository root
+# (package.json "investwise-next"). An earlier revision pointed at `client/`,
+# a directory that does not exist in this repo, so no build or typecheck ever
+# ran here — a broken build could merge to main undetected (P0).
 on:
   push:
     branches: [main]
-    paths:
-      - 'client/**'
   pull_request:
     branches: [main]
-    paths:
-      - 'client/**'
 
 jobs:
   validate:
-    name: Typecheck & Build
+    name: Typecheck, Test & Build
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: client
+        working-directory: .
 
     steps:
       - uses: actions/checkout@v4
@@ -25,12 +25,18 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: client/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - run: npm ci
 
       - name: TypeScript Check
-        run: npx tsc --noEmit
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build

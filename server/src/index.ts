@@ -1,6 +1,6 @@
-import app from './app.js';
-import { env } from './config/env.js';
-import { connectDB } from './config/database.js';
+import app from './app';
+import { env } from './config/env';
+import { connectDB } from './config/database';
 
 const start = async () => {
   // Fail fast — a running API without a database is worse than not running at all.

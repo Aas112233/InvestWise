@@ -1,14 +1,14 @@
 import type { Request, Response } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import { AppError } from '../../shared/errors.js';
-import * as financeService from './service.js';
+import { asyncHandler } from '../../shared/asyncHandler';
+import { AppError } from '../../shared/errors';
+import * as financeService from './service';
 import {
   validateWithdrawal,
   calculateExitSettlement,
   executeWithdrawal,
   executeMemberExitSettlement,
-} from './withdrawal-rules.js';
-import { getShareConsistencyReport, recalculateAllMemberShares } from './share-consistency.js';
+} from './withdrawal-rules';
+import { getShareConsistencyReport, recalculateAllMemberShares } from './share-consistency';
 
 export const getTransactions = asyncHandler(async (req: Request, res: Response) => {
   const query = req.query as Record<string, string | undefined>;

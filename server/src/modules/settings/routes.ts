@@ -1,12 +1,12 @@
 import { Router } from 'express';
-import { protect, requirePermission } from '../../middleware/auth.js';
-import { validate } from '../../middleware/validate.js';
-import { updateSettingsSchema } from './validation.js';
+import { protect, requirePermission } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
+import { updateSettingsSchema } from './validation';
 import {
   getSettingsHandler,
   updateSettingsHandler,
   getShareValueStatusHandler,
-} from './controller.js';
+} from './controller';
 
 const router = Router();
 

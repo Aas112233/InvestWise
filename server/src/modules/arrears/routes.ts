@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { protect, requirePermission } from '../../middleware/auth.js';
-import { validate } from '../../middleware/validate.js';
-import { calculateArrearsSchema, waiveArrearSchema } from './validation.js';
+import { protect, requirePermission } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
+import { calculateArrearsSchema, waiveArrearSchema } from './validation';
 import {
   calculateArrearsHandler,
   listArrearsHandler,
   waiveArrearHandler,
   getMemberArrearsHandler,
-} from './controller.js';
+} from './controller';
 
 const router = Router();
 

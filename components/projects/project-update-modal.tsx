@@ -35,8 +35,10 @@ export function ProjectUpdateModal({
   const [idempotencyRef, setIdempotencyRef] = useState<string>("");
 
   useEffect(() => {
-    if (isOpen) setIdempotencyRef(newIdempotencyRef());
-  }, [isOpen]);
+    // Prefixed ref: this value is persisted as the ledger reference number, so
+    // it must read like `PRJ-EXP-…` / `PRJ-REV-…`, never a bare UUID.
+    if (isOpen) setIdempotencyRef(newIdempotencyRef(type === "Earning" ? "PRJ-REV" : "PRJ-EXP"));
+  }, [isOpen, type]);
 
   useEffect(() => {
     if (project?.id) {

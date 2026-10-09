@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { tenants, users, funds, projects, transactions } from '@/db/schema/index';
 import { eq, and, count, sql } from 'drizzle-orm';
-import { AuthError, ForbiddenError, NotFoundError } from '@/lib/utils/errors';
+import { AuthError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
 import { requireSuperAdmin, requireAuthUser } from '@/lib/admin-guard';
 import { resolveModuleAccess } from '@/lib/tenant-modules';
-import { forceDeleteTenant } from '@/lib/superadmin-service';
+import { forceDeleteTenant, logSuperAdminAction } from '@/lib/superadmin-service';
 import { getClientIp } from '@/lib/request-meta';
 
 interface TenantResponse {
@@ -152,13 +152,21 @@ export async function PATCH(
     requireSuperAdmin(user);
 
     const { id } = await params;
-    const body = await request.json();
-    const { status, isMaintenanceMode, name, plan, maxUsers } = body;
+    const body = await readJsonBody(request);
+    const { status, isMaintenanceMode, name, plan, maxUsers, reason } = body;
 
     const db = getDb();
 
     const [target] = await db
-      .select({ id: tenants.id, status: tenants.status, slug: tenants.slug })
+      .select({
+        id: tenants.id,
+        status: tenants.status,
+        slug: tenants.slug,
+        name: tenants.name,
+        plan: tenants.plan,
+        maxUsers: tenants.maxUsers,
+        isMaintenanceMode: tenants.isMaintenanceMode,
+      })
       .from(tenants)
       .where(eq(tenants.id, id))
       .limit(1);
@@ -192,15 +200,47 @@ export async function PATCH(
       updateData.isMaintenanceMode = Boolean(isMaintenanceMode);
     }
 
+    // Field validation before any write — these values used to reach Postgres
+    // raw (a string maxUsers or 10MB name became an opaque 500, §11).
     if (name !== undefined) {
-      updateData.name = name;
+      if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 255) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "[Field 'name', Code: too_long] Name must be a string between 2 and 255 characters",
+            code: 'VALIDATION_ERROR',
+          },
+          { status: 400 }
+        );
+      }
+      updateData.name = name.trim();
     }
 
     if (plan !== undefined) {
+      if (typeof plan !== 'string' || !/^[a-z0-9-]{2,100}$/.test(plan)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "[Field 'plan', Code: invalid_format] Plan must be 2-100 characters, lowercase letters, digits and dashes",
+            code: 'VALIDATION_ERROR',
+          },
+          { status: 400 }
+        );
+      }
       updateData.plan = plan;
     }
 
     if (maxUsers !== undefined) {
+      if (!Number.isInteger(maxUsers) || maxUsers < 1 || maxUsers > 100_000) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "[Field 'maxUsers', Code: out_of_range] Must be an integer between 1 and 100000",
+            code: 'VALIDATION_ERROR',
+          },
+          { status: 400 }
+        );
+      }
       updateData.maxUsers = maxUsers;
     }
 
@@ -217,6 +257,34 @@ export async function PATCH(
     if (!updated) {
       throw new NotFoundError('Tenant');
     }
+
+    // Audit (§6, pre-flight #4): suspending a tenant, moving it off a paid
+    // plan or changing its seat cap is exactly the kind of platform action
+    // that must be attributable — this route previously wrote no audit row.
+    await logSuperAdminAction({
+      context: { adminUserId: user.id, adminEmail: user.email, ipAddress: getClientIp(request) },
+      actionType: 'TENANT_UPDATE',
+      targetType: 'Tenant',
+      targetId: id,
+      tenantId: id,
+      details: {
+        reason: typeof reason === 'string' ? reason.slice(0, 500) : null,
+        from: {
+          status: target.status,
+          plan: target.plan,
+          maxUsers: target.maxUsers,
+          isMaintenanceMode: target.isMaintenanceMode,
+          name: target.name,
+        },
+        to: {
+          status: updated.status,
+          plan: updated.plan,
+          maxUsers: updated.maxUsers,
+          isMaintenanceMode: updated.isMaintenanceMode,
+          name: updated.name,
+        },
+      },
+    });
 
     return NextResponse.json({
       success: true,

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { members, funds, transactions, profitAllocations, fiscalPeriods } from '@/db/schema/index';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { members, funds, transactions, profitAllocations, fiscalPeriods, systemSettings } from '@/db/schema/index';
+import { eq, and, sql, inArray, gte, lte } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
-import { ValidationError, ForbiddenError, AppError } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError, AppError, LockedError, readJsonBody } from '@/lib/utils/errors';
 import { MoneyError, fromCents, toCents } from '@/lib/money';
+import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
+import { fiscalStartYearForDate, resolveFiscalBounds } from '@/lib/fiscal-periods';
 import { planDividendRun } from '@/server/modules/finance/dividend-engine';
 import crypto from 'node:crypto';
 
@@ -42,7 +44,7 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError('Write permission required for: DIVIDENDS');
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const {
       grossEarnings,
       distributableFundId,
@@ -65,18 +67,32 @@ export async function POST(request: NextRequest) {
       `DIV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
     // Idempotency (§12): a retry with the same reference must not pay twice.
-    const [alreadyRun] = await db
+    //
+    // This route never writes the BARE reference — it writes three suffixed
+    // forms per run: `${refNumber}-RESERVE`, `${refNumber}-DIST`, and
+    // `${refNumber}-${memberId}`. So the guard must match on the suffix family,
+    // not on equality with refNumber (which would never match anything and let
+    // a retry through). LIKE is literal here because refNumber is a generated
+    // identifier; its `_` and `%`-free shape is asserted below so a caller
+    // cannot smuggle a wildcard into the pattern.
+    if (refNumber.includes('%') || refNumber.includes('_')) {
+      // Escape rather than reject would change the stored reference; rejecting
+      // keeps the reference family well-formed for every downstream consumer.
+      throw new ValidationError('Reference number may not contain "%" or "_"');
+    }
+    const alreadyRun = await db
       .select({ id: transactions.id })
       .from(transactions)
       .where(
         and(
-          eq(transactions.referenceNumber, refNumber),
-          eq(transactions.isDeleted, false),
           eq(transactions.tenantId, scopedTenantId),
+          eq(transactions.isDeleted, false),
+          sql`(${transactions.referenceNumber} = ${refNumber}
+                OR ${transactions.referenceNumber} LIKE ${refNumber + '-%'})`,
         ),
       )
       .limit(1);
-    if (alreadyRun) {
+    if (alreadyRun.length > 0) {
       throw new ValidationError('A dividend run with this reference number already exists');
     }
 
@@ -93,10 +109,28 @@ export async function POST(request: NextRequest) {
     });
 
     const payoutRows = plan.payouts.filter((p) => p.payoutCents > 0);
-    const currentYear = new Date().getFullYear();
     const now = new Date();
+    const [fiscalSettings] = await db
+      .select({ fiscalYearStart: systemSettings.fiscalYearStart, fiscalYearEnd: systemSettings.fiscalYearEnd })
+      .from(systemSettings)
+      .where(eq(systemSettings.tenantId, scopedTenantId))
+      .limit(1);
+    const fiscalYearStart = fiscalSettings?.fiscalYearStart || 'July';
+    const fiscalYearEnd = fiscalSettings?.fiscalYearEnd || 'June';
+    const currentYear = fiscalStartYearForDate(now, fiscalYearStart);
+    let fiscalBounds;
+    try {
+      fiscalBounds = resolveFiscalBounds(currentYear, fiscalYearStart, fiscalYearEnd);
+    } catch (error) {
+      throw new ValidationError((error as Error).message);
+    }
 
     await db.transaction(async (tx) => {
+      await assertFiscalPeriodOpen(tx, scopedTenantId, now);
+      // Raw `sql` fragments bind dates via Buffer.from(), which rejects Date
+      // instances — every timestamp interpolated into a raw fragment below
+      // must be an ISO string (this was the distribute 500).
+      const nowIso = now.toISOString();
       // 1. Lock the two funds in deterministic id order (deadlock-safe), then
       // re-read their balances from inside the lock.
       const fundIds = [distributableFund.id, reserveFund.id].sort();
@@ -171,6 +205,31 @@ export async function POST(request: NextRequest) {
           createdBy: user.id,
           updatedBy: user.id,
         });
+
+        // #97: the payout fund is debited by the GROSS (reserve + distributed),
+        // but until now the reserve half of that debit had no row against it —
+        // the only rows on this fund were the per-member dividends. Every fund
+        // statement (and the report's running balance) therefore ended the run
+        // `reserveAmount` above the cash the fund actually held, while the
+        // reserve fund showed the sweep and no matching outflow existed. Post
+        // the outflow leg so each fund's ledger reconstructs its own balance.
+        await tx.insert(transactions).values({
+          tenantId: scopedTenantId,
+          type: 'Transfer Out',
+          amount: plan.reserveAmount,
+          description: `Statutory reserve sweep to ${reserveFund.name} (${plan.reservePercent}%) for dividend run ${refNumber}`,
+          category: 'Reserve',
+          referenceNumber: `${refNumber}-RESERVE-OUT`,
+          date: now,
+          status: 'Completed',
+          fundId: distributableFund.id,
+          handlingOfficer: user.name,
+          authorizedBy: user.id,
+          balanceBefore: fromCents(distributableBeforeCents),
+          balanceAfter: fromCents(distributableBeforeCents - plan.reserveCents),
+          createdBy: user.id,
+          updatedBy: user.id,
+        });
       }
 
       // 4. The run-level distribution row.
@@ -222,11 +281,16 @@ export async function POST(request: NextRequest) {
         // DB-side from the CURRENT total_contributed under the row locks held
         // above. The §6 tenant predicate stays in the WHERE — a VALUES join
         // must never widen the write scope.
+        //
+        // `now` is passed as an ISO STRING, not a Date: this is a raw `sql`
+        // fragment, and postgres-js binds it via Buffer.from(), which throws
+        // ERR_INVALID_ARG_TYPE on a Date instance — that was the real cause of
+        // the distribute 500 (the whole run rolled back with no feedback).
         await tx.execute(sql`
           UPDATE ${members} AS m
           SET total_contributed = (COALESCE(m.total_contributed, '0')::numeric + v.payout::numeric),
-              last_active = ${now},
-              updated_at = ${now}
+              last_active = ${nowIso}::timestamptz,
+              updated_at = ${nowIso}::timestamptz
           FROM (VALUES ${sql.join(
             payoutRows.map((p) => sql`(${p.id}::uuid, ${p.grossAmount}::numeric)`),
             sql`, `,
@@ -235,10 +299,10 @@ export async function POST(request: NextRequest) {
         `);
       }
 
-      // 6. Fiscal period: reuse an explicit id when given, else this tenant's
-      // OPEN year, creating one only now that every check has passed — all
-      // inside the run's transaction so a rollback cannot orphan a period.
+      // 6. Fiscal period: resolve by the actual transaction date (not just a
+      // calendar year), creating a configured period only after all checks pass.
       let fiscalPeriod: typeof fiscalPeriods.$inferSelect | null = null;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${scopedTenantId}), ${currentYear})`);
       const [lookup] = await tx
         .select()
         .from(fiscalPeriods)
@@ -246,13 +310,25 @@ export async function POST(request: NextRequest) {
           fiscalPeriodId
             ? and(eq(fiscalPeriods.id, String(fiscalPeriodId)), eq(fiscalPeriods.tenantId, scopedTenantId))
             : and(
-                eq(fiscalPeriods.year, currentYear),
                 eq(fiscalPeriods.status, 'OPEN'),
                 eq(fiscalPeriods.tenantId, scopedTenantId),
+                lte(fiscalPeriods.periodStart, now),
+                gte(fiscalPeriods.periodEnd, now),
               ),
         )
+        .for('update')
         .limit(1);
       fiscalPeriod = lookup ?? null;
+
+      if (fiscalPeriodId && !fiscalPeriod) throw new ValidationError('Fiscal period not found for this tenant');
+      if (fiscalPeriod?.status === 'CLOSED') throw new LockedError('Dividend payouts cannot be allocated to a closed fiscal period');
+      if (
+        fiscalPeriodId &&
+        fiscalPeriod &&
+        (fiscalPeriod.periodStart > now || fiscalPeriod.periodEnd < now)
+      ) {
+        throw new ValidationError('The selected fiscal period does not contain the dividend transaction date');
+      }
 
       if (!fiscalPeriod && !fiscalPeriodId) {
         const [created] = await tx
@@ -260,8 +336,8 @@ export async function POST(request: NextRequest) {
           .values({
             tenantId: scopedTenantId,
             year: currentYear,
-            periodStart: new Date(`${currentYear}-01-01`),
-            periodEnd: new Date(`${currentYear}-12-31`),
+            periodStart: fiscalBounds.periodStart,
+            periodEnd: fiscalBounds.periodEnd,
             status: 'OPEN',
           })
           .returning();
@@ -277,7 +353,7 @@ export async function POST(request: NextRequest) {
               statutory_reserve = COALESCE(statutory_reserve, 0)::numeric + ${plan.reserveAmount}::numeric,
               distributable_surplus = COALESCE(distributable_surplus, 0)::numeric + ${plan.netDistributable}::numeric,
               actual_distributed = COALESCE(actual_distributed, 0)::numeric + ${plan.netDistributable}::numeric,
-              updated_at = ${now}
+              updated_at = ${nowIso}::timestamptz
           WHERE id = ${fiscalPeriod.id} AND tenant_id = ${scopedTenantId}
         `);
       }

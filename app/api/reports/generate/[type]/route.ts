@@ -1,253 +1,221 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/db/index';
+import { NextRequest, NextResponse } from "next/server";
+import { getAuthContext } from "@/lib/middleware/auth";
+import { requireTenant } from "@/lib/tenant";
+import { logAudit } from "@/lib/utils/audit";
+import { getDb } from "@/db/index";
+import { systemSettings } from "@/db/schema/index";
+import { eq } from "drizzle-orm";
+import { ValidationError } from "@/lib/utils/errors";
 import {
-  transactions,
-  members,
-  projects,
-  funds,
-  users,
-  memberPenalties,
-  meetings,
-} from '@/db/schema/index';
-import { eq, and, desc, asc, sql, gte, lte, aliasedTable } from 'drizzle-orm';
-import { getAuthContext } from '@/lib/middleware/auth';
-import { requireTenant } from '@/lib/tenant';
-import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/utils/errors';
+  getReportDefinition,
+  resolveReportPeriod,
+  ReportParamError,
+  DEFAULT_FISCAL,
+  type ReportFormat,
+  type ReportLocale,
+} from "@/lib/reports/catalog";
+import {
+  fetchReportData,
+  buildReportDocument,
+  lookupEntityNames,
+  type ReportLetterhead,
+  type ReportRequestContext,
+} from "@/lib/reports/data";
+import { buildExcelBuffer } from "@/lib/reports/excel";
+import { buildPdfBytes } from "@/lib/reports/pdf";
+import { buildCsv } from "@/lib/reports/csv";
 
-/**
- * Convert array of objects to CSV string with UTF-8 BOM for Excel compatibility (Rule §10).
- */
-function convertToCsv(data: Record<string, unknown>[]): string {
-  if (!data || data.length === 0) return '';
-  const headers = Object.keys(data[0] || {});
-  const csvRows = [headers.join(',')];
-  for (const row of data) {
-    const values = headers.map((header) => {
-      const val = row[header];
-      if (val === null || val === undefined) return '""';
-      const str = val instanceof Date ? val.toISOString() : typeof val === 'object' ? JSON.stringify(val) : String(val);
-      const escaped = str.replace(/"/g, '""');
-      return `"${escaped}"`;
-    });
-    csvRows.push(values.join(','));
-  }
-  return '\uFEFF' + csvRows.join('\r\n');
+export const runtime = "nodejs";
+// exceljs + jspdf + a 5000-row query can exceed the default 10s window.
+export const maxDuration = 60;
+
+const LOCALES: ReportLocale[] = ["en", "ur", "hi", "bn"];
+
+function normalizeFormat(raw: string | null): ReportFormat {
+  const value = (raw || "xlsx").toLowerCase();
+  if (value === "xlsx" || value === "excel") return "xlsx";
+  if (value === "pdf") return "pdf";
+  if (value === "csv") return "csv";
+  // #32: the in-app viewer consumes the same assembled document as the files.
+  if (value === "json") return "json";
+  throw new ValidationError(`[Field 'format', Code: INVALID_FORMAT] Unsupported format: ${raw}`);
 }
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ type: string }> }
+  { params }: { params: Promise<{ type: string }> },
 ) {
   try {
     const { user, tenantId, error } = await getAuthContext(request);
     if (error || !user) {
-      return error || NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+      return error || NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
-
-    const { type } = await params;
-    const reportType = decodeURIComponent(type);
-    // §6 fail-closed: CSV exports dump ledger/member PII — null tenant must 403.
     const scopedTenantId = requireTenant(tenantId, user);
 
+    const { type } = await params;
+    const slug = decodeURIComponent(type);
+    const definition = getReportDefinition(slug);
+    if (!definition) {
+      throw new ValidationError(`[Field 'type', Code: UNKNOWN_REPORT_TYPE] Unknown report type: ${slug}`);
+    }
+
     const { searchParams } = new URL(request.url);
-    const format = (searchParams.get('format') || 'csv').toLowerCase();
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
-    const memberId = searchParams.get('memberId');
-    const projectId = searchParams.get('projectId');
-    const fundId = searchParams.get('fundId');
+    const format = normalizeFormat(searchParams.get("format"));
+    const localeParam = (searchParams.get("locale") || "en").toLowerCase() as ReportLocale;
+    const locale: ReportLocale = LOCALES.includes(localeParam) ? localeParam : "en";
 
+    const projectId = searchParams.get("projectId") || null;
+    const memberId = searchParams.get("memberId") || null;
+    const fundId = searchParams.get("fundId") || null;
+
+    // Required-entity guard straight from the catalog (Rule §5).
+    if (definition.requires === "project" && !projectId) {
+      throw new ValidationError("[Field 'projectId', Code: REQUIRED] A target project is required for this report");
+    }
+    if (definition.requires === "member" && !memberId) {
+      throw new ValidationError("[Field 'memberId', Code: REQUIRED] A target member is required for this report");
+    }
+    if (definition.requires === "fund" && !fundId) {
+      throw new ValidationError("[Field 'fundId', Code: REQUIRED] A target fund is required for this report");
+    }
+
+    // Resolve scoped entity display names; null for a provided id means the
+    // entity belongs to another tenant — reject (Rule §6).
+    const entityNames = await lookupEntityNames(scopedTenantId, { projectId, memberId, fundId });
+    if (projectId && !entityNames.projectName) {
+      throw new ValidationError("[Field 'projectId', Code: NOT_FOUND] Project not found in this tenant");
+    }
+    if (memberId && !entityNames.memberName) {
+      throw new ValidationError("[Field 'memberId', Code: NOT_FOUND] Member not found in this tenant");
+    }
+    if (fundId && !entityNames.fundName) {
+      throw new ValidationError("[Field 'fundId', Code: NOT_FOUND] Fund not found in this tenant");
+    }
+
+    // Tenant letterhead + currency + date format + fiscal calendar (Rule §8/§10).
     const db = getDb();
-    let exportData: Record<string, unknown>[] = [];
-    let filenamePrefix = reportType.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const [settings] = await db
+      .select({
+        companyName: systemSettings.companyName,
+        companyTagline: systemSettings.companyTagline,
+        companyAddress: systemSettings.companyAddress,
+        companyEmail: systemSettings.companyEmail,
+        companyPhone: systemSettings.companyPhone,
+        baseCurrency: systemSettings.baseCurrency,
+        dateFormat: systemSettings.dateFormat,
+        fiscalYearStart: systemSettings.fiscalYearStart,
+        fiscalYearEnd: systemSettings.fiscalYearEnd,
+      })
+      .from(systemSettings)
+      .where(eq(systemSettings.tenantId, scopedTenantId))
+      .limit(1);
 
-    // 1. Comprehensive Master Ledger Report
-    if (reportType.toLowerCase().includes('ledger')) {
-      const authorizer = aliasedTable(users, 'report_authorizer');
-      const conditions: ReturnType<typeof sql>[] = [];
+    const letterhead: ReportLetterhead = {
+      name: settings?.companyName || "InvestWise",
+      tagline: settings?.companyTagline,
+      address: settings?.companyAddress,
+      email: settings?.companyEmail,
+      phone: settings?.companyPhone,
+    };
 
-      conditions.push(eq(transactions.tenantId, scopedTenantId));
-      if (startDate) conditions.push(gte(transactions.date, new Date(startDate)));
-      if (endDate) conditions.push(lte(transactions.date, new Date(endDate)));
-      if (memberId) conditions.push(eq(transactions.memberId, memberId));
-      if (projectId) conditions.push(eq(transactions.projectId, projectId));
-      if (fundId) conditions.push(eq(transactions.fundId, fundId));
+    const fiscal = {
+      startMonth: settings?.fiscalYearStart || DEFAULT_FISCAL.startMonth,
+      endMonth: settings?.fiscalYearEnd || DEFAULT_FISCAL.endMonth,
+    };
+    const periodParams = {
+      periodType: searchParams.get("periodType") || undefined,
+      fiscalMonth: searchParams.get("fiscalMonth"),
+      fiscalQuarter: searchParams.get("fiscalQuarter"),
+      fiscalYear: searchParams.get("fiscalYear"),
+      startDate: searchParams.get("startDate"),
+      endDate: searchParams.get("endDate"),
+    };
+    const period = resolveReportPeriod(periodParams, fiscal);
 
-      const rows = await db
-        .select({
-          transactionId: transactions.referenceNumber,
-          date: transactions.date,
-          type: transactions.type,
-          category: transactions.category,
-          amount: transactions.amount,
-          member: members.name,
-          fund: funds.name,
-          project: projects.title,
-          description: transactions.description,
-          status: transactions.status,
-        })
-        .from(transactions)
-        // §6: joined entities must belong to the same tenant — joining on id
-        // alone would render another tenant's member/fund/project names.
-        .leftJoin(members, and(eq(transactions.memberId, members.id), eq(members.tenantId, scopedTenantId)))
-        .leftJoin(funds, and(eq(transactions.fundId, funds.id), eq(funds.tenantId, scopedTenantId)))
-        .leftJoin(projects, and(eq(transactions.projectId, projects.id), eq(projects.tenantId, scopedTenantId)))
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(desc(transactions.date))
-        .limit(2000);
+    const ctx: ReportRequestContext = {
+      tenantId: scopedTenantId,
+      locale,
+      currency: settings?.baseCurrency || "BDT",
+      dateFormat: settings?.dateFormat || "DD/MM/YYYY",
+      generatedBy: user.name,
+      fiscal,
+    };
 
-      exportData = rows.map((r) => ({
-        'Reference #': r.transactionId || 'N/A',
-        'Date': r.date ? new Date(r.date).toISOString().slice(0, 10) : '',
-        'Type': r.type,
-        'Category': r.category || 'General',
-        'Amount': r.amount,
-        'Member': r.member || 'N/A',
-        'Fund': r.fund || 'N/A',
-        'Project': r.project || 'N/A',
-        'Status': r.status,
-        'Description': r.description || '',
-      }));
-    }
-    // 2. Member Contributions & Deposits Report
-    else if (reportType.toLowerCase().includes('deposit') || reportType.toLowerCase().includes('member')) {
-      const rows = await db
-        .select({
-          memberCode: members.memberId,
-          name: members.name,
-          email: members.email,
-          phone: members.phone,
-          shares: members.shares,
-          totalContributed: members.totalContributed,
-          warningCount: members.warningCount,
-          status: members.status,
-          joinDate: members.createdAt,
-        })
-        .from(members)
-        .where(eq(members.tenantId, scopedTenantId))
-        .orderBy(asc(members.name));
-
-      exportData = rows.map((m) => ({
-        'Member ID': m.memberCode,
-        'Name': m.name,
-        'Email': m.email || '',
-        'Phone': m.phone || '',
-        'Shares Count': m.shares,
-        'Total Contributed': m.totalContributed,
-        'Warnings': m.warningCount || 0,
-        'Status': m.status,
-        'Join Date': m.joinDate ? new Date(m.joinDate).toISOString().slice(0, 10) : '',
-      }));
-    }
-    // 3. Projects Portfolio Report
-    else if (reportType.toLowerCase().includes('project')) {
-      const rows = await db
-        .select({
-          title: projects.title,
-          category: projects.category,
-          status: projects.status,
-          health: projects.health,
-          initialInvestment: projects.initialInvestment,
-          budget: projects.budget,
-          currentFundBalance: projects.currentFundBalance,
-          totalEarnings: projects.totalEarnings,
-          totalExpenses: projects.totalExpenses,
-          expectedRoi: projects.expectedRoi,
-          startDate: projects.startDate,
-          completionDate: projects.completionDate,
-        })
-        .from(projects)
-        .where(eq(projects.tenantId, scopedTenantId))
-        .orderBy(desc(projects.createdAt));
-
-      exportData = rows.map((p) => ({
-        'Project Title': p.title,
-        'Category': p.category,
-        'Status': p.status,
-        'Health': p.health,
-        'Initial Capital': p.initialInvestment,
-        'Budget': p.budget,
-        'Fund Balance': p.currentFundBalance,
-        'Total Earnings': p.totalEarnings,
-        'Total Expenses': p.totalExpenses,
-        'Expected ROI (%)': p.expectedRoi,
-        'Start Date': p.startDate,
-        'Completion Date': p.completionDate || 'Ongoing',
-      }));
-    }
-    // 4. Governance & Penalties Report
-    else if (reportType.toLowerCase().includes('governance') || reportType.toLowerCase().includes('penalt')) {
-      const rows = await db
-        .select({
-          penaltyId: memberPenalties.id,
-          member: members.name,
-          memberCode: members.memberId,
-          tier: memberPenalties.tier,
-          title: memberPenalties.title,
-          type: memberPenalties.type,
-          deduction: memberPenalties.calculatedDeduction,
-          status: memberPenalties.status,
-          reason: memberPenalties.reason,
-          issuedAt: memberPenalties.issuedAt,
-          waivedAt: memberPenalties.waivedAt,
-          waiveReason: memberPenalties.waiveReason,
-        })
-        .from(memberPenalties)
-        .leftJoin(members, and(eq(memberPenalties.memberId, members.id), eq(members.tenantId, scopedTenantId)))
-        .where(eq(memberPenalties.tenantId, scopedTenantId))
-        .orderBy(desc(memberPenalties.createdAt));
-
-      exportData = rows.map((pen) => ({
-        'Member': pen.member || 'N/A',
-        'Member Code': pen.memberCode || 'N/A',
-        'Tier': `Tier ${pen.tier}`,
-        'Title': pen.title,
-        'Type': pen.type,
-        'Deduction': pen.deduction || '0.00',
-        'Status': pen.status,
-        'Reason': pen.reason,
-        'Issued Date': pen.issuedAt ? new Date(pen.issuedAt).toISOString().slice(0, 10) : '',
-        'Waived Date': pen.waivedAt ? new Date(pen.waivedAt).toISOString().slice(0, 10) : 'N/A',
-        'Waive Reason': pen.waiveReason || '',
-      }));
-    }
-    // Default fallback
-    else {
-      exportData = [
-        {
-          Report: reportType,
-          GeneratedAt: new Date().toISOString(),
-          Status: 'Active',
-          Note: 'Export generated with active multi-tenant ledger synchronization.',
-        },
-      ];
-    }
+    const data = await fetchReportData(slug, ctx, period, periodParams, { projectId, memberId, fundId });
+    const doc = buildReportDocument(data, ctx, periodParams, entityNames, letterhead);
 
     await logAudit({
       user: { id: user.id, name: user.name },
-      action: 'GENERATE_REPORT',
-      resourceType: 'Report',
-      details: { reportType, format, rows: exportData.length },
+      tenantId: scopedTenantId,
+      action: "GENERATE_REPORT",
+      resourceType: "Report",
+      resourceId: slug,
+      details: {
+        reportType: slug,
+        format,
+        rowCount: doc.rows.length,
+        truncated: doc.truncated,
+        period: doc.periodLine,
+      },
+      status: "SUCCESS",
     });
 
-    const csvContent = convertToCsv(exportData);
-    const dateStamp = new Date().toISOString().slice(0, 10);
-    const filename = `${filenamePrefix}_${dateStamp}.csv`;
+    const filename = `${doc.fileBase}.${format}`;
+    const disposition = `attachment; filename="${filename}"`;
 
-    return new NextResponse(csvContent, {
+    // #32: the in-app viewer needs the assembled document, not a file. Return
+    // the exact same payload the exporters consume (never a second query path).
+    if (format === "json") {
+      return NextResponse.json({ success: true, data: doc }, {
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+
+    if (format === "xlsx") {
+      const buffer = await buildExcelBuffer(doc);
+      return new NextResponse(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": disposition,
+          "Cache-Control": "no-cache",
+        },
+      });
+    }
+
+    if (format === "pdf") {
+      const bytes = await buildPdfBytes(doc);
+      return new NextResponse(new Uint8Array(bytes), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": disposition,
+          "Cache-Control": "no-cache",
+        },
+      });
+    }
+
+    return new NextResponse(buildCsv(doc), {
       status: 200,
       headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Cache-Control': 'no-cache',
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": disposition,
+        "Cache-Control": "no-cache",
       },
     });
-  } catch (err: any) {
-    console.error('[REPORT GENERATE ERROR]', err);
+  } catch (err) {
+    if (err instanceof ReportParamError || err instanceof ValidationError) {
+      return NextResponse.json(
+        { success: false, message: err.message },
+        { status: 400 },
+      );
+    }
+    console.error("[REPORT GENERATE ERROR]", err);
+    const status = (err as { statusCode?: number })?.statusCode || 500;
     return NextResponse.json(
-      { success: false, message: err.message || 'Report generation failed' },
-      { status: err.statusCode || 500 }
+      { success: false, message: (err as Error).message || "Report generation failed" },
+      { status },
     );
   }
 }

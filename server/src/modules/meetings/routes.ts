@@ -1,12 +1,12 @@
 import { Router } from 'express';
-import { protect, requirePermission, admin } from '../../middleware/auth.js';
-import { validate } from '../../middleware/validate.js';
+import { protect, requirePermission, admin } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
 import {
   createMeetingSchema,
   updateMeetingSchema,
   recordAttendanceSchema,
   completeMeetingSchema,
-} from './validation.js';
+} from './validation';
 import {
   createMeetingHandler,
   listMeetingsHandler,
@@ -16,7 +16,7 @@ import {
   recordAttendanceHandler,
   completeMeetingHandler,
   deleteMeetingHandler,
-} from './controller.js';
+} from './controller';
 
 import rateLimit from 'express-rate-limit';
 

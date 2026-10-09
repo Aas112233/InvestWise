@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getPaginationParams } from '../middleware/api.js';
+import { getPaginationParams } from '../middleware/api';
 
 /**
  * Guards the dropdown-vs-table limit contract.

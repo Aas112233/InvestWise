@@ -1,79 +1,17 @@
-import crypto from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
-import { getDb } from '../config/database.js';
-import { users, blacklistedTokens } from '../db/schema/index.js';
-import { eq, and, gt } from 'drizzle-orm';
-import { verifyToken } from '../lib/jwt.js';
-import { COOKIE_NAMES } from '../lib/cookies.js';
-import { AuthError, ForbiddenError } from '../shared/errors.js';
-import { asyncHandler } from '../shared/asyncHandler.js';
-import { cache } from '../lib/cache.js';
-import { normalizeRole, roleBaselineGrant, type Role } from '../shared/roles.js';
+import { getDb } from '../config/database';
+import { users, sessions, blacklistedTokens } from '../db/schema/index';
+import { eq, and, gt, isNull, ne, or } from 'drizzle-orm';
+import { verifyToken } from '../lib/jwt';
+import { COOKIE_NAMES } from '../lib/cookies';
+import { AuthError, ForbiddenError } from '../shared/errors';
+import { asyncHandler } from '../shared/asyncHandler';
+import { cache } from '../lib/cache';
+import { normalizeRole, roleBaselineGrant, type Role } from '../shared/roles';
 
-// Cache parsed user records by userId for 60 seconds to avoid a DB round-trip
-// on every authenticated request. JWT verification (fast crypto) still runs.
+// Cache parsed user records by userId for 60 seconds. Session and blacklist
+// state are still read from PostgreSQL on every authenticated request.
 const USER_CACHE_TTL = 60_000;
-
-/**
- * In-memory blacklist cache.
- * Stores SHA-256 hashes (not raw tokens) of revoked tokens with their expiry.
- * Avoids a Supabase round-trip (~300 ms) on every authenticated request.
- * On logout, the token is added here immediately via `blacklistToken()`.
- */
-const blacklistCache = new Map<string, number>(); // hash → expiresAt ms
-let blacklistLastSweep = 0;
-
-function tokenHash(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
-
-/** Add a token to the in-memory blacklist (call on logout). */
-export function blacklistToken(token: string, expiresAt: Date): void {
-  blacklistCache.set(tokenHash(token), expiresAt.getTime());
-}
-
-/**
- * Returns true if the token is blacklisted.
- * Checks the in-memory cache first; falls back to DB only on a miss
- * (which only happens for tokens revoked by another server instance).
- */
-async function isBlacklisted(token: string): Promise<boolean> {
-  const hash = tokenHash(token);
-  const now = Date.now();
-
-  // Periodic sweep: evict expired entries every 5 minutes
-  if (now - blacklistLastSweep > 5 * 60_000) {
-    blacklistLastSweep = now;
-    for (const [h, exp] of blacklistCache) {
-      if (exp < now) blacklistCache.delete(h);
-    }
-  }
-
-  // Cache hit — token is known to be blacklisted and not yet expired
-  const cachedExp = blacklistCache.get(hash);
-  if (cachedExp !== undefined) {
-    return cachedExp > now; // still valid blacklist entry
-  }
-
-  // Cache miss — check DB (handles tokens revoked by another server process)
-  const db = getDb();
-  const rows = await db
-    .select({ id: blacklistedTokens.id, expiresAt: blacklistedTokens.expiresAt })
-    .from(blacklistedTokens)
-    .where(and(eq(blacklistedTokens.token, token), gt(blacklistedTokens.expiresAt, new Date())))
-    .limit(1);
-
-  if (rows.length > 0) {
-    // Populate cache so future requests skip the DB
-    blacklistCache.set(hash, rows[0].expiresAt!.getTime());
-    return true;
-  }
-
-  // Token is clean — record a negative entry (not blacklisted) with a short TTL
-  // so we don't hammer the DB repeatedly for the same active token.
-  blacklistCache.set(hash, now - 1); // immediately-expired = "clean"
-  return false;
-}
 
 /**
  * Unified role taxonomy (RBAC): SuperAdmin, Admin, Manager, Auditor, Member.
@@ -100,15 +38,41 @@ export const protect = asyncHandler(async (req: Request, _res: Response, next: N
     throw new AuthError('No token provided', 'NO_TOKEN');
   }
 
-  // Check blacklist (in-memory first, DB fallback)
-  if (await isBlacklisted(token)) {
-    throw new AuthError('Token has been revoked', 'TOKEN_REVOKED');
+  // Verify the signature before database access, then require an active,
+  // persisted session. The joined blacklist lookup and session-state check are
+  // performed on every request so revocations propagate across instances.
+  const decoded = verifyToken(token, 'access');
+  if (!decoded.sessionId) {
+    throw new AuthError('Session is not active', 'TOKEN_REVOKED');
+  }
+  const db = getDb();
+  const [sessionState] = await db
+    .select({ blacklistId: blacklistedTokens.id })
+    .from(sessions)
+    .leftJoin(
+      blacklistedTokens,
+      and(eq(blacklistedTokens.token, token), gt(blacklistedTokens.expiresAt, new Date())),
+    )
+    .where(
+      and(
+        eq(sessions.sessionId, decoded.sessionId),
+        eq(sessions.userId, decoded.id),
+        eq(sessions.isActive, true),
+        eq(sessions.isExpired, false),
+        or(
+          isNull(sessions.deviceInfo),
+          ne(sessions.deviceInfo, 'Support'),
+          gt(sessions.loginTime, new Date(Date.now() - 30 * 60_000)),
+        ),
+      ),
+    )
+    .limit(1);
+  if (!sessionState || sessionState.blacklistId) {
+    throw new AuthError('Token or session has been revoked', 'TOKEN_REVOKED');
   }
 
-  // Verify JWT
-  const decoded = verifyToken(token, 'access');
-
-  // Fetch user — check cache first (avoids a DB round-trip per request)
+  // Fetch user — check cache first (avoids a user-row round-trip per request).
+  // Session revocation above is intentionally not cached.
   const cacheKey = `auth:user:${decoded.id}`;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

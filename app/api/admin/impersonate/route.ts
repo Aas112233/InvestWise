@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { blacklistedTokens } from '@/db/schema/index';
-import { AuthError, ForbiddenError, AppError } from '@/lib/utils/errors';
+import { and, eq } from 'drizzle-orm';
+import { blacklistedTokens, sessions } from '@/db/schema/index';
+import { AuthError, ForbiddenError, AppError, readJsonBody } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
 import {
   issueImpersonationSession,
@@ -10,6 +11,7 @@ import {
   type ImpersonationSession,
 } from '@/lib/superadmin-service';
 import { verifyToken, blacklistToken } from '@/lib/utils/jwt';
+import { tokenHash } from '@/lib/middleware/auth';
 import { getTokenExpiry } from '@/lib/token-expiry';
 import { getClientIp } from '@/lib/request-meta';
 import { COOKIE_NAMES } from '@/lib/utils/cookies';
@@ -28,15 +30,33 @@ import { COOKIE_NAMES } from '@/lib/utils/cookies';
 const STASH_COOKIE = 'impersonationAdminSession';
 const STASH_MAX_AGE = 60 * 60; // 1h — longer than the 30m session it restores
 
+// Shape persisted in the stash cookie. A named type, because annotating the
+// DELETE parser with `typeof stashed` self-references (it resolves to `never`
+// while its own initializer is being checked) and breaks the build.
+interface StashedAdminSession {
+  access: string;
+  refresh: string | null;
+  targetSessionId: string;
+  targetUserId: string;
+}
+
 function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
-function stashAdminSession(response: NextResponse, request: NextRequest): void {
+function stashAdminSession(response: NextResponse, request: NextRequest, target: ImpersonationSession): void {
   const access = request.cookies.get(COOKIE_NAMES.ACCESS_TOKEN)?.value;
   const refresh = request.cookies.get(COOKIE_NAMES.REFRESH_TOKEN)?.value;
   if (!access) return;
-  response.cookies.set(STASH_COOKIE, JSON.stringify({ access, refresh: refresh ?? null }), {
+  response.cookies.set(
+    STASH_COOKIE,
+    JSON.stringify({
+      access,
+      refresh: refresh ?? null,
+      targetSessionId: target.sessionId,
+      targetUserId: target.targetUserId,
+    }),
+    {
     httpOnly: true,
     secure: isProduction(),
     sameSite: isProduction() ? 'strict' : 'lax',
@@ -67,7 +87,7 @@ export async function POST(request: NextRequest) {
     const platformUser = await requireAuthUser(request);
     requireSuperAdmin(platformUser);
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const { userId } = body;
     if (!userId || typeof userId !== 'string') {
       return NextResponse.json(
@@ -111,7 +131,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    stashAdminSession(response, request);
+    stashAdminSession(response, request, session);
     applyTargetSession(response, session);
     return response;
   } catch (error: unknown) {
@@ -142,10 +162,22 @@ export async function DELETE(request: NextRequest) {
     const token = body?.token;
 
     const stashRaw = request.cookies.get(STASH_COOKIE)?.value;
-    let stashed: { access: string; refresh: string | null } | null = null;
+    let stashed: StashedAdminSession | null = null;
     if (stashRaw) {
       try {
-        stashed = JSON.parse(stashRaw) as { access: string; refresh: string | null };
+        const parsed = JSON.parse(stashRaw) as Partial<StashedAdminSession>;
+        if (
+          typeof parsed.access === 'string' &&
+          typeof parsed.targetSessionId === 'string' &&
+          typeof parsed.targetUserId === 'string'
+        ) {
+          stashed = {
+            access: parsed.access,
+            refresh: typeof parsed.refresh === 'string' ? parsed.refresh : null,
+            targetSessionId: parsed.targetSessionId,
+            targetUserId: parsed.targetUserId,
+          };
+        }
       } catch {
         stashed = null;
       }
@@ -157,24 +189,39 @@ export async function DELETE(request: NextRequest) {
       const db = getDb();
       const current = request.cookies.get(COOKIE_NAMES.ACCESS_TOKEN)?.value;
 
+      // The stash carries the random target session id so exit still revokes
+      // the session if the 30-minute access cookie has already expired. Do not
+      // restore the platform cookies unless PostgreSQL confirms this write.
+      await db
+        .update(sessions)
+        .set({ isActive: false, isExpired: true, logoutTime: new Date() })
+        .where(
+          and(
+            eq(sessions.sessionId, stashed.targetSessionId),
+            eq(sessions.userId, stashed.targetUserId),
+          ),
+        );
+
       if (current) {
-        // blacklisted_tokens.user_id is NOT NULL and must name the token's
-        // OWNER, not the platform admin — so decode it from the token. An
-        // undecodable token (already expired/revoked) is skipped rather than
-        // written under a wrong owner; the in-memory blacklist still applies.
+        // Best-effort token blacklist is defense in depth; the inactive session
+        // is the authoritative revocation and has already been persisted.
         try {
-          const ownerId = verifyToken(current, 'access').id;
-          const expiry = getTokenExpiry(current);
-          await db.insert(blacklistedTokens).values({
-            token: current,
-            type: 'access',
-            userId: ownerId,
-            expiresAt: expiry,
-            reason: 'impersonation_exit',
-          });
-          blacklistToken(current, expiry);
+          const decoded = verifyToken(current, 'access');
+          if (decoded.id === stashed.targetUserId && decoded.sessionId === stashed.targetSessionId) {
+            const expiry = getTokenExpiry(current);
+            await db.insert(blacklistedTokens).values({
+              // sha256 hex at rest, consistent with every blacklist read path.
+              token: tokenHash(current),
+              type: 'access',
+              userId: decoded.id,
+              expiresAt: expiry,
+              reason: 'impersonation_exit',
+            });
+            blacklistToken(current, expiry);
+          }
         } catch {
-          // Never block the restore on a blacklist write.
+          // A missing, expired, or already-blacklisted access token is harmless
+          // after the associated session has been marked inactive.
         }
       }
 
@@ -216,17 +263,26 @@ export async function DELETE(request: NextRequest) {
     }
 
     let targetId = 'unknown';
+    let sessionId: string | undefined;
     try {
       const decoded = verifyToken(token, 'access');
       targetId = decoded.id;
+      sessionId = decoded.sessionId;
     } catch {
       // Already invalid/expired — still record the revoke attempt.
     }
 
     const db = getDb();
     const expiry = getTokenExpiry(token);
+    if (sessionId && targetId !== 'unknown') {
+      await db
+        .update(sessions)
+        .set({ isActive: false, isExpired: true, logoutTime: new Date() })
+        .where(and(eq(sessions.sessionId, sessionId), eq(sessions.userId, targetId)));
+    }
     await db.insert(blacklistedTokens).values({
-      token,
+      // sha256 hex at rest, consistent with every blacklist read path.
+      token: tokenHash(token),
       type: 'access',
       userId: platformUser.id,
       expiresAt: expiry,

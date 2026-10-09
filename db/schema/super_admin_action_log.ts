@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, timestamp, jsonb, index } from 'drizzle-orm/pg-core';
-import { users } from './users.js';
-import { tenants } from './tenants.js';
+import { users } from './users';
+import { tenants } from './tenants';
 
 // Platform-tier audit trail, separate from tenant audit_logs.
 // Survives tenant force-delete (no cascade) so platform actions stay provable.

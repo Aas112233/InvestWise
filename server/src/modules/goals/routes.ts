@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { protect, requirePermission } from '../../middleware/auth.js';
-import { validate } from '../../middleware/validate.js';
-import { createGoalSchema, updateGoalSchema } from './validation.js';
-import { getGoals, getGoalById, createGoal, updateGoal, deleteGoal } from './controller.js';
+import { protect, requirePermission } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
+import { createGoalSchema, updateGoalSchema } from './validation';
+import { getGoals, getGoalById, createGoal, updateGoal, deleteGoal } from './controller';
 
 const router = Router();
 

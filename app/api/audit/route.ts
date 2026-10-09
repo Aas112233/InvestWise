@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
           userRole: users.role,
         })
         .from(auditLogs)
-        .leftJoin(users, eq(auditLogs.userId, users.id))
+        .leftJoin(users, and(eq(auditLogs.userId, users.id), eq(users.tenantId, tenantId)))
         .where(whereClause)
         .orderBy(orderByClause)
         .limit(limit)

@@ -337,14 +337,14 @@ if "%RUN_SEED%"=="1" (
 :: ============================================================================
 echo.
 echo ================================================
-echo   Starting Next.js dev server...
+echo   Starting Next.js dev server (Turbopack)...
 echo   Open : http://localhost:%NEXT_PORT%/login
 echo   Stop : Ctrl+C
 echo ================================================
 echo.
 
 pushd "%ROOT_DIR%"
-call npx next dev -p %NEXT_PORT%
+call npx next dev --turbopack -p %NEXT_PORT%
 set "EXIT_CODE=!errorlevel!"
 popd
 

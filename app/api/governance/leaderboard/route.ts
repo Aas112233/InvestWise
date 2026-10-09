@@ -41,7 +41,14 @@ export async function GET(request: NextRequest) {
         status: members.status,
       })
       .from(members)
-      .where(and(eq(members.tenantId, tenantId), eq(members.status, 'active')))
+      // Soft-deleted members must never be ranked. A legacy row can still
+      // carry status='active' after removal, so the isDeleted predicate is
+      // required in addition to the status filter.
+      .where(and(
+        eq(members.tenantId, tenantId),
+        eq(members.isDeleted, false),
+        eq(members.status, 'active'),
+      ))
       .orderBy(desc(members.performanceScore), desc(members.shares));
 
     const data = rows.map((r, idx) => {

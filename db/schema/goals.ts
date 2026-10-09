@@ -1,7 +1,7 @@
 import { pgTable, uuid, varchar, text, decimal, date, timestamp, index } from 'drizzle-orm/pg-core';
-import { users } from './users.js';
-import { projects } from './projects.js';
-import { tenants } from './tenants.js';
+import { users } from './users';
+import { projects } from './projects';
+import { tenants } from './tenants';
 
 export const goals = pgTable('goals', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -11,6 +11,12 @@ export const goals = pgTable('goals', {
   description: text('description'),
   targetAmount: decimal('target_amount', { precision: 15, scale: 2 }).notNull(),
   currentAmount: decimal('current_amount', { precision: 15, scale: 2 }).notNull().default('0'),
+  /**
+   * #48 — where `current_amount` comes from. `Manual` means a user typed it and
+   * it is NOT backed by a fund balance; the UI must label it "unverified".
+   * `Allocation` is reserved for a future reserve/allocation writer.
+   */
+  progressSource: varchar('progress_source', { length: 20 }).notNull().default('Manual'),
   deadline: date('deadline'),
   status: varchar('status', { length: 50 }).notNull().default('In Progress'),
   type: varchar('type', { length: 50 }).notNull().default('Other'),

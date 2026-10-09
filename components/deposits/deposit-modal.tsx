@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -13,8 +13,9 @@ import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/comp
 import { TopSheet } from "@/components/ui/top-sheet";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
-import { useTenantShareValue } from "@/lib/use-tenant-settings";
-import { buildDepositMonthOptions, buildDepositYearOptions, useFundOptions, useMemberOptions, type DepositRow } from "./shared";
+import { useTenantShareValue, useTenantPaymentMethods } from "@/lib/use-tenant-settings";
+import { PAYMENT_TYPE_LABEL_KEY, type PaymentType } from "@/lib/payment-methods";
+import { buildDepositMonthOptions, buildDepositYearOptions, monthKeyOf, useFundOptions, useHasOpenFiscalPeriod, useMemberOptions, type DepositRow } from "./shared";
 
 // Amount stays a string end-to-end (2dp, no float) to match the API contract.
 const depositSchema = z.object({
@@ -30,8 +31,8 @@ const depositSchema = z.object({
   notes: z.string().trim().optional(),
   collectedDate: z.string().min(1),
   submittedDate: z.string().nullable().optional(),
-  // Add mode only — month/year dropdowns (required at submit, guarded there
-  // since edit mode derives the month from the collected date server-side).
+  // Month/year dropdowns — the month the deposit is FOR. Required at submit
+  // in both modes; edit mode pre-fills from the saved deposit month.
   depositMonth: z.string().optional(),
   depositYear: z.string().optional(),
 });
@@ -40,23 +41,6 @@ type DepositForm = z.infer<typeof depositSchema>;
 
 const inputCls =
   "w-full px-3 py-2 rounded-xl border text-xs bg-card border-border/80 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors";
-
-const METHOD_VALUES = ["Cash", "Bank", "Mobile Banking", "Check", "Other"] as const;
-
-function methodLabelKey(m: string): string {
-  switch (m) {
-    case "Cash":
-      return "deposits.methods.cash";
-    case "Bank":
-      return "deposits.methods.bank";
-    case "Mobile Banking":
-      return "deposits.methods.mobile";
-    case "Check":
-      return "deposits.methods.check";
-    default:
-      return "deposits.methods.other";
-  }
-}
 
 // Single deposit entry + edit. The deposit month is chosen explicitly
 // (month + year dropdowns) instead of being auto-derived from the collected
@@ -88,7 +72,7 @@ export function DepositModal({
     watch,
     setValue,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<DepositForm>({
     resolver: zodResolver(depositSchema) as any,
     defaultValues: {
@@ -118,8 +102,9 @@ export function DepositModal({
         shouldValidate: true,
       });
       setValue("submittedDate", initial.submittedDate ? initial.submittedDate.slice(0, 10) : null);
-      setValue("depositMonth", "");
-      setValue("depositYear", "");
+      const savedMonth = initial.depositMonth || monthKeyOf(initial.date);
+      setValue("depositYear", savedMonth ? savedMonth.slice(0, 4) : "");
+      setValue("depositMonth", savedMonth ? savedMonth.slice(5, 7) : "");
     } else if (open && !initial) {
       reset({
         memberId: "",
@@ -162,11 +147,59 @@ export function DepositModal({
     }
   }, [open, isEdit, memberId, membersQuery.data, tenantShareValue, setValue]);
 
-  const memberOptions = (membersQuery.data ?? [])
-    .filter((m) => m.status === "active")
-    .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
-  const fundOptions = (fundsQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
-  const methodOptions = METHOD_VALUES.map((m) => ({ value: m, label: t(methodLabelKey(m)) }));
+  // New deposits are limited to active members, but edit mode must never
+  // hide the RECORDED member: a deposit belonging to a since-deactivated
+  // member (or one whose options row hasn't loaded) would otherwise render
+  // an empty member field that looks like missing data.
+  const memberOptions = useMemo(() => {
+    const list = [...(membersQuery.data ?? [])];
+    if (isEdit && initial?.memberId && !list.some((m) => m.id === initial.memberId)) {
+      list.push({
+        id: initial.memberId,
+        memberId: initial.memberIdStr ?? "",
+        name: initial.memberName ?? "",
+        status: "active",
+      });
+    }
+    return list
+      .filter((m) => m.status === "active" || (isEdit && m.id === initial?.memberId))
+      .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
+  }, [membersQuery.data, isEdit, initial]);
+  // Funds carry no status filter, but the same guard applies when the options
+  // feed fails: fall back to the row's own fund so edit never blanks it.
+  const fundOptions = useMemo(() => {
+    const list = [...(fundsQuery.data ?? [])];
+    if (isEdit && initial?.fundId && !list.some((f) => f.id === initial.fundId)) {
+      list.push({ id: initial.fundId, name: initial.fundName ?? "", balance: "0" });
+    }
+    return list.map((f) => ({ value: f.id, label: f.name }));
+  }, [fundsQuery.data, isEdit, initial]);
+  // Method picker from the tenant's configured payment methods (Settings →
+  // Governance). An edited deposit whose stored method is no longer configured
+  // (legacy row, or the org renamed it) is kept as a raw extra option — the
+  // form must never silently blank real history.
+  const paymentMethods = useTenantPaymentMethods();
+  const hasOpenFiscalPeriod = useHasOpenFiscalPeriod();
+  const methodOptions = useMemo(() => {
+    const opts = paymentMethods.map((m) => {
+      const typeLabel = t(
+        PAYMENT_TYPE_LABEL_KEY[m.type as PaymentType] ?? 'settings.paymentMethods.types.other',
+        { defaultValue: m.type },
+      );
+      // #71: the bilingual pattern `name · type` collapses to a duplicate when
+      // the org names a method after its own type ("Cash" / CASH → "Cash · Cash").
+      // Show the type qualifier only when it adds information.
+      const label = m.name.trim().toLowerCase() === typeLabel.trim().toLowerCase()
+        ? m.name
+        : `${m.name} · ${typeLabel}`;
+      return { value: m.name, label };
+    });
+    const saved = initial?.depositMethod;
+    if (isEdit && saved && !opts.some((o) => o.value === saved)) {
+      opts.unshift({ value: saved, label: saved });
+    }
+    return opts;
+  }, [paymentMethods, t, isEdit, initial?.depositMethod]);
   const monthOptions = buildDepositMonthOptions(t);
   const yearOptions = buildDepositYearOptions();
 
@@ -188,6 +221,13 @@ export function DepositModal({
   };
 
   const onSubmit = async (values: DepositForm) => {
+    // Month + year are explicit user choices (§15) — the server validates
+    // the combined YYYY-MM and stores it as the deposit month.
+    if (!values.depositMonth || !values.depositYear) {
+      toast.error(t("deposits.modal.selectMonth"));
+      return;
+    }
+    const selectedMonth = `${values.depositYear}-${values.depositMonth}`;
     try {
       if (isEdit && initial) {
         // Edit goes through the single finance path (atomic revert + apply
@@ -203,6 +243,7 @@ export function DepositModal({
             depositMethod: values.method,
             collectedDate: values.collectedDate,
             submittedDate: values.submittedDate || undefined,
+            depositMonth: selectedMonth,
           }),
         });
         queryClient.invalidateQueries({ queryKey: ["deposits"] });
@@ -210,14 +251,6 @@ export function DepositModal({
         queryClient.invalidateQueries({ queryKey: ["funds"] });
         toast.success(t("deposits.updatedToast"));
       } else {
-        // Month + year are explicit user choices in add mode (§15) — the
-        // server validates the combined YYYY-MM and uses it for
-        // lastDepositMonth and the deposit ledger rows.
-        if (!values.depositMonth || !values.depositYear) {
-          toast.error(t("deposits.modal.selectMonth"));
-          return;
-        }
-        const selectedMonth = `${values.depositYear}-${values.depositMonth}`;
         await apiClient<{ success: boolean; message?: string }>("/deposits", {
           method: "POST",
           body: JSON.stringify({
@@ -249,10 +282,26 @@ export function DepositModal({
   const title = isEdit ? t("deposits.modal.titleEdit") : t("deposits.modal.titleAdd");
 
   return (
-    <TopSheet open={open} onClose={close} title={title}>
+    // `isDirty` comes straight from react-hook-form: any touched field makes
+    // the sheet confirm before discarding (report issue 7).
+    <TopSheet open={open} onClose={close} title={title} isDirty={isDirty}>
       <form method="post" onSubmit={handleSubmit(onSubmit)} noValidate>
         <ERPFormLayout>
           <ERPFormSection title={title}>
+            {hasOpenFiscalPeriod.data === false && (
+              // #65 / #0: the write path fails closed with no OPEN fiscal
+              // period. Surface it up front so a fully-filled form never ends
+              // in an unexplained refusal.
+              <div
+                role="alert"
+                className="mb-3 rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+              >
+                {t("deposits.modal.noOpenFiscalPeriod", {
+                  defaultValue:
+                    "No fiscal year is open. Start one in Fiscal Years before recording deposits — otherwise the save will be refused.",
+                })}
+              </div>
+            )}
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("deposits.modal.member")} required error={errors.memberId ? t("deposits.modal.selectMember") : undefined}>
                 <AppDropdown
@@ -304,8 +353,7 @@ export function DepositModal({
                 />
               </ERPFormField>
             </ERPFormGrid>
-            {!isEdit && (
-              <ERPFormGrid columns={2}>
+            <ERPFormGrid columns={2}>
                 <ERPFormField label={t("deposits.modal.depositMonth")} required>
                   <AppDropdown
                     options={monthOptions}
@@ -323,7 +371,6 @@ export function DepositModal({
                   />
                 </ERPFormField>
               </ERPFormGrid>
-            )}
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("deposits.modal.reference")}>
                 <input type="text" placeholder={t("deposits.modal.referencePlaceholder")} {...register("reference")} className={`${inputCls} font-mono`} disabled={isEdit} />

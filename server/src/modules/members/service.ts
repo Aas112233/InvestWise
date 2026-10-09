@@ -1,9 +1,9 @@
 import { eq, and, ilike, or, sql, desc, asc, type SQL, type SQLWrapper } from 'drizzle-orm';
-import { getDb } from '../../lib/db.js';
-import { members, transactions, profitAllocations, fiscalPeriods } from '../../db/schema/index.js';
-import { getPaginationParams, formatPaginatedResponse } from '../../middleware/api.js';
-import { AppError } from '../../shared/errors.js';
-import { canViewMemberPII, maskMemberPII } from '@/lib/member-privacy';
+import { getDb } from '../../lib/db';
+import { members, transactions, profitAllocations, fiscalPeriods } from '../../db/schema/index';
+import { getPaginationParams, formatPaginatedResponse } from '../../middleware/api';
+import { AppError } from '../../shared/errors';
+import { canViewMemberPII, maskMemberPII, canViewMemberReviewData, maskMemberReviewData } from '@/lib/member-privacy';
 
 /** Member directory — paginated list with contributed totals + masking. */
 
@@ -36,6 +36,11 @@ const MEMBER_FIELDS = {
   avatar: members.avatar,
   joinDate: members.joinDate,
   totalArrears: members.totalArrears,
+  // Governance review data — the directory's Warnings column renders this.
+  // It was missing from the select, so every row displayed 0 regardless of
+  // what the governance sweep had recorded (a silently lying table column).
+  warningCount: members.warningCount,
+  performanceScore: members.performanceScore,
   hasUserAccess: members.hasUserAccess,
   userId: members.userId,
   nomineeName: members.nomineeName,
@@ -54,27 +59,40 @@ const MEMBER_FIELDS = {
  * exact numeric math on the DB side — no JS float anywhere near the money
  * (§12). Both predicates are required: the row set must stay inside the
  * member's own tenant even though the outer query is already scoped (§6).
+ *
+ * The outer reference is written with LITERAL quoted identifiers, not
+ * interpolated Drizzle table objects. Drizzle de-qualifies a `sql` fragment's
+ * column refs when the table object is also the query's FROM target — it emits
+ * `"member_id" = "id"` / `"tenant_id" = "tenant_id"`, and inside the subquery's
+ * scope those bare names bind to `transactions` (the inner table), making the
+ * predicate a tautology. The result was a silently-zero column for every row.
+ * Quoting `"members"."id"` by hand keeps the correlation pointing at the
+ * member row. (Verified: the per-member total now reconciles to the ledger.)
  */
 const totalDepositedExpr: SQL = sql`ROUND(COALESCE((
-  SELECT SUM(${transactions.amount}::numeric)
-  FROM ${transactions}
-  WHERE ${transactions.memberId} = ${members.id}
-    AND ${transactions.tenantId} = ${members.tenantId}
-    AND ${transactions.type} = 'Deposit'
-    AND ${transactions.status} = 'Completed'
-    AND ${transactions.isDeleted} = false
+  SELECT SUM(t.amount::numeric)
+  FROM transactions t
+  WHERE t.member_id = "members"."id"
+    AND t.tenant_id = "members"."tenant_id"
+    AND t.type = 'Deposit'
+    AND t.status IN ('Completed', 'Success')
+    AND t.is_deleted = false
 ), 0), 2)`;
 
-/** Latest month with a completed deposit, derived from the same row set as the total. */
-const lastDepositMonthExpr = sql<string>`TO_CHAR((
-  SELECT MAX(${transactions.date})
-  FROM ${transactions}
-  WHERE ${transactions.memberId} = ${members.id}
-    AND ${transactions.tenantId} = ${members.tenantId}
-    AND ${transactions.type} = 'Deposit'
-    AND ${transactions.status} = 'Completed'
-    AND ${transactions.isDeleted} = false
-), 'YYYY-MM')`;
+/**
+ * Latest month a completed deposit is FOR — stored deposit_month first,
+ * collected-date month only for legacy rows without one. Uses the same literal
+ * outer-reference technique as `totalDepositedExpr` (see above).
+ */
+const lastDepositMonthExpr = sql<string>`(
+  SELECT MAX(COALESCE(t.deposit_month, TO_CHAR(t.date AT TIME ZONE 'UTC', 'YYYY-MM')))
+  FROM transactions t
+  WHERE t.member_id = "members"."id"
+    AND t.tenant_id = "members"."tenant_id"
+    AND t.type = 'Deposit'
+    AND t.status IN ('Completed', 'Success')
+    AND t.is_deleted = false
+)`;
 
 /**
  * Declared run rate: the per-share rate of the most recent CLOSED fiscal
@@ -128,7 +146,9 @@ export async function listMembers(
     throw new AppError('Tenant context required', 403, 'TENANT_REQUIRED');
   }
 
-  const conditions: (SQLWrapper | undefined)[] = [eq(members.tenantId, tenantId)];
+  // Soft-deleted members are excluded from the directory and every dropdown
+  // feed (they share this list). Their ledger/penalty rows survive for audit.
+  const conditions: (SQLWrapper | undefined)[] = [eq(members.tenantId, tenantId), eq(members.isDeleted, false)];
 
   if (params.search) {
     // Escape LIKE wildcards so user input like "50%" matches literally.
@@ -166,6 +186,15 @@ export async function listMembers(
     .select({
       ...MEMBER_FIELDS,
       totalCount: sql<number>`COUNT(*) OVER()`,
+      // Directory rows carry this so the UI can disable Delete for members
+      // with financial history (the DELETE route enforces the same rule).
+      // EXISTS over the memberId-leading index — a probe per row, even at
+      // the 500-row dropdown cap. The outer reference is a literal quoted
+      // identifier for the same de-qualification reason as
+      // `totalDepositedExpr` above (interpolating `${members.id}` emitted a
+      // bare `"id"` that bound to the inner `t` table, so this always
+      // returned false).
+      hasTransactions: sql<boolean>`EXISTS (SELECT 1 FROM transactions t WHERE t.member_id = "members"."id")`,
       // Stored member equity (deposits + reinvested dividends). Kept for the
       // detail sheet; the directory's "Total Contributed" uses the derived
       // deposits-only total below.
@@ -188,9 +217,12 @@ export async function listMembers(
 
   // PII policy shared with GET /api/members/[id] (lib/member-privacy.ts):
   // Admin/Manager see everything; a member sees their own record; everyone
-  // else (incl. Auditor) gets the masked shape.
+  // else (incl. Auditor) gets the masked shape. Review metrics (warnings,
+  // performance) are Admin/Manager-only on top of that — the directory hides
+  // the column, and now the payload does too.
+  const canReview = canViewMemberReviewData(userRole);
   const data = rows.map(({ totalCount: _totalCount, ...rest }) =>
-    maskMemberPII(rest, canViewMemberPII(userRole, rest.userId, userId)),
+    maskMemberReviewData(maskMemberPII(rest, canViewMemberPII(userRole, rest.userId, userId)), canReview),
   );
 
   return formatPaginatedResponse(data, page, limit, totalCount);

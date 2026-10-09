@@ -1,8 +1,8 @@
 import { Router } from 'express';
 
-import { protect, requirePermission, admin } from '../../middleware/auth.js';
-import { validate } from '../../middleware/validate.js';
-import { createMemberSchema, updateMemberSchema, onboardMemberSchema } from './validation.js';
+import { protect, requirePermission, admin } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
+import { createMemberSchema, updateMemberSchema, onboardMemberSchema } from './validation';
 import {
   getMembers,
   getMyMemberProfileHandler,
@@ -12,7 +12,7 @@ import {
   deleteMemberHandler,
   onboardMemberHandler,
   recalculateMemberFinancialsHandler,
-} from './controller.js';
+} from './controller';
 
 const router = Router();
 

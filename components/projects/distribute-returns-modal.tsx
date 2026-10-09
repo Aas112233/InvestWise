@@ -43,7 +43,9 @@ export function DistributeReturnsModal({
   const [idempotencyRef, setIdempotencyRef] = useState<string>("");
 
   useEffect(() => {
-    if (isOpen) setIdempotencyRef(newIdempotencyRef());
+    // Prefixed ref: persisted as the ledger reference number (profit/loss
+    // return), so it must read like `PRJ-RET-…`, never a bare UUID.
+    if (isOpen) setIdempotencyRef(newIdempotencyRef("PRJ-RET"));
   }, [isOpen]);
 
   const typeOptions: DropdownOption[] = [

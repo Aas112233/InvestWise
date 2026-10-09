@@ -1,4 +1,5 @@
 import { getDb } from '@/db/index';
+import crypto from 'node:crypto';
 import {
   superAdminActionLog,
   tenants,
@@ -44,6 +45,14 @@ export interface SuperAdminContext {
 }
 
 export const PROTECTED_TENANT_SLUGS = ['default'] as const;
+
+// Defaults stamped by changeTenantSubscription when a status change arrives
+// without dates (the billing UI sends status/plan only). Activation opens a
+// monthly cycle; a bare trial gets the same window tenant-provisioning uses.
+const DEFAULT_BILLING_PERIOD_DAYS = 30;
+const DEFAULT_TRIAL_DAYS = 14;
+// Grace the expiry sweep grants after a paid-through date lapses.
+const GRACE_PERIOD_DAYS = 7;
 
 export function isProtectedTenantSlug(slug: string | null | undefined): boolean {
   if (!slug) return false;
@@ -112,16 +121,43 @@ export async function changeTenantSubscription(
     toPlanId = plan.id;
   }
 
+  // Billing lifecycle guarantee: every trial/active row must carry a deadline
+  // the expiry sweep can act on. A row with no deadline is invisible to the
+  // sweep — an indefinite free pass. The admin UI changes status without dates
+  // (it has no date inputs), so missing deadlines are stamped with defaults
+  // here rather than rejected: activation starts a 30-day billing period from
+  // now, a bare trial gets the same 14-day window provisioning gives tenants.
   const now = new Date();
+  const nextStatus = params.status ?? current?.status ?? 'trial';
+  let nextPeriodEnd =
+    params.currentPeriodEnd !== undefined ? params.currentPeriodEnd : current?.currentPeriodEnd ?? null;
+  let nextTrialEnd =
+    params.trialEndsAt !== undefined ? params.trialEndsAt : current?.trialEndsAt ?? null;
+  if (nextStatus === 'active' && !nextPeriodEnd) {
+    nextPeriodEnd = new Date(now.getTime() + DEFAULT_BILLING_PERIOD_DAYS * 86_400_000);
+  }
+  if (nextStatus === 'trial' && !nextTrialEnd && !nextPeriodEnd) {
+    nextTrialEnd = new Date(now.getTime() + DEFAULT_TRIAL_DAYS * 86_400_000);
+  }
+  // Activating clears a grace window left over from an earlier past_due cycle:
+  // paying restarts the clock, and a stale grace date would otherwise shorten
+  // the very next lapse's window.
+  const clearGrace = params.status === 'active' && params.graceEndsAt === undefined;
+  const nextGrace = clearGrace
+    ? null
+    : params.graceEndsAt !== undefined
+      ? params.graceEndsAt
+      : (current?.graceEndsAt ?? null);
+
   await db.transaction(async (tx) => {
     const patch = {
       ...(toPlanId !== undefined ? { planId: toPlanId } : {}),
       ...(params.status !== undefined ? { status: params.status } : {}),
-      ...(params.graceEndsAt !== undefined ? { graceEndsAt: params.graceEndsAt } : {}),
-      ...(params.currentPeriodEnd !== undefined
-        ? { currentPeriodEnd: params.currentPeriodEnd }
+      ...(nextGrace !== (current?.graceEndsAt ?? null) ? { graceEndsAt: nextGrace } : {}),
+      ...(nextPeriodEnd !== (current?.currentPeriodEnd ?? null)
+        ? { currentPeriodEnd: nextPeriodEnd }
         : {}),
-      ...(params.trialEndsAt !== undefined ? { trialEndsAt: params.trialEndsAt } : {}),
+      ...(nextTrialEnd !== (current?.trialEndsAt ?? null) ? { trialEndsAt: nextTrialEnd } : {}),
       updatedAt: now,
     };
 
@@ -134,12 +170,10 @@ export async function changeTenantSubscription(
       await tx.insert(tenantSubscriptions).values({
         tenantId: params.tenantId,
         planId: toPlanId ?? null,
-        status: params.status ?? 'active',
-        ...(params.graceEndsAt !== undefined ? { graceEndsAt: params.graceEndsAt } : {}),
-        ...(params.currentPeriodEnd !== undefined
-          ? { currentPeriodEnd: params.currentPeriodEnd }
-          : {}),
-        ...(params.trialEndsAt !== undefined ? { trialEndsAt: params.trialEndsAt } : {}),
+        status: nextStatus,
+        graceEndsAt: nextGrace,
+        currentPeriodEnd: nextPeriodEnd,
+        trialEndsAt: nextTrialEnd,
       });
     }
 
@@ -154,10 +188,9 @@ export async function changeTenantSubscription(
       toStatus: params.status ?? current?.status ?? null,
       reason: params.reason ?? null,
       metadata: {
-        currentPeriodEnd:
-          (params.currentPeriodEnd ?? current?.currentPeriodEnd)?.toISOString() ?? null,
-        trialEndsAt: (params.trialEndsAt ?? current?.trialEndsAt)?.toISOString() ?? null,
-        graceEndsAt: (params.graceEndsAt ?? current?.graceEndsAt)?.toISOString() ?? null,
+        currentPeriodEnd: nextPeriodEnd?.toISOString() ?? null,
+        trialEndsAt: nextTrialEnd?.toISOString() ?? null,
+        graceEndsAt: nextGrace?.toISOString() ?? null,
       },
     });
 
@@ -172,9 +205,9 @@ export async function changeTenantSubscription(
         toPlan: params.planSlug ?? null,
         toStatus: params.status ?? null,
         reason: params.reason ?? null,
-        currentPeriodEnd: (params.currentPeriodEnd ?? current?.currentPeriodEnd)?.toISOString() ?? null,
-        trialEndsAt: (params.trialEndsAt ?? current?.trialEndsAt)?.toISOString() ?? null,
-        graceEndsAt: (params.graceEndsAt ?? current?.graceEndsAt)?.toISOString() ?? null,
+        currentPeriodEnd: nextPeriodEnd?.toISOString() ?? null,
+        trialEndsAt: nextTrialEnd?.toISOString() ?? null,
+        graceEndsAt: nextGrace?.toISOString() ?? null,
       } as unknown as Record<string, unknown>,
       ipAddress: context.ipAddress ?? null,
     });
@@ -233,13 +266,20 @@ export async function evaluateSubscriptionExpiry(
     } else if (row.status === 'active' || row.status === 'past_due') {
       const periodEnd = row.currentPeriodEnd;
       if (periodEnd && periodEnd.getTime() <= now.getTime()) {
-        if (row.graceEndsAt && row.graceEndsAt.getTime() <= now.getTime()) {
-          nextStatus = 'expired';
-        } else {
+        // A grace date only counts if it is still ahead of now. Previously the
+        // sweep kept whatever graceEndsAt was stored, so a stale (already
+        // elapsed) date inherited from an earlier billing cycle expired the
+        // tenant the instant the new period lapsed — no grace at all.
+        const graceRunning =
+          row.graceEndsAt != null && row.graceEndsAt.getTime() > now.getTime();
+        if (graceRunning) {
           nextStatus = 'past_due';
-          // Grace runs from the period end, so a fresh non-payment starts its
-          // window rather than inheriting a stale (already elapsed) date.
-          nextGrace = row.graceEndsAt ?? new Date(periodEnd.getTime() + 7 * 86_400_000);
+        } else {
+          // Fresh window from this period end; if even that has already
+          // elapsed (long-unvisited row), expire directly instead of waiting
+          // for another sweep to notice the dead date.
+          nextGrace = new Date(periodEnd.getTime() + GRACE_PERIOD_DAYS * 86_400_000);
+          nextStatus = nextGrace.getTime() <= now.getTime() ? 'expired' : 'past_due';
         }
       }
     }
@@ -572,6 +612,7 @@ export interface ImpersonationSession {
   tenantId: string | null;
   email: string;
   targetUserId: string;
+  sessionId: string;
 }
 
 export async function issueImpersonationSession(
@@ -591,18 +632,39 @@ export async function issueImpersonationSession(
     throw new Error('Cannot impersonate a platform operator');
   }
 
+  const sessionId = crypto.randomUUID();
+  const now = new Date();
+  await db.insert(sessions).values({
+    userId: target.id,
+    sessionId,
+    ipAddress: 'support',
+    userAgent: 'InvestWise support impersonation',
+    locationCountry: 'Unknown',
+    locationCity: 'Unknown',
+    locationRegion: 'Unknown',
+    loginTime: now,
+    lastActivity: now,
+    isActive: true,
+    isExpired: false,
+    deviceInfo: 'Support',
+    osInfo: 'Unknown',
+    browserInfo: 'Unknown',
+  });
+
   const claims = {
     role: normalizeRole(target.role),
     email: target.email,
     tenantId: target.tenantId ?? null,
     subscriptionBlocked: false,
     impersonatedBy: admin.id,
+    sessionId,
   };
   return {
     accessToken: generateAccessToken(target.id, claims, IMPERSONATION_TOKEN_TTL),
-    refreshToken: generateRefreshToken(target.id),
+    refreshToken: generateRefreshToken(target.id, sessionId, IMPERSONATION_TOKEN_TTL, admin.id),
     tenantId: target.tenantId ?? null,
     email: target.email,
     targetUserId: target.id,
+    sessionId,
   };
 }

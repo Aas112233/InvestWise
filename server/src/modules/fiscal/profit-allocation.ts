@@ -1,4 +1,4 @@
-import { getDb } from '../../config/database.js';
+import { getDb } from '../../config/database';
 import {
   fiscalPeriods,
   profitAllocations,
@@ -6,9 +6,9 @@ import {
   funds,
   transactions,
   auditLogs,
-} from '../../db/schema/index.js';
+} from '../../db/schema/index';
 import { eq, and, sql, desc } from 'drizzle-orm';
-import { NotFoundError, AppError } from '../../shared/errors.js';
+import { NotFoundError, AppError } from '../../shared/errors';
 
 export async function executeProfitAllocation(
   fiscalPeriodId: string,

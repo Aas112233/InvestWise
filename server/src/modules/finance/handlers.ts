@@ -23,8 +23,8 @@ import {
   transactionQuerySchema,
   revertDepositSchema,
   type DividendPayload,
-} from './validation.js';
-import * as finance from './service.js';
+} from './validation';
+import * as finance from './service';
 
 /**
  * Financial API — Next.js App Router route handlers.

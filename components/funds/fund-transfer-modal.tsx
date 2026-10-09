@@ -102,7 +102,10 @@ export function FundTransferModal({
         body: JSON.stringify({
           sourceFundId: sourceId,
           targetFundId: destId,
-          amount: amount.trim(),
+          // Must be a JSON number: transferSchema.amount is z.number(), so the
+          // raw string form produced a CHECK/invalid_type rejection and no
+          // transfer ever landed. Decimal safety is enforced server-side.
+          amount: parseFloat(amount.trim()),
           description: reason.trim() || undefined,
         }),
       });

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import * as goalService from './service.js';
+import { asyncHandler } from '../../shared/asyncHandler';
+import * as goalService from './service';
 
 export const getGoals = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.id;

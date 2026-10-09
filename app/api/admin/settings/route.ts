@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getDb, withDbRetry } from '@/db/index';
 import { platformSettings, PLATFORM_SETTINGS_ID } from '@/db/schema/index';
 import { eq } from 'drizzle-orm';
-import { AuthError, ForbiddenError } from '@/lib/utils/errors';
+import { AuthError, ForbiddenError, readJsonUnknown } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
 import { getClientIp } from '@/lib/request-meta';
 import { logSuperAdminAction } from '@/lib/superadmin-service';
@@ -102,7 +102,7 @@ export async function PATCH(request: NextRequest) {
     const platformUser = await requireAuthUser(request);
     requireSuperAdmin(platformUser);
 
-    const parsed = settingsUpdateSchema.safeParse(await request.json());
+    const parsed = settingsUpdateSchema.safeParse(await readJsonUnknown(request));
     if (!parsed.success) {
       return NextResponse.json(fieldError(parsed.error), { status: 400 });
     }

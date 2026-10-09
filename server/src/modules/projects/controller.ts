@@ -1,6 +1,6 @@
 import type { Response, NextFunction } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import * as projectService from './service.js';
+import { asyncHandler } from '../../shared/asyncHandler';
+import * as projectService from './service';
 
 // ---------------------------------------------------------------------------
 // GET /api/projects

@@ -6,15 +6,17 @@ import { useAuth } from "@/lib/auth-context";
 import { useInactivityTimeout } from "@/hooks/use-inactivity-timeout";
 import { SessionTimeoutDialog } from "@/components/ui/session-timeout-dialog";
 import { Sidebar } from "./sidebar";
+import { OfflineBanner } from "./offline-banner";
 import { TopNav, type TenantOption } from "./top-nav";
 import { cn } from "@/lib/utils";
+import { refreshSessionSingleFlight } from "@/lib/api-client";
 
+// Shares api-client's single in-flight rotation instead of issuing a second
+// /api/auth/refresh: concurrent rotations invalidate each other and the loser
+// is told the session was revoked.
 async function refreshSession(): Promise<void> {
-  const res = await fetch("/api/auth/refresh", {
-    method: "POST",
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error(`Session refresh failed: ${res.status}`);
+  const ok = await refreshSessionSingleFlight();
+  if (!ok) throw new Error("Session refresh failed");
 }
 
 // Root application shell: fixed collapsible sidebar + sticky header + session timeout guard.
@@ -89,6 +91,7 @@ export function AppShell({
         )}
       >
         <TopNav tenants={tenants} tenantsLoading={tenantsLoading} />
+        <OfflineBanner />
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
           <div className="max-w-[1600px] mx-auto pb-10">{children}</div>
         </main>

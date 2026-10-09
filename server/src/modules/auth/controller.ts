@@ -1,8 +1,9 @@
 import type { Request, Response } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import * as authService from './service.js';
-import { ForbiddenError } from '../../shared/errors.js';
-import { setAuthCookies, clearAuthCookies, COOKIE_NAMES } from '../../lib/cookies.js';
+import { asyncHandler } from '../../shared/asyncHandler';
+import * as authService from './service';
+import { ForbiddenError } from '../../shared/errors';
+import { setAuthCookies, clearAuthCookies, COOKIE_NAMES } from '../../lib/cookies';
+import { verifyToken } from '../../lib/jwt';
 
 // ---------------------------------------------------------------------------
 // POST /login
@@ -153,7 +154,11 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
 // ---------------------------------------------------------------------------
 export const logoutUser = asyncHandler(async (req: Request, res: Response) => {
   const refreshToken = req.cookies?.[COOKIE_NAMES.REFRESH_TOKEN] || (req.body.refreshToken as string | undefined);
-  const sessionId = req.body.sessionId as string | undefined;
+  const authorization = req.headers.authorization;
+  const accessToken =
+    req.cookies?.[COOKIE_NAMES.ACCESS_TOKEN] ||
+    (authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined);
+  const sessionId = accessToken ? verifyToken(accessToken, 'access').sessionId : undefined;
 
   await authService.logoutUser(req.user!.id, refreshToken, sessionId);
 

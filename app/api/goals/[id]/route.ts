@@ -5,7 +5,7 @@ import { eq, and } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError, ForbiddenError } from '@/lib/utils/errors';
+import { NotFoundError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 
 /** §6 guard: tenant business route — resolve tenantId or fail closed. */
 async function requireTenantContext(request: NextRequest) {
@@ -26,7 +26,7 @@ export async function GET(
   try {
     const ctx = await requireTenantContext(request);
     if ('error' in ctx) return ctx.error;
-    const { tenantId } = ctx;
+    const { user, tenantId } = ctx;
 
     const { id } = await params;
     const db = getDb();
@@ -39,6 +39,7 @@ export async function GET(
         description: goals.description,
         targetAmount: goals.targetAmount,
         currentAmount: goals.currentAmount,
+        progressSource: goals.progressSource,
         deadline: goals.deadline,
         status: goals.status,
         type: goals.type,
@@ -48,11 +49,14 @@ export async function GET(
         updatedAt: goals.updatedAt,
       })
       .from(goals)
-      .leftJoin(projects, eq(goals.linkedProjectId, projects.id))
+      .leftJoin(projects, and(eq(goals.linkedProjectId, projects.id), eq(projects.tenantId, tenantId)))
       .where(and(eq(goals.id, id), eq(goals.tenantId, tenantId)))
       .limit(1);
 
     if (!goal) throw new NotFoundError('Goal');
+    if (normalizeRole(ctx.user.role) === 'Member' && goal.userId !== ctx.user.id) {
+      throw new NotFoundError('Goal');
+    }
 
     return NextResponse.json({
       success: true,
@@ -77,7 +81,7 @@ export async function PUT(
     const { user, tenantId } = ctx;
 
     const { id } = await params;
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const db = getDb();
 
     const [existing] = await db
@@ -102,7 +106,20 @@ export async function PUT(
     if (body.currentAmount !== undefined) updateFields.currentAmount = String(Number(body.currentAmount));
     if (body.deadline !== undefined) updateFields.deadline = body.deadline || null;
     if (body.type !== undefined) updateFields.type = body.type;
-    if (body.linkedProjectId !== undefined) updateFields.linkedProjectId = body.linkedProjectId || null;
+    if (body.linkedProjectId !== undefined) {
+      if (body.linkedProjectId && typeof body.linkedProjectId !== 'string') {
+        throw new ForbiddenError('linkedProjectId must be a string');
+      }
+      if (body.linkedProjectId) {
+        const [linkedProject] = await db
+          .select({ id: projects.id })
+          .from(projects)
+          .where(and(eq(projects.id, body.linkedProjectId), eq(projects.tenantId, tenantId)))
+          .limit(1);
+        if (!linkedProject) throw new NotFoundError('Project');
+      }
+      updateFields.linkedProjectId = body.linkedProjectId || null;
+    }
 
     // Check if goal reached target
     const current = Number(body.currentAmount !== undefined ? body.currentAmount : existing.currentAmount);
@@ -122,6 +139,7 @@ export async function PUT(
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'UPDATE_GOAL',
       resourceType: 'Goal',
       resourceId: id,
@@ -170,6 +188,7 @@ export async function DELETE(
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'DELETE_GOAL',
       resourceType: 'Goal',
       resourceId: id,

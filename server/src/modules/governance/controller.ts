@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import * as penaltyService from './penalty-service.js';
-import * as performanceService from './performance.js';
+import { asyncHandler } from '../../shared/asyncHandler';
+import * as penaltyService from './penalty-service';
+import * as performanceService from './performance';
 
 export const issuePenaltyHandler = asyncHandler(async (req: Request, res: Response) => {
   const result = await penaltyService.issuePenalty(

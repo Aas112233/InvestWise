@@ -7,7 +7,8 @@ import { requireTenant } from '@/lib/tenant';
 import { toCents, fromCents } from '@/lib/money';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
-import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
+import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
@@ -28,8 +29,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
+    // Clamp pagination at the boundary: this GET fans out to four LEFT JOINs
+    // on top of count/SUM work, so an unbounded `limit` is a memory/CPU DoS.
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const skip = (page - 1) * limit;
     const fundId = searchParams.get('fundId');
     const projectId = searchParams.get('projectId');
@@ -75,9 +78,23 @@ export async function GET(request: NextRequest) {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [totalRes, rows] = await Promise.all([
+    const [totalRes, aggRes, rows] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)::int` })
+        .from(transactions)
+        .where(whereClause),
+      // Whole-result-set aggregates for the KPI cards. These deliberately share
+      // `whereClause` (filters, not pagination) so the cards describe the view,
+      // not just the visible page.
+      //   • operationalTotal — expense rows not attributed to a project
+      //   • projectTotal     — expense rows attributed to a project
+      //   • totalExpenses    — every matching row
+      db
+        .select({
+          totalExpenses: sql<number>`coalesce(sum(${transactions.amount}::numeric), 0)::float`,
+          operationalTotal: sql<number>`coalesce(sum(case when ${transactions.projectId} is null then ${transactions.amount}::numeric else 0 end), 0)::float`,
+          projectTotal: sql<number>`coalesce(sum(case when ${transactions.projectId} is not null then ${transactions.amount}::numeric else 0 end), 0)::float`,
+        })
         .from(transactions)
         .where(whereClause),
       db
@@ -105,8 +122,10 @@ export async function GET(request: NextRequest) {
           approvedByName: users.name,
         })
         .from(transactions)
-        .leftJoin(funds, eq(transactions.fundId, funds.id))
-        .leftJoin(projects, eq(transactions.projectId, projects.id))
+        // Related entities are tenant-scoped as well as the transaction; this
+        // prevents a bad legacy FK from exposing another tenant's labels.
+        .leftJoin(funds, and(eq(transactions.fundId, funds.id), eq(funds.tenantId, scopedTenantId)))
+        .leftJoin(projects, and(eq(transactions.projectId, projects.id), eq(projects.tenantId, scopedTenantId)))
         // §6: joined entities must belong to the same tenant — joining on id
         // alone would render another tenant's member/approver names.
         .leftJoin(members, and(eq(transactions.memberId, members.id), eq(members.tenantId, scopedTenantId)))
@@ -118,10 +137,16 @@ export async function GET(request: NextRequest) {
     ]);
 
     const total = totalRes[0]?.count ?? 0;
+    const agg = aggRes[0] ?? { totalExpenses: 0, operationalTotal: 0, projectTotal: 0 };
 
     return NextResponse.json({
       success: true,
       data: rows,
+      metrics: {
+        totalExpenses: agg.totalExpenses,
+        operationalTotal: agg.operationalTotal,
+        projectTotal: agg.projectTotal,
+      },
       pagination: {
         page,
         limit,
@@ -153,7 +178,7 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError('Write permission required for: EXPENSES');
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const {
       fundId,
       projectId,
@@ -189,17 +214,28 @@ export async function POST(request: NextRequest) {
       throw new ValidationError("[Field 'memberId', Code: required] Expense by member is required");
     }
 
-    const expenseAmount = parseFloat(amount);
-    if (isNaN(expenseAmount) || expenseAmount <= 0) {
+    // Integer-cents parsing (§12 — never parseFloat float math on money).
+    // Legacy message precedence is preserved: a clean decimal(15,2) literal
+    // parses exactly in cents; anything else keeps the old split between
+    // "positive number" (non-numeric / zero / negative) and "2 decimal
+    // places" (numeric but over-precise, e.g. 1.999 or 1e3).
+    let expenseCents: number | null = null;
+    if (/^\d+(\.\d{1,2})?$/.test(String(amount ?? ''))) {
+      try {
+        expenseCents = toCents(String(amount));
+      } catch {
+        expenseCents = null;
+      }
+    }
+    if (expenseCents === null || expenseCents <= 0) {
+      const numeric = Number(amount);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        throw new ValidationError('Amount must have at most 2 decimal places');
+      }
       throw new ValidationError('Expense amount must be a positive number');
     }
 
-    // Validate 2 decimal places
-    if (!/^\d+(\.\d{1,2})?$/.test(amount.toString())) {
-      throw new ValidationError('Amount must have at most 2 decimal places');
-    }
-
-    const formattedAmount = expenseAmount.toFixed(2);
+    const formattedAmount = fromCents(expenseCents);
     const refNumber = referenceNumber || `EXP-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const expenseDate = date ? new Date(date) : new Date();
 
@@ -271,14 +307,19 @@ export async function POST(request: NextRequest) {
       throw new ValidationError('Fund is not active');
     }
 
-    // Check if fund has sufficient balance above minimum
-    const fundBalance = parseFloat(fund.balance);
-    const fundMinBalance = parseFloat(fund.minimumBalance || '0');
-    const availableBalance = fundBalance - fundMinBalance;
+    // Check if fund has sufficient balance above minimum (integer cents, §12 —
+    // the authoritative re-check runs under the fund lock inside the tx below;
+    // a malformed balance string defers to that check instead of throwing).
+    let availableCents: number | null = null;
+    try {
+      availableCents = toCents(fund.balance ?? '0') - toCents(fund.minimumBalance || '0');
+    } catch {
+      availableCents = null;
+    }
 
-    if (availableBalance < expenseAmount) {
+    if (availableCents !== null && availableCents < expenseCents) {
       throw new ValidationError(
-        `Insufficient available balance in fund. Available (above minimum): ${availableBalance.toFixed(2)}, Required: ${formattedAmount}`
+        `Insufficient available balance in fund. Available (above minimum): ${fromCents(availableCents)}, Required: ${formattedAmount}`
       );
     }
 
@@ -305,6 +346,7 @@ export async function POST(request: NextRequest) {
     // balance write is atomic SQL arithmetic, so a concurrent deposit,
     // transfer, or expense can never lose an update (§12).
     const { newFundBalance, newProjectExpenses } = await db.transaction(async (tx) => {
+      await assertFiscalPeriodOpen(tx, scopedTenantId, expenseDate);
       const [lockedFund] = await tx
         .select()
         .from(funds)
@@ -313,7 +355,8 @@ export async function POST(request: NextRequest) {
         .limit(1);
       if (!lockedFund) throw new NotFoundError('Fund');
 
-      const expenseCents = toCents(formattedAmount);
+      // expenseCents comes from the outer integer-cents parse of the payload;
+      // the fund balance is re-read under the FOR UPDATE lock here.
       const fundBalanceCents = toCents(lockedFund.balance ?? '0');
       const fundMinBalanceCents = toCents(lockedFund.minimumBalance ?? '0');
       if (fundBalanceCents - fundMinBalanceCents < expenseCents) {
@@ -372,6 +415,7 @@ export async function POST(request: NextRequest) {
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId: scopedTenantId,
       action: 'RECORD_EXPENSE',
       resourceType: 'Transaction',
       resourceId: refNumber,

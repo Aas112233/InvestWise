@@ -1,7 +1,20 @@
 import { NextResponse } from 'next/server';
 import { ZodError, type ZodType } from 'zod';
-import { AppError, normalizeError } from '../shared/errors.js';
-import { normalizeRole, isSuperAdminRole, roleBaselineGrant, isPlatformOwnerEmail } from '../shared/roles.js';
+import { eq, sql } from 'drizzle-orm';
+import { workUnitAsyncStorage } from 'next/dist/server/app-render/work-unit-async-storage.external';
+import { AppError, normalizeError } from '../shared/errors';
+import { normalizeRole, isSuperAdminRole, roleBaselineGrant, isPlatformOwnerEmail } from '../shared/roles';
+import { getDb } from '../lib/db';
+import { tenants } from '../db/schema/index';
+// The repo carries two drizzle-orm installs (root 0.45.x + server 0.38.x).
+// Every query in this file runs on the SERVER copy, pairing server/src/lib/db
+// with server/src/db/schema. The one column the server schema copy lacks
+// (tenants.module_access) is read as a raw jsonb field. Cross-tree helpers
+// (maintenance flags, subscription guard, module entitlements) are pure
+// async functions — no drizzle objects cross the boundary.
+import { getTenantSubscriptionBlocked } from '@/lib/subscription-guard';
+import { moduleForApiPath, resolveModuleAccess } from '@/lib/tenant-modules';
+import { getMaintenanceFlags } from '@/lib/middleware/auth';
 
 /**
  * Route kernel for the financial API: session extraction, Zod body/query
@@ -70,10 +83,21 @@ export function hasAnyScreenPermission(
 
 export function errorResponse(err: unknown): NextResponse {
   const appErr = normalizeError(err);
+  // Intentional AppErrors carry client-safe messages by construction (AGENTS.md
+  // §11) — never mask them, including 5xx (e.g. the 503 maintenance gates in
+  // requireSession must reach the client verbatim, matching
+  // lib/middleware/auth.ts). Unknown failures still normalize to the masked
+  // INTERNAL_ERROR payload.
+  const message =
+    err instanceof AppError
+      ? appErr.message
+      : appErr.statusCode >= 500
+        ? 'An unexpected error occurred'
+        : appErr.message;
   return NextResponse.json(
     {
       success: false,
-      message: appErr.statusCode >= 500 ? 'An unexpected error occurred' : appErr.message,
+      message,
       code: appErr.code,
     },
     { status: appErr.statusCode },
@@ -82,6 +106,24 @@ export function errorResponse(err: unknown): NextResponse {
 
 export function jsonError(message: string, statusCode: number, code: string): NextResponse {
   return NextResponse.json({ success: false, message, code }, { status: statusCode });
+}
+
+/**
+ * Parse a JSON request body that the caller will read field-by-field (rather
+ * than hand to a Zod schema). Fails CLOSED with a 400 on malformed JSON or a
+ * non-object body — never lets a client error surface as a 500.
+ */
+export async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    throw new AppError('Request body must be valid JSON', 400, 'INVALID_JSON');
+  }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new AppError('Request body must be a JSON object', 400, 'INVALID_BODY');
+  }
+  return raw as Record<string, unknown>;
 }
 
 /** Validate a request body against a Zod schema; field errors per §11 format. */
@@ -126,11 +168,118 @@ export function validateQuery<T>(request: Request, schema: ZodType<T>): T {
   return result.data;
 }
 
-/** Authenticated session or 401. */
+const DEFAULT_MAINTENANCE_MESSAGE = 'System is under maintenance. Please try again later.';
+
+/**
+ * Request path for module-entitlement gating. Next.js keeps the live request
+ * (including url.pathname) in the same async storage that powers cookies()/
+ * headers() — requireSession runs inside route handlers, where that store is
+ * always present (session.ts already relies on it via cookies()). Returns null
+ * only outside a request scope (unit tests), which skips the path-dependent
+ * check; every other gate still applies.
+ * ponytail: switch to a stable Next public API when one exists.
+ */
+function currentRequestPathname(): string | null {
+  try {
+    const store = workUnitAsyncStorage.getStore();
+    if (store && store.type === 'request') return store.url.pathname;
+  } catch {
+    // No request scope — fall through to null.
+  }
+  return null;
+}
+
+/**
+ * Authenticated session or 401 — PLUS the tenant-level gates the modern stack
+ * (lib/middleware/auth.ts getAuthContext) applies to every non-delegated
+ * route, with identical status codes and error codes:
+ *   account suspended/inactive -> 401 ACCOUNT_SUSPENDED / ACCOUNT_INACTIVE
+ *   global maintenance         -> 503 MAINTENANCE_MODE
+ *   tenant maintenance         -> 503 TENANT_MAINTENANCE
+ *   tenant suspended           -> 403 TENANT_SUSPENDED
+ *   module not licensed        -> 403 MODULE_NOT_LICENSED
+ *   subscription inactive      -> 403 SUBSCRIPTION_BLOCKED
+ *
+ * Every delegated handler (server/src/modules/<module>/handlers.ts and
+ * app/api/funds/transfer) funnels through this guard or the permission guards
+ * that call it, so the gates hold in one place without touching handlers.
+ *
+ * Platform operators (null tenant) are intentionally NOT gated here: they fall
+ * through to requireTenant in the handler, which confines them to /api/admin
+ * (403 PLATFORM_USE_ADMIN_API) — pre-existing behavior, preserved.
+ */
 export async function requireSession(): Promise<SessionUser> {
-  const { getSessionUser } = await import('../lib/session.js');
+  const { getSessionUser } = await import('../lib/session');
   const user = await getSessionUser();
   if (!user) throw new AppError('Authentication required', 401, 'UNAUTHORIZED');
+
+  // Account status gate — codes mirror lib/middleware/auth.ts. session.ts no
+  // longer collapses suspended/inactive identities to null so these exact
+  // codes reach the client; the check runs per request on the cached identity,
+  // so enforcement is immediate.
+  if (user.status === 'suspended') throw new AppError('Account is suspended', 401, 'ACCOUNT_SUSPENDED');
+  if (user.status === 'inactive') throw new AppError('Account is inactive', 401, 'ACCOUNT_INACTIVE');
+
+  if (user.tenantId) {
+    // Fresh PK lookup per request: suspension must apply the moment an
+    // operator flips the switch, not up to a cache TTL later. A DB error here
+    // propagates (handler catch -> 500): fail closed.
+    const db = getDb();
+    const [tenant] = await db
+      .select({
+        status: tenants.status,
+        isMaintenanceMode: tenants.isMaintenanceMode,
+        // module_access exists in the database (root schema models it) but not
+        // in the server schema copy — read the jsonb column raw.
+        moduleAccess: sql<unknown>`module_access`,
+      })
+      .from(tenants)
+      .where(eq(tenants.id, user.tenantId))
+      .limit(1);
+
+    // A tenant user without a tenant row is a corrupt state — never let it
+    // through the money API (the modern stack skips its gates in this case;
+    // here we fail closed instead).
+    if (!tenant) throw new AppError('Tenant context required', 403, 'TENANT_REQUIRED');
+
+    const isSuperAdmin = isSuperAdminRole(user.role);
+
+    // Maintenance gates. SuperAdmin bypasses both switches so support can
+    // always reach a tenant (mirrors lib/middleware/auth.ts). Flags come from
+    // the shared per-tenant helper (30s cache, global switch + the CALLER's
+    // tenant row — the hardcoded slug='default' lookup is fixed in auth.ts).
+    if (!isSuperAdmin) {
+      const flags = await getMaintenanceFlags(user.tenantId);
+      if (flags.globalMaintenance) {
+        throw new AppError(flags.globalMessage || DEFAULT_MAINTENANCE_MESSAGE, 503, 'MAINTENANCE_MODE');
+      }
+      if (flags.tenantMaintenance || tenant.isMaintenanceMode) {
+        throw new AppError('Tenant is in maintenance mode', 503, 'TENANT_MAINTENANCE');
+      }
+    }
+
+    if (tenant.status === 'suspended') {
+      throw new AppError('Tenant is suspended', 403, 'TENANT_SUSPENDED');
+    }
+
+    // Module entitlement gate — same route-prefix mapping and merge logic as
+    // lib/middleware/auth.ts. A module the tenant is not licensed for is
+    // rejected at the API, not merely hidden in the sidebar.
+    if (!isSuperAdmin) {
+      const pathname = currentRequestPathname();
+      const required = pathname ? moduleForApiPath(pathname) : null;
+      if (required && resolveModuleAccess(tenant.moduleAccess)[required] === false) {
+        throw new AppError(`Module '${required}' is not enabled for this organisation`, 403, 'MODULE_NOT_LICENSED');
+      }
+    }
+
+    // Subscription gate — shared helper (60s per-tenant cache), checked LAST
+    // exactly like getAuthContext. Platform operators (null tenant) skipped.
+    if (await getTenantSubscriptionBlocked(user.tenantId)) {
+      throw new AppError('Subscription is inactive. Please contact support.', 403, 'SUBSCRIPTION_BLOCKED');
+    }
+  }
+
   return user;
 }
 

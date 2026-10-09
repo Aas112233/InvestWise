@@ -3,7 +3,7 @@ import { getDb } from '@/db/index';
 import { projects, projectUpdates, projectMembers, members, funds, systemSettings } from '@/db/schema/index';
 import { eq, and, desc } from 'drizzle-orm';
 import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError } from '@/lib/utils/errors';
+import { NotFoundError, readJsonBody } from '@/lib/utils/errors';
 import { projectUpdateSchema } from '@/lib/utils/validation';
 import { requireProjectContext, zodMessage, assertFundInTenant } from '../_helpers';
 
@@ -112,7 +112,7 @@ export async function PUT(
 
     if (!existing) throw new NotFoundError('Project');
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const parsed = projectUpdateSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
@@ -163,6 +163,7 @@ export async function PUT(
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'UPDATE_PROJECT',
       resourceType: 'Project',
       resourceId: id,
@@ -214,6 +215,7 @@ export async function DELETE(
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId,
       action: 'CANCEL_PROJECT',
       resourceType: 'Project',
       resourceId: id,

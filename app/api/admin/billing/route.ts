@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { tenants, users, tenantSubscriptions, subscriptionPlans } from '@/db/schema/index';
 import { eq, desc, count, inArray } from 'drizzle-orm';
-import { AuthError, ForbiddenError, ConflictError } from '@/lib/utils/errors';
+import { AuthError, ForbiddenError, ConflictError, readJsonBody } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
 import { changeTenantSubscription } from '@/lib/superadmin-service';
 import { getClientIp } from '@/lib/request-meta';
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     const platformUser = await requireAuthUser(request);
     requireSuperAdmin(platformUser);
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const {
       tenantId,
       planSlug,
@@ -108,11 +108,21 @@ export async function POST(request: NextRequest) {
       trialEndsAt,
       gracePeriodDays,
     } = body;
-    if (!tenantId) {
+    if (!tenantId || typeof tenantId !== 'string') {
       return NextResponse.json(
         {
           success: false,
           message: "[Field 'tenantId', Code: invalid_type] tenantId is required",
+          code: 'VALIDATION_ERROR',
+        },
+        { status: 400 },
+      );
+    }
+    if (planSlug !== undefined && planSlug !== null && (typeof planSlug !== 'string' || planSlug.length > 100)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "[Field 'planSlug', Code: invalid_type] planSlug must be a string of at most 100 characters",
           code: 'VALIDATION_ERROR',
         },
         { status: 400 },

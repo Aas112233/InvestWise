@@ -6,8 +6,9 @@ import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
-import { ValidationError, ForbiddenError, NotFoundError, LockedError } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError, NotFoundError, LockedError, readJsonBody } from '@/lib/utils/errors';
 import { toCents, fromCents } from '@/lib/money';
+import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
@@ -52,7 +53,15 @@ export async function POST(
       throw new ValidationError('Transaction is not a deposit');
     }
 
-    const body = await request.json();
+    // Segregation of duties: the requester can never approve their own
+    // deposit request. The full row is selected above, so createdBy is
+    // present; the guard only skips genuinely NULL (legacy pre-createdBy)
+    // rows — it never fires for a different approver.
+    if (deposit.createdBy && deposit.createdBy === user.id) {
+      throw new ValidationError("[Field 'createdBy', Code: SELF_APPROVAL] You cannot approve your own deposit request.");
+    }
+
+    const body = await readJsonBody(request);
 
     // Share numbers are one-time setup (member creation). Approvals never
     // change them — a non-zero payload is rejected, not silently applied.
@@ -110,6 +119,19 @@ export async function POST(
     // INSIDE the tx; balance writes are atomic SQL arithmetic so concurrent
     // movements can never lose an update. All math in integer cents (§12).
     const { newFundBalance, newMemberContributed } = await db.transaction(async (tx) => {
+      await assertFiscalPeriodOpen(tx, scopedTenantId, collectedDate);
+      // Re-check under the fiscal lock and transaction-row lock. Concurrent
+      // approvals must not credit the same pending request twice.
+      const [lockedDeposit] = await tx
+        .select({ status: transactions.status, type: transactions.type, isDeleted: transactions.isDeleted })
+        .from(transactions)
+        .where(and(eq(transactions.id, id), eq(transactions.tenantId, scopedTenantId)))
+        .for('update')
+        .limit(1);
+      if (!lockedDeposit || lockedDeposit.isDeleted) throw new NotFoundError('Deposit transaction');
+      if (lockedDeposit.type !== 'Deposit') throw new ValidationError('Transaction is not a deposit');
+      if (lockedDeposit.status !== 'PENDING') throw new ValidationError('Only pending deposits can be approved');
+
       const sourceFundId = deposit.fundId!;
       const sourceMemberId = deposit.memberId!;
       const [lockedFund] = await tx
@@ -174,6 +196,7 @@ export async function POST(
 
     await logAudit({
       user: { id: user.id, name: user.name },
+      tenantId: scopedTenantId,
       action: 'APPROVE_DEPOSIT',
       resourceType: 'Transaction',
       resourceId: id,

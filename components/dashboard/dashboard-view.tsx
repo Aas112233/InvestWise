@@ -520,6 +520,16 @@ export function DashboardView({
                   </div>
                 </div>
               </div>
+
+              {/* #10 — state the divisor so the indicator is auditable: burn is
+                  the current calendar month's spend, falling back to the
+                  3-month average only before the current month has expenses. */}
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                {t("dashboard.fundsHealthMethod", {
+                  defaultValue:
+                    "Runway = net reserves ÷ monthly burn. Monthly burn is the current calendar month's expenses, or the trailing 3-month average when this month has none yet.",
+                })}
+              </p>
             </div>
           ) : (
             <EmptyChart

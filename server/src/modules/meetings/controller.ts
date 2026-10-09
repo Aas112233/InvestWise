@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import * as meetingService from './service.js';
+import { asyncHandler } from '../../shared/asyncHandler';
+import * as meetingService from './service';
 
 export const createMeetingHandler = asyncHandler(async (req: Request, res: Response) => {
   const result = await meetingService.createMeeting(req.body, req.user!.id, req.user!.name);

@@ -1,8 +1,8 @@
-import { getDb } from '../../config/database.js';
-import { auditLogs, users } from '../../db/schema/index.js';
+import { getDb } from '../../config/database';
+import { auditLogs, users } from '../../db/schema/index';
 import { eq, and, gte, lte, count, desc, asc, sql } from 'drizzle-orm';
-import { getPaginationParams, formatPaginatedResponse } from '../../shared/types.js';
-import type { PaginatedResponse } from '../../shared/types.js';
+import { getPaginationParams, formatPaginatedResponse } from '../../shared/types';
+import type { PaginatedResponse } from '../../shared/types';
 
 interface AuditLogQuery {
   page?: string;

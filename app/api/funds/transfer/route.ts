@@ -5,12 +5,26 @@ import { AppError } from '@/server/shared/errors';
 
 export const dynamic = 'force-dynamic';
 
+/** Parse the JSON body; a malformed/non-object body is a 400, never a 500. */
+async function readBody(request: NextRequest): Promise<any> {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    throw new AppError('Request body must be valid JSON', 400, 'INVALID_JSON');
+  }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new AppError('Request body must be a JSON object', 400, 'INVALID_BODY');
+  }
+  return raw;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await requirePermission('FUNDS_MANAGEMENT', 'WRITE');
     requireTenant(user);
 
-    const body = await request.json();
+    const body = await readBody(request);
     const sourceFundId = body.sourceFundId || body.fromFundId;
     const targetFundId = body.targetFundId || body.toFundId;
     const amount = body.amount;

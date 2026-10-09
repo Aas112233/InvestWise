@@ -10,29 +10,12 @@ import { TopSheet } from "@/components/ui/top-sheet";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useLocale } from "@/lib/i18n";
-import { useTenantShareValue } from "@/lib/use-tenant-settings";
+import { useTenantShareValue, useTenantPaymentMethods } from "@/lib/use-tenant-settings";
+import { PAYMENT_TYPE_LABEL_KEY, type PaymentType } from "@/lib/payment-methods";
 import { DepositsListView } from "./deposits-list-view";
 import { buildDepositMonthOptions, buildDepositYearOptions, useFundOptions, useMemberOptions } from "./shared";
 
 const AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
-const REQUEST_METHODS = ["BANK_TRANSFER", "BKASH", "NAGAD", "ROCKET", "CASH", "OTHER"] as const;
-
-function requestMethodLabelKey(m: string): string {
-  switch (m) {
-    case "BANK_TRANSFER":
-      return "requestDeposit.methods.bankTransfer";
-    case "BKASH":
-      return "requestDeposit.methods.bkash";
-    case "NAGAD":
-      return "requestDeposit.methods.nagad";
-    case "ROCKET":
-      return "requestDeposit.methods.rocket";
-    case "CASH":
-      return "requestDeposit.methods.cash";
-    default:
-      return "requestDeposit.methods.other";
-  }
-}
 
 const inputCls =
   "w-full px-3 py-2 rounded-xl border text-xs bg-card border-border/80 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors";
@@ -146,7 +129,21 @@ export function DepositRequestView() {
         .filter((m) => m.status === "active")
         .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
   const fundOptions = (fundsQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
-  const methodOptions = REQUEST_METHODS.map((m) => ({ value: m, label: t(requestMethodLabelKey(m)) }));
+  // Method picker comes from the tenant's Settings → Governance list (name +
+  // channel type); the stored value is the configured name itself.
+  const paymentMethods = useTenantPaymentMethods();
+  const methodOptions = paymentMethods.map((m) => {
+    const typeLabel = t(
+      PAYMENT_TYPE_LABEL_KEY[m.type as PaymentType] ?? 'settings.paymentMethods.types.other',
+      { defaultValue: m.type },
+    );
+    // #71: drop the type qualifier when it merely repeats the method name
+    // ("Cash" / CASH → "Cash", not "Cash · Cash").
+    const label = m.name.trim().toLowerCase() === typeLabel.trim().toLowerCase()
+      ? m.name
+      : `${m.name} · ${typeLabel}`;
+    return { value: m.name, label };
+  });
   const monthOptions = buildDepositMonthOptions(t);
   const yearOptions = buildDepositYearOptions();
 

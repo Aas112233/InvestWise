@@ -1,10 +1,10 @@
-import { pgTable, uuid, varchar, text, decimal, boolean, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, decimal, boolean, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { tenants } from './tenants.js';
-import { members } from './members.js';
-import { projects } from './projects.js';
-import { funds } from './funds.js';
-import { users } from './users.js';
+import { tenants } from './tenants';
+import { members } from './members';
+import { projects } from './projects';
+import { funds } from './funds';
+import { users } from './users';
 
 export const transactions = pgTable('transactions', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -73,13 +73,23 @@ export const transactions = pgTable('transactions', {
   index('idx_trans_date_status').on(
     table.date.desc(), table.status, table.isDeleted,
   ),
-  // Tenant-scoped idempotency/dup-check lookups (referenceNumber) in the
-  // deposits/expenses/dividends POST routes previously seq-scanned. Partial:
-  // every dup-check query filters out soft-deleted rows, so excluding them
-  // keeps the index smaller.
-  index('idx_trans_tenant_reference').on(
+  // Tenant-scoped idempotency guard (referenceNumber): the deposits/expenses/
+  // dividends POST routes dup-check with a SELECT-then-INSERT pair, which
+  // races under concurrent submits — this partial UNIQUE index is the
+  // database-level backstop so a race cannot double-credit a fund. Mirrors
+  // uq_trans_tenant_reference in db/migrations/0009_ledger_integrity.sql,
+  // which also re-keys pre-existing duplicates (-DUP- suffix) before creating
+  // the index. Partial: soft-deleted rows never take part in dup-checks.
+  uniqueIndex('uq_trans_tenant_reference').on(
     table.tenantId, table.referenceNumber,
-  ).where(sql`is_deleted = false`),
+  ).where(sql`is_deleted = false AND reference_number is not null`),
+  // Deposit month view: GET /api/deposits?depositMonth=YYYY-MM filters on
+  // COALESCE(deposit_month, to_char(date …)) — a function expression no index
+  // can serve, so it full-scans the tenant ledger. This composite lets the
+  // planner scan by (tenant, month) instead when deposit_month is populated.
+  index('idx_trans_tenant_deposit_month').on(
+    table.tenantId, table.depositMonth, table.date.desc(),
+  ),
   // Ledger search box (GET /api/transactions ?search=): contains-match over
   // reference #, description, and the string form of the row id. Requires the
   // pg_trgm extension (CREATE EXTENSION IF NOT EXISTS pg_trgm — applied live

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import * as auditService from './service.js';
+import { asyncHandler } from '../../shared/asyncHandler';
+import * as auditService from './service';
 
 /**
  * GET /api/audit

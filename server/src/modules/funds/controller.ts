@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { asyncHandler } from '../../shared/asyncHandler.js';
-import * as fundService from './service.js';
+import { asyncHandler } from '../../shared/asyncHandler';
+import * as fundService from './service';
 
 export const getFunds = asyncHandler(async (req: Request, res: Response) => {
   const { type, status } = req.query as { type?: string; status?: string };

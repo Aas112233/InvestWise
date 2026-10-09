@@ -1,10 +1,10 @@
 import { pgTable, uuid, varchar, text, decimal, boolean, timestamp, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { tenants } from './tenants.js';
-import { members } from './members.js';
-import { projects } from './projects.js';
-import { funds } from './funds.js';
-import { users } from './users.js';
+import { tenants } from './tenants';
+import { members } from './members';
+import { projects } from './projects';
+import { funds } from './funds';
+import { users } from './users';
 
 export const transactions = pgTable('transactions', {
   id: uuid('id').defaultRandom().primaryKey(),

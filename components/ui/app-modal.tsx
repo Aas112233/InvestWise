@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/lib/i18n";
 import { Button } from "./button";
+import { ERPConfirmDialog } from "./erp-confirm-dialog";
 
 export interface AppModalProps {
   isOpen: boolean;
@@ -16,6 +18,15 @@ export interface AppModalProps {
   children: React.ReactNode;
   className?: string;
   maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "6xl" | "full";
+  /**
+   * When true, dismissing the modal (backdrop, X, Escape) first asks for
+   * confirmation instead of silently throwing away what the user typed
+   * (report issue 7). Call the `markDirty`/`markSaved` callbacks the modal
+   * passes to `children` to drive this.
+   */
+  isDirty?: boolean;
+  /** Called after the user confirms discarding their input. */
+  onDiscard?: () => void;
 }
 
 const ANIMATION_DURATION = 200;
@@ -30,10 +41,40 @@ export function AppModal({
   children,
   className,
   maxWidth = "md",
+  isDirty = false,
+  onDiscard,
 }: AppModalProps) {
+  const { t } = useLocale();
   const [isMounted, setIsMounted] = useState(false);
   const [animationState, setAnimationState] = useState<"entering" | "open" | "exiting" | "closed">("closed");
   const backdropRef = useRef<HTMLDivElement>(null);
+  /**
+   * Set on backdrop `pointerdown`, cleared on `pointerup`. The modal only
+   * closes when BOTH ends of the click land on the backdrop.
+   *
+   * Plain `onClick` on the backdrop was closing the dialog when the user
+   * pressed down inside a portaled child (e.g. a dropdown menu rendered
+   * outside the modal's DOM subtree) and released over the backdrop — the
+   * browser then dispatched `click` on the backdrop, destroying the form and
+   * everything typed into it (report issue 6). Requiring the press to also
+   * START on the backdrop makes an in-flight drag from a child harmless.
+   */
+  const backdropPointerDown = useRef(false);
+
+  // Unsaved-changes guard (report issue 7). `isDirtyRef` shadows the prop so
+  // the close path reads the latest value without re-creating handlers.
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  /** Gate every dismissal behind the unsaved-changes confirmation. */
+  const requestClose = () => {
+    if (isDirtyRef.current) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onClose();
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -65,11 +106,12 @@ export function AppModal({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      // Escape is also a dismissal — respect the unsaved-changes guard.
+      if (e.key === "Escape") requestClose();
     };
     if (isOpen) document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  });
 
   if (!isMounted || typeof document === "undefined") return null;
 
@@ -99,7 +141,17 @@ export function AppModal({
             ? "opacity-100 duration-250 ease-out"
             : "opacity-0 duration-200 ease-in",
         )}
-        onClick={onClose}
+        onPointerDown={(e) => {
+          // Only a primary-button press that begins on the backdrop counts.
+          backdropPointerDown.current = e.button === 0 && e.target === e.currentTarget;
+        }}
+        onClick={(e) => {
+          // Close only when the gesture both started and ended on the backdrop
+          // — see `backdropPointerDown` above (report issue 6).
+          const startOnBackdrop = backdropPointerDown.current;
+          backdropPointerDown.current = false;
+          if (e.target === e.currentTarget && startOnBackdrop) requestClose();
+        }}
         aria-hidden
       />
 
@@ -140,7 +192,7 @@ export function AppModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Close"
             className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors -mr-1 -mt-1"
           >
@@ -158,6 +210,22 @@ export function AppModal({
           </div>
         )}
       </div>
+
+      {/* Unsaved-changes confirmation (report issue 7). Rendered as a sibling
+          portal so it stacks above the modal (z-[110] vs z-50). */}
+      <ERPConfirmDialog
+        isOpen={confirmDiscard}
+        title={t("ui.unsavedTitle")}
+        description={t("ui.unsavedBody")}
+        confirmLabel={t("ui.discardConfirm")}
+        cancelLabel={t("ui.discardCancel")}
+        onConfirm={() => {
+          setConfirmDiscard(false);
+          onDiscard?.();
+          onClose();
+        }}
+        onClose={() => setConfirmDiscard(false)}
+      />
     </div>,
     document.body,
   );

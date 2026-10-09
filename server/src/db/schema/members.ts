@@ -1,14 +1,17 @@
-import { pgTable, uuid, varchar, integer, decimal, boolean, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, integer, decimal, boolean, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { tenants } from './tenants.js';
-import { users } from './users.js';
+import { tenants } from './tenants';
+import { users } from './users';
 
 export const members = pgTable('members', {
   id: uuid('id').defaultRandom().primaryKey(),
   tenantId: uuid('tenant_id').references(() => tenants.id),
-  memberId: varchar('member_id', { length: 50 }).unique().notNull(),
+  // Uniqueness is PER TENANT (uq_members_* below): global unique columns in a
+  // shared-DB multi-tenant model block two orgs registering the same person and
+  // turn the create route into a cross-tenant existence oracle.
+  memberId: varchar('member_id', { length: 50 }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
-  email: varchar('email', { length: 255 }).unique().notNull(),
+  email: varchar('email', { length: 255 }).notNull(),
   phone: varchar('phone', { length: 50 }).notNull(),
   role: varchar('role', { length: 50 }).default('Member'),
   shares: integer('shares').default(0).notNull(),
@@ -37,9 +40,16 @@ export const members = pgTable('members', {
   nomineeRelation: varchar('nominee_relation', { length: 100 }),
   nomineeNidOrPassport: varchar('nominee_nid_or_passport', { length: 100 }),
   nomineePhone: varchar('nominee_phone', { length: 50 }),
+  // Soft delete (AGENTS.md §12): row + ledger history survive; directory reads
+  // and dividend rosters filter isDeleted = false.
+  isDeleted: boolean('is_deleted').default(false).notNull(),
+  deletedBy: uuid('deleted_by').references(() => users.id),
+  deletionReason: varchar('deletion_reason', { length: 500 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  uniqueIndex('uq_members_tenant_member_id').on(table.tenantId, table.memberId),
+  uniqueIndex('uq_members_tenant_email').on(table.tenantId, table.email).where(sql`is_deleted = false`),
   index('idx_members_tenant').on(table.tenantId),
   index('idx_members_status_name').on(table.status, table.name),
   index('idx_members_email_status').on(table.email, table.status),

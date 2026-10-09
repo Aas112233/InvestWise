@@ -40,6 +40,7 @@ import { ERPMetricCard, AppDropdown, Button, DropdownOption, CardGridSkeleton } 
 import { AnalysisData, Member } from "@/types";
 import { formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { fiscalMonthSequence, fiscalStartYearForDate, resolveFiscalBounds } from "@/lib/fiscal-periods";
 import { cn } from "@/lib/utils";
 
 interface AnalysisViewProps {
@@ -47,6 +48,8 @@ interface AnalysisViewProps {
   members: Member[];
   isLoading: boolean;
   selectedYear: number;
+  fiscalStartMonth: string;
+  fiscalEndMonth: string;
   selectedMemberId: string;
   onYearChange: (year: number) => void;
   onMemberChange: (memberId: string) => void;
@@ -75,21 +78,39 @@ export function AnalysisView({
   members,
   isLoading,
   selectedYear,
+  fiscalStartMonth,
+  fiscalEndMonth,
   selectedMemberId,
   onYearChange,
   onMemberChange,
   onRefresh,
 }: AnalysisViewProps) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [activeTab, setActiveTab] = useState<"overview" | "regularity" | "leaderboard">("overview");
 
-  const currentYear = new Date().getFullYear();
+  const currentFiscalStartYear = fiscalStartYearForDate(new Date(), fiscalStartMonth);
+  const fiscalYearLabel = resolveFiscalBounds(selectedYear, fiscalStartMonth, fiscalEndMonth).label;
+  const fiscalYearDisplay = `${t("layout.fiscalYearAbbrev", { defaultValue: "FY" })} ${fiscalYearLabel}`;
+  const fiscalMonths = useMemo(() => fiscalMonthSequence(fiscalStartMonth), [fiscalStartMonth]);
+  const monthFormatter = useMemo(
+    () => new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" }),
+    [locale],
+  );
   const yearOptions: DropdownOption[] = useMemo(() => {
-    return [currentYear, currentYear - 1, currentYear - 2, currentYear - 3].map((y) => ({
-      value: String(y),
-      label: `Fiscal Year ${y}`,
-    }));
-  }, [currentYear]);
+    return [currentFiscalStartYear, currentFiscalStartYear - 1, currentFiscalStartYear - 2, currentFiscalStartYear - 3]
+      .map((year) => ({
+        value: String(year),
+        label: `${t("layout.fiscalYearAbbrev", { defaultValue: "FY" })} ${resolveFiscalBounds(year, fiscalStartMonth, fiscalEndMonth).label}`,
+      }));
+  }, [currentFiscalStartYear, fiscalStartMonth, fiscalEndMonth, t]);
+  const chartMonthlyTrends = useMemo(
+    () => data?.monthlyTrends.map((trend, offset) => {
+      const month = fiscalMonths[offset];
+      const date = new Date(Date.UTC(2020, month?.index ?? 0, 1));
+      return { ...trend, month: monthFormatter.format(date) };
+    }) ?? [],
+    [data?.monthlyTrends, fiscalMonths, monthFormatter],
+  );
 
   const memberOptions: DropdownOption[] = useMemo(() => {
     const list: DropdownOption[] = [{ value: "all", label: "All Shareholders (Consolidated)" }];
@@ -113,8 +134,8 @@ export function AnalysisView({
             <AppDropdown
               options={yearOptions}
               value={String(selectedYear)}
-              onChange={(val) => onYearChange(parseInt(val || String(currentYear), 10))}
-              placeholder="Select Year"
+              onChange={(val) => onYearChange(parseInt(val || String(currentFiscalStartYear), 10))}
+              placeholder={t("fiscal.actions.selectYear")}
             />
           </div>
 
@@ -145,32 +166,44 @@ export function AnalysisView({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <ERPMetricCard
-            label="Total Capital Invested"
+            label={t("analysis.totalCapitalInvested")}
             value={formatMoney(metrics?.totalInvested ?? 0)}
             icon={Wallet}
             tone="slate"
-            helperText="Sum of all verified deposits to date"
+            helperText={t("analysis.capitalInvestedHelper", {
+              defaultValue: "Sum of all verified deposits to date",
+            })}
           />
           <ERPMetricCard
-            label="Consolidated Portfolio Value"
+            label={t("analysis.consolidatedPortfolioValue")}
             value={formatMoney(metrics?.totalAssetValue ?? 0)}
             icon={Landmark}
             tone="emerald"
-            helperText="Active project capital + fund reserves"
+            helperText={t("analysis.consolidatedPortfolioHelper", {
+              defaultValue: "Total treasury: active fund balances (project capital included)",
+            })}
           />
           <ERPMetricCard
-            label="Portfolio Net Return"
+            label={t("analysis.portfolioNetReturn")}
             value={formatMoney(metrics?.netProfit ?? 0)}
             icon={TrendingUp}
             tone={(metrics?.netProfit ?? 0) >= 0 ? "emerald" : "rose"}
-            helperText={`Realized Return: ${metrics?.roi ?? 0}%`}
+            helperText={t("analysis.realizedReturn", { value: metrics?.roi ?? 0 })}
           />
           <ERPMetricCard
-            label="Collection Efficiency"
+            label={t("analysis.collectionEfficiency")}
             value={`${metrics?.collectionEfficiency ?? 100}%`}
             icon={ShieldCheck}
             tone="cyan"
-            helperText={`${metrics?.activeProjects ?? 0} active portfolio projects`}
+            // #15: the caption previously read a hardcoded, un-pluralized
+            // "1 active portfolio projects" and paired the efficiency metric
+            // with an unrelated project count. Localized + pluralized.
+            helperText={t(
+              (metrics?.activeProjects ?? 0) === 1
+                ? "analysis.collectionEfficiencyHelperOne"
+                : "analysis.collectionEfficiencyHelperOther",
+              { count: metrics?.activeProjects ?? 0 },
+            )}
           />
         </div>
       )}
@@ -230,7 +263,7 @@ export function AnalysisView({
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                      Monthly Cash Flow Dynamics ({selectedYear})
+                      Monthly Cash Flow Dynamics ({fiscalYearDisplay})
                     </h2>
                     <p className="text-xs text-muted-foreground">
                       Comparison of monthly deposits & earnings (Inflow) versus expenses & dividends (Outflow)
@@ -242,7 +275,7 @@ export function AnalysisView({
                   {data && data.monthlyTrends.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart
-                        data={data.monthlyTrends}
+                        data={chartMonthlyTrends}
                         margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                       >
                         <defs>
@@ -303,7 +336,7 @@ export function AnalysisView({
                     </ResponsiveContainer>
                   ) : (
                     <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                      No transaction records registered for {selectedYear}
+                      No transaction records registered for {fiscalYearDisplay}
                     </div>
                   )}
                 </div>
@@ -328,10 +361,14 @@ export function AnalysisView({
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                      Capital Allocation by Sector
+                      {t("analysis.sectorAllocationTitle", { defaultValue: "Capital Allocation by Sector" })}
                     </h2>
                     <p className="text-xs text-muted-foreground">
-                      Project portfolio weightings across industries
+                      {/* #14: state the measure so the number cannot be read as
+                          "spent" or "remaining" when it means committed budget. */}
+                      {t("analysis.sectorAllocationSubtitle", {
+                        defaultValue: "Committed capital (project budget) by industry",
+                      })}
                     </p>
                   </div>
                 </div>
@@ -448,7 +485,7 @@ export function AnalysisView({
           <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                Shareholder Regularity & Punctuality Matrix ({selectedYear})
+                Shareholder Regularity & Punctuality Matrix ({fiscalYearDisplay})
               </h2>
               <p className="text-xs text-muted-foreground">
                 12-month payment verification across shareholders to monitor commitment and discipline
@@ -473,18 +510,11 @@ export function AnalysisView({
               <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-slate-800">
                 <tr>
                   <th className="py-3 px-4">Shareholder</th>
-                  <th className="py-3 px-2 text-center">Jan</th>
-                  <th className="py-3 px-2 text-center">Feb</th>
-                  <th className="py-3 px-2 text-center">Mar</th>
-                  <th className="py-3 px-2 text-center">Apr</th>
-                  <th className="py-3 px-2 text-center">May</th>
-                  <th className="py-3 px-2 text-center">Jun</th>
-                  <th className="py-3 px-2 text-center">Jul</th>
-                  <th className="py-3 px-2 text-center">Aug</th>
-                  <th className="py-3 px-2 text-center">Sep</th>
-                  <th className="py-3 px-2 text-center">Oct</th>
-                  <th className="py-3 px-2 text-center">Nov</th>
-                  <th className="py-3 px-2 text-center">Dec</th>
+                  {fiscalMonths.map((month) => (
+                    <th key={month.key} className="py-3 px-2 text-center">
+                      {monthFormatter.format(new Date(Date.UTC(2020, month.index, 1)))}
+                    </th>
+                  ))}
                   <th className="py-3 px-4 text-right">Punctuality</th>
                 </tr>
               </thead>
@@ -500,11 +530,8 @@ export function AnalysisView({
                         <div className="text-[11px] font-mono text-slate-400">{item.memberId}</div>
                       </td>
 
-                      {[
-                        "january", "february", "march", "april", "may", "june",
-                        "july", "august", "september", "october", "november", "december",
-                      ].map((mKey) => {
-                        const status = item.months[mKey];
+                      {fiscalMonths.map((month) => {
+                        const status = item.months[month.key];
                         let badgeClass = "bg-slate-100 text-slate-400 dark:bg-slate-800";
                         let text = "—";
 
@@ -517,7 +544,7 @@ export function AnalysisView({
                         }
 
                         return (
-                          <td key={mKey} className="py-3 px-2 text-center">
+                          <td key={month.key} className="py-3 px-2 text-center">
                             <span
                               className={cn(
                                 "inline-block w-6 h-6 leading-6 text-[10px] rounded text-center font-mono",

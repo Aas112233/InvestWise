@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PAYMENT_TYPES } from '@/lib/payment-methods';
 
 export const loginSchema = z.object({
   email: z.string().email().transform((e: string) => e.toLowerCase().trim()),
@@ -31,7 +32,7 @@ export const projectCreateSchema = z.object({
   createNewFund: z.boolean().default(false).optional(),
   newFundName: z.string().trim().max(255).nullable().optional(),
   projectFundHandler: z.string().trim().max(255).nullable().optional(),
-  shareholders: z.array(projectShareholderSchema).default([]),
+  shareholders: z.array(projectShareholderSchema).max(1000, 'Too many shareholders in one project').default([]),
 });
 
 // Partial update: every field optional, but at least one must be present.
@@ -57,7 +58,9 @@ export const projectReturnDistributionSchema = z.object({
 });
 
 export const registerSchema = z.object({
-  name: z.string().min(2),
+  // users.name is varchar(255); without a cap an over-long value reaches the
+  // INSERT and fails as Postgres 22001 (a 500) instead of a field error.
+  name: z.string().min(2).max(255),
   email: z.string().email().transform(e => e.toLowerCase().trim()),
   password: z.string().min(8).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+\-=[\]{}|;:,.<>/~`])/, 'Must include uppercase, lowercase, digit, and special character'),
   role: z.enum(['Admin', 'Administrator', 'Manager', 'Audit', 'Investor', 'Associate Member', 'Member']).default('Member'),
@@ -66,7 +69,7 @@ export const registerSchema = z.object({
 });
 
 export const updateUserSchema = z.object({
-  name: z.string().min(2).optional(),
+  name: z.string().min(2).max(255).optional(),
   email: z.string().email().transform(e => e.toLowerCase().trim()).optional(),
   role: z.enum(['Admin', 'Administrator', 'Manager', 'Audit', 'Investor', 'Associate Member', 'Member']).optional(),
   status: z.enum(['active', 'inactive', 'suspended']).optional(),
@@ -83,6 +86,11 @@ export const adminPasswordResetSchema = z.object({
   password: z.string().min(8).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+\-=[\]{}|;:,.<>/~`])/, 'Must include uppercase, lowercase, digit, and special character'),
 });
 
+const fiscalMonthName = z.enum([
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]);
+
 export const updateSettingsSchema = z.object({
   organization: z
     .object({
@@ -97,17 +105,26 @@ export const updateSettingsSchema = z.object({
     .optional(),
   financial: z
     .object({
-      fiscalYearStart: z.string().optional(),
+      fiscalYearStart: fiscalMonthName.optional(),
       baseCurrency: z.string().max(10).optional(),
       taxRate: z.number().min(0).max(100).optional(),
       accountingMethod: z.enum(['Cash', 'Accrual']).optional(),
-      shareValueBdt: z.number().positive().optional(),
+      shareValueBdt: z.coerce.number().positive().optional(),
       isShareValueLocked: z.boolean().optional(),
       withdrawalLimitPercent: z.number().min(0).max(100).optional(),
       withdrawalNoticeDays: z.number().int().min(0).max(365).optional(),
       maxWithdrawalPerRequest: z.number().min(0).optional(),
       statutoryReservePercent: z.number().min(0).max(100).optional(),
-      fiscalYearEnd: z.string().optional(),
+      fiscalYearEnd: fiscalMonthName.optional(),
+    })
+    .superRefine((financial, ctx) => {
+      if (financial.fiscalYearStart && financial.fiscalYearEnd && financial.fiscalYearStart === financial.fiscalYearEnd) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['fiscalYearEnd'],
+          message: 'Fiscal year start and end months must differ',
+        });
+      }
     })
     .optional(),
   system: z
@@ -131,13 +148,37 @@ export const updateSettingsSchema = z.object({
       /** Months without a deposit before a member becomes suspension-eligible. */
       suspendedAfterMonths: z.number().int().min(2).max(60).optional(),
       meetingTypes: z.array(z.string().min(1)).optional(),
+      /**
+       * Tenant-configurable payment methods (deposit forms list these). Name
+       * is free text the org sets; type is one of the fixed channel
+       * categories in lib/payment-methods.ts.
+       */
+      paymentMethods: z
+        .array(
+          z.object({
+            name: z.string().trim().min(1, 'Payment method name is required').max(40),
+            type: z.enum(PAYMENT_TYPES),
+          }),
+        )
+        .max(20, 'At most 20 payment methods')
+        .superRefine((list, ctx) => {
+          const seen = new Set<string>();
+          for (const m of list) {
+            const key = m.name.toLowerCase();
+            if (seen.has(key)) {
+              ctx.addIssue({ code: 'custom', message: `Duplicate payment method name: ${m.name}` });
+            }
+            seen.add(key);
+          }
+        })
+        .optional(),
       penaltyRules: z
         .array(
           z.object({
             tier: z.number().int().min(1).max(4),
             title: z.string().min(1),
             type: z.enum(['VERBAL_WARNING', 'FUND_DEDUCTION', 'SUSPENSION']),
-            deductionAmount: z.number().min(0).optional(),
+            deductionAmount: z.coerce.number().min(0).optional(),
             isPercentage: z.boolean().optional(),
           }),
         )

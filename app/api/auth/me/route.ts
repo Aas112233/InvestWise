@@ -5,6 +5,8 @@ import { eq } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { AuthError } from '@/lib/utils/errors';
 import { normalizeRole } from '@/lib/roles';
+import { verifyToken } from '@/lib/utils/jwt';
+import { COOKIE_NAMES } from '@/lib/utils/cookies';
 
 const USER_SELECT = {
   id: users.id,
@@ -65,7 +67,21 @@ export async function GET(request: NextRequest) {
       throw new AuthError('User not found', 'USER_NOT_FOUND');
     }
 
-    return NextResponse.json(toUserResponse(user));
+    // Support-session flag: the impersonated access token carries
+    // impersonatedBy (the platform admin's id). Surfacing it lets the header
+    // render the yellow impersonation bar with an exit action. The id itself
+    // is already embedded in the audited token, so exposing it changes nothing.
+    let impersonatedBy: string | null = null;
+    const token = request.cookies.get(COOKIE_NAMES.ACCESS_TOKEN)?.value;
+    if (token) {
+      try {
+        impersonatedBy = verifyToken(token, 'access').impersonatedBy ?? null;
+      } catch {
+        impersonatedBy = null;
+      }
+    }
+
+    return NextResponse.json({ ...toUserResponse(user), impersonatedBy });
   } catch (error: any) {
     console.error('[GET PROFILE ERROR]', error);
     
