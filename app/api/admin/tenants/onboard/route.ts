@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AuthError, ConflictError, ForbiddenError, AppError, readJsonBody } from '@/lib/utils/errors';
+import {
+  AuthError,
+  ConflictError,
+  ForbiddenError,
+  AppError,
+  ValidationError,
+  readJsonBody,
+} from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
 import { logSuperAdminAction } from '@/lib/superadmin-service';
 import { provisionTenant } from '@/lib/tenant-provision';
+import type { FinancialDefaultsInput } from '@/lib/org-setup';
 
 // Platform onboarding hands a 14-day trial and says so in the panel copy
 // (admin.tenants.onboardDesc). Self-serve signup uses the operator-set
@@ -14,24 +22,34 @@ const ONBOARD_TRIAL_DAYS = 14;
 // transaction via lib/tenant-provision (the same path public self-serve
 // signup takes, so the two cannot drift). The org admin is role Admin: full
 // power inside their tenant, locked out of /api/admin (requires SuperAdmin).
+//
+// Parity with self-serve signup (#105): the panel may also send `slug`
+// (optional — derived from the name when omitted), `financial` (currency,
+// share value, date format, fiscal year) and `funds` (extra named funds).
+// Every field is deep-validated inside provisionTenant — resolveFinancialDefaults
+// and normalizeExtraFunds throw ValidationError before the transaction opens —
+// so the route only shape-checks the container.
 export async function POST(request: NextRequest) {
   try {
     const platformUser = await requireAuthUser(request);
     requireSuperAdmin(platformUser);
 
     const body = await readJsonBody(request);
-    const { slug, name, plan = 'standard', maxUsers = 100, adminName, adminEmail, adminPassword } = body;
+    const { slug, name, plan = 'standard', maxUsers = 100, adminName, adminEmail, adminPassword, financial, funds } = body;
 
-    if (!slug || !name || !adminEmail || !adminPassword) {
+    if (!name || !adminEmail || !adminPassword) {
       return NextResponse.json(
-        { success: false, message: 'slug, name, adminEmail and adminPassword are required', code: 'VALIDATION_ERROR' },
+        { success: false, message: 'name, adminEmail and adminPassword are required', code: 'VALIDATION_ERROR' },
         { status: 400 },
       );
+    }
+    if (financial !== undefined && (typeof financial !== 'object' || financial === null || Array.isArray(financial))) {
+      throw new ValidationError("[Field 'financial', Code: invalid_type] Financial configuration must be an object");
     }
 
     const result = await provisionTenant({
       organizationName: name,
-      slug,
+      slug: typeof slug === 'string' && slug.trim() ? slug.trim() : undefined,
       adminName: adminName || 'Organization Admin',
       email: adminEmail,
       password: adminPassword,
@@ -39,6 +57,8 @@ export async function POST(request: NextRequest) {
       onUnknownPlan: 'reject',
       maxUsers,
       trialDays: ONBOARD_TRIAL_DAYS,
+      financial: financial as FinancialDefaultsInput | undefined,
+      funds,
       actor: { userId: platformUser.id, email: platformUser.email },
       reason: 'Onboarded via /api/admin/tenants/onboard',
     });

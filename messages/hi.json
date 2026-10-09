@@ -141,7 +141,91 @@
     "meetings": "Meetings & Performance",
     "governance": "Governance",
     "platform": "Platform",
-    "superadminPanel": "SuperAdmin Panel"
+    "superadminPanel": "SuperAdmin Panel",
+    "users": "उपयोगकर्ता"
+  },
+  "users": {
+    "title": "उपयोगकर्ता प्रबंधन",
+    "totalUsers": "कुल उपयोगकर्ता: {count}",
+    "refresh": "रिफ्रेश",
+    "addUser": "उपयोगकर्ता जोड़ें",
+    "searchPlaceholder": "उपयोगकर्ता खोजें...",
+    "allStatuses": "सभी स्थितियाँ",
+    "empty": "कोई उपयोगकर्ता नहीं मिला",
+    "noAccess": "आपके पास उपयोगकर्ता प्रबंधन तक पहुँच नहीं है।",
+    "columns": {
+      "user": "उपयोगकर्ता",
+      "role": "भूमिका",
+      "status": "स्थिति",
+      "lastLogin": "अंतिम लॉगिन",
+      "created": "बनाया गया",
+      "actions": "कार्रवाई"
+    },
+    "roleLabels": {
+      "Admin": "एडमिन",
+      "Manager": "मैनेजर",
+      "Auditor": "ऑडिटर",
+      "Member": "सदस्य"
+    },
+    "statusLabels": {
+      "active": "सक्रिय",
+      "inactive": "निष्क्रिय",
+      "suspended": "निलंबित"
+    },
+    "rowMenu": {
+      "actions": "कार्रवाई",
+      "edit": "उपयोगकर्ता संपादित करें",
+      "resetPassword": "पासवर्ड रीसेट करें",
+      "activate": "सक्रिय करें",
+      "deactivate": "निष्क्रिय करें"
+    },
+    "activateTitle": "उपयोगकर्ता सक्रिय करें",
+    "activateMessage": "{name} की साइन-इन पहुँच पुनर्स्थापित करें?",
+    "deactivateTitle": "उपयोगकर्ता निष्क्रिय करें",
+    "deactivateMessage": "{name} अब साइन इन नहीं कर पाएगा। उनका इतिहास सुरक्षित रहेगा।",
+    "activatedToast": "{name} सक्रिय हुआ",
+    "deactivatedToast": "{name} निष्क्रिय हुआ",
+    "permLevels": {
+      "NONE": "कोई पहुँच नहीं",
+      "READ": "पठन",
+      "WRITE": "पूर्ण"
+    },
+    "validation": {
+      "nameMin": "नाम कम से कम 2 अक्षर का होना चाहिए",
+      "emailRequired": "ईमेल आवश्यक है",
+      "emailInvalid": "मान्य ईमेल पता दर्ज करें"
+    },
+    "errors": {
+      "loadFailed": "उपयोगकर्ता लोड नहीं हो सके",
+      "saveFailed": "उपयोगकर्ता सहेजा नहीं जा सका"
+    },
+    "form": {
+      "titleAdd": "उपयोगकर्ता जोड़ें",
+      "titleEdit": "उपयोगकर्ता संपादित करें",
+      "titleReset": "पासवर्ड रीसेट करें",
+      "accountTitle": "खाता",
+      "name": "पूरा नाम",
+      "email": "ईमेल",
+      "password": "पासवर्ड",
+      "newPassword": "नया पासवर्ड",
+      "confirmPassword": "पासवर्ड की पुष्टि करें",
+      "role": "भूमिका",
+      "selectRole": "भूमिका चुनें",
+      "passwordRequired": "पासवर्ड आवश्यक है",
+      "passwordPolicyNote": "कम से कम 8 अक्षर, बड़े और छोटे अक्षर, अंक और विशेष संकेत के साथ।",
+      "permissions": "स्क्रीन अनुमतियाँ",
+      "permissionsNote": "ओवरराइड भूमिका की डिफ़ॉल्ट पहुँच के ऊपर लागू होते हैं। अननिर्धारित स्क्रीन भूमिका की डिफ़ॉल्ट विरासत में लेती हैं।",
+      "inherit": "विरासत (भूमिका डिफ़ॉल्ट)",
+      "adminFullAccessNote": "एडमिन के पास हर स्क्रीन तक पूर्ण पहुँच होती है।",
+      "save": "सहेजें",
+      "saving": "सहेजा जा रहा है...",
+      "createdToast": "उपयोगकर्ता {name} बनाया गया",
+      "updatedToast": "उपयोगकर्ता {name} अपडेट हुआ",
+      "resetFor": "{name} के लिए नया पासवर्ड सेट करें",
+      "resetConfirm": "पासवर्ड रीसेट करें",
+      "resetToast": "{name} का पासवर्ड रीसेट हुआ",
+      "passwordMismatch": "पासवर्ड मेल नहीं खाते"
+    }
   },
   "fiscal": {
     "title": "वित्तीय वर्ष प्रबंधन",
@@ -1997,7 +2081,14 @@
       "fieldSlug": "स्लग",
       "fieldName": "नाम",
       "fieldPlan": "प्लान",
-      "fieldMaxUsers": "अधिकतम उपयोगकर्ता"
+      "fieldMaxUsers": "अधिकतम उपयोगकर्ता",
+      "onboardSubmit": "टेनेंट ऑनबोर्ड करें",
+      "slugAutoHint": "संगठन के नाम से स्वतः बना — संपादन योग्य।",
+      "slugInvalid": "छोटे अक्षर, अंक और हाइफ़न उपयोग करें (3–63 वर्ण)।",
+      "maxUsersInvalid": "1 से 100000 के बीच एक पूर्णांक दर्ज करें।",
+      "onboardSuccessTitle": "टेनेंट ऑनबोर्ड हो गया",
+      "onboardSuccessDesc": "{name} तैयार है — एडमिन आपके दिए गए विवरण से साइन इन कर सकता है।",
+      "onboardDone": "पूर्ण"
     },
     "billing": {
       "title": "बिलिंग और सदस्यता",

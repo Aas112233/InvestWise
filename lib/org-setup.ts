@@ -162,6 +162,22 @@ export const DEFAULT_FISCAL_YEAR_START = 'July';
 export const DEFAULT_FISCAL_YEAR_END = 'June';
 export const DEFAULT_SHARE_VALUE = '1000.00';
 
+/**
+ * Client-side password strength meter, 0-4. Mirrors validatePasswordStrength
+ * (lib/utils/password.ts) so the meter tells the truth about what the server
+ * will accept: 8+ chars, upper+lower, digit, special. Lifted here from the
+ * signup page because the SuperAdmin onboarding form (#105) is the third
+ * consumer — one shared definition beats a third copy.
+ */
+export function passwordStrengthScore(password: string): number {
+  let score = 0;
+  if (password.length >= 8) score += 1;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
+  if (/\d/.test(password)) score += 1;
+  if (/[@$!%*?&#^()_+\-=[\]{}|;:,.<>/~`]/.test(password)) score += 1;
+  return score;
+}
+
 /** Money crosses the Postgres boundary as a 2dp string, never a float (§8/§12). */
 const SHARE_VALUE_RE = /^\d{1,10}(\.\d{1,2})?$/;
 

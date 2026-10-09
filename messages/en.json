@@ -141,7 +141,91 @@
     "meetings": "Meetings & Performance",
     "governance": "Governance",
     "platform": "Platform",
-    "superadminPanel": "SuperAdmin Panel"
+    "superadminPanel": "SuperAdmin Panel",
+    "users": "Users"
+  },
+  "users": {
+    "title": "User Management",
+    "totalUsers": "Total users: {count}",
+    "refresh": "Refresh",
+    "addUser": "Add User",
+    "searchPlaceholder": "Search users...",
+    "allStatuses": "All statuses",
+    "empty": "No users found",
+    "noAccess": "You do not have access to user management.",
+    "columns": {
+      "user": "User",
+      "role": "Role",
+      "status": "Status",
+      "lastLogin": "Last login",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "roleLabels": {
+      "Admin": "Admin",
+      "Manager": "Manager",
+      "Auditor": "Auditor",
+      "Member": "Member"
+    },
+    "statusLabels": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "suspended": "Suspended"
+    },
+    "rowMenu": {
+      "actions": "Actions",
+      "edit": "Edit user",
+      "resetPassword": "Reset password",
+      "activate": "Activate",
+      "deactivate": "Deactivate"
+    },
+    "activateTitle": "Activate user",
+    "activateMessage": "Restore sign-in access for {name}?",
+    "deactivateTitle": "Deactivate user",
+    "deactivateMessage": "{name} will no longer be able to sign in. Their history is kept.",
+    "activatedToast": "{name} activated",
+    "deactivatedToast": "{name} deactivated",
+    "permLevels": {
+      "NONE": "No access",
+      "READ": "Read",
+      "WRITE": "Full"
+    },
+    "validation": {
+      "nameMin": "Name must be at least 2 characters",
+      "emailRequired": "Email is required",
+      "emailInvalid": "Enter a valid email address"
+    },
+    "errors": {
+      "loadFailed": "Failed to load users",
+      "saveFailed": "Failed to save user"
+    },
+    "form": {
+      "titleAdd": "Add user",
+      "titleEdit": "Edit user",
+      "titleReset": "Reset password",
+      "accountTitle": "Account",
+      "name": "Full name",
+      "email": "Email",
+      "password": "Password",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm password",
+      "role": "Role",
+      "selectRole": "Select role",
+      "passwordRequired": "Password is required",
+      "passwordPolicyNote": "At least 8 characters with uppercase, lowercase, digit and special character.",
+      "permissions": "Screen permissions",
+      "permissionsNote": "Overrides apply on top of the role's default access. Unset screens inherit the role default.",
+      "inherit": "Inherit (role default)",
+      "adminFullAccessNote": "Admins have full access to every screen.",
+      "save": "Save",
+      "saving": "Saving...",
+      "createdToast": "User {name} created",
+      "updatedToast": "User {name} updated",
+      "resetFor": "Set a new password for {name}",
+      "resetConfirm": "Reset password",
+      "resetToast": "Password reset for {name}",
+      "passwordMismatch": "Passwords do not match"
+    }
   },
   "fiscal": {
     "title": "Fiscal Year Management",
@@ -1997,7 +2081,14 @@
       "fieldSlug": "Slug",
       "fieldName": "Name",
       "fieldPlan": "Plan",
-      "fieldMaxUsers": "Max users"
+      "fieldMaxUsers": "Max users",
+      "onboardSubmit": "Onboard tenant",
+      "slugAutoHint": "Auto-generated from the organization name — editable.",
+      "slugInvalid": "Use lowercase letters, digits and hyphens (3–63 characters).",
+      "maxUsersInvalid": "Enter a whole number between 1 and 100000.",
+      "onboardSuccessTitle": "Tenant onboarded",
+      "onboardSuccessDesc": "{name} is ready — the org admin can sign in with the credentials you set.",
+      "onboardDone": "Done"
     },
     "billing": {
       "title": "Billing & Subscriptions",

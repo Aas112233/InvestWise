@@ -141,7 +141,91 @@
     "meetings": "Meetings & Performance",
     "governance": "Governance",
     "platform": "Platform",
-    "superadminPanel": "SuperAdmin Panel"
+    "superadminPanel": "SuperAdmin Panel",
+    "users": "صارفین"
+  },
+  "users": {
+    "title": "صارف مینجمنٹ",
+    "totalUsers": "کل صارفین: {count}",
+    "refresh": "ری فریش",
+    "addUser": "صارف شامل کریں",
+    "searchPlaceholder": "صارفین تلاش کریں...",
+    "allStatuses": "تمام اسٹیٹس",
+    "empty": "کوئی صارف نہیں ملا",
+    "noAccess": "آپ کو صارف مینجمنٹ تک رسائی حاصل نہیں ہے۔",
+    "columns": {
+      "user": "صارف",
+      "role": "کردار",
+      "status": "اسٹیٹس",
+      "lastLogin": "آخری لاگ ان",
+      "created": "بنایا گیا",
+      "actions": "اعمال"
+    },
+    "roleLabels": {
+      "Admin": "ایڈمن",
+      "Manager": "مینیجر",
+      "Auditor": "آڈیٹر",
+      "Member": "رکن"
+    },
+    "statusLabels": {
+      "active": "فعال",
+      "inactive": "غیر فعال",
+      "suspended": "معطل"
+    },
+    "rowMenu": {
+      "actions": "اعمال",
+      "edit": "صارف میں ترمیم",
+      "resetPassword": "پاس ورڈ ری سیٹ",
+      "activate": "فعال کریں",
+      "deactivate": "غیر فعال کریں"
+    },
+    "activateTitle": "صارف فعال کریں",
+    "activateMessage": "{name} کی سائن ان رسائی بحال کریں؟",
+    "deactivateTitle": "صارف غیر فعال کریں",
+    "deactivateMessage": "{name} سائن ان نہیں کر سکے گا۔ ان کی تاریخ محفوظ رہے گی۔",
+    "activatedToast": "{name} فعال ہو گیا",
+    "deactivatedToast": "{name} غیر فعال ہو گیا",
+    "permLevels": {
+      "NONE": "کوئی رسائی نہیں",
+      "READ": "مطالعہ",
+      "WRITE": "مکمل"
+    },
+    "validation": {
+      "nameMin": "نام کم از کم 2 حروف کا ہونا چاہیے",
+      "emailRequired": "ای میل درکار ہے",
+      "emailInvalid": "درست ای میل پتہ درج کریں"
+    },
+    "errors": {
+      "loadFailed": "صارفین لوڈ نہیں ہو سکے",
+      "saveFailed": "صارف محفوظ نہیں ہو سکا"
+    },
+    "form": {
+      "titleAdd": "صارف شامل کریں",
+      "titleEdit": "صارف میں ترمیم",
+      "titleReset": "پاس ورڈ ری سیٹ",
+      "accountTitle": "اکاؤنٹ",
+      "name": "پورا نام",
+      "email": "ای میل",
+      "password": "پاس ورڈ",
+      "newPassword": "نیا پاس ورڈ",
+      "confirmPassword": "پاس ورڈ کی تصدیق",
+      "role": "کردار",
+      "selectRole": "کردار منتخب کریں",
+      "passwordRequired": "پاس ورڈ درکار ہے",
+      "passwordPolicyNote": "کم از کم 8 حروف، بڑے اور چھوٹے حروف، عدد اور خاص علامت کے ساتھ۔",
+      "permissions": "اسکرین اجازتیں",
+      "permissionsNote": "ترمیمیں کردار کی ڈیفالٹ رسائی کے اوپر لاگو ہوتی ہیں۔ غیر مقررہ اسکرینیں کردار کا ڈیفالٹ ورثے میں لیتی ہیں۔",
+      "inherit": "وراثت (کردار ڈیفالٹ)",
+      "adminFullAccessNote": "ایڈمن کے پاس ہر اسکرین تک مکمل رسائی ہوتی ہے۔",
+      "save": "محفوظ کریں",
+      "saving": "محفوظ ہو رہا ہے...",
+      "createdToast": "صارف {name} بنایا گیا",
+      "updatedToast": "صارف {name} اپ ڈیٹ ہو گیا",
+      "resetFor": "{name} کے لیے نیا پاس ورڈ مقرر کریں",
+      "resetConfirm": "پاس ورڈ ری سیٹ کریں",
+      "resetToast": "{name} کا پاس ورڈ ری سیٹ ہو گیا",
+      "passwordMismatch": "پاس ورڈ ملتے نہیں ہیں"
+    }
   },
   "fiscal": {
     "title": "مالی سال کا انتظام",
@@ -1997,7 +2081,14 @@
       "fieldSlug": "سلگ",
       "fieldName": "نام",
       "fieldPlan": "پلان",
-      "fieldMaxUsers": "زیادہ سے زیادہ صارفین"
+      "fieldMaxUsers": "زیادہ سے زیادہ صارفین",
+      "onboardSubmit": "ٹیننٹ آن بورڈ کریں",
+      "slugAutoHint": "تنظیم کے نام سے خودکار تخلیق — قابل ترمیم۔",
+      "slugInvalid": "چھوٹے حروف، ہندسے اور ہائفن استعمال کریں (3–63 حروف)۔",
+      "maxUsersInvalid": "1 سے 100000 کے درمیان ایک عدد درج کریں۔",
+      "onboardSuccessTitle": "ٹیننٹ آن بورڈ مکمل",
+      "onboardSuccessDesc": "{name} تیار ہے — ایڈمن آپ کی دی گئی تفصیلات سے سائن ان کر سکتا ہے۔",
+      "onboardDone": "مکمل"
     },
     "billing": {
       "title": "بلنگ اور رکنیت",
