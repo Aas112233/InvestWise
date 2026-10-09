@@ -13,7 +13,7 @@ import {
   users,
   memberPenalties,
 } from "@/db/schema/index";
-import { aliasedTable, and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { aliasedTable, and, asc, count, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { fromCents } from "@/lib/money";
 import { SETTLED_DEPOSIT_STATUSES } from "@/lib/ledger-selectors";
 import {
@@ -259,6 +259,22 @@ function emptyToBlank(value: string | null | undefined): string {
 // Core transaction fetch — tenant-scoped joins, chronological, capped
 // ─────────────────────────────────────────────────────────────────────
 
+/**
+ * #103: a capped statement's summary must describe the whole period, not the
+ * rows the table happened to list. Built from the same arrays
+ * `classifyLedgerType` reads (inflow-and-not-outflow, settled only), so the SQL
+ * aggregate cannot drift from the per-row classifier.
+ */
+function signedSumSql(side: "inflow" | "outflow") {
+  const own = side === "inflow" ? INFLOW_TYPES : OUTFLOW_TYPES;
+  const opposite = side === "inflow" ? OUTFLOW_TYPES : INFLOW_TYPES;
+  const list = (values: string[]) => sql.join(values.map((v) => sql`${v}`), sql`, `);
+  return sql`coalesce(sum(case when ${transactions.type} in (${list(own)}) \
+and ${transactions.type} not in (${list(opposite)}) \
+and ${transactions.status} in (${list([...SETTLED_DEPOSIT_STATUSES])}) \
+then ${transactions.amount}::numeric else 0::numeric end), 0)`;
+}
+
 async function fetchTransactionRows(opts: {
   tenantId: string;
   period?: ResolvedPeriod;
@@ -266,7 +282,7 @@ async function fetchTransactionRows(opts: {
   projectId?: string | null;
   fundId?: string | null;
   types?: string[];
-}): Promise<{ rows: TxRow[]; truncated: boolean }> {
+}): Promise<{ rows: TxRow[]; truncated: boolean; totals: { inflow: string; outflow: string; rowCount: number } }> {
   const db = getDb();
   const authorizer = aliasedTable(users, "report_authorizer");
 
@@ -357,7 +373,26 @@ async function fetchTransactionRows(opts: {
     };
   });
 
-  return { rows, truncated };
+  // One aggregate over the FULL filtered set (no joins, no limit): the table
+  // may be capped, the money figures must not be (#103).
+  const [totals] = await db
+    .select({
+      inflow: sql<string>`${signedSumSql("inflow")}::text`,
+      outflow: sql<string>`${signedSumSql("outflow")}::text`,
+      rowCount: count(),
+    })
+    .from(transactions)
+    .where(and(...conditions));
+
+  return {
+    rows,
+    truncated,
+    totals: {
+      inflow: totals?.inflow ?? "0.00",
+      outflow: totals?.outflow ?? "0.00",
+      rowCount: Number(totals?.rowCount ?? 0),
+    },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -436,7 +471,7 @@ function entitySummary(args: BuildArgs): ReportSummaryEntry[] {
 }
 
 async function buildLedger(args: BuildArgs, types?: string[]): Promise<ReportData> {
-  const { rows, truncated } = await fetchTransactionRows({
+  const { rows, truncated, totals } = await fetchTransactionRows({
     tenantId: args.ctx.tenantId,
     period: args.period,
     memberId: args.memberId,
@@ -466,10 +501,15 @@ async function buildLedger(args: BuildArgs, types?: string[]): Promise<ReportDat
     status: r.status,
   }));
 
-  const totalOutflow = sumDecimal(ledgerRows.map((r) => r.debit));
-  const totalInflow = sumDecimal(ledgerRows.map((r) => r.credit));
+  // #103: totals and closing balance come from the aggregate over the whole
+  // period. Summing the listed rows silently understated a capped statement —
+  // `meridian`'s FY2025 ledger has 7,505 rows against a 5,000-row cap, so the
+  // signed "Closing Balance" was missing 2,505 movements. Uncapped reports are
+  // unaffected: this is the same sum the last listed running balance held.
+  const totalOutflow = totals.outflow;
+  const totalInflow = totals.inflow;
   const netCents = decimalToCents(totalInflow) - decimalToCents(totalOutflow);
-  const closing = ledgerRows.length > 0 ? (ledgerRows[ledgerRows.length - 1]?.runningBalance ?? "0.00") : "0.00";
+  const closing = fromCents(netCents);
 
   return {
     definition: args.definition,
@@ -481,7 +521,7 @@ async function buildLedger(args: BuildArgs, types?: string[]): Promise<ReportDat
       { labelKey: S.totalOutflow, value: formatMoneyWithCurrency(totalOutflow, args.ctx.currency) },
       { labelKey: S.netCashFlow, value: formatMoneyWithCurrency(fromCents(netCents), args.ctx.currency) },
       { labelKey: S.closingBalance, value: formatMoneyWithCurrency(closing, args.ctx.currency) },
-      { labelKey: S.rowCount, value: String(ledgerRows.length) },
+      { labelKey: S.rowCount, value: String(totals.rowCount) },
     ],
     truncated,
   };
@@ -529,7 +569,7 @@ async function buildMemberHistory(args: BuildArgs): Promise<ReportData> {
   const memberId = args.memberId as string;
   const member = await lookupMember(args.ctx.tenantId, memberId);
 
-  const { rows, truncated } = await fetchTransactionRows({
+  const { rows, truncated, totals } = await fetchTransactionRows({
     tenantId: args.ctx.tenantId,
     period: args.period,
     memberId,
@@ -550,7 +590,10 @@ async function buildMemberHistory(args: BuildArgs): Promise<ReportData> {
   const summary: ReportSummaryEntry[] = [];
   if (member) summary.push({ labelKey: S.member, value: `${member.name} (${member.code})` });
   if (member) summary.push({ labelKey: S.sharesHeld, value: String(member.shares) });
-  summary.push({ labelKey: S.totalDeposits, value: sumDecimal(data.map((r) => r.amount)) });
+  // #95's rule, second door: this report listed PENDING requests and REJECTED
+  // slips and then summed `amount` over every listed row, so a member's
+  // "Total Deposits" was more than the money they had actually paid in.
+  summary.push({ labelKey: S.totalDeposits, value: totals.inflow });
   summary.push({ labelKey: S.rowCount, value: String(data.length) });
 
   return {
@@ -572,6 +615,8 @@ async function buildMemberContribution(args: BuildArgs): Promise<ReportData> {
 
   const byMember = new Map<string, { code: string; name: string; shares: number; count: number; totalCents: number }>();
   for (const r of rows) {
+    // #95's rule: an unsettled request is not a contribution.
+    if (!(SETTLED_DEPOSIT_STATUSES as readonly string[]).includes(r.status ?? "")) continue;
     const key = r.memberCode || r.member;
     const entry = byMember.get(key) ?? { code: r.memberCode, name: r.member, shares: 0, count: 0, totalCents: 0 };
     entry.count += 1;
