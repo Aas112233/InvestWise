@@ -963,7 +963,9 @@
     "validation": {
       "dateRequired": "Date is required.",
       "dateFuture": "Date cannot be in the future."
-    }
+    },
+    "projectManager": "Project Manager",
+    "projectManagerPlaceholder": "Select member (optional)..."
   },
   "analysis": {
     "portfolio": "Portfolio",

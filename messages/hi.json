@@ -963,7 +963,9 @@
     "validation": {
       "dateRequired": "तिथि आवश्यक है।",
       "dateFuture": "तिथि भविष्य की नहीं हो सकती।"
-    }
+    },
+    "projectManager": "परियोजना प्रबंधक",
+    "projectManagerPlaceholder": "सदस्य चुनें (वैकल्पिक)..."
   },
   "analysis": {
     "portfolio": "Portfolio",

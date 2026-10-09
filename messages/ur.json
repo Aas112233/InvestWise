@@ -963,7 +963,9 @@
     "validation": {
       "dateRequired": "تاریخ درکار ہے۔",
       "dateFuture": "تاریخ مستقبل کی نہیں ہو سکتی۔"
-    }
+    },
+    "projectManager": "پروجیکٹ منیجر",
+    "projectManagerPlaceholder": "رکن منتخب کریں (اختیاری)..."
   },
   "analysis": {
     "portfolio": "Portfolio",

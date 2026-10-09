@@ -49,6 +49,10 @@ export function ProjectFormModal({
   const [category, setCategory] = useState(initialData?.category || "");
   const [description, setDescription] = useState(initialData?.description || "");
   const [status, setStatus] = useState<string>(initialData?.status || "In Progress");
+  // #109: project manager selection. Persisted as projectFundHandler (the
+  // existing varchar column the detail view renders as "Handler: …"); the
+  // dropdown carries the member id, submit maps it back to the member's name.
+  const [projectManagerId, setProjectManagerId] = useState<string | null>(null);
 
   // Financials & ROI
   const [budget, setBudget] = useState(initialData?.budget ? String(initialData.budget) : "");
@@ -91,6 +95,11 @@ export function ProjectFormModal({
       setStatus(initialData.status || "In Progress");
       setFundStrategy("linkExisting");
       setShareholders([]);
+      setProjectManagerId(
+        initialData.projectFundHandler
+          ? members.find((m) => m.name === initialData.projectFundHandler)?.id ?? null
+          : null
+      );
     } else {
       setTitle("");
       setCategory("");
@@ -105,6 +114,7 @@ export function ProjectFormModal({
       setStatus("In Progress");
       setFundStrategy("linkExisting");
       setShareholders([]);
+      setProjectManagerId(null);
     }
     setErrorMessage(null);
   }, [initialData, isOpen]);
@@ -224,6 +234,7 @@ export function ProjectFormModal({
 
     try {
       setIsSubmitting(true);
+      const managerMember = members.find((m) => m.id === projectManagerId);
       await onSubmit({
         title: title.trim(),
         category,
@@ -238,6 +249,7 @@ export function ProjectFormModal({
         newFundName: fundStrategy === "createNew" ? (newFundName.trim() || `${title.trim()} Fund`) : undefined,
         status,
         shareholders: validShareholders,
+        projectFundHandler: managerMember?.name || undefined,
       });
       onClose();
     } catch (err: any) {
@@ -281,6 +293,15 @@ export function ProjectFormModal({
                 value={category}
                 onChange={(val) => setCategory(val || "")}
                 placeholder={t("projects.selectCategory", { defaultValue: "Select category..." })}
+              />
+            </ERPFormField>
+
+            <ERPFormField label={t("projects.projectManager", { defaultValue: "Project Manager" })}>
+              <AppDropdown
+                options={memberOptions}
+                value={projectManagerId}
+                onChange={(val) => setProjectManagerId(val || null)}
+                placeholder={t("projects.projectManagerPlaceholder", { defaultValue: "Select member (optional)..." })}
               />
             </ERPFormField>
           </ERPFormGrid>

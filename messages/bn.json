@@ -963,7 +963,9 @@
     "validation": {
       "dateRequired": "তারিখ প্রয়োজন।",
       "dateFuture": "তারিখ ভবিষ্যতের হতে পারে না।"
-    }
+    },
+    "projectManager": "প্রকল্প ব্যবস্থাপক",
+    "projectManagerPlaceholder": "সদস্য নির্বাচন করুন (ঐচ্ছিক)..."
   },
   "analysis": {
     "portfolio": "পোর্টফোলিও",
