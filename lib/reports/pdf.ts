@@ -1,20 +1,20 @@
 /**
- * PDF report builder (jspdf + jspdf-autotable). Enterprise template:
+ * PDF report builder (pdfkit — fontkit shaping engine). Enterprise template:
  * letterhead + hairline rule, report title + period + provenance,
  * localized summary block, striped data table with repeated header,
  * totals row, and a per-page footer (page x/y, timestamp, confidentiality).
  *
- * Localized documents (Rule §10): non-Latin locales embed their Noto font
- * (Bengali / Devanagari / Naskh Arabic) at request time; Urdu tables render
- * right-aligned.
+ * Localized documents (Rule §10): non-Latin locales embed their Noto-family
+ * font (Bengali / Devanagari / Naskh Arabic) at request time; Urdu tables
+ * render right-aligned.
  *
- * ponytail: jsPDF has no complex-script shaping engine, so Indic conjuncts
- * and Arabic joining render as base glyphs (correct characters, imperfect
- * ligatures). Upgrade path: @react-pdf/renderer (fontkit shaping) or a
- * browser print pipeline — swap buildPdfBytes, the document model stays.
+ * Shaping (#106): pdfkit lays text out through fontkit's HarfBuzz-style
+ * shapers, so Indic matra reordering (কি → matra before ka), conjunct
+ * ligatures (ক্ক → one glyph) and Arabic joining all render correctly —
+ * jsPDF could only emit base codepoints and garbled Indic scripts. The
+ * document model (ReportDocument) is unchanged; only buildPdfBytes moved.
  */
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import PDFDocument from "pdfkit";
 import fs from "node:fs";
 import path from "node:path";
 import type { ReportDocument } from "./data";
@@ -25,10 +25,10 @@ interface PdfFont {
   family: string;
 }
 
-// Static Google-Fonts families that bundle Latin + the local script: jsPDF
-// uses one font per draw call, so every glyph in a mixed-script string
-// (labels, names, money) must exist in the same font. Script-only Noto
-// builds render blanks for ASCII — do not swap them back in.
+// Static Google-Fonts families that bundle Latin + the local script: one font
+// per document, so every glyph in a mixed-script string (labels, names,
+// money) exists in the same font. Script-only Noto builds render blanks for
+// ASCII — do not swap them back in.
 const LOCALE_FONTS: Partial<Record<ReportDocument["locale"], PdfFont>> = {
   bn: { file: "HindSiliguri-Regular.ttf", family: "HindSiliguri" },
   hi: { file: "Hind-Regular.ttf", family: "Hind" },
@@ -36,125 +36,155 @@ const LOCALE_FONTS: Partial<Record<ReportDocument["locale"], PdfFont>> = {
 };
 
 const FONT_DIR = path.join(process.cwd(), "lib", "reports", "fonts");
-const base64Cache = new Map<string, string>();
+const fontCache = new Map<string, Buffer>();
 
-function loadFontBase64(file: string): string | null {
-  const cached = base64Cache.get(file);
+function loadFontBuffer(file: string): Buffer | null {
+  const cached = fontCache.get(file);
   if (cached) return cached;
   try {
-    const ttf = fs.readFileSync(path.join(FONT_DIR, file));
-    const base64 = Buffer.from(ttf).toString("base64");
-    base64Cache.set(file, base64);
-    return base64;
+    const buf = fs.readFileSync(path.join(FONT_DIR, file));
+    fontCache.set(file, buf);
+    return buf;
   } catch (error) {
-    // Missing/unreadable font file (e.g. tracing misconfigured on the edge
-    // case deploy): degrade to Helvetica instead of failing the export.
+    // Missing/unreadable font file: degrade to Helvetica instead of failing
+    // the export (Latin-only fallback; non-Latin glyphs would not render).
     console.error(`[reports/pdf] font unavailable: ${file}`, error);
     return null;
   }
 }
 
-const DARK: [number, number, number] = [17, 24, 39]; // gray-900
-const MUTED: [number, number, number] = [107, 114, 128]; // gray-500
-const HEADER_BG: [number, number, number] = [31, 41, 55]; // gray-800
-const ZEBRA_BG: [number, number, number] = [243, 244, 246]; // gray-100
-const TOTAL_BG: [number, number, number] = [229, 231, 235]; // gray-200
-const RULE: [number, number, number] = [209, 213, 219]; // gray-300
+// Enterprise palette (hairline borders, muted fills — no emoji, no brights).
+const DARK = "#111827"; // gray-900
+const MUTED = "#6B7280"; // gray-500
+const HEADER_BG = "#1F2937"; // slate-800
+const ZEBRA_BG = "#F3F4F6"; // gray-100
+const TOTAL_BG = "#E5E7EB"; // gray-200
+const RULE = "#D1D5DB"; // gray-300
+const WHITE = "#FFFFFF";
+
+const MM = 2.83465; // pt per mm — the template's measurements stay in mm
+const MARGIN = 12 * MM;
+const TABLE_BOTTOM = 16 * MM; // footer zone reserved below the table
+const HEAD_FS = 7;
+const BODY_FS = 6.8;
+const PAD_X = 3.2;
+const PAD_Y = 2.6;
 
 export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   const landscape = doc.columns.length > 7;
-  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: landscape ? "landscape" : "portrait" });
+  const pdf = new PDFDocument({
+    size: "A4",
+    layout: landscape ? "landscape" : "portrait",
+    bufferPages: true,
+    margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+    info: { Title: doc.title, Creator: "InvestWise" },
+  });
+  pdf.lineGap(0);
 
-  const font = LOCALE_FONTS[doc.locale];
-  let family = "helvetica";
-  if (font) {
-    const base64 = loadFontBase64(font.file);
-    if (base64) {
-      pdf.addFileToVFS(font.file, base64);
-      // Single weight registered under every style label: jsPDF otherwise
-      // falls back with a lookup warning whenever autoTable asks for bold.
-      pdf.addFont(font.file, font.family, "normal");
-      pdf.addFont(font.file, font.family, "bold");
-      pdf.addFont(font.file, font.family, "italic");
-      pdf.addFont(font.file, font.family, "bolditalic");
-      family = font.family;
+  // Font: localized families get the embedded TTF under explicit names
+  // (regular + bold alias the same file — no bold cut exists, and pdfkit
+  // otherwise warns and falls back when a style is requested unregistered).
+  const fontInfo = LOCALE_FONTS[doc.locale];
+  let regName = "Helvetica";
+  let boldName = "Helvetica-Bold";
+  if (fontInfo) {
+    const buf = loadFontBuffer(fontInfo.file);
+    if (buf) {
+      pdf.registerFont(fontInfo.family, buf);
+      pdf.registerFont(`${fontInfo.family}:bold`, buf);
+      regName = fontInfo.family;
+      boldName = `${fontInfo.family}:bold`;
     }
   }
+  const useFont = (weight: "normal" | "bold") => {
+    pdf.font(weight === "bold" ? boldName : regName);
+    return pdf;
+  };
 
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 12;
-  const contentWidth = pageWidth - margin * 2;
+  const pageWidth = pdf.page.width;
+  const pageHeight = pdf.page.height;
+  const contentWidth = pageWidth - MARGIN * 2;
   const rtl = doc.locale === "ur";
-  const baseAlign = rtl ? "right" : "left";
+  const baseAlign: "left" | "right" = rtl ? "right" : "left";
 
-  let cursorY = margin;
+  // Single-line draw (letterhead/title/provenance/footers). y = top of line.
+  const line = (
+    str: string,
+    y: number,
+    opts: { size: number; color: string; weight?: "normal" | "bold"; align?: "left" | "right" },
+  ) => {
+    useFont(opts.weight ?? "normal").fontSize(opts.size).fillColor(opts.color);
+    pdf.text(str, MARGIN, y, {
+      width: contentWidth,
+      align: opts.align ?? baseAlign,
+      lineBreak: false,
+    });
+  };
+
+  let cursorY = MARGIN;
 
   // ── Letterhead (first page) ──────────────────────────────────────
-  pdf.setFont(family, "normal").setFontSize(15).setTextColor(...DARK);
-  pdf.text(doc.letterhead.name, rtl ? pageWidth - margin : margin, cursorY + 4, { align: baseAlign });
-  cursorY += 7;
+  line(doc.letterhead.name, cursorY, { size: 15, color: DARK });
+  cursorY += 7 * MM;
 
-  pdf.setFontSize(8).setTextColor(...MUTED);
   if (doc.letterhead.tagline) {
-    pdf.text(doc.letterhead.tagline, rtl ? pageWidth - margin : margin, cursorY + 3, { align: baseAlign });
-    cursorY += 4.5;
+    line(doc.letterhead.tagline, cursorY, { size: 8, color: MUTED });
+    cursorY += 4.5 * MM;
   }
   const contactLine = [doc.letterhead.address, doc.letterhead.email, doc.letterhead.phone]
     .filter(Boolean)
     .join("  |  ");
   if (contactLine) {
-    pdf.text(contactLine, rtl ? pageWidth - margin : margin, cursorY + 3, { align: baseAlign });
-    cursorY += 4.5;
+    line(contactLine, cursorY, { size: 8, color: MUTED });
+    cursorY += 4.5 * MM;
   }
 
-  pdf.setDrawColor(...RULE).setLineWidth(0.3);
-  pdf.line(margin, cursorY + 2, pageWidth - margin, cursorY + 2);
-  cursorY += 6;
+  pdf
+    .moveTo(MARGIN, cursorY + 2 * MM)
+    .lineTo(pageWidth - MARGIN, cursorY + 2 * MM)
+    .lineWidth(0.3)
+    .strokeColor(RULE)
+    .stroke();
+  cursorY += 6 * MM;
 
   // ── Title block ──────────────────────────────────────────────────
-  pdf.setFont(family, "normal").setFontSize(12).setTextColor(...DARK);
-  pdf.text(doc.title, rtl ? pageWidth - margin : margin, cursorY + 4, { align: baseAlign });
-  cursorY += 6.5;
+  line(doc.title, cursorY, { size: 12, color: DARK });
+  cursorY += 6.5 * MM;
+  line(doc.periodLine, cursorY, { size: 8.5, color: MUTED });
+  cursorY += 4.5 * MM;
+  line(`${doc.generatedAt}  |  ${doc.generatedByLabel}: ${doc.generatedBy}`, cursorY, {
+    size: 8.5,
+    color: MUTED,
+  });
+  cursorY += 6 * MM;
 
-  pdf.setFontSize(8.5).setTextColor(...MUTED);
-  pdf.text(doc.periodLine, rtl ? pageWidth - margin : margin, cursorY + 3, { align: baseAlign });
-  cursorY += 4.5;
-  pdf.text(`${doc.generatedAt}  |  ${doc.generatedByLabel}: ${doc.generatedBy}`, rtl ? pageWidth - margin : margin, cursorY + 3, { align: baseAlign });
-  cursorY += 6;
-
-  // ── Summary block ────────────────────────────────────────────────
+  // ── Summary block (plain label/value rows) ───────────────────────
   if (doc.summary.length > 0) {
-    autoTable(pdf, {
-      body: doc.summary.map((entry) => [entry.label, entry.value]),
-      startY: cursorY,
-      margin: { left: margin, right: margin },
-      theme: "plain",
-      styles: { font: family, fontSize: 8.5, cellPadding: 0.8, textColor: DARK },
-      columnStyles: {
-        0: { cellWidth: 55, fontStyle: "normal", textColor: MUTED },
-        1: { fontStyle: "bold", textColor: DARK },
-      },
-    });
-    const afterSummary = (pdf as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable;
-    cursorY = (afterSummary?.finalY ?? cursorY) + 5;
+    const valueX = MARGIN + 55 * MM;
+    for (const entry of doc.summary) {
+      useFont("normal").fontSize(8.5).fillColor(MUTED);
+      pdf.text(entry.label, MARGIN, cursorY, { width: 55 * MM, align: baseAlign, lineBreak: false });
+      useFont("bold").fontSize(8.5).fillColor(DARK);
+      pdf.text(entry.value, valueX, cursorY, { lineBreak: false });
+      cursorY += 4.8 * MM;
+    }
+    cursorY += 5 * MM;
   }
 
   // ── Main data table ──────────────────────────────────────────────
-  const moneyColIndexes = doc.columns
-    .map((c, i) => (c.type === "money" || c.type === "number" ? i : -1))
-    .filter((i) => i >= 0);
-  const totalKeys = new Set(doc.columns.filter((c) => c.total).map((c) => c.key));
-
-  const body = doc.rows.map((row) =>
-    doc.columns.map((col) => renderCell(row[col.key], col.type, doc)),
+  const cols = doc.columns;
+  const moneyIdx = new Set(
+    cols.map((c, i) => (c.type === "money" || c.type === "number" ? i : -1)).filter((i) => i >= 0),
   );
+  const totalKeys = new Set(cols.filter((c) => c.total).map((c) => c.key));
+
+  const bodyRows = doc.rows.map((row) => cols.map((c) => renderCell(row[c.key], c.type, doc)));
   const hasTotals = totalKeys.size > 0 && doc.rows.length > 0;
   if (hasTotals) {
-    body.push(
-      doc.columns.map((col, i) => {
-        if (totalKeys.has(col.key)) {
-          const total = sumDecimal(doc.rows.map((r) => r[col.key] as string | number | null));
+    bodyRows.push(
+      cols.map((c, i) => {
+        if (totalKeys.has(c.key)) {
+          const total = sumDecimal(doc.rows.map((r) => r[c.key] as string | number | null));
           return formatMoneyNumber(total);
         }
         return i === 0 ? doc.totalsLabel : "";
@@ -162,46 +192,123 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
     );
   }
 
-  autoTable(pdf, {
-    head: [doc.columns.map((c) => c.label)],
-    body,
-    startY: cursorY,
-    margin: { left: margin, right: margin, top: 18, bottom: 16 },
-    styles: { font: family, fontSize: 6.8, cellPadding: 1.1, textColor: DARK, overflow: "linebreak", halign: baseAlign },
-    headStyles: { font: family, fillColor: HEADER_BG, textColor: [255, 255, 255], fontSize: 7, fontStyle: "normal" },
-    alternateRowStyles: { fillColor: ZEBRA_BG },
-    columnStyles: Object.fromEntries(
-      moneyColIndexes.map((i) => [i, { halign: "right" as const }]),
-    ),
-    didParseCell: (data) => {
-      const isTotalsRow = data.section === "body" && hasTotals && data.row.index === body.length - 1;
-      if (isTotalsRow) {
-        data.cell.styles.fontStyle = "bold";
-        data.cell.styles.fillColor = TOTAL_BG;
-      }
-    },
-    didDrawPage: (data) => {
-      if (data.pageNumber > 1) {
-        // Slim running header on continuation pages.
-        pdf.setFont(family, "normal").setFontSize(7).setTextColor(...MUTED);
-        pdf.text(doc.letterhead.name, rtl ? pageWidth - margin : margin, margin - 4, { align: baseAlign });
-        pdf.text(doc.title, rtl ? margin : pageWidth - margin, margin - 4, { align: rtl ? "left" : "right" });
-      }
-    },
+  // Column widths: measure with the FINAL font at body size, then scale to
+  // fill the content width exactly (autotable's stretch behaviour).
+  useFont("normal").fontSize(BODY_FS);
+  const widthOf = (s: string) => pdf.widthOfString(String(s ?? ""));
+  const desired = cols.map((c, i) => {
+    let w = widthOf(c.label);
+    for (const row of doc.rows) w = Math.max(w, widthOf(renderCell(row[c.key], c.type, doc)));
+    if (hasTotals && totalKeys.has(c.key)) {
+      w = Math.max(
+        w,
+        widthOf(formatMoneyNumber(sumDecimal(doc.rows.map((r) => r[c.key] as string | number | null)))),
+      );
+    }
+    return w + PAD_X * 2;
   });
+  const scale = contentWidth / desired.reduce((a, b) => a + b, 0);
+  const widths = desired.map((w) => Math.max(w * scale, 20));
+  const colX = widths.map((_, i) => widths.slice(0, i).reduce((a, b) => a + b, 0) + MARGIN);
 
-  // ── Footers (page x/y + confidentiality) ─────────────────────────
-  const pageCount = pdf.getNumberOfPages();
-  for (let page = 1; page <= pageCount; page += 1) {
-    pdf.setPage(page);
-    pdf.setDrawColor(...RULE).setLineWidth(0.2);
-    pdf.line(margin, pageHeight - 9, pageWidth - margin, pageHeight - 9);
-    pdf.setFont(family, "normal").setFontSize(6.5).setTextColor(...MUTED);
-    pdf.text(doc.footerNote, margin, pageHeight - 5.5, { align: "left" });
-    pdf.text(`${doc.generatedAt}  |  ${page} / ${pageCount}`, pageWidth - margin, pageHeight - 5.5, { align: "right" });
+  const headerHeight = HEAD_FS * 1.45 + PAD_Y * 2;
+
+  const drawTableHeader = (y: number): number => {
+    pdf.rect(MARGIN, y, contentWidth, headerHeight).fill(HEADER_BG);
+    useFont("normal").fontSize(HEAD_FS).fillColor(WHITE);
+    cols.forEach((c, i) => {
+      const x = colX[i] ?? MARGIN;
+      const w = widths[i] ?? contentWidth;
+      pdf.text(c.label, x + PAD_X, y + PAD_Y, {
+        width: w - PAD_X * 2,
+        align: moneyIdx.has(i) ? "right" : baseAlign,
+        lineBreak: false,
+      });
+    });
+    return y + headerHeight;
+  };
+
+  const startTablePage = (): number => {
+    pdf.addPage({
+      margins: { top: 18 * MM, bottom: TABLE_BOTTOM, left: MARGIN, right: MARGIN },
+    });
+    // Slim running header on continuation pages.
+    useFont("normal").fontSize(7).fillColor(MUTED);
+    pdf.text(doc.letterhead.name, MARGIN, 24, { width: contentWidth, align: baseAlign, lineBreak: false });
+    pdf.text(doc.title, MARGIN, 24, { width: contentWidth, align: rtl ? "left" : "right", lineBreak: false });
+    let y = 18 * MM;
+    return drawTableHeader(y);
+  };
+
+  let y = cursorY;
+  if (y + headerHeight > pageHeight - TABLE_BOTTOM) {
+    y = startTablePage();
+  } else {
+    y = drawTableHeader(y);
   }
 
-  return Buffer.from(pdf.output("arraybuffer"));
+  for (let r = 0; r < bodyRows.length; r += 1) {
+    const isTotals = hasTotals && r === bodyRows.length - 1;
+    const cells = bodyRows[r] ?? [];
+    useFont(isTotals ? "bold" : "normal").fontSize(BODY_FS);
+    const heights = cols.map((c, i) =>
+      pdf.heightOfString(cells[i] ?? "", { width: (widths[i] ?? contentWidth) - PAD_X * 2 }),
+    );
+    const rowHeight = Math.max(...heights, BODY_FS * 1.3) + PAD_Y * 2;
+    if (y + rowHeight > pageHeight - TABLE_BOTTOM) {
+      y = startTablePage();
+      useFont(isTotals ? "bold" : "normal").fontSize(BODY_FS);
+    }
+    if (isTotals) {
+      pdf.rect(MARGIN, y, contentWidth, rowHeight).fill(TOTAL_BG);
+    } else if (r % 2 === 1) {
+      pdf.rect(MARGIN, y, contentWidth, rowHeight).fill(ZEBRA_BG);
+    }
+    useFont(isTotals ? "bold" : "normal").fontSize(BODY_FS).fillColor(DARK);
+    cols.forEach((c, i) => {
+      const x = colX[i] ?? MARGIN;
+      const w = widths[i] ?? contentWidth;
+      pdf.text(cells[i] ?? "", x + PAD_X, y + PAD_Y, {
+        width: w - PAD_X * 2,
+        align: moneyIdx.has(i) ? "right" : baseAlign,
+      });
+    });
+    y += rowHeight;
+  }
+
+  // ── Footers (page x/y + confidentiality) ─────────────────────────
+  const range = pdf.bufferedPageRange();
+  for (let p = range.start; p < range.start + range.count; p += 1) {
+    pdf.switchToPage(p);
+    const h = pdf.page.height;
+    pdf
+      .moveTo(MARGIN, h - 9 * MM)
+      .lineTo(pageWidth - MARGIN, h - 9 * MM)
+      .lineWidth(0.2)
+      .strokeColor(RULE)
+      .stroke();
+    useFont("normal").fontSize(6.5).fillColor(MUTED);
+    pdf.text(doc.footerNote, MARGIN, h - 5.5 * MM - 1.5, {
+      width: contentWidth * 0.7,
+      align: "left",
+      lineBreak: false,
+    });
+    pdf.text(`${doc.generatedAt}  |  ${p + 1} / ${range.count}`, MARGIN + contentWidth * 0.3, h - 5.5 * MM - 1.5, {
+      width: contentWidth * 0.7,
+      align: "right",
+      lineBreak: false,
+    });
+  }
+
+  pdf.end();
+
+  const chunks: Buffer[] = [];
+  const done = new Promise<Buffer>((resolve, reject) => {
+    pdf.on("data", (chunk: Buffer) => chunks.push(chunk));
+    pdf.on("end", () => resolve(Buffer.concat(chunks)));
+    pdf.on("error", reject);
+  });
+  return done;
 }
 
 function renderCell(value: string | number | null | undefined, type: ReportDocument["columns"][number]["type"], doc: ReportDocument): string {

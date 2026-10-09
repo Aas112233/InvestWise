@@ -268,6 +268,43 @@ describe("document builders (smoke)", () => {
     }
   });
 
+  it("shapes Bengali properly (matra reorder + conjunct ligature) — issue #106", async () => {
+    // jsPDF emitted base codepoints with no shaping; pdfkit routes text
+    // through fontkit's Indic shaper. Guard the shaping pipeline itself so a
+    // future engine swap cannot silently regress it.
+    const fontkitModule = await import("fontkit");
+    const fontkit = (fontkitModule as unknown as { openSync: typeof fontkitModule.openSync }).openSync
+      ? fontkitModule
+      : ((fontkitModule as unknown as { default: typeof fontkitModule }).default);
+    const path = await import("node:path");
+    interface ShapingGlyph { id: number }
+    interface ShapingFont {
+      layout(s: string): { glyphs: ShapingGlyph[] };
+      glyphsForString(s: string): ShapingGlyph[];
+    }
+    const font = fontkit.openSync(path.join(process.cwd(), "lib", "reports", "fonts", "HindSiliguri-Regular.ttf")) as unknown as ShapingFont;
+    // কি: the i-matra must be reordered to render BEFORE the consonant.
+    const ki = font.layout("কি");
+    const kaId = font.glyphsForString("ক")[0]?.id;
+    const iMatraId = font.glyphsForString("ি")[0]?.id;
+    expect(kaId).toBeDefined();
+    expect(iMatraId).toBeDefined();
+    expect(ki.glyphs.map((g) => g.id)).toEqual([iMatraId, kaId]);
+    // ক্ক: ka + virama + ka must collapse into ONE conjunct ligature glyph.
+    const kka = font.layout("ক্ক");
+    expect(kka.glyphs).toHaveLength(1);
+  });
+
+  it("embeds the script font subset for Bangla PDFs — issue #106", async () => {
+    const { buildPdfBytes } = await import("./pdf");
+    const bn = await buildPdfBytes(baseDoc("bn"));
+    // HindSiliguri is a TrueType font → its subset shows up as FontFile2.
+    expect(bn.toString("latin1")).toContain("/FontFile2");
+    const en = await buildPdfBytes(baseDoc("en"));
+    // English stays on the built-in Type1 Helvetica (no TrueType subset).
+    expect(en.toString("latin1")).not.toContain("/FontFile2");
+  });
+
   it("exports a date-only cell (no fractional time serial) — issue #59", async () => {
     const { buildExcelBuffer } = await import("./excel");
     const doc = baseDoc("en");

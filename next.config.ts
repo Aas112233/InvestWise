@@ -20,9 +20,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   // postgres/bcryptjs stay external: bundling the DB driver into every
-  // serverless function inflates cold starts (DATA-025). Same for exceljs —
-  // the report builder pulls in a large CJS tree that changes rarely.
-  serverExternalPackages: ['postgres', 'bcryptjs', 'exceljs'],
+  // serverless function inflates cold starts (DATA-025). Same for exceljs and
+  // pdfkit — the report builders pull in large CJS trees that change rarely.
+  serverExternalPackages: ['postgres', 'bcryptjs', 'exceljs', 'pdfkit'],
   // Report PDFs embed per-locale Noto fonts read from disk at request time.
   outputFileTracingIncludes: {
     '/api/reports/generate/[type]': ['./lib/reports/fonts/**/*'],
