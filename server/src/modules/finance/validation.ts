@@ -121,26 +121,46 @@ export const dividendSchema = dividendSchemaBase.superRefine((val, ctx) => {
   }
 });
 
-export const equityTransferSchema = z.object({
-  fromMemberId: uuidField,
-  transfers: z
-    .array(
-      z.object({
-        toMemberId: uuidField,
-        // Optional: a shares-only transfer needs no cash leg. Coerced for the
-        // same reason as every other money field.
-        amount: z.coerce.number().min(0, 'Amount cannot be negative').optional(),
-        shares: z.coerce.number().int().min(1, 'Minimum shares is 1'),
-      }),
-    )
-    .min(1, 'At least one transfer recipient is required'),
-  reason: z.string().min(1, 'Reason is required').max(500),
-  /** Client retry key. A repeat of an already-recorded key is rejected rather
-   *  than moving the same equity a second time. */
-  referenceNumber: z.string().trim().min(3).max(120).optional(),
-  /** Must be true when any row transfers shares with no contribution behind it. */
-  giftAcknowledged: z.boolean().optional(),
+const equityTransferRowSchema = z.object({
+  toMemberId: uuidField,
+  // Optional: a shares-only transfer needs no cash leg. Coerced for the
+  // same reason as every other money field.
+  amount: z.coerce.number().min(0, 'Amount cannot be negative').optional(),
+  // Optional too: a contribution-only transfer moves equity without any
+  // ownership change. Ceiling on "what must a row move" is on the parent.
+  shares: z.coerce
+    .number({ invalid_type_error: 'Shares must be a number' })
+    .int('Shares must be a whole number')
+    .min(0, 'Shares cannot be negative')
+    .optional(),
 });
+
+export const equityTransferSchema = z
+  .object({
+    fromMemberId: uuidField,
+    transfers: z.array(equityTransferRowSchema).min(1, 'At least one transfer recipient is required'),
+    reason: z.string().min(1, 'Reason is required').max(500),
+    /** Client retry key. A repeat of an already-recorded key is rejected rather
+     *  than moving the same equity a second time. */
+    referenceNumber: z.string().trim().min(3).max(120).optional(),
+    /** Must be true when any row transfers shares with no contribution behind it. */
+    giftAcknowledged: z.boolean().optional(),
+    /** Must be true when any row transfers contribution with no shares behind it. */
+    amountOnlyAcknowledged: z.boolean().optional(),
+  })
+  .superRefine((val, ctx) => {
+    // A row has to move something — shares, contribution, or both. An empty row
+    // would otherwise record zero-value ledger legs for a recipient.
+    val.transfers.forEach((row, index) => {
+      if (!(row.shares ?? 0) && !(row.amount ?? 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['transfers', index, 'shares'],
+          message: 'Transfer shares, an amount, or both',
+        });
+      }
+    });
+  });
 
 export const deleteTransactionSchema = z.object({
   reason: z.string().max(500).optional(),

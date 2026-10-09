@@ -134,6 +134,83 @@ export function splitDividendByShares(
   return base.map(({ id, shares, payoutCents }) => ({ id, shares, payoutCents }));
 }
 
+/**
+ * Parse a percentage (0 < p <= 100, at most 2 decimal places) into integer
+ * basis points (1% = 100 bp, 100% = 10_000 bp). Uses the same 2dp decimal
+ * discipline as money — "20.5" -> 2050, "0" / "100.01" -> MoneyError.
+ */
+export function parsePercentBp(value: string | number, field = "percent"): number {
+  const bp = toCents(typeof value === "number" ? String(value) : value);
+  if (!Number.isInteger(bp)) throw new MoneyError(`${field} precision error`, "PRECISION_LOSS");
+  if (bp <= 0) throw new MoneyError(`${field} must be greater than zero`, "INVALID_PERCENT");
+  if (bp > 10_000) throw new MoneyError(`${field} must be at most 100`, "INVALID_PERCENT");
+  return bp;
+}
+
+/**
+ * Percentage-weighted split in exact cents, the percent twin of
+ * `splitDividendByShares`.
+ *
+ * `weights` are integer basis points (20.50% -> 2050). The block for this
+ * weight set is `round(totalCents * sumWeights / 10000)` (half-up), then each
+ * entry gets floor(blockCents * w_i / sumWeights) with the leftover cents
+ * dealt one at a time by largest fractional remainder, ties broken by lower
+ * id — identical determinism contract to the shares split:
+ * `sum(payouts) === blockCents` and entries are id-sorted.
+ */
+export function splitByPercent(
+  totalCents: number,
+  weights: Array<{ id: string; bp: number }>,
+): Array<{ id: string; bp: number; payoutCents: number }> {
+  if (!Number.isInteger(totalCents) || totalCents <= 0) {
+    throw new MoneyError("Total must be a positive integer-cent amount", "INVALID_AMOUNT");
+  }
+  if (weights.length === 0) {
+    throw new MoneyError("No weighted entries to split", "NO_ENTRIES");
+  }
+  for (const w of weights) {
+    if (!Number.isInteger(w.bp) || w.bp <= 0 || w.bp > 10_000) {
+      throw new MoneyError("Each weight must be an integer basis-point percent in (0, 10000]", "INVALID_PERCENT");
+    }
+  }
+  const sumBp = weights.reduce((acc, w) => acc + w.bp, 0);
+  if (sumBp > 10_000) {
+    throw new MoneyError("Percentages must not exceed 100% in total", "PERCENT_SUM_EXCEEDED");
+  }
+
+  // Block this weight set claims from the total (exact for sumBp = 10000).
+  const blockCents = Math.floor((totalCents * sumBp) / 10_000 + 0.5);
+
+  const sorted = [...weights].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const base = sorted.map((w) => {
+    const exact = (blockCents * w.bp) / sumBp;
+    return { ...w, exact, payoutCents: Math.floor(exact) };
+  });
+
+  let distributed = base.reduce((acc, e) => acc + e.payoutCents, 0);
+  const residual = blockCents - distributed;
+  const order = base
+    .map((e, i) => ({ i, frac: e.exact - e.payoutCents }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+
+  for (let k = 0; k < residual; k++) {
+    const target = order[k % order.length];
+    if (target !== undefined) {
+      const entry = base[target.i];
+      if (entry !== undefined) {
+        entry.payoutCents += 1;
+        distributed += 1;
+      }
+    }
+  }
+
+  if (distributed !== blockCents) {
+    throw new MoneyError("Percent split does not reconcile", "SPLIT_UNBALANCED");
+  }
+
+  return base.map(({ id, bp, payoutCents }) => ({ id, bp, payoutCents }));
+}
+
 /** Parse "Month YYYY" / localized month label into ISO date (1st, UTC). */
 const MONTH_NAMES_EN = [
   "january", "february", "march", "april", "may", "june",

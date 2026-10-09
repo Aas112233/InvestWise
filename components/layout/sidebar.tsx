@@ -7,7 +7,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useLocale } from "@/lib/i18n";
 import { hasScreenPermission, type PermissionUser } from "@/lib/permissions";
-import { isSuperAdminRole } from "@/lib/roles";
+import { isSuperAdminRole, normalizeRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { NAVIGATION, NavItem } from "./navigation";
 
@@ -22,6 +22,13 @@ function canRead(user: PermissionUser | null | undefined, id: string): boolean {
   // through the shared evaluator (role baseline + explicit overrides +
   // parent fallback). Fail-closed: unknown role or NONE grant hides the item.
   if (id === "DASHBOARD") return true;
+  // The user directory is role-gated (Admin/Manager/SuperAdmin) rather than
+  // screen-permission-gated: GET /api/auth/users rejects anyone else, so an
+  // Auditor with a READ grant here would only reach a 403.
+  if (id === "USERS") {
+    const role = normalizeRole(user?.role);
+    return role === "Admin" || role === "Manager" || role === "SuperAdmin";
+  }
   return hasScreenPermission(user, id, "READ");
 }
 

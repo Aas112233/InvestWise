@@ -26,6 +26,9 @@ import {
   TrendingUp,
   Activity,
   Filter,
+  PieChart,
+  Landmark,
+  User,
 } from "lucide-react";
 import {
   Button,
@@ -58,16 +61,18 @@ export default function ProjectsPage() {
   };
 
   // Top-level Navigation Tabs for the Project Module
-  const [mainTab, setMainTab] = useState<"projects" | "updates" | "timeline">("projects");
+  const [mainTab, setMainTab] = useState<"projects" | "updates" | "timeline" | "distributions">("projects");
 
-  // Filter by project in Tab 2 and Tab 3
+  // Filter by project in Tab 2, Tab 3 and Tab 4
   const [filterProjectId, setFilterProjectId] = useState<string>("");
 
-  // Pagination for Tab 2 and Tab 3
+  // Pagination for Tab 2, Tab 3 and Tab 4
   const [updatesPage, setUpdatesPage] = useState(1);
   const [updatesPageSize, setUpdatesPageSize] = useState(10);
   const [timelinePage, setTimelinePage] = useState(1);
   const [timelinePageSize, setTimelinePageSize] = useState(10);
+  const [distributionsPage, setDistributionsPage] = useState(1);
+  const [distributionsPageSize, setDistributionsPageSize] = useState(10);
 
   // Modal and Selection States
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -174,6 +179,39 @@ export default function ProjectsPage() {
   const allProjectTransactions = timelineResult?.data ?? [];
   const timelineTotal = timelineResult?.pagination?.total ?? 0;
 
+  // Tab 4: Returns-distribution ledger rows. Every distribution run posts its
+  // payout legs under a shared `PRJ-RET-…` reference (one row per member or
+  // fund recipient), so searching that prefix — scoped to the selected project
+  // or to all project rows — returns exactly the distribution history.
+  const { data: distributionsResult } = useQuery<{
+    data: any[];
+    pagination?: { total: number };
+  }>({
+    queryKey: [
+      "transactions",
+      "distributions",
+      { projectId: filterProjectId || undefined, page: distributionsPage, pageSize: distributionsPageSize },
+    ],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: String(distributionsPage),
+        limit: String(distributionsPageSize),
+        search: "PRJ-RET",
+      });
+      if (filterProjectId) params.set("projectId", filterProjectId);
+      else params.set("hasProject", "true");
+      try {
+        return await apiClient<{ data: any[]; pagination?: { total: number } }>(`/transactions?${params.toString()}`);
+      } catch (err: any) {
+        toast.error(err?.message || t("projects.loadFailed", { defaultValue: "Failed to load projects data" }));
+        return { data: [], pagination: { total: 0 } };
+      }
+    },
+    enabled: mainTab === "distributions",
+  });
+  const allDistributions = distributionsResult?.data ?? [];
+  const distributionsTotal = distributionsResult?.pagination?.total ?? 0;
+
   // Mutations
   const saveMutation = useMutation({
     mutationFn: async (payload: { data: Partial<Project>; id?: string }) => {
@@ -248,7 +286,14 @@ export default function ProjectsPage() {
       payload,
     }: {
       projectId: string;
-      payload: { type: "Profit" | "Loss"; amount: number; description: string; referenceNumber: string };
+      payload: {
+        type: "Profit" | "Loss";
+        amount: number;
+        description: string;
+        referenceNumber: string;
+        fundAllocations?: Array<{ fundId: string; percent: number }>;
+        projectId?: string;
+      };
     }) => {
       return await apiClient(`/projects/${projectId}/distribute-returns`, {
         method: "POST",
@@ -469,6 +514,113 @@ export default function ProjectsPage() {
     },
   ];
 
+  // Tab 4 Columns (Returns Distribution History — one row per payout leg)
+  const distributionsColumns: ERPColumn<any>[] = [
+    {
+      key: "date",
+      header: t("common.date", { defaultValue: "DATE" }),
+      sortable: true,
+      render: (tx) => (
+        <span className="text-xs font-mono text-muted-foreground">
+          {formatDate(tx.date, true)}
+        </span>
+      ),
+    },
+    {
+      key: "projectName",
+      header: t("projects.targetEntity", { defaultValue: "PROJECT" }),
+      render: (tx) => (
+        <span className="text-xs font-semibold text-foreground block">
+          {tx.projectName || "-"}
+        </span>
+      ),
+    },
+    {
+      key: "category",
+      header: t("common.type", { defaultValue: "TYPE" }),
+      render: (tx) => {
+        const isProfit = tx.category === "Profit Distribution";
+        return (
+          <span
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+              isProfit
+                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300"
+            }`}
+          >
+            {isProfit ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownLeft className="w-3 h-3" />}
+            {tx.category || tx.type}
+          </span>
+        );
+      },
+    },
+    {
+      key: "referenceNumber",
+      header: t("projects.distributions.runRef", { defaultValue: "RUN REF" }),
+      render: (tx) => (
+        <span className="text-[11px] font-mono font-medium text-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+          {tx.referenceNumber}
+        </span>
+      ),
+    },
+    {
+      key: "recipient",
+      header: t("projects.distributions.recipient", { defaultValue: "RECIPIENT" }),
+      render: (tx) => {
+        if (tx.memberName) {
+          return (
+            <span className="flex items-center gap-1.5 text-xs text-foreground font-medium">
+              <User className="w-3.5 h-3.5 text-primary shrink-0" />
+              {tx.memberName}
+              {tx.memberCode && (
+                <span className="text-[10px] text-muted-foreground font-mono">({tx.memberCode})</span>
+              )}
+            </span>
+          );
+        }
+        return (
+          <span className="flex items-center gap-1.5 text-xs text-foreground font-medium">
+            <Landmark className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            {tx.fundName || "-"}
+            <span className="text-[10px] text-muted-foreground">
+              {t("projects.distributions.fundTag", { defaultValue: "Fund" })}
+            </span>
+          </span>
+        );
+      },
+    },
+    {
+      key: "amount",
+      header: t("finance.amount", { defaultValue: "AMOUNT" }),
+      align: "right",
+      sortable: true,
+      render: (tx) => {
+        const isProfit = tx.category === "Profit Distribution";
+        return (
+          <span
+            className={`font-mono text-xs font-semibold ${
+              isProfit
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-rose-600 dark:text-rose-400"
+            }`}
+          >
+            {isProfit ? "+" : "-"}
+            {formatMoney(tx.amount)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "handlingOfficer",
+      header: t("projects.officer", { defaultValue: "OFFICER" }),
+      render: (tx) => (
+        <span className="text-[11px] text-muted-foreground font-mono">
+          {tx.handlingOfficer || "-"}
+        </span>
+      ),
+    },
+  ];
+
   // If a single project is clicked to drill-down, render the full ProjectDetailView
   if (selectedProjectId && activeProject) {
     return (
@@ -532,10 +684,13 @@ export default function ProjectsPage() {
               setProjectForDistribute(null);
             }}
             project={projectForDistribute}
+            projects={projects}
+            funds={funds}
             onSubmit={async (payload) => {
-              if (projectForDistribute) {
+              const targetId = payload.projectId || projectForDistribute?.id;
+              if (targetId) {
                 await distributeReturnsMutation.mutateAsync({
-                  projectId: projectForDistribute.id,
+                  projectId: targetId,
                   payload,
                 });
               }
@@ -594,7 +749,7 @@ export default function ProjectsPage() {
           </div>
         </div>
 
-        {/* 3 Main Screen Tabs */}
+        {/* 4 Main Screen Tabs */}
         <div className="flex items-center border-b border-border/80 gap-2">
           <button
             type="button"
@@ -639,6 +794,22 @@ export default function ProjectsPage() {
           >
             <Clock className="w-4 h-4" />
             <span>{t("projects.tabs.timeline", { defaultValue: "Project Timelines & Transactions" })}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMainTab("distributions")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
+              mainTab === "distributions"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <PieChart className="w-4 h-4" />
+            <span>{t("projects.tabs.distributions", { defaultValue: "Distribute Returns" })}</span>
+            <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-foreground">
+              {distributionsTotal}
+            </span>
           </button>
         </div>
 
@@ -775,6 +946,87 @@ export default function ProjectsPage() {
           </div>
         )}
 
+        {/* TAB 4: DISTRIBUTE RETURNS (run + manage the project's return distributions) */}
+        {mainTab === "distributions" && (
+          <div className="space-y-6">
+            {/* Filter and Action Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-card border border-border/80 rounded-xl">
+              <div className="flex items-center gap-3 w-full sm:w-72">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                  {t("projects.filterProject", { defaultValue: "Filter:" })}
+                </span>
+                <AppDropdown
+                  options={projectFilterOptions}
+                  value={filterProjectId}
+                  onChange={(val) => {
+                    setFilterProjectId(val || "");
+                    setDistributionsPage(1);
+                  }}
+                  placeholder={t("projects.selectProject", { defaultValue: "All Projects" })}
+                />
+              </div>
+
+              {canWrite && (
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={PieChart}
+                    onClick={async () => {
+                      // Preselects the filtered project when one is chosen;
+                      // otherwise the modal opens in picker mode (it loads the
+                      // full project itself — list rows lack involvedMembers).
+                      const targetId = filterProjectId || null;
+                      if (!targetId) {
+                        setProjectForDistribute(null);
+                        setIsDistributeOpen(true);
+                        return;
+                      }
+                      try {
+                        const res = await apiClient<{ data: Project } | Project>(`/projects/${targetId}`);
+                        setProjectForDistribute((res as any)?.data || res);
+                        setIsDistributeOpen(true);
+                      } catch (err: any) {
+                        toast.error(err?.message || t("projects.loadFailed", { defaultValue: "Failed to load projects data" }));
+                      }
+                    }}
+                  >
+                    {t("projects.distributions.run", { defaultValue: "Distribute Returns" })}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Distribution History Table */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+                  {t("projects.distributions.title", { defaultValue: "Returns Distribution History" })}
+                </h2>
+                <span className="text-xs text-muted-foreground font-mono">
+                  {distributionsTotal} {t("common.entries", { defaultValue: "entries" })}
+                </span>
+              </div>
+
+              <ERPDataTable
+                data={allDistributions}
+                columns={distributionsColumns}
+                page={distributionsPage}
+                pageSize={distributionsPageSize}
+                totalCount={distributionsTotal}
+                onPageChange={setDistributionsPage}
+                onPageSizeChange={(size) => {
+                  setDistributionsPageSize(size);
+                  setDistributionsPage(1);
+                }}
+                emptyMessage={t("projects.distributions.empty", {
+                  defaultValue: "No returns have been distributed for this selection yet.",
+                })}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Create / Edit Project Modal */}
         <ProjectFormModal
           isOpen={isCreateOpen}
@@ -819,10 +1071,13 @@ export default function ProjectsPage() {
             setProjectForDistribute(null);
           }}
           project={projectForDistribute}
+          projects={projects}
+          funds={funds}
           onSubmit={async (payload) => {
-            if (projectForDistribute) {
+            const targetId = payload.projectId || projectForDistribute?.id;
+            if (targetId) {
               await distributeReturnsMutation.mutateAsync({
-                projectId: projectForDistribute.id,
+                projectId: targetId,
                 payload,
               });
             }

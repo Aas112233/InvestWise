@@ -69,6 +69,12 @@ const HEAD_FS = 7;
 const BODY_FS = 6.8;
 const PAD_X = 3.2;
 const PAD_Y = 2.6;
+// #110: column width policy. Reference/ID-style values (PRJ-EXP-20261009-…)
+// used to inflate their column's desired width and squeeze every other
+// column. Widths are now capped: long values wrap onto extra lines instead
+// of hogging the page, while normal columns keep dynamic spacing.
+const COL_MIN_PT = 18;
+const COL_MAX_PT = 55 * MM;
 
 export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   const landscape = doc.columns.length > 7;
@@ -96,7 +102,7 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
       boldName = `${fontInfo.family}:bold`;
     }
   }
-  const useFont = (weight: "normal" | "bold") => {
+  const selectFont = (weight: "normal" | "bold") => {
     pdf.font(weight === "bold" ? boldName : regName);
     return pdf;
   };
@@ -113,7 +119,7 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
     y: number,
     opts: { size: number; color: string; weight?: "normal" | "bold"; align?: "left" | "right" },
   ) => {
-    useFont(opts.weight ?? "normal").fontSize(opts.size).fillColor(opts.color);
+    selectFont(opts.weight ?? "normal").fontSize(opts.size).fillColor(opts.color);
     pdf.text(str, MARGIN, y, {
       width: contentWidth,
       align: opts.align ?? baseAlign,
@@ -162,9 +168,9 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   if (doc.summary.length > 0) {
     const valueX = MARGIN + 55 * MM;
     for (const entry of doc.summary) {
-      useFont("normal").fontSize(8.5).fillColor(MUTED);
+      selectFont("normal").fontSize(8.5).fillColor(MUTED);
       pdf.text(entry.label, MARGIN, cursorY, { width: 55 * MM, align: baseAlign, lineBreak: false });
-      useFont("bold").fontSize(8.5).fillColor(DARK);
+      selectFont("bold").fontSize(8.5).fillColor(DARK);
       pdf.text(entry.value, valueX, cursorY, { lineBreak: false });
       cursorY += 4.8 * MM;
     }
@@ -192,9 +198,11 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
     );
   }
 
-  // Column widths: measure with the FINAL font at body size, then scale to
-  // fill the content width exactly (autotable's stretch behaviour).
-  useFont("normal").fontSize(BODY_FS);
+  // Column widths: measure with the FINAL font at body size, clamp each to
+  // [MIN, MAX] (#110 — long references wrap instead of hogging), then fit the
+  // set to the content width: shrink proportionally when over, grow columns
+  // toward the cap when under (never stretching a capped column further).
+  selectFont("normal").fontSize(BODY_FS);
   const widthOf = (s: string) => pdf.widthOfString(String(s ?? ""));
   const desired = cols.map((c, i) => {
     let w = widthOf(c.label);
@@ -205,21 +213,49 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
         widthOf(formatMoneyNumber(sumDecimal(doc.rows.map((r) => r[c.key] as string | number | null)))),
       );
     }
-    return w + PAD_X * 2;
+    return Math.min(Math.max(w + PAD_X * 2, COL_MIN_PT), COL_MAX_PT);
   });
-  const scale = contentWidth / desired.reduce((a, b) => a + b, 0);
-  const widths = desired.map((w) => Math.max(w * scale, 20));
+  const widths = fitWidths(desired, contentWidth, COL_MIN_PT, COL_MAX_PT);
   const colX = widths.map((_, i) => widths.slice(0, i).reduce((a, b) => a + b, 0) + MARGIN);
+
+  // #110: pdfkit wraps on whitespace only, so one long unbreakable token
+  // (a reference, a UUID) would overflow a capped column horizontally. Chunk
+  // any token wider than the usable cell width into fitting pieces joined by
+  // spaces — the visible result is a value wrapped across lines.
+  const chunkForWidth = (s: string, i: number, size: number): string => {
+    const usable = (widths[i] ?? contentWidth) - PAD_X * 2;
+    if (usable <= 4) return s;
+    pdf.fontSize(size);
+    const tokens = String(s ?? "").split(" ");
+    const out: string[] = [];
+    for (const token of tokens) {
+      if (pdf.widthOfString(token) <= usable) {
+        out.push(token);
+        continue;
+      }
+      let rest = token;
+      while (pdf.widthOfString(rest) > usable && rest.length > 1) {
+        let fit = rest.length - 1;
+        while (fit > 1 && pdf.widthOfString(rest.slice(0, fit)) > usable) fit -= 1;
+        if (fit <= 1) break;
+        out.push(rest.slice(0, fit));
+        rest = rest.slice(fit);
+      }
+      out.push(rest);
+    }
+    return out.join(" ");
+  };
 
   const headerHeight = HEAD_FS * 1.45 + PAD_Y * 2;
 
   const drawTableHeader = (y: number): number => {
     pdf.rect(MARGIN, y, contentWidth, headerHeight).fill(HEADER_BG);
-    useFont("normal").fontSize(HEAD_FS).fillColor(WHITE);
+    selectFont("normal").fontSize(HEAD_FS).fillColor(WHITE);
     cols.forEach((c, i) => {
       const x = colX[i] ?? MARGIN;
       const w = widths[i] ?? contentWidth;
-      pdf.text(c.label, x + PAD_X, y + PAD_Y, {
+      const label = chunkForWidth(c.label, i, HEAD_FS);
+      pdf.text(label, x + PAD_X, y + PAD_Y, {
         width: w - PAD_X * 2,
         align: moneyIdx.has(i) ? "right" : baseAlign,
         lineBreak: false,
@@ -233,7 +269,7 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
       margins: { top: 18 * MM, bottom: TABLE_BOTTOM, left: MARGIN, right: MARGIN },
     });
     // Slim running header on continuation pages.
-    useFont("normal").fontSize(7).fillColor(MUTED);
+    selectFont("normal").fontSize(7).fillColor(MUTED);
     pdf.text(doc.letterhead.name, MARGIN, 24, { width: contentWidth, align: baseAlign, lineBreak: false });
     pdf.text(doc.title, MARGIN, 24, { width: contentWidth, align: rtl ? "left" : "right", lineBreak: false });
     let y = 18 * MM;
@@ -250,25 +286,26 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   for (let r = 0; r < bodyRows.length; r += 1) {
     const isTotals = hasTotals && r === bodyRows.length - 1;
     const cells = bodyRows[r] ?? [];
-    useFont(isTotals ? "bold" : "normal").fontSize(BODY_FS);
+    selectFont(isTotals ? "bold" : "normal").fontSize(BODY_FS);
+    const wrapped = cells.map((cell, i) => chunkForWidth(cell ?? "", i, BODY_FS));
     const heights = cols.map((c, i) =>
-      pdf.heightOfString(cells[i] ?? "", { width: (widths[i] ?? contentWidth) - PAD_X * 2 }),
+      pdf.heightOfString(wrapped[i] ?? "", { width: (widths[i] ?? contentWidth) - PAD_X * 2 }),
     );
     const rowHeight = Math.max(...heights, BODY_FS * 1.3) + PAD_Y * 2;
     if (y + rowHeight > pageHeight - TABLE_BOTTOM) {
       y = startTablePage();
-      useFont(isTotals ? "bold" : "normal").fontSize(BODY_FS);
+      selectFont(isTotals ? "bold" : "normal").fontSize(BODY_FS);
     }
     if (isTotals) {
       pdf.rect(MARGIN, y, contentWidth, rowHeight).fill(TOTAL_BG);
     } else if (r % 2 === 1) {
       pdf.rect(MARGIN, y, contentWidth, rowHeight).fill(ZEBRA_BG);
     }
-    useFont(isTotals ? "bold" : "normal").fontSize(BODY_FS).fillColor(DARK);
+    selectFont(isTotals ? "bold" : "normal").fontSize(BODY_FS).fillColor(DARK);
     cols.forEach((c, i) => {
       const x = colX[i] ?? MARGIN;
       const w = widths[i] ?? contentWidth;
-      pdf.text(cells[i] ?? "", x + PAD_X, y + PAD_Y, {
+      pdf.text(wrapped[i] ?? "", x + PAD_X, y + PAD_Y, {
         width: w - PAD_X * 2,
         align: moneyIdx.has(i) ? "right" : baseAlign,
       });
@@ -287,7 +324,7 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
       .lineWidth(0.2)
       .strokeColor(RULE)
       .stroke();
-    useFont("normal").fontSize(6.5).fillColor(MUTED);
+    selectFont("normal").fontSize(6.5).fillColor(MUTED);
     pdf.text(doc.footerNote, MARGIN, h - 5.5 * MM - 1.5, {
       width: contentWidth * 0.7,
       align: "left",
@@ -317,4 +354,40 @@ function renderCell(value: string | number | null | undefined, type: ReportDocum
   if (type === "number") return formatMoneyNumber(typeof value === "number" ? value : Number(value));
   if (type === "date") return formatUtcDate(String(value), doc.dateFormat);
   return String(value);
+}
+
+/**
+ * #110: fit measured column widths to the content width without letting one
+ * long-value column hog the page. Columns arrive clamped to [min, max];
+ * shrink proportionally when the set overflows, grow toward the cap when it
+ * underflows (headroom-weighted), and spread any remainder equally once every
+ * column sits at the cap.
+ */
+function fitWidths(desired: number[], contentWidth: number, min: number, max: number): number[] {
+  const widths = desired.map((w) => Math.min(Math.max(w, min), max));
+  const sum = widths.reduce((a, b) => a + b, 0);
+  let diff = contentWidth - sum;
+  if (diff > 0.5) {
+    const headroom = widths.map((w) => Math.max(0, max - w));
+    const room = headroom.reduce((a, b) => a + b, 0);
+    if (room > 0) {
+      const take = Math.min(diff, room);
+      for (let i = 0; i < widths.length; i += 1) {
+        widths[i] = (widths[i] ?? 0) + take * ((headroom[i] ?? 0) / room);
+      }
+      diff -= take;
+    }
+    if (diff > 0.5 && widths.length > 0) {
+      const extra = diff / widths.length;
+      for (let i = 0; i < widths.length; i += 1) {
+        widths[i] = (widths[i] ?? 0) + extra;
+      }
+    }
+  } else if (diff < -0.5) {
+    const scale = contentWidth / sum;
+    for (let i = 0; i < widths.length; i += 1) {
+      widths[i] = Math.max((widths[i] ?? 0) * scale, min);
+    }
+  }
+  return widths;
 }

@@ -121,9 +121,14 @@ export async function GET(request: NextRequest) {
         })
         .from(transactions)
         .where(dividendCond),
+      // "Total Investments" = money ACTUALLY invested, not planned. The
+      // `currentFundBalance` is the live project-fund balance: shareholder
+      // capital credited at creation + posted earnings − expenses − return
+      // distributions. `initialInvestment`/`budget` are planning fields that
+      // are never posted to the books, so summing them overstated the KPI.
       db
         .select({
-          investmentsTotal: sql<number>`coalesce(sum(${projects.initialInvestment}::numeric), 0)::float`,
+          investmentsTotal: sql<number>`coalesce(sum(${projects.currentFundBalance}::numeric), 0)::float`,
           investmentsCount: sql<number>`count(*)::int`,
         })
         .from(projects)

@@ -21,14 +21,6 @@ const toneClasses: Record<StatusTone, string> = {
     "bg-[var(--status-neutral-bg)] text-[var(--status-neutral-text)] border-[var(--status-neutral-border)]",
 };
 
-const dotClasses: Record<StatusTone, string> = {
-  emerald: "bg-emerald-500",
-  amber: "bg-amber-500",
-  rose: "bg-rose-500",
-  cyan: "bg-teal-500",
-  slate: "bg-slate-400",
-};
-
 const variantToToneMap: Record<StatusVariant, StatusTone> = {
   success: "emerald",
   error: "rose",
@@ -46,14 +38,12 @@ export function StatusBadge({
   children,
   /** Text alternative to `children` used by feature call sites. */
   label,
-  dot = true,
   className,
 }: {
   tone?: StatusTone;
   variant?: StatusVariant;
   children?: ReactNode;
   label?: string;
-  dot?: boolean;
   className?: string;
 }) {
   const resolvedTone: StatusTone = tone ?? (variant ? variantToToneMap[variant] : "slate");
@@ -61,12 +51,11 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap shadow-2xs",
+        "inline-flex items-center px-2.5 py-0.5 rounded-full border text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap shadow-2xs",
         toneClasses[resolvedTone],
         className,
       )}
     >
-      {dot && <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", dotClasses[resolvedTone])} />}
       {children ?? label}
     </span>
   );

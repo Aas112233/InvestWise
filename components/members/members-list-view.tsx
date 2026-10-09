@@ -381,13 +381,22 @@ export function MembersListView() {
     },
     {
       key: "totalDeposited",
-      // "Total Contributed" is the deposits-only ledger sum, not the stored
-      // equity figure (which also counts reinvested dividends) — the two are
-      // different numbers and are labeled differently on purpose.
+      // "Total Deposited" is the deposits-only ledger sum. It deliberately does
+      // not move when an equity transfer reallocates capital between members —
+      // that shows up in the stored equity column below instead.
       header: t("members.columns.contributed"),
       sortable: true,
       align: "right",
       render: (m) => <span className="font-mono">{formatMoney(m.totalDeposited, currency)}</span>,
+    },
+    {
+      key: "totalContributed",
+      // Stored `members.total_contributed`: what the member actually holds in
+      // the pool. This is the figure an equity transfer moves, on both sides.
+      header: t("members.columns.equity"),
+      sortable: true,
+      align: "right",
+      render: (m) => <span className="font-mono">{formatMoney(m.totalContributed, currency)}</span>,
     },
     {
       key: "lastDepositMonth",

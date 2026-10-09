@@ -48,6 +48,21 @@ export function isNetworkError(err: unknown): boolean {
 
 const inFlightGetRequests = new Map<string, Promise<any>>();
 
+// ── UI locale propagation ────────────────────────────────────────────────────
+// i18n is client-side: UI labels are translated at render time, but ledger
+// descriptions are written server-side at the moment of the operation. So the
+// signed-in user's UI language is sent as `x-locale` on every request and the
+// server localizes what it writes (stored text is never re-translated later).
+// I18nProvider calls this on mount and on every language switch.
+let apiClientLocale: string | null = null;
+export function setApiClientLocale(locale: string | null): void {
+  apiClientLocale = locale;
+}
+
+function localeHeaders(): Record<string, string> {
+  return apiClientLocale ? { "x-locale": apiClientLocale } : {};
+}
+
 // ── Session auto-refresh (single-flight) ────────────────────────────────────
 // The 15m access token was never refreshed during normal API use — only the
 // AppShell "Extend" button called /api/auth/refresh — so expiry surfaced as
@@ -194,17 +209,18 @@ export async function apiClient<T = any>(
 
     const promise = (async () => {
       try {
-        const response = await executeRequest(url, {
-          headers: {
-            "Content-Type": "application/json",
-            ...customConfig.headers,
-          },
-          ...customConfig,
-        });
+      const response = await executeRequest(url, {
+        headers: {
+          "Content-Type": "application/json",
+          ...localeHeaders(),
+          ...customConfig.headers,
+        },
+        ...customConfig,
+      });
 
-        if (!response.ok) {
-          let errorMsg = `Request failed: ${response.statusText}`;
-          let errorData = null;
+      if (!response.ok) {
+        let errorMsg = `Request failed: ${response.statusText}`;
+        let errorData = null;
           try {
             errorData = await response.json();
             if (errorData?.message) {
@@ -236,6 +252,7 @@ export async function apiClient<T = any>(
   const response = await executeRequest(url, {
     headers: {
       "Content-Type": "application/json",
+      ...localeHeaders(),
       ...customConfig.headers,
     },
     ...customConfig,

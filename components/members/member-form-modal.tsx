@@ -75,6 +75,19 @@ export function MemberFormModal({
   });
   const full: Member | null = detailQuery.data?.data ?? null;
 
+  // Shares stay editable until a transaction links to the member — the same
+  // rule PUT /api/members/[id] enforces server-side (FOR UPDATE guard).
+  // Evidence order: the list row's hasTransactions (counts ALL linked txn
+  // rows incl. soft-deleted); the detail's recent-deposit list as fallback
+  // when editing was opened from the detail sheet. Unknown = locked.
+  const detailWithDeposits = full as (Member & { deposits?: unknown[] }) | null;
+  const hasNoTransactions =
+    initial?.hasTransactions === false ||
+    (initial?.hasTransactions === undefined &&
+      detailWithDeposits !== null &&
+      (detailWithDeposits.deposits?.length ?? 1) === 0);
+  const sharesLocked = isEdit && !hasNoTransactions;
+
   const roleOptions: DropdownOption[] = useMemo(
     () => MEMBER_ROLES.map((r) => ({ value: r, label: t(memberRoleLabel(r)) })),
     [t],
@@ -139,6 +152,9 @@ export function MemberFormModal({
             email: values.email,
             phone: values.phone.trim(),
             role: values.role,
+            // Only send shares while the field is editable — sending the
+            // prefill for a locked member trips the server lock for no reason.
+            ...(sharesLocked ? {} : { shares: values.shares }),
             nidOrPassport: values.nidOrPassport || null,
             fatherName: values.fatherName || null,
             address: values.address || null,
@@ -229,8 +245,21 @@ export function MemberFormModal({
                   <input type="text" {...register("nidOrPassport")} className={inputCls} />
                 </ERPFormField>
               </ERPFormGrid>
-            ) : (
+            ) : sharesLocked ? (
               <p className="text-[11px] text-slate-400">{t("members.form.sharesLockedNote")}</p>
+            ) : (
+              <ERPFormGrid columns={2}>
+                <ERPFormField
+                  label={t("members.form.shares")}
+                  required
+                  hint={t("members.form.sharesEditableNote", {
+                    defaultValue: "Editable while this member has no transactions",
+                  })}
+                  error={errors.shares?.message ? t(errors.shares.message) : undefined}
+                >
+                  <input type="number" min={1} step={1} {...register("shares", { valueAsNumber: true })} className={inputCls} />
+                </ERPFormField>
+              </ERPFormGrid>
             )}
           </ERPFormSection>
 

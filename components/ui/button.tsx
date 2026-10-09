@@ -58,7 +58,7 @@ export function buttonVariants({
   className?: string;
 } = {}) {
   return cn(
-    "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none active:scale-[0.98] [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variantClasses[variant] || variantClasses.default,
     sizeClasses[size] || sizeClasses.default,
     className,
@@ -73,7 +73,14 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   loadingText?: React.ReactNode;
   loadingLabel?: string;
   icon?: React.ReactNode | React.ComponentType<{ className?: string; size?: number }>;
+  /**
+   * Client-side rate-limit (debounce window) in ms to block rapid double-tapping.
+   * Defaults to 450ms for mutating/action clicks. Set to 0 to disable.
+   */
+  rateLimitMs?: number;
 }
+
+const DEFAULT_CLICK_COOLDOWN_MS = 450;
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (
@@ -81,18 +88,68 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       className,
       variant = "default",
       size = "default",
-      loading = false,
+      loading: controlledLoading = false,
       loadingText,
       loadingLabel,
       icon: Icon,
       children,
       disabled,
+      onClick,
+      rateLimitMs = DEFAULT_CLICK_COOLDOWN_MS,
       ...props
     },
     ref,
   ) => {
+    const [asyncLoading, setAsyncLoading] = React.useState(false);
+    const lastClickRef = React.useRef<number>(0);
+    const isMounted = React.useRef(true);
+
+    React.useEffect(() => {
+      isMounted.current = true;
+      return () => {
+        isMounted.current = false;
+      };
+    }, []);
+
+    const isLoading = controlledLoading || asyncLoading;
+    const isDisabled = Boolean(disabled || isLoading);
+
+    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+      if (isDisabled) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      const now = Date.now();
+      if (rateLimitMs > 0 && now - lastClickRef.current < rateLimitMs) {
+        // Prevent rapid double-tap / spam clicks
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      lastClickRef.current = now;
+
+      if (!onClick) return;
+
+      // onClick is typed void; capture as unknown so an async handler's
+      // returned Promise can still be detected (no runtime change).
+      const result: unknown = onClick(e) as unknown;
+
+      // Smart async detection: If onClick returns a Promise, automatically handle loading & disabling
+      if (result && typeof (result as unknown as Promise<unknown>).then === "function") {
+        setAsyncLoading(true);
+        (result as unknown as Promise<unknown>)
+          .finally(() => {
+            if (isMounted.current) {
+              setAsyncLoading(false);
+            }
+          });
+      }
+    };
+
     const renderIcon = () => {
-      if (loading) {
+      if (isLoading) {
         return <Loader2 className="mr-1.5 size-3.5 animate-spin shrink-0" />;
       }
       if (!Icon) return null;
@@ -107,7 +164,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const effectiveText =
-      loading && (loadingText || loadingLabel) ? (loadingText || loadingLabel) : children;
+      isLoading && (loadingText || loadingLabel) ? (loadingText || loadingLabel) : children;
 
     return (
       <button
@@ -115,8 +172,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         data-slot="button"
         data-variant={variant}
         data-size={size}
-        disabled={disabled || loading}
-        aria-busy={loading || undefined}
+        disabled={isDisabled}
+        aria-disabled={isDisabled || undefined}
+        aria-busy={isLoading || undefined}
+        onClick={handleClick}
         className={buttonVariants({ variant, size, className })}
         {...props}
       >

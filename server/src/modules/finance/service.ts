@@ -157,7 +157,7 @@ interface DividendInput {
 
 interface EquityTransferInput {
   fromMemberId: string;
-  transfers: Array<{ toMemberId: string; amount?: number; shares: number }>;
+  transfers: Array<{ toMemberId: string; amount?: number; shares?: number }>;
   reason: string;
   /** Retry key. Absent means a fresh run; a repeat of a known key is rejected. */
   referenceNumber?: string;
@@ -167,6 +167,12 @@ interface EquityTransferInput {
    * it must be an acknowledged gift rather than an unchecked blank field.
    */
   giftAcknowledged?: boolean;
+  /**
+   * Required when a row moves contribution with no shares behind it — the
+   * recipient's equity rises without gaining any ownership of the pool, so it
+   * is a capital reallocation, not a share transfer, and must be deliberate.
+   */
+  amountOnlyAcknowledged?: boolean;
 }
 
 interface BulkDepositInput {
@@ -1699,9 +1705,43 @@ export async function distributeDividends(data: DividendInput, user: SessionUser
 // 11. transferEquity
 // ---------------------------------------------------------------------------
 
-export async function transferEquity(data: EquityTransferInput, user: SessionUser) {
+// Ledger descriptions are stored text: they are written once, at operation
+// time, and never re-translated. They are therefore localized at write-time
+// in the actor's UI language (x-locale header → `locale` param). Unknown or
+// missing locales fall back to English so the books never come out empty.
+const EQUITY_MIGRATION_TEMPLATES: Record<
+  string,
+  {
+    received: (name: string, ref: string) => string;
+    transferred: (n: number, ref: string) => string;
+  }
+> = {
+  en: {
+    received: (name, ref) => `Equity Migration: Received from ${name} [Reference: ${ref}]`,
+    transferred: (n, ref) => `Equity Migration: Transferred to ${n} recipient(s) [Reference: ${ref}]`,
+  },
+  bn: {
+    received: (name, ref) => `ইকুইটি মাইগ্রেশন: ${name} থেকে প্ৰাপ্ত [Reference: ${ref}]`,
+    transferred: (n, ref) => `ইকুইটি মাইগ্রেশন: ${n} গ্রহীতার কাছতে হস্তান্তৰিত [Reference: ${ref}]`,
+  },
+  hi: {
+    received: (name, ref) => `इक़ुईटी माईग़्रेशन: ${name} सें प्राप्‍त [Reference: ${ref}]`,
+    transferred: (n, ref) => `इक़ुईटी माईग़्रेशन: ${n} प्राप्‍तकर्ताओं कें हस्तांतरित [Reference: ${ref}]`,
+  },
+  ur: {
+    received: (name, ref) => `ایکوئیٹی مائیگریشن: ${name} سے موصول [Reference: ${ref}]`,
+    transferred: (n, ref) => `ایکوئیٹی مائیگریشن: ${n} وصول کنندہ(وں) کو منتقل [Reference: ${ref}]`,
+  },
+};
+
+function equityMigrationStrings(locale?: string) {
+  return (locale && EQUITY_MIGRATION_TEMPLATES[locale]) || EQUITY_MIGRATION_TEMPLATES['en']!;
+}
+
+export async function transferEquity(data: EquityTransferInput, user: SessionUser, locale?: string) {
   const tenantId = requireTenant(user);
   const db = getDb();
+  const migrationStrings = equityMigrationStrings(locale);
 
   const batchId =
     (typeof data.referenceNumber === 'string' && data.referenceNumber.trim)
@@ -1753,7 +1793,7 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
     const transfers = data.transfers.map((t) => ({
       toMemberId: t.toMemberId,
       amountCents: t.amount ? parsePositiveAmount(t.amount) : 0,
-      shares: assertIntegralShares(t.shares, 'transfers.shares'),
+      shares: assertIntegralShares(t.shares ?? 0, 'transfers.shares'),
     }));
 
     // Shares without contribution are a gift: require the explicit flag rather
@@ -1764,6 +1804,18 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
         'Transferring shares without their contribution balance gives the recipient a claim on future surplus they did not fund. Acknowledge this as a gift to continue.',
         400,
         'GIFT_ACKNOWLEDGEMENT_REQUIRED',
+      );
+    }
+
+    // The mirror case: contribution without shares. The recipient's equity
+    // grows while their ownership of the pool does not, so this too has to be
+    // an acknowledged movement rather than an accidentally filled row.
+    const amountOnlyRows = transfers.filter((t) => t.amountCents > 0 && t.shares === 0);
+    if (amountOnlyRows.length > 0 && data.amountOnlyAcknowledged !== true) {
+      throw new AppError(
+        'Transferring contribution without shares changes the recipient\'s equity balance but not their ownership. Acknowledge this as an amount-only transfer to continue.',
+        400,
+        'AMOUNT_ONLY_ACKNOWLEDGEMENT_REQUIRED',
       );
     }
 
@@ -1820,7 +1872,7 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
         tenantId,
         type: 'Equity-Transfer',
         amount: fmt(t.amountCents),
-        description: `Equity Migration: Received from ${sourceMember.name} [Reference: ${data.reason}]`,
+        description: migrationStrings.received(sourceMember.name, data.reason),
         memberId: t.toMemberId,
         date: now,
         status: 'Completed',
@@ -1855,7 +1907,7 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
       tenantId,
       type: 'Equity-Transfer',
       amount: fmt(totalBeingTransferredCents),
-      description: `Equity Migration: Transferred to ${transfers.length} recipient(s) [Reference: ${data.reason}]`,
+      description: migrationStrings.transferred(transfers.length, data.reason),
       memberId: data.fromMemberId,
       date: now,
       status: 'Completed',
@@ -1892,6 +1944,8 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
             shares: t.shares,
             // Makes an unfunded share movement explicit in the audit trail.
             gift: t.amountCents === 0 && t.shares > 0,
+            // ...and the mirror: equity moved with no ownership change.
+            amountOnly: t.amountCents > 0 && t.shares === 0,
             sharesBefore: Number(target?.shares ?? 0),
             sharesAfter: Number(target?.shares ?? 0) + t.shares,
           };

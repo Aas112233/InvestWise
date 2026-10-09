@@ -174,7 +174,11 @@ export async function handleTransferEquity(request: NextRequest) {
   try {
     const body = await validateBody(request, equityTransferSchema);
     const user = await requirePermission('DIVIDENDS', 'WRITE');
-    const result = await finance.transferEquity(body, user as SessionUser);
+    // The actor's UI language (set by the client i18n provider) — the ledger
+    // descriptions are written in it at operation time.
+    const rawLocale = request.headers.get('x-locale');
+    const locale = rawLocale === 'en' || rawLocale === 'bn' || rawLocale === 'hi' || rawLocale === 'ur' ? rawLocale : undefined;
+    const result = await finance.transferEquity(body, user as SessionUser, locale);
     return Response.json(result, { status: 201 });
   } catch (err) {
     return errorResponse(err);

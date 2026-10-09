@@ -57,13 +57,31 @@ export const disbursementSchema = z.object({
   referenceNumber: z.string().trim().min(1).max(255).optional(),
 });
 
-export const projectReturnDistributionSchema = z.object({
-  type: z.enum(['Profit', 'Loss']),
-  amount: z.coerce.number().positive('Distribution amount must be greater than zero'),
-  description: z.string().trim().min(1, 'Description is required').max(500),
-  // §12 idempotency: see disbursementSchema.referenceNumber.
-  referenceNumber: z.string().trim().min(1).max(255).optional(),
-});
+export const projectReturnDistributionSchema = z
+  .object({
+    type: z.enum(['Profit', 'Loss']),
+    amount: z.coerce.number().positive('Distribution amount must be greater than zero'),
+    description: z.string().trim().min(1, 'Description is required').max(500),
+    // §12 idempotency: see disbursementSchema.referenceNumber.
+    referenceNumber: z.string().trim().min(1).max(255).optional(),
+    // Optional fund recipients (Profit only): each fund gets `percent` of the
+    // distribution; shareholders pro-rata split the remaining percentage.
+    // Percent is at most 2dp; duplicates and sums > 100% are rejected
+    // server-side with exact integer basis-point math.
+    fundAllocations: z
+      .array(
+        z.object({
+          fundId: z.string().trim().min(1).max(64),
+          percent: z.coerce.number().positive('Fund percent must be greater than zero').max(100, 'Fund percent must be at most 100'),
+        }),
+      )
+      .max(50, 'At most 50 funds can receive a distribution')
+      .optional(),
+  })
+  .refine((d) => !(d.type === 'Loss' && (d.fundAllocations?.length ?? 0) > 0), {
+    message: 'Fund allocations are only allowed for Profit distributions',
+    path: ['fundAllocations'],
+  });
 
 export const registerSchema = z.object({
   // users.name is varchar(255); without a cap an over-long value reaches the

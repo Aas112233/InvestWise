@@ -268,6 +268,27 @@ describe("document builders (smoke)", () => {
     }
   });
 
+  it("#110: caps wide columns and wraps long references instead of hogging the page", async () => {
+    const { buildPdfBytes } = await import("./pdf");
+    const doc = baseDoc("en");
+    // A reference far wider than any sane column — pre-#110 this inflated its
+    // column's desired width and squeezed the rest of the table.
+    const longRef = "PRJ-EXP-20261009-ABCDEF12-34567890-ABCDEFOBARTOKEN";
+    doc.rows = [
+      { date: "2026-10-09T00:00:00Z", member: "Rafiq", description: "Deposit", debit: "0.00", credit: "1500.00", reference: longRef },
+      { date: "2026-10-09T01:00:00Z", member: "Karim", description: "Withdrawal", debit: "250.00", credit: "0.00", reference: longRef },
+    ];
+    if (doc.columns.length && !doc.columns.some((c) => c.key === "reference")) {
+      doc.columns = [
+        ...doc.columns,
+        { key: "reference", label: "Reference #", type: "text" as const },
+      ];
+    }
+    const bytes = await buildPdfBytes(doc);
+    expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    expect(bytes.length).toBeGreaterThan(1000);
+  });
+
   it("shapes Bengali properly (matra reorder + conjunct ligature) — issue #106", async () => {
     // jsPDF emitted base codepoints with no shaping; pdfkit routes text
     // through fontkit's Indic shaper. Guard the shaping pipeline itself so a

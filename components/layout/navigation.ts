@@ -12,6 +12,7 @@ import {
   Settings,
   ShieldCheck,
   Target,
+  UserCog,
   Users,
   Wallet,
 } from "lucide-react";
@@ -35,6 +36,7 @@ export const NAVIGATION: NavGroup[] = [
     items: [
       { id: "DASHBOARD", labelKey: "nav.dashboard", route: "/", icon: LayoutDashboard },
       { id: "MEMBERS", labelKey: "nav.members", route: "/members", icon: Users },
+      { id: "USERS", labelKey: "nav.users", route: "/users", icon: UserCog },
       { id: "MEETINGS", labelKey: "nav.meetings", route: "/meetings", icon: Calendar },
       { id: "GOVERNANCE", labelKey: "nav.governance", route: "/governance", icon: ShieldCheck },
       { id: "GOALS", labelKey: "nav.goals", route: "/goals", icon: Target },

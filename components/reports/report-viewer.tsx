@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
 import { apiClient } from "@/lib/api-client";
+import { formatUtcDate } from "@/lib/reports/format";
 import type { ReportFormat, ReportPeriodType } from "@/lib/reports/catalog";
 
 export interface ReportDocumentPayload {
@@ -213,17 +214,28 @@ export function ReportViewer({ slug, query, downloadFormats = ["xlsx", "pdf", "c
                     {data.columns.map((col) => {
                       const value = row[col.key];
                       const isNumeric = col.type === "money" || col.type === "number";
+                      // Date columns carry ISO on the wire (the exporters format
+                      // them); render them the same way the PDF/Excel do, against
+                      // the tenant pattern (§8) — never a raw 2026-10-09T…Z.
+                      const shown =
+                        col.type === "date"
+                          ? formatUtcDate(String(value), data.dateFormat) || String(value)
+                          : String(value);
                       return (
                         <td
                           key={col.key}
-                          className={`px-3 py-2 ${isNumeric ? "text-right tabular-nums" : "text-left"} ${
-                            col.type === "money" ? "font-medium text-foreground" : "text-foreground/90"
-                          }`}
+                          className={`px-3 py-2 align-top ${
+                            isNumeric
+                              ? "whitespace-nowrap text-right tabular-nums"
+                              : col.type === "date"
+                                ? "whitespace-nowrap text-left"
+                                : "text-left break-words max-w-[220px]"
+                          } ${col.type === "money" ? "font-medium text-foreground" : "text-foreground/90"}`}
                         >
                           {value === null || value === undefined || value === "" ? (
                             <span className="text-muted-foreground">—</span>
                           ) : (
-                            String(value)
+                            shown
                           )}
                         </td>
                       );

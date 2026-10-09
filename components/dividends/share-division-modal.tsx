@@ -34,8 +34,9 @@ let rowKey = 0;
 const nextRow = (): TransferRow => ({ key: ++rowKey, toMemberId: null, shares: "", amount: "" });
 
 /**
- * Share division: move one member's shares, and optionally their contribution
- * balance, to one or more other members.
+ * Share division: move one member's shares, their contribution balance, or both
+ * to one or more other members. A row that leaves one of the two out is
+ * confirmed with its own acknowledgement checkbox.
  *
  * This is the UI for `POST /api/finance/equity/transfer`, which existed without
  * one. The source member is the row it was opened from and is never selectable;
@@ -58,6 +59,7 @@ export function ShareDivisionModal({
   const [rows, setRows] = useState<TransferRow[]>([nextRow()]);
   const [memo, setMemo] = useState("");
   const [giftAcknowledged, setGiftAcknowledged] = useState(false);
+  const [amountOnlyAcknowledged, setAmountOnlyAcknowledged] = useState(false);
   const [touched, setTouched] = useState(false);
   // One reference per opened dialog: a retry of the same attempt collides with
   // the server's duplicate check instead of moving the equity twice.
@@ -88,6 +90,7 @@ export function ShareDivisionModal({
     setRows([nextRow()]);
     setMemo("");
     setGiftAcknowledged(false);
+    setAmountOnlyAcknowledged(false);
     setTouched(false);
     setReferenceNumber(`EQT-${crypto.randomUUID().toUpperCase()}`);
   }, [open, source?.id]);
@@ -114,17 +117,19 @@ export function ShareDivisionModal({
 
   // A row that moves shares without any contribution is a gift: the recipient
   // gains a claim on future surplus they never funded, so it must be explicit.
-  const hasGiftRow = rows.some(
-    (r) => (Number.parseInt(r.shares, 10) || 0) > 0 && !r.amount.trim(),
-  );
+  const rowShares = (r: TransferRow) => Number.parseInt(r.shares, 10) || 0;
+  const rowAmount = (r: TransferRow) => r.amount.trim();
+  const hasGiftRow = rows.some((r) => rowShares(r) > 0 && !rowAmount(r));
+  // The mirror case: contribution moves without shares, so the recipient's
+  // equity rises while their ownership of the pool stays where it was.
+  const hasAmountOnlyRow = rows.some((r) => rowAmount(r) !== "" && rowShares(r) === 0);
 
   const rowErrors = rows.map((r) => {
     const seen = rows.filter((o) => o.toMemberId && o.toMemberId === r.toMemberId).length;
     if (!r.toMemberId) return touched ? t("dividends.selectTarget") : "";
     if (seen > 1) return touched ? t("dividends.duplicateRecipient") : "";
-    if (!/^\d+$/.test(r.shares) || Number.parseInt(r.shares, 10) < 1) {
-      return touched ? t("dividends.insufficientShares") : "";
-    }
+    // Each row moves shares, capital, or both — an empty row moves nothing.
+    if (!rowShares(r) && !rowAmount(r)) return touched ? t("dividends.sharesOrAmount") : "";
     return "";
   });
 
@@ -132,16 +137,18 @@ export function ShareDivisionModal({
   const overContribution = amountOutCents > heldContributionCents;
   const memoMissing = !memo.trim();
   const giftUnacknowledged = hasGiftRow && !giftAcknowledged;
+  const amountOnlyUnacknowledged = hasAmountOnlyRow && !amountOnlyAcknowledged;
 
   const valid =
     rows.length > 0 &&
     rows.every((r) => r.toMemberId) &&
     rowErrors.every((e) => !e) &&
-    sharesOut > 0 &&
+    (sharesOut > 0 || amountOutCents > 0) &&
     !overShares &&
     !overContribution &&
     !memoMissing &&
-    !giftUnacknowledged;
+    !giftUnacknowledged &&
+    !amountOnlyUnacknowledged;
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -152,12 +159,14 @@ export function ShareDivisionModal({
           transfers: rows.map((r) => ({
             toMemberId: r.toMemberId,
             // Omitted means no contribution moves with the shares.
-            amount: r.amount.trim() ? Number(r.amount.trim()) : undefined,
-            shares: Number.parseInt(r.shares, 10),
+            amount: rowAmount(r) ? Number(rowAmount(r)) : undefined,
+            // Omitted means no shares move with the contribution.
+            shares: rowShares(r) || undefined,
           })),
           reason: memo.trim(),
           referenceNumber,
           giftAcknowledged: hasGiftRow ? giftAcknowledged : undefined,
+          amountOnlyAcknowledged: hasAmountOnlyRow ? amountOnlyAcknowledged : undefined,
         }),
       }),
     onSuccess: () => {
@@ -248,7 +257,7 @@ export function ShareDivisionModal({
                       placeholder={t("dividends.selectTarget")}
                     />
                   </ERPFormField>
-                  <ERPFormField label={t("dividends.transferShares")} required>
+                  <ERPFormField label={t("dividends.transferShares")}>
                     <input
                       type="text"
                       inputMode="numeric"
@@ -331,6 +340,18 @@ export function ShareDivisionModal({
                 onChange={(e) => setGiftAcknowledged(e.target.checked)}
               />
               <span>{t("dividends.giftAcknowledge")}</span>
+            </label>
+          )}
+
+          {hasAmountOnlyRow && (
+            <label className="flex items-start gap-2 mt-2 text-[11px] text-amber-700 dark:text-amber-400">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={amountOnlyAcknowledged}
+                onChange={(e) => setAmountOnlyAcknowledged(e.target.checked)}
+              />
+              <span>{t("dividends.amountOnlyAcknowledge")}</span>
             </label>
           )}
         </ERPFormSection>

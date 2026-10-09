@@ -13,6 +13,7 @@ import en from "../messages/en.json";
 import ur from "../messages/ur.json";
 import hi from "../messages/hi.json";
 import bn from "../messages/bn.json";
+import { setApiClientLocale } from "./api-client";
 
 export type Locale = "en" | "ur" | "hi" | "bn";
 export const LOCALES: Locale[] = ["en", "ur", "hi", "bn"];
@@ -68,6 +69,12 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.add(`lang-${locale}`);
     document.documentElement.setAttribute("lang", locale);
     document.documentElement.setAttribute("dir", locale === "ur" ? "rtl" : "ltr");
+  }, [locale]);
+
+  // Propagate the active language to the API client (x-locale header) so
+  // server-side ledger descriptions are written in the actor's language.
+  useEffect(() => {
+    setApiClientLocale(locale);
   }, [locale]);
 
   const setLocale = useCallback((l: Locale) => {

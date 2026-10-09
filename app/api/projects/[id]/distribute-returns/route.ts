@@ -6,12 +6,19 @@ import { logAudit } from '@/lib/utils/audit';
 import { NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { projectReturnDistributionSchema } from '@/lib/utils/validation';
 import { requireProjectContext, zodMessage } from '../../_helpers';
-import { parsePositiveAmount, splitDividendByShares, toCents, fromCents } from '@/lib/money';
+import {
+  parsePositiveAmount,
+  splitDividendByShares,
+  splitByPercent,
+  parsePercentBp,
+  toCents,
+  fromCents,
+} from '@/lib/money';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
 
-// The run locks the project + every recipient row and writes grouped ledger
-// rows — keep headroom over the 10s serverless default for large co-ops.
+// The run locks the project + every fund + every recipient row and writes
+// grouped ledger rows — keep headroom over the 10s serverless default.
 export const maxDuration = 60;
 
 export async function POST(
@@ -42,6 +49,35 @@ export async function POST(
       throw new ValidationError(err instanceof Error ? err.message : 'Invalid amount');
     }
 
+    // Fund recipients are Profit-only (schema already rejects Loss). Parse each
+    // percent to integer basis points, reject duplicates, and cap the total at
+    // 100% before any DB work. Shareholders take the remaining percentage.
+    let fundPlan: Array<{ fundId: string; bp: number }> | null = null;
+    const fundPercentBp = new Map<string, number>();
+    if (type === 'Profit' && parsed.data.fundAllocations && parsed.data.fundAllocations.length > 0) {
+      const seen = new Set<string>();
+      for (const fa of parsed.data.fundAllocations) {
+        if (seen.has(fa.fundId)) {
+          throw new ValidationError('A fund appears more than once in the allocations');
+        }
+        seen.add(fa.fundId);
+        let bp: number;
+        try {
+          bp = parsePercentBp(fa.percent, 'fundAllocations.percent');
+        } catch (err) {
+          throw new ValidationError(err instanceof Error ? err.message : 'Invalid fund percent');
+        }
+        fundPercentBp.set(fa.fundId, bp);
+        fundPlan = (fundPlan ?? []);
+        fundPlan.push({ fundId: fa.fundId, bp });
+      }
+      const totalBp = [...fundPercentBp.values()].reduce((a, b) => a + b, 0);
+      if (totalBp > 10_000) {
+        throw new ValidationError('Fund percentages must not exceed 100% in total');
+      }
+    }
+    const recipientFundIds = fundPlan ? fundPlan.map((f) => f.fundId) : [];
+
     // §12 idempotency: the run reference doubles as the retry key. Payout rows
     // carry `${refBase}-${seq}` refs, so the dup-check matches both forms.
     const refBase = parsed.data.referenceNumber?.trim() ||
@@ -59,11 +95,6 @@ export async function POST(
         .limit(1);
 
       if (!project) throw new NotFoundError('Project');
-
-      const totalShares = Number(project.totalShares || 0);
-      if (totalShares <= 0) {
-        throw new ValidationError('Project has zero total shares; cannot distribute returns');
-      }
 
       // #74 (same rule, second door): a distribution without a fund pays members
       // from money that exists nowhere. The equity write-back below still raises
@@ -98,23 +129,35 @@ export async function POST(
         throw new ValidationError('Transaction with this reference number already exists');
       }
 
-      // 2. Lock the linked fund before member rows (single id, so the lock set
-      //    is trivially deterministic) — the same funds-before-members order the
-      //    dividend run uses, so a concurrent profit distribution and dividend
-      //    run can never deadlock across routes. Both the profit payout and the
-      //    loss write-down move this fund's balance; the locked row is the
-      //    source of truth for the sufficiency checks below.
-      let linkedFundBalanceCents = 0;
-      if (project.linkedFundId) {
-        const [linkedFund] = await tx
-          .select({ id: funds.id, balance: funds.balance })
-          .from(funds)
-          .where(and(eq(funds.id, project.linkedFundId), eq(funds.tenantId, tenantId)))
-          .for('update')
-          .limit(1);
-        if (!linkedFund) throw new NotFoundError('Linked fund');
-        linkedFundBalanceCents = toCents(linkedFund.balance || '0');
+      // 2. Lock the linked fund (source of funds) and every recipient fund in a
+      //    single deterministic pass (funds-before-members order, ascending id).
+      //    The same ordering the dividend run uses, so a concurrent profit
+      //    distribution and dividend run can never deadlock across routes.
+      const fundIdsToLock = Array.from(new Set([project.linkedFundId!, ...recipientFundIds])).sort();
+      const lockedFunds = await tx
+        .select({ id: funds.id, name: funds.name, balance: funds.balance, currency: funds.currency })
+        .from(funds)
+        .where(and(inArray(funds.id, fundIdsToLock), eq(funds.tenantId, tenantId)))
+        .orderBy(funds.id)
+        .for('update');
+      const fundById = new Map(lockedFunds.map((f) => [f.id, f]));
+
+      if (!fundById.get(project.linkedFundId!)) throw new NotFoundError('Linked fund');
+      const linkedFund = fundById.get(project.linkedFundId!)!;
+      const linkedCurrency = (linkedFund.currency ?? '').trim().toUpperCase();
+      for (const fid of recipientFundIds) {
+        const recipient = fundById.get(fid);
+        if (!recipient) throw new NotFoundError('Recipient fund');
+        // Same guard as fund transfers: mixing two currencies in one payout
+        // would book an amount in the wrong unit on the recipient's statement.
+        const recipientCurrency = (recipient.currency ?? '').trim().toUpperCase();
+        if (linkedCurrency && recipientCurrency && linkedCurrency !== recipientCurrency) {
+          throw new ValidationError(
+            `Cannot distribute returns from ${linkedFund.name} (${linkedCurrency}) to ${recipient.name} (${recipientCurrency}) — currency mismatch`,
+          );
+        }
       }
+      const linkedFundBalanceCents = toCents(linkedFund.balance || '0');
 
       // 3. Fetch project shareholders (deterministic order)
       const shareholders = await tx
@@ -129,19 +172,19 @@ export async function POST(
         .where(eq(projectMembers.projectId, id))
         .orderBy(projectMembers.memberId);
 
-      if (shareholders.length === 0) {
-        throw new ValidationError('No active shareholders found in this project');
-      }
-
       // Lock member rows in deterministic order: the equity snapshots feed the
-      // ledger balanceBefore/After and cap loss absorption.
+      // ledger balanceBefore/After and cap loss absorption. An empty roster is
+      // skipped outright (funds-only distributions are legal for such projects).
       const shareholderIds = shareholders.map((s) => s.memberId).sort();
-      const lockedMembers = await tx
-        .select({ id: members.id, equity: members.totalContributed })
-        .from(members)
-        .where(and(inArray(members.id, shareholderIds), eq(members.tenantId, tenantId)))
-        .orderBy(members.id)
-        .for('update');
+      const lockedMembers =
+        shareholderIds.length > 0
+          ? await tx
+              .select({ id: members.id, equity: members.totalContributed })
+              .from(members)
+              .where(and(inArray(members.id, shareholderIds), eq(members.tenantId, tenantId)))
+              .orderBy(members.id)
+              .for('update')
+          : [];
       const equityAtLock = new Map<string, number>();
       for (const m of lockedMembers) {
         equityAtLock.set(m.id, toCents(m.equity ?? '0'));
@@ -150,43 +193,78 @@ export async function POST(
 
       const currentBalanceCents = toCents(project.currentFundBalance || '0');
 
+      // ---- Split the amount: funds first (by percent), shareholders get the
+      //      remaining percentage pro-rata by shares. Both splits are exact
+      //      integer-cent, so funds + members === distribution to the cent.
+      let fundPayoutCents = new Map<string, number>();
+      let fundsTotalCents = 0;
+      if (type === 'Profit' && fundPlan && fundPlan.length > 0) {
+        let split: Array<{ id: string; bp: number; payoutCents: number }>;
+        try {
+          split = splitByPercent(
+            distributionAmountCents,
+            fundPlan.map((f) => ({ id: f.fundId, bp: f.bp })),
+          );
+        } catch (err) {
+          throw new ValidationError(
+            err instanceof Error ? err.message : 'Cannot split distribution across funds',
+          );
+        }
+        fundsTotalCents = split.reduce((s, p) => s + p.payoutCents, 0);
+        for (const p of split) {
+          if (p.payoutCents > 0) fundPayoutCents.set(p.id, p.payoutCents);
+        }
+      }
+      const membersTotalCents = distributionAmountCents - fundsTotalCents;
+
+      // Sufficiency: the linked fund (source) must absorb the FULL amount at its
+      // locked balance — the old GREATEST(0, ...) clamp silently absorbed any
+      // shortfall; that drift is now a hard, unmasked failure.
+      if (type === 'Profit' && linkedFundBalanceCents < distributionAmountCents) {
+        throw new ValidationError(
+          `Insufficient linked fund balance for profit payout (Available: ${fromCents(linkedFundBalanceCents)}, Required: ${fromCents(distributionAmountCents)})`,
+        );
+      }
       if (type === 'Profit' && currentBalanceCents < distributionAmountCents) {
         throw new ValidationError(
           `Insufficient project fund balance for profit payout (Available: ${fromCents(currentBalanceCents)}, Required: ${fromCents(distributionAmountCents)})`,
         );
       }
 
-      // §12: the linked fund must absorb the full payout at its locked balance.
-      // The old GREATEST(0, ...) clamp silently absorbed any shortfall between
-      // fund and project books; that drift is now a hard, unmasked failure.
-      if (type === 'Profit' && project.linkedFundId && linkedFundBalanceCents < distributionAmountCents) {
-        throw new ValidationError(
-          `Insufficient linked fund balance for profit payout (Available: ${fromCents(linkedFundBalanceCents)}, Required: ${fromCents(distributionAmountCents)})`,
-        );
-      }
-
       const now = new Date();
       await assertFiscalPeriodOpen(tx, tenantId, now);
 
-      // 3. Pro-rata split by shares in exact cents (deterministic
-      //    largest-remainder; sum(payouts) === requested total).
-      let split: Array<{ id: string; shares: number; payoutCents: number }>;
-      try {
-        split = splitDividendByShares(
-          distributionAmountCents,
-          shareholders.map((s) => ({ id: s.memberId, shares: Number(s.sharesInvested || 0) })),
-        );
-      } catch (err) {
-        throw new ValidationError(err instanceof Error ? err.message : 'Cannot split distribution across shareholders');
+      // ---- Member split of the remaining percentage.
+      let requestedCents = new Map<string, number>();
+      let appliedCents = new Map<string, number>();
+      if (membersTotalCents > 0) {
+        if (shareholders.length === 0) {
+          throw new ValidationError(
+            'No active shareholders found to receive the member portion of this distribution',
+          );
+        }
+        try {
+          const memberSplit = splitDividendByShares(
+            membersTotalCents,
+            shareholders.map((s) => ({ id: s.memberId, shares: Number(s.sharesInvested || 0) })),
+          );
+          requestedCents = new Map(memberSplit.map((s) => [s.id, s.payoutCents]));
+          appliedCents = new Map(requestedCents);
+        } catch (err) {
+          throw new ValidationError(
+            err instanceof Error
+              ? `Cannot split the member portion across shareholders: ${err.message}`
+              : 'Cannot split distribution across shareholders',
+          );
+        }
       }
-      const requestedCents = new Map(split.map((s) => [s.id, s.payoutCents]));
-      const appliedCents = new Map(requestedCents);
 
       // 4. Loss: a debit can never exceed the member's recorded equity. Clamp
       //    each over-cap debit and re-allocate the shortfall to shareholders
       //    with remaining equity. Every pass fully consumes at least one
       //    member's equity, so the loop is bounded; the final clamp after the
-      //    loop guarantees the invariant unconditionally.
+      //    loop guarantees the invariant unconditionally. (Profit pays out; it
+      //    is never clamped against equity.)
       if (type === 'Loss') {
         for (let pass = 0; pass < shareholders.length; pass++) {
           const overCap = shareholders.filter(
@@ -225,9 +303,10 @@ export async function POST(
         }
       }
 
-      // 5. Ledger: per-shareholder equity update + audit-grade transaction row.
-      //    Members with nothing applied (no shares / equity exhausted) post no
-      //    rows. Both writes are grouped: N recipients cost 2 round-trips, not 2N.
+      // 5. Ledger: per-fund Dividend rows + per-shareholder equity rows.
+      //    Both writes are grouped: N recipients cost 2 round-trips, not 2N.
+      //    Reference numbers share one sequence (fund rows first, then member
+      //    rows) so the idempotency dup-check (refBase-%) covers every leg.
       let appliedTotalCents = 0;
       const distributionsList: Array<{
         memberId: string;
@@ -253,8 +332,7 @@ export async function POST(
       // §12 loss mirror: the equity shareholders surrender must be written down
       // through the project fund, the linked fund and the project's expense
       // books by the same cents. Pre-validate sufficiency at the locked
-      // balances BEFORE any ledger write — an unabsorbable loss fails the whole
-      // run with an unmasked error instead of silently clamping a book negative.
+      // balances BEFORE any ledger write.
       const lossTotalCents = type === 'Loss'
         ? recipients.reduce((acc, r) => acc + r.applied, 0)
         : 0;
@@ -264,11 +342,40 @@ export async function POST(
             `Insufficient project fund balance to absorb the loss (Available: ${fromCents(currentBalanceCents)}, Required: ${fromCents(lossTotalCents)})`,
           );
         }
-        if (project.linkedFundId && linkedFundBalanceCents < lossTotalCents) {
+        if (linkedFundBalanceCents < lossTotalCents) {
           throw new ValidationError(
             `Insufficient linked fund balance to absorb the loss (Available: ${fromCents(linkedFundBalanceCents)}, Required: ${fromCents(lossTotalCents)})`,
           );
         }
+      }
+
+      let refSeq = 0;
+      const nextRef = () => `${refBase}-${(String(++refSeq)).padStart(2, '0')}`;
+
+      // Per-fund Dividend ledger rows (Profit only), sorted by fund id.
+      const fundLedgerRows: Array<typeof transactions.$inferInsert> = [];
+      for (const [fid, payout] of [...fundPayoutCents.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+        const fund = fundById.get(fid);
+        if (!fund) continue;
+        const balBefore = toCents(fund.balance || '0');
+        fundLedgerRows.push({
+          tenantId,
+          type: 'Dividend',
+          amount: fromCents(payout),
+          description: `Project profit return to ${fund.name} (${project.title}): ${description.trim()}`,
+          category: 'Profit Distribution',
+          referenceNumber: nextRef(),
+          date: now,
+          submittedDate: now,
+          status: 'Completed',
+          memberId: null,
+          projectId: id,
+          fundId: fid,
+          handlingOfficer: user.name,
+          balanceBefore: fromCents(balBefore),
+          balanceAfter: fromCents(balBefore + payout),
+          createdBy: user.id,
+        });
       }
 
       if (recipients.length > 0) {
@@ -284,49 +391,71 @@ export async function POST(
           )}) AS v(id, balance)
           WHERE m.id = v.id AND m.tenant_id = ${tenantId}
         `);
-
-        await tx.insert(transactions).values(
-          recipients.map((r, idx) => ({
-            tenantId,
-            type: type === 'Profit' ? 'Dividend' : 'Expense',
-            amount: fromCents(r.applied),
-            description: type === 'Profit'
-              ? `Project profit return (${project.title}): ${description.trim()}`
-              : `Project loss absorption (${project.title}): ${description.trim()}`,
-            category: type === 'Profit' ? 'Profit Distribution' : 'Loss Allocation',
-            referenceNumber: `${refBase}-${(idx + 1).toString().padStart(2, '0')}`,
-            date: now,
-            submittedDate: now,
-            status: 'Completed',
-            memberId: r.sh.memberId,
-            projectId: id,
-            fundId: project.linkedFundId ?? null,
-            handlingOfficer: user.name,
-            balanceBefore: fromCents(r.beforeCents),
-            balanceAfter: fromCents(r.afterCents),
-            createdBy: user.id,
-          })),
-        );
-
-        for (const r of recipients) {
-          appliedTotalCents += r.applied;
-          distributionsList.push({
-            memberId: r.sh.memberId,
-            memberName: r.sh.memberName,
-            shares: Number(r.sh.sharesInvested || 0),
-            requestedAmount: fromCents(requestedCents.get(r.sh.memberId) ?? 0),
-            appliedAmount: fromCents(r.applied),
-          });
-        }
       }
 
-      // 6. Project + linked-fund books. Profit pays out of the project fund;
-      //    Loss mirrors it — the equity debited from shareholders leaves the
-      //    project's fund balance and the linked fund, and lands in
-      //    totalExpenses so Project Performance net profit (earnings -
-      //    expenses) reports the loss truthfully. Sufficiency was
-      //    pre-validated against the locked balances, so every write below is
-      //    an exact decrement with no clamping (§12).
+      const memberLedgerRows: Array<typeof transactions.$inferInsert> = recipients.map((r) => ({
+        tenantId,
+        type: type === 'Profit' ? 'Dividend' : 'Expense',
+        amount: fromCents(r.applied),
+        description: type === 'Profit'
+          ? `Project profit return (${project.title}): ${description.trim()}`
+          : `Project loss absorption (${project.title}): ${description.trim()}`,
+        category: type === 'Profit' ? 'Profit Distribution' : 'Loss Allocation',
+        referenceNumber: nextRef(),
+        date: now,
+        submittedDate: now,
+        status: 'Completed',
+        memberId: r.sh.memberId,
+        projectId: id,
+        fundId: project.linkedFundId ?? null,
+        handlingOfficer: user.name,
+        balanceBefore: fromCents(r.beforeCents),
+        balanceAfter: fromCents(r.afterCents),
+        createdBy: user.id,
+      }));
+
+      if (fundLedgerRows.length > 0 || memberLedgerRows.length > 0) {
+        await tx.insert(transactions).values([...fundLedgerRows, ...memberLedgerRows]);
+      }
+
+      for (const r of recipients) {
+        appliedTotalCents += r.applied;
+        distributionsList.push({
+          memberId: r.sh.memberId,
+          memberName: r.sh.memberName,
+          shares: Number(r.sh.sharesInvested || 0),
+          requestedAmount: fromCents(requestedCents.get(r.sh.memberId) ?? 0),
+          appliedAmount: fromCents(r.applied),
+        });
+      }
+
+      // 6. Fund books. The linked fund is the SOURCE: it is debited the full
+      //    distribution; each recipient fund is credited its share. If the
+      //    linked fund is also a recipient its net delta is (-full + share).
+      //    Applied as one grouped UPDATE with relative deltas (row locks held,
+      //    so f.balance + delta is exact with no clamping).
+      const fundDeltaCents = new Map<string, number>();
+      const linkedId = project.linkedFundId!;
+      fundDeltaCents.set(linkedId, (fundDeltaCents.get(linkedId) ?? 0) - distributionAmountCents);
+      for (const [fid, payout] of fundPayoutCents) {
+        fundDeltaCents.set(fid, (fundDeltaCents.get(fid) ?? 0) + payout);
+      }
+      if (fundDeltaCents.size > 0) {
+        await tx.execute(sql`
+          UPDATE ${funds} AS f
+          SET balance = (f.balance::numeric + v.delta::numeric(15,2)),
+              updated_at = ${now.toISOString()}::timestamptz
+          FROM (VALUES ${sql.join(
+            [...fundDeltaCents.entries()].map(
+              ([k, v]) => sql`(${k}::uuid, ${fromCents(v)}::numeric(15,2))`,
+            ),
+            sql`, `,
+          )}) AS v(id, delta)
+          WHERE f.id = v.id AND f.tenant_id = ${tenantId}
+        `);
+      }
+
+      // Project books. Profit pays out of the project fund; Loss mirrors it.
       if (type === 'Profit') {
         const newBalanceStr = fromCents(currentBalanceCents - distributionAmountCents);
         await tx
@@ -336,16 +465,6 @@ export async function POST(
             updatedAt: now,
           })
           .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)));
-
-        if (project.linkedFundId) {
-          await tx
-            .update(funds)
-            .set({
-              balance: fromCents(linkedFundBalanceCents - distributionAmountCents),
-              updatedAt: now,
-            })
-            .where(and(eq(funds.id, project.linkedFundId), eq(funds.tenantId, tenantId)));
-        }
       } else if (lossTotalCents > 0) {
         await tx
           .update(projects)
@@ -355,32 +474,45 @@ export async function POST(
             updatedAt: now,
           })
           .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)));
-
-        if (project.linkedFundId) {
-          await tx
-            .update(funds)
-            .set({
-              balance: fromCents(linkedFundBalanceCents - lossTotalCents),
-              updatedAt: now,
-            })
-            .where(and(eq(funds.id, project.linkedFundId), eq(funds.tenantId, tenantId)));
-        }
       }
+
+      const fundDistributionsList: Array<{
+        fundId: string;
+        fundName: string;
+        percent: string;
+        amount: string;
+      }> = [...fundPayoutCents.entries()]
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .map(([fid, payout]) => ({
+          fundId: fid,
+          fundName: fundById.get(fid)?.name ?? '',
+          percent: fromCents(fundPercentBp.get(fid) ?? 0),
+          amount: fromCents(payout),
+        }));
 
       return {
         type,
         requestedAmount: fromCents(distributionAmountCents),
-        totalDistributed: fromCents(appliedTotalCents),
+        totalDistributed: fromCents(appliedTotalCents + fundsTotalCents),
+        totalToMembers: fromCents(appliedTotalCents),
+        totalToFunds: fromCents(fundsTotalCents),
         shareholderCount: distributionsList.length,
+        fundCount: fundDistributionsList.length,
         distributions: distributionsList,
+        fundDistributions: fundDistributionsList,
       };
     });
 
-    const appliedTotalCents = toCents(distributionResult.totalDistributed);
-    const shortfallCents = distributionAmountCents - appliedTotalCents;
+    const appliedTotalCents = toCents(distributionResult.totalToMembers);
+    const fundsTotalCents = toCents(distributionResult.totalToFunds);
+    const shortfallCents = distributionAmountCents - (appliedTotalCents + fundsTotalCents);
+    const fundNote =
+      distributionResult.fundCount > 0
+        ? ` and ${distributionResult.fundCount} fund${distributionResult.fundCount > 1 ? 's' : ''}`
+        : '';
     const message = type === 'Loss' && shortfallCents > 0
       ? `Project loss distribution applied ${distributionResult.totalDistributed} of ${distributionResult.requestedAmount} requested; some shareholders had insufficient equity to absorb their share`
-      : `Project ${type.toLowerCase()} distribution executed successfully across ${distributionResult.shareholderCount} shareholders`;
+      : `Project ${type.toLowerCase()} distribution executed successfully across ${distributionResult.shareholderCount} shareholder${distributionResult.shareholderCount === 1 ? '' : 's'}${fundNote}`;
 
     await logAudit({
       user: { id: user.id, name: user.name },
@@ -392,7 +524,10 @@ export async function POST(
         type,
         amount: distributionResult.totalDistributed,
         requestedAmount: distributionResult.requestedAmount,
+        totalToMembers: distributionResult.totalToMembers,
+        totalToFunds: distributionResult.totalToFunds,
         shareholderCount: distributionResult.shareholderCount,
+        fundCount: distributionResult.fundCount,
       },
     });
 
