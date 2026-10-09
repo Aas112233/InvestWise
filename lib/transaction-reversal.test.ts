@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideReversal, shouldRefundProjectExpenses } from './transaction-reversal';
+import { decideReversal, shouldRefundProjectExpenses, shouldRefundProjectEarnings } from './transaction-reversal';
 
 /**
  * These lock in the money-integrity rule that a soft delete must not strand a
@@ -85,6 +85,58 @@ describe('decideReversal', () => {
     });
   });
 
+  describe('#108: inflow/outflow types reverse via the canonical classifier', () => {
+    it('a settled Earning debits the fund back (-1) — was stranded +amount before', () => {
+      const d = decideReversal({
+        type: 'Earning',
+        status: 'Completed',
+        fundId: 'fund-1',
+        amount: '1.00',
+      });
+      expect(d).toMatchObject({ fundId: 'fund-1', direction: -1, requiresRevertPath: false });
+    });
+
+    it('a settled Withdrawal credits the fund back (+1)', () => {
+      const d = decideReversal({
+        type: 'Withdrawal',
+        status: 'Completed',
+        fundId: 'fund-1',
+        amount: '50.00',
+      });
+      expect(d).toMatchObject({ fundId: 'fund-1', direction: 1 });
+    });
+
+    it('a settled Dividend credits the fund back (+1)', () => {
+      const d = decideReversal({
+        type: 'Dividend',
+        status: 'Completed',
+        fundId: 'fund-1',
+        amount: '50.00',
+      });
+      expect(d).toMatchObject({ fundId: 'fund-1', direction: 1 });
+    });
+
+    it('a settled Investment debits the fund back (-1)', () => {
+      const d = decideReversal({
+        type: 'Investment',
+        status: 'Completed',
+        fundId: 'fund-1',
+        amount: '50.00',
+      });
+      expect(d).toMatchObject({ fundId: 'fund-1', direction: -1 });
+    });
+
+    it('a 0/0 informational aggregate (Dividend Distribution) is left alone', () => {
+      const d = decideReversal({
+        type: 'Dividend Distribution',
+        status: 'Completed',
+        fundId: 'fund-1',
+        amount: '50.00',
+      });
+      expect(d).toMatchObject({ fundId: null, direction: 0 });
+    });
+  });
+
   describe('guard rails', () => {
     it('does nothing without a fund', () => {
       const d = decideReversal({
@@ -127,6 +179,26 @@ describe('shouldRefundProjectExpenses', () => {
     ).toBe(false);
     expect(
       shouldRefundProjectExpenses({ type: 'Transfer Out', status: 'Completed', fundId: 'f', amount: '1' }),
+    ).toBe(false);
+  });
+});
+
+describe('shouldRefundProjectEarnings (#108b)', () => {
+  it('is true only for settled earnings', () => {
+    expect(
+      shouldRefundProjectEarnings({ type: 'Earning', status: 'Completed', fundId: 'f', amount: '1' }),
+    ).toBe(true);
+    expect(
+      shouldRefundProjectEarnings({ type: 'Earning', status: 'Success', fundId: 'f', amount: '1' }),
+    ).toBe(true);
+    expect(
+      shouldRefundProjectEarnings({ type: 'Earning', status: 'Pending', fundId: 'f', amount: '1' }),
+    ).toBe(false);
+    expect(
+      shouldRefundProjectEarnings({ type: 'Expense', status: 'Completed', fundId: 'f', amount: '1' }),
+    ).toBe(false);
+    expect(
+      shouldRefundProjectEarnings({ type: 'Deposit', status: 'Completed', fundId: 'f', amount: '1' }),
     ).toBe(false);
   });
 });

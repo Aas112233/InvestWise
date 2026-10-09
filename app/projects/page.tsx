@@ -215,11 +215,18 @@ export default function ProjectsPage() {
       updateData,
     }: {
       projectId: string;
-      updateData: { type: "Earning" | "Expense"; amount: number; description: string; referenceNumber: string };
+      updateData: { type: "Earning" | "Expense"; amount: number; description: string; referenceNumber: string; date: string; handledByMemberId: string | null };
     }) => {
       return await apiClient(`/projects/${projectId}/updates`, {
         method: "POST",
-        body: JSON.stringify(updateData),
+        body: JSON.stringify({
+          type: updateData.type,
+          amount: updateData.amount,
+          description: updateData.description,
+          referenceNumber: updateData.referenceNumber,
+          date: updateData.date,
+          ...(updateData.handledByMemberId ? { handledByMemberId: updateData.handledByMemberId } : {}),
+        }),
       });
     },
     onSuccess: () => {

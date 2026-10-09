@@ -6,20 +6,30 @@
  * strand a fund movement. Deposits have a dedicated revert path
  * (POST /api/deposits/[id]/revert) which reverses fund + member balances
  * atomically, so the transactions DELETE route refuses to delete a settled
- * deposit and points at that path instead. Expenses and fund transfers have no
+ * deposit and points at that path instead. Other settled movements have no
  * equivalent revert endpoint — if DELETE merely flipped `is_deleted`, the fund
  * would stay permanently debited/credited while the ledger claimed the row no
  * longer existed. So the DELETE handler reverses the effect itself, in the same
  * DB transaction.
  *
  * This module is intentionally pure (no DB, no IO) so the direction rules can
- * be unit-tested and cannot drift from the writer that created the movement:
- *   • Expense      → the fund was debited   → CREDIT it back  (+1)
- *   • Transfer Out → the source fund was debited → CREDIT back (+1)
- *   • Transfer In  → the target fund was credited → DEBIT back (-1)
+ * be unit-tested and cannot drift from the writers that created the movement.
+ *
+ * #108: the direction rule is derived from the CANONICAL ledger classifier
+ * (lib/reports/data.ts classifyLedgerType) instead of a hand-maintained type
+ * list. A credit-side type credited the fund when posted → deleting it debits
+ * the fund back; a debit-side type did the opposite. The first version listed
+ * only Expense/Transfer Out/Transfer In by hand, so deleting a settled
+ * project Earning stranded its credit on the fund balance forever (observed
+ * as a +3.00 drift after three earning deletions).
+ *
+ *   • credit-side (Earning, Investment, Transfer In, …) → DEBIT back (-1)
+ *   • debit-side  (Expense, Withdrawal, Dividend, Transfer Out, …) → CREDIT back (+1)
+ *   • 0/0 informational or unknown types → 0 (never guess)
  *   • Settlement deposits → owned by the revert route → 0 (refuse-and-redirect)
  *   • Anything unsettled (Pending / Rejected / Request) never moved money → 0
  */
+import { classifyLedgerType } from './reports/data';
 
 /** Statuses that mean a movement actually reached the ledger's money. */
 export const SETTLED_STATUSES = ['Completed', 'Success'] as const;
@@ -79,21 +89,21 @@ export function decideReversal(tx: ReversalInput): ReversalDecision {
     return { fundId: null, direction: 0, requiresRevertPath: false };
   }
 
-  switch (tx.type) {
-    case 'Expense':
-      // The route debits the fund → credit it back.
-      return { fundId: tx.fundId, direction: 1, requiresRevertPath: false };
-    case 'Transfer Out':
-      // The route debits the SOURCE fund → credit it back.
-      return { fundId: tx.fundId, direction: 1, requiresRevertPath: false };
-    case 'Transfer In':
-      // The route credits the TARGET fund → debit it back.
-      return { fundId: tx.fundId, direction: -1, requiresRevertPath: false };
-    default:
-      // Deposits (unsettled) never moved money; unknown types are deliberately
-      // left alone rather than guessed at — a wrong guess is worse than none.
-      return { fundId: null, direction: 0, requiresRevertPath: false };
+  // #108: derive the direction from the canonical classifier rather than a
+  // hand-maintained list, so the reversal can never drift from the writers.
+  const { debit, credit } = classifyLedgerType(tx.type ?? '');
+  if (credit === 1) {
+    // The posting credited the fund → debit it back.
+    return { fundId: tx.fundId, direction: -1, requiresRevertPath: false };
   }
+  if (debit === 1) {
+    // The posting debited the fund → credit it back.
+    return { fundId: tx.fundId, direction: 1, requiresRevertPath: false };
+  }
+  // 0/0 informational aggregates (e.g. Dividend Distribution) and unknown
+  // types are deliberately left alone rather than guessed at — a wrong guess
+  // is worse than none.
+  return { fundId: null, direction: 0, requiresRevertPath: false };
 }
 
 /**
@@ -104,4 +114,16 @@ export function shouldRefundProjectExpenses(tx: ReversalInput): boolean {
   const settled =
     tx.status != null && (SETTLED_STATUSES as readonly string[]).includes(tx.status);
   return tx.type === 'Expense' && settled;
+}
+
+/**
+ * #108b: whether the delete must also refund a project's rolled-up
+ * `totalEarnings`. Symmetric with shouldRefundProjectExpenses — only settled
+ * earnings attributed to a project inflate that rollup, so deleting one must
+ * decrement it or the project overstates revenue forever.
+ */
+export function shouldRefundProjectEarnings(tx: ReversalInput): boolean {
+  const settled =
+    tx.status != null && (SETTLED_STATUSES as readonly string[]).includes(tx.status);
+  return tx.type === 'Earning' && settled;
 }

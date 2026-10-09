@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const postgres = require(path.resolve('node_modules/postgres'));
 const sql = postgres(process.env.DATABASE_URL, { prepare: false });
-const BASE = 'http://localhost:3001';
+const BASE = process.env.BASE_URL || 'http://localhost:3001';
 let pass=0, fails=0;
 const ok=(l,c,d='')=>{console.log((c?'  PASS  ':'  FAIL  ')+l+(d?` — ${d}`:''));c?pass++:fails++;};
 

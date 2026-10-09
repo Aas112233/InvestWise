@@ -3,7 +3,7 @@
 // provisioning, the tenant lands fully configured, and cleanup restores state.
 import postgres from 'postgres';
 
-const BASE = 'http://localhost:3001';
+const BASE = process.env.BASE_URL || 'http://localhost:3001';
 let pass = 0, fail = 0;
 const ok = (label, cond, detail = '') => {
   console.log((cond ? 'PASS  ' : 'FAIL  ') + label + (detail ? ` — ${detail}` : ''));

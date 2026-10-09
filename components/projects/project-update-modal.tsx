@@ -1,19 +1,37 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
+import { useQuery } from "@tanstack/react-query";
+import { TopSheet, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
 import { Project } from "@/types";
 import { formatMoney } from "@/lib/formatters";
 import { newIdempotencyRef } from "@/lib/idempotency";
+import { apiClient } from "@/lib/api-client";
 
 interface ProjectUpdateModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (updateData: { type: "Earning" | "Expense"; amount: number; description: string; projectId?: string; referenceNumber: string }) => Promise<void>;
+  onSubmit: (updateData: {
+    type: "Earning" | "Expense";
+    amount: number;
+    description: string;
+    projectId?: string;
+    referenceNumber: string;
+    date: string;
+    handledByMemberId: string | null;
+  }) => Promise<void>;
   project?: Project | null;
   projects?: Project[];
 }
+
+interface InvolvedMember {
+  memberId: string;
+  memberName: string;
+  memberCode?: string;
+}
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 export function ProjectUpdateModal({
   isOpen,
@@ -28,11 +46,24 @@ export function ProjectUpdateModal({
   const [type, setType] = useState<"Earning" | "Expense">("Expense");
   const [amount, setAmount] = useState<string>("");
   const [description, setDescription] = useState<string>("");
+  const [date, setDate] = useState<string>(todayISO());
+  const [handledByMemberId, setHandledByMemberId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // §12 idempotency: one retry key per modal session — a retry after a
   // network failure reuses it so the server rejects the double post.
   const [idempotencyRef, setIdempotencyRef] = useState<string>("");
+
+  // #107: a fresh sheet every time. The old sheet kept the previously
+  // submitted amount/description visible on reopen.
+  const resetForm = React.useCallback(() => {
+    setType("Expense");
+    setAmount("");
+    setDescription("");
+    setDate(todayISO());
+    setHandledByMemberId(null);
+    setErrorMessage(null);
+  }, []);
 
   useEffect(() => {
     // Prefixed ref: this value is persisted as the ledger reference number, so
@@ -50,6 +81,17 @@ export function ProjectUpdateModal({
 
   const effectiveProject = project || projects.find((p) => p.id === selectedProjectId) || null;
 
+  // #107: project associate members for the "Handled by" picker (name entry
+  // only — selecting one never moves a balance).
+  const membersQuery = useQuery<{ data?: { involvedMembers?: InvolvedMember[] }; involvedMembers?: InvolvedMember[] }>({
+    queryKey: ["project-update-members", effectiveProject?.id],
+    queryFn: () => apiClient(`/projects/${effectiveProject?.id}`),
+    enabled: isOpen && !!effectiveProject?.id,
+    staleTime: 60_000,
+  });
+  const involvedMembers: InvolvedMember[] =
+    membersQuery.data?.data?.involvedMembers ?? membersQuery.data?.involvedMembers ?? [];
+
   const projectOptions: DropdownOption[] = projects.map((p) => ({
     value: p.id,
     label: `${p.title} (Bal: ${formatMoney(p.currentFundBalance)})`,
@@ -60,12 +102,29 @@ export function ProjectUpdateModal({
     { value: "Earning", label: t("projects.updateTypes.earning", { defaultValue: "Earning (Revenue / Return)" }) },
   ];
 
+  const handledByOptions: DropdownOption[] = involvedMembers.map((m) => ({
+    value: m.memberId,
+    label: `${m.memberName}${m.memberCode ? ` (${m.memberCode})` : ""}`,
+  }));
+
   const currentBalance = Number(effectiveProject?.currentFundBalance || 0);
   const numAmount = parseFloat(amount) || 0;
   const simulatedNewBalance =
     type === "Earning"
       ? currentBalance + numAmount
       : currentBalance - numAmount;
+
+  const isDirty =
+    !!amount ||
+    !!description.trim() ||
+    type !== "Expense" ||
+    date !== todayISO() ||
+    !!handledByMemberId;
+
+  const discardAndClose = () => {
+    resetForm();
+    onClose();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,6 +146,15 @@ export function ProjectUpdateModal({
       return;
     }
 
+    if (!date) {
+      setErrorMessage(t("projects.validation.dateRequired", { defaultValue: "Date is required." }));
+      return;
+    }
+    if (date > todayISO()) {
+      setErrorMessage(t("projects.validation.dateFuture", { defaultValue: "Date cannot be in the future." }));
+      return;
+    }
+
     if (type === "Expense" && simulatedNewBalance < 0) {
       setErrorMessage(t("projects.validation.insufficientBalance", { defaultValue: "Insufficient project fund balance for this expense." }));
       return;
@@ -100,7 +168,11 @@ export function ProjectUpdateModal({
         description: description.trim(),
         projectId: targetId,
         referenceNumber: idempotencyRef,
+        date,
+        handledByMemberId,
       });
+      // #107: clear the sheet so the next open starts blank.
+      resetForm();
       onClose();
     } catch (err: any) {
       setErrorMessage(err?.message || t("common.errors.failedToRecordProjectUpdate", { defaultValue: "Failed to record project update." }));
@@ -113,6 +185,8 @@ export function ProjectUpdateModal({
     <TopSheet
       isOpen={isOpen}
       onClose={onClose}
+      onDiscard={discardAndClose}
+      isDirty={isDirty}
       title={t("projects.recordDisbursement", { defaultValue: "Project Disbursement & Update" })}
       description={effectiveProject ? `${effectiveProject.title} (${effectiveProject.category})` : t("projects.selectProjectForUpdate", { defaultValue: "Record income or expense against a project" })}
     >
@@ -155,6 +229,33 @@ export function ProjectUpdateModal({
                 onChange={(e) => setAmount(e.target.value)}
                 className="w-full px-3 py-2 text-xs font-mono bg-card border border-border/80 text-foreground rounded-xl placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
               />
+            </ERPFormField>
+          </ERPFormGrid>
+
+          <ERPFormGrid cols={2}>
+            <ERPFormField label={t("common.date", { defaultValue: "Date *" })}>
+              <input
+                type="date"
+                value={date}
+                max={todayISO()}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full px-3 py-2 text-xs font-mono bg-card border border-border/80 text-foreground rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
+              />
+            </ERPFormField>
+
+            <ERPFormField label={t("projects.handledBy", { defaultValue: "Handled By" })}>
+              <AppDropdown
+                options={handledByOptions}
+                value={handledByMemberId}
+                onChange={(val) => setHandledByMemberId(val || null)}
+                placeholder={t("projects.handledByPlaceholder", { defaultValue: "Select member (optional)..." })}
+                disabled={handledByOptions.length === 0}
+              />
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                {handledByOptions.length === 0
+                  ? t("projects.handledByNoMembers", { defaultValue: "No members are associated with this project yet." })
+                  : t("projects.handledByHint", { defaultValue: "Name entry only — this does not change the member's balance." })}
+              </p>
             </ERPFormField>
           </ERPFormGrid>
 
@@ -201,7 +302,7 @@ export function ProjectUpdateModal({
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-          <Button variant="ghost" size="sm" type="button" onClick={onClose} disabled={isSubmitting}>
+          <Button variant="ghost" size="sm" type="button" onClick={discardAndClose} disabled={isSubmitting}>
             {t("common.cancel", { defaultValue: "Cancel" })}
           </Button>
           <Button variant="primary" size="sm" type="submit" loading={isSubmitting}>

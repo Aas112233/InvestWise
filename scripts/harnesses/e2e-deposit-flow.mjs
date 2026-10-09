@@ -1,7 +1,7 @@
 // Deposit lifecycle with role separation — the money-critical path, and the
 // #72 segregation-of-duties guard.
 import postgres from 'postgres';
-const BASE = 'http://localhost:3001';
+const BASE = process.env.BASE_URL || 'http://localhost:3001';
 const sql = postgres(process.env.DATABASE_URL, { prepare: false });
 let failures = 0;
 const check = (l, c) => { if (!c) failures++; console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}`); };

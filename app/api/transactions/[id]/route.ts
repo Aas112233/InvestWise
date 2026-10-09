@@ -8,7 +8,7 @@ import { logAudit } from '@/lib/utils/audit';
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/utils/errors';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import { toCents } from '@/lib/money';
-import { decideReversal, shouldRefundProjectExpenses } from '@/lib/transaction-reversal';
+import { decideReversal, shouldRefundProjectExpenses, shouldRefundProjectEarnings } from '@/lib/transaction-reversal';
 
 export async function GET(
   request: NextRequest,
@@ -184,6 +184,27 @@ export async function DELETE(
               .update(projects)
               .set({
                 totalExpenses: sql`(coalesce(${projects.totalExpenses}, 0) - ${amountCents / 100})::numeric(15,2)`,
+                updatedAt: now,
+              })
+              .where(and(eq(projects.id, lockedExisting.projectId), eq(projects.tenantId, tenantId)));
+          }
+
+          // #108b: symmetric refund — a settled Earning attributed to a project
+          // inflated projects.totalEarnings; deleting it must decrement that
+          // rollup or the project overstates revenue forever.
+          if (
+            shouldRefundProjectEarnings({
+              type: lockedExisting.type,
+              status: lockedExisting.status,
+              fundId: lockedExisting.fundId,
+              amount: lockedExisting.amount,
+            }) &&
+            lockedExisting.projectId
+          ) {
+            await tx
+              .update(projects)
+              .set({
+                totalEarnings: sql`(coalesce(${projects.totalEarnings}, 0) - ${amountCents / 100})::numeric(15,2)`,
                 updatedAt: now,
               })
               .where(and(eq(projects.id, lockedExisting.projectId), eq(projects.tenantId, tenantId)));

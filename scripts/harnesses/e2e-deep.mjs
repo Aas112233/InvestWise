@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import postgres from 'postgres';
 
-const BASE = 'http://localhost:3001';
+const BASE = process.env.BASE_URL || 'http://localhost:3001';
 const sql = postgres(process.env.DATABASE_URL, { prepare: false });
 
 const results = { pass: 0, real: [], contract: [], notes: [] };

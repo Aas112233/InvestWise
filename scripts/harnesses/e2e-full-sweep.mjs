@@ -1,7 +1,7 @@
 // Full end-to-end sweep: login, then exercise every flow touched this session
 // through the real HTTP surface the UI calls. Read-only where possible.
 import postgres from 'postgres';
-const BASE = 'http://localhost:3001';
+const BASE = process.env.BASE_URL || 'http://localhost:3001';
 const sql = postgres(process.env.DATABASE_URL, { prepare: false });
 const ok = (b) => (b ? 'PASS' : 'FAIL');
 let failures = 0;

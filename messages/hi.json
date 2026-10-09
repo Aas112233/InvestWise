@@ -955,7 +955,15 @@
       "description": "विवरण / कारण",
       "portion": "गणना किया गया हिस्सा"
     },
-    "loadFailed": "परियोजना डेटा लोड करने में विफल"
+    "loadFailed": "परियोजना डेटा लोड करने में विफल",
+    "handledBy": "द्वारा संचालित",
+    "handledByPlaceholder": "सदस्य चुनें (वैकल्पिक)...",
+    "handledByNoMembers": "इस परियोजना से अभी कोई सदस्य संबद्ध नहीं है।",
+    "handledByHint": "केवल नाम दर्ज होगा — इससे सदस्य का बैलेंस नहीं बदलेगा।",
+    "validation": {
+      "dateRequired": "तिथि आवश्यक है।",
+      "dateFuture": "तिथि भविष्य की नहीं हो सकती।"
+    }
   },
   "analysis": {
     "portfolio": "Portfolio",

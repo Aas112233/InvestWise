@@ -1,7 +1,7 @@
 // Verify the members DELETE guard: a member with linked transactions MUST be
 // un-deletable. Tests both the guard and the soft-delete-vs-balance question.
 import postgres from 'postgres';
-const BASE='http://localhost:3001';
+const BASE = process.env.BASE_URL || 'http://localhost:3001';
 const sql = postgres(process.env.DATABASE_URL,{prepare:false});
 async function login(email){
   const r=await fetch(`${BASE}/api/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:'pass-12345678'})});

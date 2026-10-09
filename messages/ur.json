@@ -955,7 +955,15 @@
       "description": "تفصیل / وجہ",
       "portion": "متعلقہ حصہ"
     },
-    "loadFailed": "پروجیکٹ ڈیٹا لوڈ کرنے میں ناکام"
+    "loadFailed": "پروجیکٹ ڈیٹا لوڈ کرنے میں ناکام",
+    "handledBy": "ہاتھ سے منسلک",
+    "handledByPlaceholder": "رکن منتخب کریں (اختیاری)...",
+    "handledByNoMembers": "اس منصوبے سے ابھی کوئی رکن وابستہ نہیں ہے۔",
+    "handledByHint": "صرف نام درج ہوگا — اس سے رکن کا بیلنس تبدیل نہیں ہوگا۔",
+    "validation": {
+      "dateRequired": "تاریخ درکار ہے۔",
+      "dateFuture": "تاریخ مستقبل کی نہیں ہو سکتی۔"
+    }
   },
   "analysis": {
     "portfolio": "Portfolio",

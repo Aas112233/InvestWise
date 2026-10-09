@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { projects, projectUpdates, funds, transactions } from '@/db/schema/index';
+import { projects, projectUpdates, projectMembers, funds, transactions, members } from '@/db/schema/index';
 import { eq, and, sql } from 'drizzle-orm';
 import { logAudit } from '@/lib/utils/audit';
 import { NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
@@ -42,6 +42,58 @@ export async function POST(
       amountCents = parsePositiveAmount(parsed.data.amount, { field: 'amount', maxCents: 99_999_999_999 });
     } catch (err) {
       throw new ValidationError(err instanceof Error ? err.message : 'Invalid amount');
+    }
+
+    // #107: posting date. Defaults to now (legacy clients). A client-supplied
+    // date may be backdated (the fiscal-period guard below validates its
+    // period), but never future-dated beyond clock-skew slack — future rows
+    // would poison balance snapshots and period totals.
+    const receivedAt = new Date();
+    let postingDate = receivedAt;
+    if (parsed.data.date) {
+      const d = new Date(parsed.data.date);
+      if (Number.isNaN(d.getTime())) {
+        throw new ValidationError('date must be a valid ISO date/datetime');
+      }
+      if (d.getTime() > receivedAt.getTime() + 12 * 60 * 60 * 1000) {
+        throw new ValidationError('date cannot be in the future');
+      }
+      postingDate = d;
+    }
+
+    // #107: optional "handled by" project associate member. Name entry only —
+    // the member is recorded on the ledger row (handlingOfficer + memberId)
+    // but no balance anywhere moves for them: member equity derives from
+    // Deposit/Dividend rows, and this writes Earning/Expense.
+    let handledBy: { id: string; name: string } | null = null;
+    if (parsed.data.handledByMemberId) {
+      const db0 = getDb();
+      const [memberRow] = await db0
+        .select({ id: members.id, name: members.name })
+        .from(members)
+        .where(
+          and(
+            eq(members.id, parsed.data.handledByMemberId),
+            eq(members.tenantId, tenantId),
+            eq(members.isDeleted, false),
+          ),
+        )
+        .limit(1);
+      if (!memberRow) throw new ValidationError('handledByMemberId does not match a member of this tenant');
+      const [association] = await db0
+        .select({ memberId: projectMembers.memberId })
+        .from(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, id),
+            eq(projectMembers.memberId, memberRow.id),
+          ),
+        )
+        .limit(1);
+      if (!association) {
+        throw new ValidationError('handledByMemberId must be a member associated with this project');
+      }
+      handledBy = memberRow;
     }
 
     // §12 idempotency: the ledger reference doubles as the retry key. A
@@ -113,7 +165,7 @@ export async function POST(
       const balanceAfterStr = fromCents(balanceAfterCents);
 
       const now = new Date();
-      await assertFiscalPeriodOpen(tx, tenantId, now);
+      await assertFiscalPeriodOpen(tx, tenantId, postingDate);
       const [updateRecord] = await tx
         .insert(projectUpdates)
         .values({
@@ -122,7 +174,7 @@ export async function POST(
           type,
           amount: amountStr,
           description: description.trim(),
-          date: now,
+          date: postingDate,
           balanceBefore: balanceBeforeStr,
           balanceAfter: balanceAfterStr,
         })
@@ -169,12 +221,16 @@ export async function POST(
         expenseName: type === 'Earning' ? null : description.trim(),
         category: type === 'Earning' ? 'Project Revenue' : 'Project Expense',
         referenceNumber: refNumber,
-        date: now,
-        submittedDate: now,
+        date: postingDate,
+        submittedDate: postingDate,
         status: 'Completed',
         projectId: id,
         fundId: project.linkedFundId ?? null,
-        handlingOfficer: user.name,
+        // #107: "handled by" records the chosen project associate member
+        // (name entry only — see the validation block above); without one it
+        // stays the operator, as before.
+        handlingOfficer: handledBy ? handledBy.name : user.name,
+        memberId: handledBy ? handledBy.id : null,
         // The user performing the disbursement is the approver of record for
         // project postings (there is no separate approval step on this route).
         authorizedBy: user.id,
@@ -192,7 +248,13 @@ export async function POST(
       action: 'ADD_PROJECT_UPDATE',
       resourceType: 'Project',
       resourceId: id,
-      details: { type, amount: fromCents(amountCents), description },
+      details: {
+        type,
+        amount: fromCents(amountCents),
+        description,
+        date: postingDate.toISOString(),
+        handledByMemberId: handledBy?.id ?? null,
+      },
     });
 
     return NextResponse.json(

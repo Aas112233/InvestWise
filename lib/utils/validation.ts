@@ -44,6 +44,14 @@ export const disbursementSchema = z.object({
   type: z.enum(['Earning', 'Expense']),
   amount: z.coerce.number().positive('Amount must be greater than zero'),
   description: z.string().trim().min(1, 'Description is required').max(500),
+  // #107: user-picked posting date (ISO). Omitted = server "now" (legacy
+  // clients). Future-dating is rejected in the route (with clock-skew slack).
+  date: z.string().trim().min(1).max(40).optional(),
+  // #107: optional project associate member who handled the posting. Name
+  // entry only — recorded as handlingOfficer + transaction memberId; it does
+  // NOT move the member's balance (member equity derives from Deposit/Dividend
+  // rows only).
+  handledByMemberId: z.string().trim().uuid('handledByMemberId must be a valid member id').optional(),
   // §12 idempotency: client-supplied reference doubles as the retry key —
   // a retry with the same reference is rejected instead of double-posting.
   referenceNumber: z.string().trim().min(1).max(255).optional(),

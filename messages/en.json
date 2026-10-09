@@ -955,7 +955,15 @@
       "description": "Distribution Notes / Reason",
       "portion": "Calculated Share"
     },
-    "loadFailed": "Failed to load projects data"
+    "loadFailed": "Failed to load projects data",
+    "handledBy": "Handled By",
+    "handledByPlaceholder": "Select member (optional)...",
+    "handledByNoMembers": "No members are associated with this project yet.",
+    "handledByHint": "Name entry only — this does not change the member's balance.",
+    "validation": {
+      "dateRequired": "Date is required.",
+      "dateFuture": "Date cannot be in the future."
+    }
   },
   "analysis": {
     "portfolio": "Portfolio",
