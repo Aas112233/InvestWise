@@ -1,11 +1,12 @@
 # InvestWise — Enterprise Investment Management (Multi-Tenant SaaS)
 
-> Migration target: Next.js 15 App Router. Current code (Vite SPA `client/` + Express API
-> `server/src/`) is the behavioral reference — port behavior, don't redesign it mid-flight.
+> Runs on Next.js 16 App Router. The Express-era module tree under `server/src/` is imported
+> directly by the API routes (`app/api/**` → `server/src/modules/**/handlers.ts`) — it is live
+> code, not a reference. Keep its behaviour; don't redesign it mid-flight.
 
 ## Stack (target)
 
-- **Framework:** Next.js 15 (App Router) + React 19 + TypeScript `strict: true`
+- **Framework:** Next.js 16 (App Router, Turbopack) + React 19 + TypeScript `strict: true`
 - **Database:** Postgres/Supabase + Drizzle ORM — schema: `server/src/db/schema/*.ts`
   (`drizzle.config.ts`, `db:generate` / `db:migrate` / `db:push`)
 - **Auth:** JWT access (15m) + refresh (7d, rotation) in HttpOnly cookies
@@ -21,14 +22,15 @@
 ## Commands
 
 ```bash
-npm run dev          # Vite dev (client) — after migration: next dev
-npm run build        # vite build — after migration: next build
-npm run lint         # eslint
-npm run test         # vitest (client) / vitest run (server)
-npm run typecheck    # tsc --noEmit (server)
-npm run db:generate  # drizzle-kit generate (server)
-npm run db:migrate   # drizzle-kit migrate (server)
-npm run db:push      # drizzle-kit push (server, dev only)
+npm run dev          # next dev (Turbopack; reads .env.local)
+npm run build        # next build (Turbopack in Next 16)
+npm run start        # next start (serve a built production app locally)
+npm run lint         # eslint . (flat config: eslint.config.mjs — `next lint` was removed in 16)
+npm run test         # vitest run
+npm run typecheck    # tsc --noEmit
+npm run db:migrate   # node scripts/migrate.mjs
+npm run db:seed      # node scripts/seed-superadmin.mjs
+npm run i18n:validate # 4-locale key parity check on messages/*.json
 ```
 
 ---
