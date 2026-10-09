@@ -1,8 +1,8 @@
 /**
  * Excel report builder (exceljs). Renders the enterprise template:
- * letterhead block, period + provenance lines, localized summary block,
- * styled data table (frozen header, autofilter, 2dp money columns,
- * totals row), right-to-left sheet for Urdu (Rule §10).
+ * 3-row header cap (#104), styled data table (frozen header, autofilter,
+ * 2dp money columns, totals row), footer provenance, right-to-left sheet
+ * for Urdu (Rule §10).
  */
 import ExcelJS from "exceljs";
 import type { ReportDocument } from "./data";
@@ -21,16 +21,19 @@ const NUMBER_FMT = "#,##0.00";
 
 const isRtl = (locale: ReportDocument["locale"]) => locale === "ur";
 
-function letterheadLineCount(doc: ReportDocument): number {
-  // company + [tagline] + [contact] + title + period + generated + blank
-  let lines = 1;
-  if (doc.letterhead.tagline) lines += 1;
-  if ([doc.letterhead.address, doc.letterhead.email, doc.letterhead.phone].some(Boolean)) lines += 1;
-  return lines + 4;
-}
+/**
+ * #104: the pre-table header block is HARD-CAPPED at 3 rows — the old
+ * template stacked company + tagline + contact + title + period + generated
+ * + blank + one row PER summary entry + blank, which pushed the statement
+ * data down 14+ rows. Now: row 1 = company — report type, row 2 = period +
+ * provenance, row 3 = summary rollup joined on one line. The table header
+ * always lands on row 4 and the data on row 5, for every report type.
+ * Letterhead tagline/contact are demoted to the footer, not lost.
+ */
+const HEADER_BLOCK_ROWS = 3;
 
-function tableHeaderRowIndex(doc: ReportDocument): number {
-  return letterheadLineCount(doc) + doc.summary.length + 1; // + trailing blank
+function tableHeaderRowIndex(): number {
+  return HEADER_BLOCK_ROWS + 1; // data table header: row 4
 }
 
 function sanitizeSheetName(name: string): string {
@@ -98,7 +101,7 @@ export async function buildExcelBuffer(doc: ReportDocument): Promise<Buffer> {
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet(sanitizeSheetName(doc.title), {
-    views: [{ state: "frozen", ySplit: tableHeaderRowIndex(doc), rightToLeft: rtl }],
+    views: [{ state: "frozen", ySplit: tableHeaderRowIndex(), rightToLeft: rtl }],
     pageSetup: {
       paperSize: 9, // A4
       orientation: doc.columns.length > 7 ? "landscape" : "portrait",
@@ -130,52 +133,28 @@ export async function buildExcelBuffer(doc: ReportDocument): Promise<Buffer> {
 
   let row = 1;
 
-  // ── Letterhead ───────────────────────────────────────────────────
+  // ── Header block — hard cap: exactly 3 rows (#104) ───────────────
+  // Row 1: company — report type name.
   sheet.mergeCells(row, 1, row, lastCol);
-  putStrong(sheet.getCell(row, 1), doc.letterhead.name, 15);
-  sheet.getRow(row).height = 22;
+  putStrong(sheet.getCell(row, 1), doc.title ? `${doc.letterhead.name} — ${doc.title}` : doc.letterhead.name, 13);
+  sheet.getRow(row).height = 20;
   row += 1;
 
-  if (doc.letterhead.tagline) {
-    sheet.mergeCells(row, 1, row, lastCol);
-    putMuted(sheet.getCell(row, 1), doc.letterhead.tagline, { size: 9 });
-    row += 1;
-  }
-  const contactLine = [doc.letterhead.address, doc.letterhead.email, doc.letterhead.phone]
-    .filter(Boolean)
-    .join("  |  ");
-  if (contactLine) {
-    sheet.mergeCells(row, 1, row, lastCol);
-    putMuted(sheet.getCell(row, 1), contactLine, { size: 9 });
-    row += 1;
-  }
-
-  // ── Title + period + provenance ──────────────────────────────────
+  // Row 2: period + provenance on one muted line.
   sheet.mergeCells(row, 1, row, lastCol);
-  putStrong(sheet.getCell(row, 1), doc.title, 12);
+  putMuted(
+    sheet.getCell(row, 1),
+    [doc.periodLine, doc.generatedAt, `${doc.generatedByLabel}: ${doc.generatedBy}`].filter(Boolean).join("  |  "),
+    { size: 9 },
+  );
   row += 1;
 
+  // Row 3: summary rollup joined on one line (wraps inside the merge if long).
   sheet.mergeCells(row, 1, row, lastCol);
-  putMuted(sheet.getCell(row, 1), doc.periodLine, { size: 10 });
+  const summaryCell = sheet.getCell(row, 1);
+  putMuted(summaryCell, doc.summary.map((entry) => `${entry.label}: ${entry.value}`).join("   |   "), { size: 9 });
+  summaryCell.alignment = { horizontal: rtl ? "right" : "left", vertical: "top", wrapText: true };
   row += 1;
-
-  sheet.mergeCells(row, 1, row, lastCol);
-  putMuted(sheet.getCell(row, 1), `${doc.generatedAt}  |  ${doc.generatedByLabel}: ${doc.generatedBy}`, { size: 9 });
-  row += 1;
-
-  row += 1; // blank spacer
-
-  // ── Summary block ────────────────────────────────────────────────
-  for (const entry of doc.summary) {
-    putMuted(sheet.getCell(row, 1), entry.label, { bold: true, size: 9 });
-    sheet.mergeCells(row, 2, row, Math.max(2, Math.min(4, lastCol)));
-    const valueCell = sheet.getCell(row, 2);
-    valueCell.value = entry.value;
-    valueCell.font = { size: 10, bold: true, color: { argb: TEXT_DARK } };
-    valueCell.alignment = { horizontal: rtl ? "right" : "left" };
-    row += 1;
-  }
-  row += 1; // blank spacer
 
   // ── Table header ─────────────────────────────────────────────────
   const headerRowIndex = row;
@@ -237,6 +216,17 @@ export async function buildExcelBuffer(doc: ReportDocument): Promise<Buffer> {
   row += 1;
   sheet.mergeCells(row, 1, row, lastCol);
   putMuted(sheet.getCell(row, 1), doc.footerNote, { size: 8, italic: true });
+  // #104: letterhead tagline/contact were demoted out of the 3-row header
+  // cap — they survive here, below the statement, so nothing is lost.
+  const contactLine = [doc.letterhead.address, doc.letterhead.email, doc.letterhead.phone]
+    .filter(Boolean)
+    .join("  |  ");
+  const provenanceLine = [doc.letterhead.tagline, contactLine].filter(Boolean).join("  |  ");
+  if (provenanceLine) {
+    row += 1;
+    sheet.mergeCells(row, 1, row, lastCol);
+    putMuted(sheet.getCell(row, 1), provenanceLine, { size: 8, italic: true });
+  }
   if (doc.truncated) {
     row += 1;
     sheet.mergeCells(row, 1, row, lastCol);
