@@ -62,7 +62,10 @@ if (!configured || configured === DEV_DEFAULT_PASSWORD) {
 }
 const PASSWORD = configured || DEV_DEFAULT_PASSWORD;
 
-const sql = postgres(env.DATABASE_URL, { prepare: false, connect_timeout: 15 });
+// Pin search_path per connection: Supabase poolers can hand out backends whose
+// role-level search_path is empty, and the unqualified names below would then
+// fail with "relation does not exist" (see db/index.ts for the app-side pin).
+const sql = postgres(env.DATABASE_URL, { prepare: false, connect_timeout: 15, connection: { search_path: 'public' } });
 
 try {
   await sql`insert into tenants (slug, name, status, plan) values ('default', 'Default Organization', 'active', 'standard') on conflict (slug) do nothing`;

@@ -20,6 +20,12 @@ const poolOptions = {
   fetch_types: false,
   debug: false,
   onnotice: () => {},
+  // Every table lives in `public`. Pin the search path per connection so
+  // table resolution is deterministic regardless of the server/role default —
+  // Supabase's pooler can hand out backends whose role-level search_path is
+  // empty or stale, and unqualified names then fail with "relation does not
+  // exist" in exactly the ways that are hardest to diagnose at 2 a.m.
+  connection: { search_path: 'public' },
 };
 
 /**
