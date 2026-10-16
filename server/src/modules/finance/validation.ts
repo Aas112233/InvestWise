@@ -22,7 +22,7 @@ const uuidField = z.string().uuid('Must be a valid UUID');
  */
 const moneyField = (max: number, maxMessage: string) =>
   z.coerce
-    .number({ invalid_type_error: 'Amount must be a number' })
+    .number({ error: 'Amount must be a number' })
     .positive('Amount must be positive')
     .min(0.01, 'Minimum amount is 0.01')
     .max(max, maxMessage);
@@ -112,7 +112,7 @@ const equityTransferRowSchema = z.object({
   // Optional too: a contribution-only transfer moves equity without any
   // ownership change. Ceiling on "what must a row move" is on the parent.
   shares: z.coerce
-    .number({ invalid_type_error: 'Shares must be a number' })
+    .number({ error: 'Shares must be a number' })
     .int('Shares must be a whole number')
     .min(0, 'Shares cannot be negative')
     .optional(),

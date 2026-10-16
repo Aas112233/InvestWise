@@ -48,10 +48,7 @@
     "server/src/lib/session.ts",
     "server/src/shared/errors.ts",
     "server/src/middleware/api.ts",
-    "server/src/db/schema/*.ts",
-    "server/src/modules/members/handlers.ts",
-    "server/src/modules/members/service.ts",
-    "server/src/modules/finance/withdrawal-rules.ts",
+    "server/src/**/*.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
