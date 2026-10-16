@@ -58,9 +58,10 @@ function sameOrigin(request: NextRequest): boolean {
 }
 
 // Exact public pages + public auth endpoints. Everything else requires a
-// valid session token to even load.
+// valid session token to even load. The dashboard ('/') is deliberately NOT
+// public: anonymous visitors are redirected to /login (with ?redirect=/) by
+// the !claims branch below, so the first screen anyone sees is the login.
 const PUBLIC_PATHS = [
-  '/',
   '/login',
   '/forgot-password',
   // Self-serve tenant onboarding (page + its endpoint). The endpoint enforces
