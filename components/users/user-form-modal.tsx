@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -11,11 +12,13 @@ import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/comp
 import { TopSheet } from "@/components/ui/top-sheet";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
-import { PERMISSION_SCREENS, SCREEN_LABEL_KEY, TENANT_ASSIGNABLE_ROLES, type TenantUser } from "./types";
+import { ACCESS_PRESETS, PERMISSION_SCREENS, SCREEN_LABEL_KEY, TENANT_ASSIGNABLE_ROLES, presetPermissions, type AccessPreset, type TenantUser } from "./types";
 
 // Create/edit user sheet. Permissions matrix edits explicit per-user
-// overrides (WRITE/READ/NONE); an unset screen inherits the role baseline
-// (lib/roles.ts roleBaselineGrant) and is omitted from the payload.
+// overrides (MANAGE/WRITE/READ/NONE); an unset screen inherits the role
+// baseline (lib/roles.ts roleBaselineGrant) and is omitted from the payload.
+// On create, an optional member link prefills name/email from the directory
+// and is claimed transactionally server-side (app/api/auth/register).
 export function UserFormModal({
   open,
   initial,
@@ -48,11 +51,14 @@ export function UserFormModal({
 
   const [role, setRole] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Record<string, string | null>>({});
+  const [memberUuid, setMemberUuid] = useState<string | null>(null);
+  const [memberSearch, setMemberSearch] = useState("");
 
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(formSchema) as any });
 
@@ -64,8 +70,52 @@ export function UserFormModal({
         ? Object.fromEntries(PERMISSION_SCREENS.map((s) => [s, initial.permissions?.[s] ?? null]))
         : Object.fromEntries(PERMISSION_SCREENS.map((s) => [s, null])),
     );
+    setMemberUuid(initial?.memberUuid ?? null);
+    setMemberSearch("");
     reset({ name: initial?.name ?? "", email: initial?.email ?? "", password: "" });
   }, [open, initial, reset]);
+
+  // Member directory feed for the link-member picker (create mode only).
+  // Unlinked members surface first; already-linked rows are disabled so one
+  // member can never fan out to two logins.
+  const memberQuery = useQuery({
+    queryKey: ["members", { linkPicker: true, search: memberSearch }],
+    queryFn: () =>
+      apiClient<{ data: Array<{ id: string; memberId: string; name: string; email?: string | null; userId?: string | null }> }>(
+        "/members",
+        { params: { limit: 100, search: memberSearch || undefined } },
+      ),
+    enabled: open && !isEdit,
+    staleTime: 30_000,
+  });
+  const memberOptions: DropdownOption[] = useMemo(() => {
+    const rows = memberQuery.data?.data ?? [];
+    return rows.map((m) => ({
+      value: m.id,
+      label: `${m.name} (${m.memberId})`,
+      caption: m.email ?? undefined,
+      disabled: Boolean(m.userId),
+    }));
+  }, [memberQuery.data]);
+
+  const selectedMember = useMemo(() => {
+    const rows = memberQuery.data?.data ?? [];
+    return rows.find((m) => m.id === memberUuid) ?? null;
+  }, [memberQuery.data, memberUuid]);
+
+  const applyMemberLink = (id: string | null) => {
+    setMemberUuid(id);
+    if (!id) return;
+    const rows = memberQuery.data?.data ?? [];
+    const m = rows.find((r) => r.id === id);
+    if (!m) return;
+    setValue("name", m.name, { shouldValidate: true });
+    if (m.email) setValue("email", m.email, { shouldValidate: true });
+  };
+
+  const applyPreset = (preset: AccessPreset) => {
+    setPermissions(presetPermissions(preset));
+  };
 
   const roleOptions: DropdownOption[] = useMemo(
     () => TENANT_ASSIGNABLE_ROLES.map((r) => ({ value: r, label: t(`users.roleLabels.${r}`) })),
@@ -77,6 +127,16 @@ export function UserFormModal({
       { value: "NONE", label: t("users.permLevels.NONE") },
       { value: "READ", label: t("users.permLevels.READ") },
       { value: "WRITE", label: t("users.permLevels.WRITE") },
+      { value: "MANAGE", label: t("users.permLevels.MANAGE") },
+    ],
+    [t],
+  );
+
+  const presetOptions: Array<{ preset: AccessPreset; label: string }> = useMemo(
+    () => [
+      { preset: ACCESS_PRESETS.READ_ONLY, label: t("users.form.presetReadOnly") },
+      { preset: ACCESS_PRESETS.STANDARD_WRITE, label: t("users.form.presetStandardWrite") },
+      { preset: ACCESS_PRESETS.FULL_MANAGE, label: t("users.form.presetFullManage") },
     ],
     [t],
   );
@@ -107,6 +167,7 @@ export function UserFormModal({
             email: values.email,
             password: values.password,
             role: role ?? undefined,
+            memberUuid: memberUuid ?? undefined,
             permissions: Object.keys(explicitPermissions).length > 0 ? explicitPermissions : undefined,
           }),
         });
@@ -130,6 +191,27 @@ export function UserFormModal({
       <form method="post" onSubmit={handleSubmit(onSubmit)} noValidate>
         <ERPFormLayout>
           <ERPFormSection title={t("users.form.accountTitle")}>
+            {!isEdit && (
+              <ERPFormField
+                label={t("users.form.linkedMember")}
+                hint={t("users.form.linkedMemberHint")}
+                error={memberQuery.isError ? t("users.errors.membersLoadFailed") : undefined}
+              >
+                <AppDropdown
+                  options={memberOptions}
+                  value={memberUuid}
+                  onChange={applyMemberLink}
+                  onSearch={setMemberSearch}
+                  loading={memberQuery.isFetching}
+                  placeholder={t("users.form.selectMember")}
+                />
+              </ERPFormField>
+            )}
+            {isEdit && initial?.memberName && (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 pb-2">
+                {t("users.form.currentlyLinked", { name: initial.memberName })}
+              </p>
+            )}
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("users.form.name")} required error={errors.name?.message ? t(errors.name.message) : undefined}>
                 <input type="text" autoComplete="name" {...register("name")} className={inputCls} />
@@ -167,6 +249,14 @@ export function UserFormModal({
               <p className="text-[11px] text-slate-500 dark:text-slate-400 pb-2">
                 {t("users.form.permissionsNote")}
               </p>
+              <div className="flex flex-wrap items-center gap-2 pb-2">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">{t("users.form.presetLabel")}</span>
+                {presetOptions.map(({ preset, label }) => (
+                  <Button key={preset} variant="outline" size="sm" type="button" onClick={() => applyPreset(preset)}>
+                    {label}
+                  </Button>
+                ))}
+              </div>
               <div className="divide-y divide-border/60">
                 {PERMISSION_SCREENS.map((screen) => (
                   <div key={screen} className="flex items-center justify-between gap-3 py-1.5">

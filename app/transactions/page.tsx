@@ -11,12 +11,20 @@ import {
   TransactionVoucherData,
 } from "@/components/transactions";
 import { apiClient } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
+import { hasScreenPermission } from "@/lib/permissions";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/i18n";
 
 export default function TransactionsPage() {
   const { t } = useLocale();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  // Soft-delete is a ledger write: gate the button on screen permission, not
+  // a constant. An explicit READ grant overrides the role baseline, so a
+  // read-only user never sees it (the API enforces the same check).
+  const canManage = hasScreenPermission(user, "TRANSACTIONS", "WRITE");
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -40,7 +48,12 @@ export default function TransactionsPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   // TanStack Query v5: Hierarchical key ["transactions", { ... }] (AGENTS.md §7)
-  const { data: responseData, isLoading } = useQuery<{
+  const {
+    data: responseData,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery<{
     data: TransactionRecord[];
     pagination: { total: number; totalPages: number };
     metrics: { totalInflow: number; totalOutflow: number; netFlow: number };
@@ -120,6 +133,8 @@ export default function TransactionsPage() {
       <TransactionsListView
         transactions={responseData?.data || []}
         isLoading={isLoading}
+        isRefreshing={isFetching}
+        onRefresh={() => refetch()}
         totalCount={responseData?.pagination?.total || 0}
         currentPage={page}
         pageSize={pageSize}
@@ -140,7 +155,7 @@ export default function TransactionsPage() {
         metrics={responseData?.metrics}
         onViewVoucher={handleViewVoucher}
         onSoftDelete={handleOpenSoftDelete}
-        canManage={true}
+        canManage={canManage}
       />
 
       {/* Voucher Drawer */}

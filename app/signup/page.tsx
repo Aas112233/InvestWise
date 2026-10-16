@@ -30,6 +30,7 @@ import {
   ERPFormLayout,
   ERPFormSection,
 } from "@/components/ui/erp-form-layout";
+import { NumericInput } from "@/components/ui/numeric-input";
 
 interface TurnstileApi {
   render: (el: HTMLElement, opts: Record<string, unknown>) => string;
@@ -111,7 +112,10 @@ export default function SignupPage() {
   // anything incomplete and re-validates the rest.
   const [extraFunds, setExtraFunds] = useState<{ name: string; type: string }[]>([]);
 
-  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
+  const siteKey =
+    process.env.NEXT_PUBLIC_TURNSTILE_ENABLED === "true"
+      ? process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""
+      : "";
   const widgetRef = useRef<HTMLDivElement>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
@@ -385,7 +389,7 @@ export default function SignupPage() {
                     hint={t("auth.signup.shareValueHint")}
                     error={errors.shareValue ? t("auth.signup.invalidAmount") : undefined}
                   >
-                    <input
+                    <NumericInput
                       type="text"
                       inputMode="decimal"
                       autoComplete="off"

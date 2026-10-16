@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, decimal, integer, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, decimal, integer, boolean, timestamp, jsonb, index, unique } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { tenants } from './tenants';
 
@@ -19,11 +19,22 @@ export const DEFAULT_PENALTY_RULES: PenaltyRuleConfig[] = [
 
 export const DEFAULT_MEETING_TYPES = ['FOUNDING_MEMBER', 'SHAREHOLDER', 'INVESTOR'];
 
+// Payment-method jsonb shape (canonical types live in lib/payment-methods.ts;
+// duplicated here as a plain default because schema files must not import app
+// libs — same pattern as DEFAULT_MEETING_TYPES being mirrored client-side).
+const DEFAULT_PAYMENT_METHODS = [
+  { name: 'Cash', type: 'CASH' },
+  { name: 'Bank Transfer', type: 'BANK' },
+  { name: 'bKash', type: 'MOBILE' },
+  { name: 'Nagad', type: 'MOBILE' },
+  { name: 'Rocket', type: 'MOBILE' },
+  { name: 'Check', type: 'CHECK' },
+  { name: 'Other', type: 'OTHER' },
+];
+
 export const systemSettings = pgTable('system_settings', {
   id: uuid('id').defaultRandom().primaryKey(),
-  // One row per tenant (AGENTS.md §multi-tenancy). This copy of the schema was
-  // missing the column the live table and the root schema both have, which
-  // forced every server-side settings read to run unscoped.
+  // One row per tenant (AGENTS.md §multi-tenancy).
   tenantId: uuid('tenant_id').references(() => tenants.id),
 
   // Organization / Corporate Identity
@@ -57,21 +68,31 @@ export const systemSettings = pgTable('system_settings', {
   monthlyMeetingDay: integer('monthly_meeting_day').default(5),
   depositDueDate: integer('deposit_due_date').default(10),
   gracePeriodDays: integer('grace_period_days').default(3),
+  /**
+   * Month-granularity tolerance for submitting a PAST period's deposit.
+   * Distinct from `gracePeriodDays`, which is the day-level buffer on the
+   * current period's deadline. With 1, a January deposit still counts as
+   * on-time if it lands any time in February.
+   */
+  lateDepositGraceMonths: integer('late_deposit_grace_months').default(1),
+  /** Months without a deposit before a member is auto-held (status -> inactive). */
+  inactiveAfterMonths: integer('inactive_after_months').default(3),
+  /**
+   * Months without a deposit before a member becomes SUSPENSION-ELIGIBLE.
+   * Suspension is never automatic — the sweep only marks eligibility and an
+   * admin confirms. Must be > inactiveAfterMonths.
+   */
+  suspendedAfterMonths: integer('suspended_after_months').default(6),
   meetingTypes: jsonb('meeting_types').$type<string[]>().default(DEFAULT_MEETING_TYPES),
   penaltyRules: jsonb('penalty_rules').$type<PenaltyRuleConfig[]>().default(DEFAULT_PENALTY_RULES),
   /** Tenant-configurable payment methods for deposit forms: name + channel type. */
-  paymentMethods: jsonb('payment_methods').$type<{ name: string; type: string }[]>().default([
-    { name: 'Cash', type: 'CASH' },
-    { name: 'Bank Transfer', type: 'BANK' },
-    { name: 'bKash', type: 'MOBILE' },
-    { name: 'Nagad', type: 'MOBILE' },
-    { name: 'Rocket', type: 'MOBILE' },
-    { name: 'Check', type: 'CHECK' },
-    { name: 'Other', type: 'OTHER' },
-  ]),
+  paymentMethods: jsonb('payment_methods').$type<{ name: string; type: string }[]>().default(DEFAULT_PAYMENT_METHODS),
 
   lastUpdatedBy: uuid('last_updated_by').references(() => users.id),
   lastUpdatedAt: timestamp('last_updated_at', { withTimezone: true }).defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-});
+}, (table) => [
+  index('idx_system_settings_tenant').on(table.tenantId),
+  unique('uq_system_settings_tenant').on(table.tenantId),
+]);

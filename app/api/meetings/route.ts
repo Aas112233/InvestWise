@@ -137,6 +137,8 @@ export async function POST(request: NextRequest) {
       resourceType: 'Meeting',
       resourceId: created?.id,
       details: { title, meetingDate, meetingType },
+      // Create flow: after-only — `created` is the INSERT's .returning().
+      after: created,
     });
 
     return NextResponse.json({

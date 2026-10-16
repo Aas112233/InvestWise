@@ -131,11 +131,11 @@ export function MeetingAttendanceModal({
       isOpen={isOpen}
       onClose={onClose}
       title={meeting.title}
-      description={`${t("meetings.attendanceRoster", { defaultValue: "Attendance Roster" })} • ${meeting.location || "HQ"}`}
+      description={`${t("meetings.attendanceRoster", { defaultValue: "Attendance Roster" })} • ${meeting.location || t("meetings.defaultVenue", { defaultValue: "HQ" })}`}
     >
       <div className="space-y-6">
         {/* Attendance Summary Header */}
-        <div className="grid grid-cols-4 gap-2 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-center text-xs">
+        <div className="grid grid-cols-4 gap-2 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-input rounded-lg text-center text-xs">
           <div>
             <span className="text-slate-400 block">{t("meetings.total", { defaultValue: "Total" })}</span>
             <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{total}</span>
@@ -168,7 +168,11 @@ export function MeetingAttendanceModal({
                     {member.name}
                   </span>
                   <span className="text-[11px] font-mono text-muted-foreground">
-                    ID: {member.memberId} • Shares: {member.shares}
+                    {t("meetings.idShares", {
+                      id: member.memberId,
+                      count: member.shares,
+                      defaultValue: "ID: {id} • {count} Shares",
+                    })}
                   </span>
                 </div>
 
@@ -225,12 +229,12 @@ export function MeetingAttendanceModal({
             placeholder={t("meetings.minutesPlaceholder", { defaultValue: "Document resolutions, decisions and key takeaways..." })}
             value={meetingNotes}
             onChange={(e) => setMeetingNotes(e.target.value)}
-            className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
+            className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-input rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
           />
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-border">
           <Button variant="outline" size="sm" onClick={handleSave} loading={isSaving} icon={Save}>
             {t("meetings.saveDraft", { defaultValue: "Save Roster" })}
           </Button>

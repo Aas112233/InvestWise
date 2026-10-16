@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { useFiscalPeriodYears } from "@/lib/fiscal-period-options";
 import type { PaginatedResponse } from "@/lib/utils/types";
 import type { StatusTone } from "@/components/ui/status-badge";
 
@@ -30,25 +31,11 @@ export interface DepositRow {
   fundName?: string | null;
 }
 
-// §8: deposit month pickers are dropdowns over dynamic arrays, never free
-// text. Shared by the deposit form and the request-deposit form so both
-// always agree on values and ranges.
+// §8: deposit period pickers are dropdowns over the tenant's fiscal arrays —
+// see useFiscalPeriodOptions() in lib/fiscal-period-options, used by every
+// deposit screen so they always agree on values and ranges. DEPOSIT_MONTH_KEYS
+// stays for rendering an absolute YYYY-MM month label.
 export const DEPOSIT_MONTH_KEYS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const;
-
-export function buildDepositMonthOptions(t: (k: string) => string) {
-  return DEPOSIT_MONTH_KEYS.map((key, i) => ({
-    value: String(i + 1).padStart(2, "0"),
-    label: t(`common.months.${key}`),
-  }));
-}
-
-/** Back-entry window: next year down to ten years back, newest first. */
-export function buildDepositYearOptions() {
-  return Array.from({ length: 12 }, (_, i) => {
-    const y = new Date().getFullYear() + 1 - i;
-    return { value: String(y), label: String(y) };
-  });
-}
 
 export interface MemberOption {
   id: string;
@@ -90,6 +77,16 @@ export function useDepositsList(params: {
   endDate: string | null;
   /** Deposit month (YYYY-MM) — filters on the month a deposit is FOR. */
   monthKey?: string | null;
+  /**
+   * Management desk only: hide PENDING deposit REQUESTS (they live on the
+   * Request Deposit screen's inbox). The request screen omits this and sees
+   * everything. Completed requests are real money and stay on both screens.
+   */
+  excludePendingRequests?: boolean;
+  /** Server-side header sort — the desk paginates, so a browser sort only
+   *  reorders the rows already on screen. */
+  sortBy: string;
+  sortOrder: 'asc' | 'desc';
 }) {
   return useQuery({
     queryKey: ["deposits", params],
@@ -114,6 +111,9 @@ export function useDepositsList(params: {
           startDate: params.monthKey ? undefined : params.startDate || undefined,
           endDate: params.monthKey ? undefined : params.endDate || undefined,
           depositMonth: params.monthKey || undefined,
+          excludePendingRequests: params.excludePendingRequests ? "true" : undefined,
+          sortBy: params.sortBy,
+          sortOrder: params.sortOrder,
         },
       });
       return { data: res.data ?? [], total: res.pagination?.total ?? 0, sum: res.sum };
@@ -168,12 +168,19 @@ export function useMemberOptions() {
   });
 }
 
-export function useFundOptions() {
+/**
+ * Fund picker feed. Pass a fund type (e.g. `DEPOSIT_FUND_TYPE` from
+ * `lib/deposit-fund.ts`) to offer only that container — the deposit and
+ * request-deposit forms do, because member money may only land in a DEPOSIT
+ * fund. The deposits list filter stays unfiltered so legacy rows in another
+ * container remain findable.
+ */
+export function useFundOptions(fundType?: string) {
   return useQuery({
-    queryKey: ["funds", "dropdown"],
+    queryKey: ["funds", "dropdown", fundType ?? "all"],
     queryFn: async (): Promise<FundOption[]> => {
       const res = await apiClient<PaginatedResponse<FundOption>>("/funds", {
-        params: { page: 1, limit: 200 },
+        params: { page: 1, limit: 200, ...(fundType ? { type: fundType } : {}) },
       });
       return res.data ?? [];
     },
@@ -182,23 +189,22 @@ export function useFundOptions() {
 }
 
 /**
- * #65: lightweight look-up of whether ANY fiscal period is OPEN. The deposit
- * write path fails closed without one (lib/fiscal-guard.ts), so the form warns
- * BEFORE the user fills everything in and hits a toast they may never connect
- * to the missing fiscal year. Shares the ["fiscalPeriods"] cache key with the
- * Fiscal screen, so starting a year there updates the banner immediately.
+ * #65: whether ANY fiscal period is OPEN for posting. The deposit write path
+ * fails closed without one (lib/fiscal-guard.ts), so the form warns BEFORE the
+ * user fills everything in and hits a toast they may never connect to the
+ * missing fiscal year.
+ *
+ * Reads the tenant-readable /api/fiscal/years list rather than
+ * /api/fiscal/periods: the latter gates on FISCAL READ, so the clerks who
+ * actually post deposits got a 403 and never saw this warning at all. Shares
+ * the ["fiscalPeriods"] prefix, so starting a year on the Fiscal screen updates
+ * the banner immediately. `data` stays undefined while unknown — loading or a
+ * failed request must not fire a warning.
  */
-export function useHasOpenFiscalPeriod() {
-  return useQuery({
-    queryKey: ["fiscalPeriods", "open-check"],
-    queryFn: async (): Promise<boolean> => {
-      const res = await apiClient<{ success: boolean; data: Array<{ status: string | null }> }>(
-        "/fiscal/periods",
-      );
-      return (res.data ?? []).some((p) => p.status === "OPEN" || p.status === "ACTIVE");
-    },
-    staleTime: 60_000,
-  });
+export function useHasOpenFiscalPeriod(): { data: boolean | undefined } {
+  const { openFiscalYear, pending, failed } = useFiscalPeriodYears();
+  if (pending || failed) return { data: undefined };
+  return { data: openFiscalYear !== null };
 }
 
 // Tenant settings hooks now live in lib/use-tenant-settings.ts (single shared
@@ -248,10 +254,4 @@ export function monthRange(key: string): { start: string; end: string } | null {
     start: `${y}-${mm}-01`,
     end: `${y}-${mm}-${String(last).padStart(2, "0")}`,
   };
-}
-
-/** Last N calendar years (descending) for dynamic fiscal arrays. */
-export function recentYears(count: number = 5): string[] {
-  const y = new Date().getFullYear();
-  return Array.from({ length: count }, (_, i) => String(y - i));
 }

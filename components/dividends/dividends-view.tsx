@@ -11,9 +11,12 @@ import {
   Button,
   StatusBadge,
 } from "@/components/ui";
-import { formatMoney, formatDatePattern } from "@/lib/formatters";
+import { formatMoney, formatDateOnly } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { translateLedgerDescription } from "@/lib/ledger-description";
 import { apiClient } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
+import { hasScreenPermission } from "@/lib/permissions";
 import { useTenantCurrency, useTenantDateFormat, useTenantSettings } from "@/lib/use-tenant-settings";
 import {
   PieChart,
@@ -61,6 +64,13 @@ export function DividendsView() {
   const currency = useTenantCurrency();
   const dateFormat = useTenantDateFormat();
   const { data: settings } = useTenantSettings();
+  const { user } = useAuth();
+
+  // The only mutating action on this screen is running a distribution, which
+  // moves real money. The UI gate must match the API gate exactly
+  // (POST /dividends/distribute requires DIVIDENDS WRITE) — otherwise a
+  // read-only user sees a button that only 403s at the final submit.
+  const canDistribute = hasScreenPermission(user, "DIVIDENDS", "WRITE");
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -114,7 +124,7 @@ export function DividendsView() {
       sortable: true,
       render: (row) => (
         <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
-          {formatDatePattern(row.date, dateFormat)}
+          {formatDateOnly(row.date, dateFormat)}
         </span>
       ),
     },
@@ -174,7 +184,7 @@ export function DividendsView() {
       header: t("dividends.columns.description"),
       render: (row) => (
         <span className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-xs block">
-          {row.description || "-"}
+          {translateLedgerDescription(row.description, t) || "-"}
         </span>
       ),
     },
@@ -213,14 +223,16 @@ export function DividendsView() {
             <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isFetching ? "animate-spin" : ""}`} />
             {t("common.update")}
           </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setIsDistributeModalOpen(true)}
-          >
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            {t("dividends.payoutTab")}
-          </Button>
+          {canDistribute && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setIsDistributeModalOpen(true)}
+            >
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              {t("dividends.payoutTab")}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -318,8 +330,8 @@ export function DividendsView() {
             setPageSize(newSize);
             setPage(1);
           }}
-          emptyActionLabel={t("dividends.payoutTab")}
-          onEmptyAction={() => setIsDistributeModalOpen(true)}
+          emptyActionLabel={canDistribute ? t("dividends.payoutTab") : undefined}
+          onEmptyAction={canDistribute ? () => setIsDistributeModalOpen(true) : undefined}
         />
       </div>
 

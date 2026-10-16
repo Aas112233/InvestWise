@@ -3,7 +3,7 @@ import { getDb } from '@/db/index';
 import { projects, projectUpdates, projectMembers, funds, transactions, members } from '@/db/schema/index';
 import { eq, and, sql } from 'drizzle-orm';
 import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
+import { LockedError, NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { disbursementSchema } from '@/lib/utils/validation';
 import { requireProjectContext, zodMessage } from '../../_helpers';
 import { parsePositiveAmount, toCents, fromCents } from '@/lib/money';
@@ -124,6 +124,13 @@ export async function POST(
 
       if (!project) throw new NotFoundError('Project');
 
+      // Settled & closed projects are immutable records — no more postings.
+      if (project.isLocked) {
+        throw new LockedError(
+          'This project is completed and permanently locked — earnings and expenses can no longer be posted.',
+        );
+      }
+
       // #74: a posting with no fund is money that exists nowhere. The project's
       // currentFundBalance would rise while every fund balance stayed flat, so
       // the project view and the treasury could never be reconciled.
@@ -166,6 +173,39 @@ export async function POST(
 
       const now = new Date();
       await assertFiscalPeriodOpen(tx, tenantId, postingDate);
+
+      // Record the ledger transaction FIRST so the update row can link to it
+      // (transactionId): the printable update receipt is keyed on this row —
+      // reference number, member and officer live here, not on project_updates.
+      // #36: the Expenses register groups by `expense_name` and shows
+      // `authorized_by` — without them a project disbursement rendered as an
+      // unattributed "—" voucher in the audit trail.
+      const [createdTx] = await tx.insert(transactions).values({
+        tenantId,
+        type: type === 'Earning' ? 'Earning' : 'Expense',
+        amount: amountStr,
+        description: `${description.trim()} (${project.title})`,
+        expenseName: type === 'Earning' ? null : description.trim(),
+        category: type === 'Earning' ? 'Project Revenue' : 'Project Expense',
+        referenceNumber: refNumber,
+        date: postingDate,
+        submittedDate: postingDate,
+        status: 'Completed',
+        projectId: id,
+        fundId: project.linkedFundId ?? null,
+        // #107: "handled by" records the chosen project associate member
+        // (name entry only — see the validation block above); without one it
+        // stays the operator, as before.
+        handlingOfficer: handledBy ? handledBy.name : user.name,
+        memberId: handledBy ? handledBy.id : null,
+        // The user performing the disbursement is the approver of record for
+        // project postings (there is no separate approval step on this route).
+        authorizedBy: user.id,
+        balanceBefore: balanceBeforeStr,
+        balanceAfter: balanceAfterStr,
+        createdBy: user.id,
+      }).returning();
+
       const [updateRecord] = await tx
         .insert(projectUpdates)
         .values({
@@ -177,6 +217,7 @@ export async function POST(
           date: postingDate,
           balanceBefore: balanceBeforeStr,
           balanceAfter: balanceAfterStr,
+          transactionId: createdTx?.id ?? null,
         })
         .returning();
 
@@ -209,37 +250,9 @@ export async function POST(
           .where(and(eq(funds.id, project.linkedFundId), eq(funds.tenantId, tenantId)));
       }
 
-      // Record corresponding ledger transaction for project timeline.
-      // #36: the Expenses register groups by `expense_name` and shows
-      // `authorized_by` — without them a project disbursement rendered as an
-      // unattributed "—" voucher in the audit trail.
-      await tx.insert(transactions).values({
-        tenantId,
-        type: type === 'Earning' ? 'Earning' : 'Expense',
-        amount: amountStr,
-        description: `${description.trim()} (${project.title})`,
-        expenseName: type === 'Earning' ? null : description.trim(),
-        category: type === 'Earning' ? 'Project Revenue' : 'Project Expense',
-        referenceNumber: refNumber,
-        date: postingDate,
-        submittedDate: postingDate,
-        status: 'Completed',
-        projectId: id,
-        fundId: project.linkedFundId ?? null,
-        // #107: "handled by" records the chosen project associate member
-        // (name entry only — see the validation block above); without one it
-        // stays the operator, as before.
-        handlingOfficer: handledBy ? handledBy.name : user.name,
-        memberId: handledBy ? handledBy.id : null,
-        // The user performing the disbursement is the approver of record for
-        // project postings (there is no separate approval step on this route).
-        authorizedBy: user.id,
-        balanceBefore: balanceBeforeStr,
-        balanceAfter: balanceAfterStr,
-        createdBy: user.id,
-      });
-
-      return updateRecord;
+      // The update record carries the ledger link; the client opens the
+      // printable receipt on the transaction id.
+      return { ...updateRecord, transactionId: createdTx?.id };
     });
 
     await logAudit({

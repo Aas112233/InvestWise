@@ -1,0 +1,227 @@
+"use client";
+
+import React from "react";
+import { useLocale } from "@/lib/i18n";
+
+/**
+ * Printable-document primitives.
+ *
+ * Design language: A4, monochrome, hairline rules, a single 5px brand accent,
+ * tabular figures. No gradients, no colored panels. All layout uses physical mm
+ * (exact print fidelity) and logical alignment (start/end) so Urdu mirrors to
+ * RTL automatically via the inherited <html dir>.
+ */
+
+export interface DocSignature {
+  label: string;
+  name?: string;
+  role?: string;
+}
+
+const HAIRLINE = "1px solid #eef0f3";
+const RULE = "1px solid #e5e7eb";
+const INK = "#111827";
+const MUTED = "#6b7280";
+const FAINT = "#9ca3af";
+
+/**
+ * Text must never clip on the sheet: every value can wrap inside its cell
+ * (overflow-wrap: anywhere also breaks long unspaced tokens like reference
+ * numbers) and nothing is allowed to be cut by ellipsis. breakInside keeps a
+ * row/block whole when a long document flows onto a second printed page.
+ */
+const WRAP: React.CSSProperties = { overflowWrap: "anywhere", wordBreak: "break-word" };
+const KEEP: React.CSSProperties = { breakInside: "avoid" };
+
+interface DocumentFrameProps {
+  orgName?: string;
+  docType: string;
+  reference?: string;
+  dateLabel?: string;
+  children: React.ReactNode;
+  signatures?: DocSignature[];
+  orgTagline?: string;
+}
+
+export function DocumentFrame({ orgName, docType, reference, dateLabel, children, signatures, orgTagline }: DocumentFrameProps) {
+  const { t } = useLocale();
+  return (
+    <div
+      id="doc-sheet"
+      className="doc-sheet"
+      style={{
+        width: "210mm",
+        minHeight: "297mm",
+        margin: "0 auto",
+        padding: "16mm 18mm 14mm",
+        background: "#ffffff",
+        color: INK,
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+        position: "relative",
+      }}
+    >
+      {/* Letterhead */}
+      <div style={{ borderBottom: RULE, paddingBottom: "6mm", marginBottom: "9mm", ...KEEP }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12mm" }}>
+          <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.25, color: INK, ...WRAP }}>
+              {orgName || t("documents.orgFallback", { defaultValue: "InvestWise" })}
+            </div>
+            <div style={{ marginTop: 3, fontSize: 10.5, color: FAINT, display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 5, height: 5, borderRadius: 9999, background: "var(--primary, #2563eb)", display: "inline-block" }} />
+              {orgTagline || "InvestWise"}
+            </div>
+          </div>
+          <div style={{ textAlign: "end", fontSize: 11, color: MUTED, lineHeight: 1.7, minWidth: 0, flex: "0 1 auto", ...WRAP }}>
+            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.09em", color: FAINT, fontWeight: 600, ...WRAP }}>
+              {docType}
+            </div>
+            {reference ? (
+              <div>
+                {t("documents.reference", { defaultValue: "Reference" })}:{" "}
+                <span style={{ fontVariantNumeric: "tabular-nums", color: INK }}>{reference}</span>
+              </div>
+            ) : null}
+            {dateLabel ? <div style={{ fontVariantNumeric: "tabular-nums" }}>{dateLabel}</div> : null}
+          </div>
+        </div>
+      </div>
+
+      {/* Body (grows so signatures/footer sit at the bottom of the sheet) */}
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+
+      {/* Signatures */}
+      {signatures && signatures.length > 0 ? (
+        <div style={{ marginTop: "10mm" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "10mm", ...KEEP }}>
+            {signatures.map((s, i) => (
+              <div key={i} style={{ flex: 1, maxWidth: "52mm", minWidth: 0 }}>
+                <div
+                  style={{
+                    borderTop: `1px solid ${FAINT}`,
+                    paddingTop: 5,
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    color: INK,
+                    minHeight: 15,
+                    lineHeight: 1.3,
+                    ...WRAP,
+                  }}
+                >
+                  {s.name || ""}
+                </div>
+                <div style={{ fontSize: 9, color: FAINT, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 3 }}>
+                  {s.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Footer */}
+      <div
+        style={{
+          marginTop: "10mm",
+          paddingTop: "3mm",
+        borderTop: HAIRLINE,
+        fontSize: 9.5,
+        color: FAINT,
+        textAlign: "center",
+        ...KEEP,
+        ...WRAP,
+      }}
+    >
+        {t("documents.generatedBy", { defaultValue: "Generated by InvestWise" })}
+        {reference ? ` · ${reference}` : ""}
+        {dateLabel ? ` · ${dateLabel}` : ""}
+      </div>
+    </div>
+  );
+}
+
+export function DocTitle({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em", color: INK, marginBottom: 6, ...KEEP, ...WRAP }}>{children}</div>;
+}
+
+export function DocAmount({ label, children }: { label?: string; children: React.ReactNode }) {
+  return (
+    <div style={{ margin: "4mm 0 7mm" }}>
+      {label ? (
+        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.09em", color: FAINT, marginBottom: 3, fontWeight: 600 }}>
+          {label}
+        </div>
+      ) : null}
+      <div style={{ fontSize: 28, fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em", color: INK, lineHeight: 1.2, ...WRAP }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function DocRow({ label, value, strong }: { label: string; value: React.ReactNode; strong?: boolean }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12mm", padding: "3.1mm 0", borderBottom: HAIRLINE, fontSize: 12.5, ...KEEP }}>
+      <span style={{ color: MUTED, flexShrink: 0, ...WRAP }}>{label}</span>
+      <span style={{ color: INK, fontWeight: strong ? 650 : 500, textAlign: "end", fontVariantNumeric: "tabular-nums", minWidth: 0, flex: "1 1 auto", ...WRAP }}>{value}</span>
+    </div>
+  );
+}
+
+export function DocField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ padding: "3.1mm 0", borderBottom: HAIRLINE, ...KEEP }}>
+      <div style={{ color: MUTED, fontSize: 12.5, marginBottom: 2 }}>{label}</div>
+      <div style={{ color: INK, fontSize: 12.5, lineHeight: 1.55, ...WRAP }}>{children}</div>
+    </div>
+  );
+}
+
+export function DocSectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.09em", color: FAINT, fontWeight: 600, margin: "6mm 0 2mm" }}>
+      {children}
+    </div>
+  );
+}
+
+export function DocTable({ headers, rows, alignFirstLeft = true }: { headers: string[]; rows: React.ReactNode[][]; alignFirstLeft?: boolean }) {
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+      <thead>
+        <tr style={{ borderBottom: RULE }}>
+          {headers.map((h, i) => (
+              <th
+                key={i}
+                style={{
+                  textAlign: i === 0 && alignFirstLeft ? "start" : "end",
+                  padding: "2.4mm 0",
+                  fontSize: 9.5,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  color: FAINT,
+                  fontWeight: 600,
+                  overflowWrap: "anywhere",
+                }}
+              >
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, ri) => (
+          <tr key={ri} style={{ borderBottom: HAIRLINE, ...KEEP }}>
+            {r.map((c, ci) => (
+              <td key={ci} style={{ padding: "2.4mm 0", color: INK, textAlign: ci === 0 && alignFirstLeft ? "start" : "end", fontVariantNumeric: "tabular-nums", ...WRAP }}>
+                {c}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}

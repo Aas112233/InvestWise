@@ -329,6 +329,11 @@ export function MembersListView() {
       key: "name",
       header: t("members.columns.name"),
       sortable: true,
+      // Widest text column: the row's anchor. Long bilingual names (Bengali +
+      // English) need real room — squeezing the primary identifier hurts
+      // scanning more than any other column.
+      className: "min-w-[240px]",
+      cellClassName: "min-w-[240px]",
       render: (m) => (
         <div>
           <p className="font-medium text-slate-800 dark:text-slate-100">{m.name}</p>
@@ -339,6 +344,9 @@ export function MembersListView() {
     {
       key: "email",
       header: t("members.columns.contact"),
+      // Narrower than before: the phone is fixed-length and fits; the email
+      // truncates at the column's content width (~152px inside 180 - padding).
+      cellClassName: "max-w-[180px]",
       render: (m) => (
         <div className="text-[11px]">
           {/* Phone is masked PII: say so instead of rendering a blank cell that
@@ -348,7 +356,7 @@ export function MembersListView() {
           ) : (
             <p className="text-slate-600 dark:text-slate-300">{m.phone || "—"}</p>
           )}
-          <p className="text-slate-400 truncate max-w-[200px]">{m.email || "—"}</p>
+          <p className="text-slate-400 truncate max-w-[152px]">{m.email || "—"}</p>
         </div>
       ),
     },
@@ -371,7 +379,7 @@ export function MembersListView() {
               {m.nomineeName}
               {m.nomineeRelation && <span className="text-slate-400"> · {m.nomineeRelation}</span>}
             </p>
-            <p className="text-slate-400 truncate max-w-[200px]">
+            <p className="text-slate-400 truncate max-w-[152px]">
               {[m.nomineePhone, m.nomineeNidOrPassport].filter(Boolean).join(" · ") || "—"}
             </p>
           </div>

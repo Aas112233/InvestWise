@@ -130,6 +130,8 @@ export async function POST(request: NextRequest) {
       resourceType: 'Member',
       resourceId: created?.id,
       details: { memberId, name, email, role },
+      // Create flow: after-only — `created` is the INSERT's .returning().
+      after: created,
     });
 
     return NextResponse.json(

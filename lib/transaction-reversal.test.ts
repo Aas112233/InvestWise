@@ -7,8 +7,8 @@ import { decideReversal, shouldRefundProjectExpenses, shouldRefundProjectEarning
  * fund permanently debited (or credited) while the ledger shows the row gone.
  */
 describe('decideReversal', () => {
-  describe('settled deposits are owned by the revert route', () => {
-    it('refuses a Completed deposit and points at the revert endpoint', () => {
+  describe('settled deposits are owned by the revert path', () => {
+    it('refuses a Completed deposit and points at the Deposits screen (never an API route)', () => {
       const d = decideReversal({
         type: 'Deposit',
         status: 'Completed',
@@ -18,7 +18,10 @@ describe('decideReversal', () => {
       expect(d.requiresRevertPath).toBe(true);
       expect(d.direction).toBe(0);
       expect(d.fundId).toBeNull();
-      expect(d.revertHint).toContain('/api/deposits/[id]/revert');
+      // User-facing guidance names the screen, not the endpoint (§11: no
+      // route leaks in messages shown to users).
+      expect(d.revertHint).toContain('Deposits screen');
+      expect(d.revertHint).not.toContain('/api/');
     });
 
     it('refuses a Success deposit too', () => {

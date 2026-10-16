@@ -145,6 +145,10 @@ export async function PUT(
       resourceType: 'Meeting',
       resourceId: id,
       details: { updatedFields: Object.keys(updateFields) },
+      // Zero extra queries: `existing` was fetched for the guard checks
+      // above; `updated` is the UPDATE's .returning().
+      before: existing,
+      after: updated,
     });
 
     return NextResponse.json({
@@ -194,6 +198,9 @@ export async function DELETE(
       action: 'DELETE_MEETING',
       resourceType: 'Meeting',
       resourceId: id,
+      // Hard delete: the row is gone after this — the snapshot is the ONLY
+      // surviving record of what it contained. `existing` was already fetched.
+      before: existing,
     });
 
     return NextResponse.json({

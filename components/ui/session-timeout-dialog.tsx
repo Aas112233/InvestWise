@@ -78,7 +78,7 @@ export function SessionTimeoutDialog({
         onClick={handleLogout}
         aria-hidden="true"
       />
-      <div className="relative z-[10000] bg-card text-card-foreground rounded-2xl shadow-2xl max-w-md w-full mx-auto overflow-hidden border border-border/80 animate-in fade-in-50 zoom-in-95 duration-150">
+      <div className="relative z-[10000] bg-card text-card-foreground rounded-2xl shadow-2xl max-w-md w-full mx-auto overflow-hidden border border-border/80 dark:border-white/10 animate-in fade-in-50 zoom-in-95 duration-150">
         <div className="border-b border-border/80 p-6 bg-muted/20">
           <div className="flex items-center gap-3.5">
             <div className="w-12 h-12 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">

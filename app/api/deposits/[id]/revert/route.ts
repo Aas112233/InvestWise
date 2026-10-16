@@ -136,7 +136,19 @@ export async function POST(
           `Cannot revert: reversing ${fromCents(txnCents)} would drop ${lockedFund.name} below minimum reserve`,
         );
       }
-      const memberAfterCents = Math.max(0, toCents(lockedMember.totalContributed ?? '0') - txnCents);
+      // A deposit is revertible while the member's FREE balance covers it.
+      // `totalContributed` is already net of project investment (the project
+      // create path deducts from it), so: deposits 5,000 + 5,000 with 1,000
+      // invested leaves 9,000 free and either 5,000 deposit may revert. Only a
+      // revert larger than the free balance would un-fund a project (§12). The
+      // member row is locked above, so a concurrent investment cannot race this.
+      const memberEquityCents = toCents(lockedMember.totalContributed ?? '0');
+      if (memberEquityCents < txnCents) {
+        throw new ValidationError(
+          `[Field 'amount', Code: INSUFFICIENT_EQUITY] Cannot revert: this member only has ${fromCents(memberEquityCents)} of uncommitted deposit balance, and reverting would remove ${fromCents(txnCents)}. The difference has already been invested in a project — wind that project back first.`,
+        );
+      }
+      const memberAfterCents = memberEquityCents - txnCents;
 
       await tx
         .update(funds)
@@ -149,7 +161,7 @@ export async function POST(
       await tx
         .update(members)
         .set({
-          totalContributed: sql`GREATEST((${members.totalContributed}::numeric - ${txnCents / 100})::numeric(15,2), 0)`,
+          totalContributed: sql`(${members.totalContributed}::numeric - ${txnCents / 100})::numeric(15,2)`,
           updatedAt: now,
         })
         .where(and(eq(members.id, deposit.memberId!), eq(members.tenantId, scopedTenantId)));
@@ -208,6 +220,15 @@ export async function POST(
         referenceNumber: deposit.referenceNumber,
         previousStatus: deposit.status,
         newStatus: 'PENDING',
+        reason: reason.trim(),
+      },
+      // Zero extra queries: `deposit` is the row already fetched above; the
+      // reversal balances come from the transaction's own return value.
+      before: deposit,
+      after: {
+        status: 'PENDING',
+        fundBalance: newFundBalance,
+        memberTotalContributed: newMemberContributed,
         reason: reason.trim(),
       },
     });

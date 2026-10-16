@@ -51,17 +51,12 @@
     "server/src/db/schema/*.ts",
     "server/src/modules/members/handlers.ts",
     "server/src/modules/members/service.ts",
-    "server/src/modules/projects/service.ts",
     "server/src/modules/finance/withdrawal-rules.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "client",
-    "docs",
-    "server/src/modules/finance/controller.ts",
-    "server/src/modules/finance/routes.ts",
-    "server/src/modules/finance/share-consistency.ts"
+    "docs"
   ]
 }

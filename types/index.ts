@@ -3,29 +3,6 @@
  * Shared across Next.js App Router components and actions.
  */
 
-export enum AppScreen {
-  DASHBOARD = "DASHBOARD",
-  MEMBERS = "MEMBERS",
-  MEETINGS = "MEETINGS",
-  GOVERNANCE = "GOVERNANCE",
-  DEPOSITS = "DEPOSITS",
-  REQUEST_DEPOSIT = "REQUEST_DEPOSIT",
-  TRANSACTIONS = "TRANSACTIONS",
-  PROJECT_MANAGEMENT = "PROJECT_MANAGEMENT",
-  FUNDS_MANAGEMENT = "FUNDS_MANAGEMENT",
-  EXPENSES = "EXPENSES",
-  ANALYSIS = "ANALYSIS",
-  REPORTS = "REPORTS",
-  GOALS = "GOALS",
-  DIVIDENDS = "DIVIDENDS",
-  SETTINGS = "SETTINGS",
-}
-
-export enum AccessLevel {
-  NONE = "NONE",
-  READ = "READ",
-  WRITE = "WRITE",
-}
 
 export interface Member {
   id: string;
@@ -84,6 +61,9 @@ export interface ProjectMemberParticipation {
   ownershipPercentage?: number;
   tenantShareValue?: number;
   totalInvested?: number;
+  /** Deposit fund this shareholder's capital was drawn from (ledger recorded). */
+  sourceFundId?: string | null;
+  sourceFundName?: string | null;
 }
 
 export interface ProjectUpdateRecord {
@@ -94,6 +74,8 @@ export interface ProjectUpdateRecord {
   date: string;
   balanceBefore?: number;
   balanceAfter?: number;
+  /** Ledger row this posting created — the printable receipt is keyed on it. */
+  transactionId?: string | null;
 }
 
 export interface Project {
@@ -119,6 +101,10 @@ export interface Project {
   totalEarnings: number;
   totalExpenses: number;
   updates?: ProjectUpdateRecord[];
+  /** True once the project has earnings/expenses: capital structure is history. */
+  capitalLocked?: boolean;
+  /** Settled & closed: one-way permanent lock, set by a "Distribute Complete Project" run. */
+  isLocked?: boolean;
   tenantShareValue?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -276,6 +262,8 @@ export interface AnalyticsStats {
   totalDeposits: number;
   /** Count of deposit transactions (lifetime). */
   depositCount: number;
+  /** All-time Earning ledger total — the mirror of totalExpenses. */
+  totalIncome: number;
   totalExpenses: number;
   netReserveBalance: number;
   /** Total shares distributed across members, split founding vs normal (members.role). */

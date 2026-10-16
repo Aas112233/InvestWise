@@ -63,6 +63,10 @@ export async function GET(request: NextRequest) {
     );
     const dividendCond = and(eq(transactions.type, 'Dividend'), eq(transactions.isDeleted, false), eq(transactions.tenantId, scopedTenantId));
     const expenseCond = and(eq(transactions.type, 'Expense'), eq(transactions.isDeleted, false), eq(transactions.tenantId, scopedTenantId));
+    // Income is the mirror of the Expenses KPI: the all-time Earning ledger
+    // (project revenue booked via the project disbursement flow), not
+    // projects.totalEarnings — which excludes income earned outside a project.
+    const incomeCond = and(eq(transactions.type, 'Earning'), eq(transactions.isDeleted, false), eq(transactions.tenantId, scopedTenantId));
     const tenantProjectCond = eq(projects.tenantId, scopedTenantId);
 
     // Parallel aggregate queries — one round-trip batch (Tokyo pooler RT dominates).
@@ -78,6 +82,7 @@ export async function GET(request: NextRequest) {
       expenseRunRateAgg,
       currentMonthExpenseAgg,
       expenseLedgerAgg,
+      incomeLedgerAgg,
       recentLogs,
     ] = await withDbRetry(() => Promise.all([
       db
@@ -134,9 +139,22 @@ export async function GET(request: NextRequest) {
         .from(projects)
         .where(tenantProjectCond),
       // 12-month deposit series: amount, entry count, distinct submitting members.
+      //
+      // Bucket by the deposit's OWN `deposit_month` (which month this money
+      // covers), not the transaction date it was recorded — matching how
+      // governance/compliance reads `lastDepositMonth`. A January contribution
+      // entered in October belongs in the January slot. Legacy rows without a
+      // deposit_month (or with a malformed one) fall back to the transaction
+      // date so no data is silently dropped.
       db
         .select({
-          month: sql<string>`to_char(date_trunc('month', ${transactions.date}), 'YYYY-MM')`,
+          month: sql<string>`(
+            case
+              when ${transactions.depositMonth} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'
+                then ${transactions.depositMonth}
+              else to_char(${transactions.date}, 'YYYY-MM')
+            end
+          )`,
           amount: sql<number>`coalesce(sum(${transactions.amount}::numeric), 0)::float`,
           count: sql<number>`count(*)::int`,
           submittingMembers: sql<number>`count(distinct ${transactions.memberId})::int`,
@@ -185,6 +203,14 @@ export async function GET(request: NextRequest) {
         })
         .from(transactions)
         .where(expenseCond),
+      // All-time income ledger total — the Dashboard "Income" KPI, symmetric
+      // with the expense total above.
+      db
+        .select({
+          totalIncomeLedger: sql<number>`coalesce(sum(${transactions.amount}::numeric), 0)::float`,
+        })
+        .from(transactions)
+        .where(incomeCond),
       db
         .select({
           id: auditLogs.id,
@@ -212,6 +238,7 @@ export async function GET(request: NextRequest) {
     const foundingMembers = memberAgg[0]?.foundingMembers ?? 0;
     const normalMembers = memberAgg[0]?.normalMembers ?? 0;
     const totalExpenses = expenseLedgerAgg[0]?.totalExpenseLedger ?? 0;
+    const totalIncome = incomeLedgerAgg[0]?.totalIncomeLedger ?? 0;
     const totalDeposits = txDepositAgg[0]?.totalDeposits ?? 0;
     const depositCount = txDepositAgg[0]?.depositCount ?? 0;
     const totalDividendsDistributed = txDividendAgg[0]?.totalDividends ?? 0;
@@ -300,6 +327,7 @@ export async function GET(request: NextRequest) {
       monthlyGrowthRate: null,
       totalDeposits,
       depositCount,
+      totalIncome,
       totalExpenses,
       netReserveBalance: netReserves,
       totalShares: foundingShares + normalShares,

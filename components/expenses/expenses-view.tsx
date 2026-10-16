@@ -11,8 +11,9 @@ import {
   Button,
   StatusBadge,
 } from "@/components/ui";
-import { formatMoney, formatDate } from "@/lib/formatters";
+import { formatMoney, formatDateOnly } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { translateLedgerDescription } from "@/lib/ledger-description";
 import { usePermissions } from "@/lib/use-permissions";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
@@ -132,7 +133,7 @@ export function ExpensesView() {
       sortable: true,
       render: (row) => (
         <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
-          {formatDate(row.date)}
+          {formatDateOnly(row.date)}
         </span>
       ),
     },
@@ -219,7 +220,7 @@ export function ExpensesView() {
       header: t("expenses.reasonEntity"),
       render: (row) => (
         <span className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-xs block">
-          {row.description || "-"}
+          {translateLedgerDescription(row.description, t) || "-"}
         </span>
       ),
     },
@@ -285,7 +286,7 @@ export function ExpensesView() {
           description="Treasury fund deductions"
         />
         <ERPMetricCard
-          label="Direct Disbursements"
+          label="Direct Spending"
           value={formatMoney(projectTotal, "BDT")}
           icon={<Briefcase className="w-4 h-4" />}
           tone="slate"

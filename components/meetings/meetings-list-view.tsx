@@ -29,6 +29,7 @@ import {
 } from "@/components/ui";
 import { formatDate } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { meetingStatusLabel, meetingTypeLabel } from "./meeting-labels";
 
 interface MeetingsListViewProps {
   meetings: Meeting[];
@@ -117,7 +118,7 @@ export function MeetingsListView({
             {m.title}
           </span>
           <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-            {m.meetingType?.replace(/_/g, " ")}
+            {meetingTypeLabel(t, m.meetingType)}
           </span>
         </div>
       ),
@@ -167,7 +168,7 @@ export function MeetingsListView({
       key: "status",
       header: t("meetings.columns.status", { defaultValue: "STATUS" }),
       render: (m) => (
-        <StatusBadge tone={mapStatusTone(m.status)} label={m.status} />
+        <StatusBadge tone={mapStatusTone(m.status)} label={meetingStatusLabel(t, m.status)} />
       ),
     },
     {

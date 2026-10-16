@@ -9,7 +9,6 @@ export {
   CardSkeleton,
   CardGridSkeleton,
   TableRowSkeleton,
-  TableSkeleton,
 } from "./skeleton";
 export type { SkeletonProps } from "./skeleton";
 export { StatusBadge } from "./status-badge";
@@ -37,16 +36,8 @@ export type {
   ERPFiscalMonthPickerProps,
 } from "./erp-fiscal-month-picker";
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from "./card";
-export {
-  Table,
-  TableHeader,
-  TableBody,
-  TableFooter,
-  TableRow,
-  TableHead,
-  TableCell,
-  TableCaption,
-} from "./table";
 export { Input } from "./input";
+export { NumericInput } from "./numeric-input";
+export type { NumericInputProps } from "./numeric-input";
 export { AppModal } from "./app-modal";
 export type { AppModalProps } from "./app-modal";

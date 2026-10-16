@@ -8,7 +8,8 @@ import { apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
 import { useFormatDate, useFormatMoney } from "@/lib/use-tenant-settings";
 import { usePermissions } from "@/lib/use-permissions";
-import { fiscalStartYearForDate, nextFiscalStartYear, resolveFiscalBounds } from "@/lib/fiscal-periods";
+import { nextFiscalStartYear, resolveFiscalBounds } from "@/lib/fiscal-periods";
+import { useFiscalPeriodYears } from "@/lib/fiscal-period-options";
 import { AppDropdown, Button, ERPConfirmDialog, ERPDataTable, StatusBadge, type DropdownOption, type ERPColumn } from "@/components/ui";
 
 interface FiscalPeriod {
@@ -60,27 +61,34 @@ export function FiscalPeriodsView() {
   const startMonth = data?.fiscalYearStart || "July";
   const endMonth = data?.fiscalYearEnd || "June";
   const suggestedYear = nextFiscalStartYear(new Date(), startMonth, periods.map((period) => period.year));
-  const year = Number(selectedYear ?? suggestedYear);
 
-  const yearOptions: DropdownOption[] = useMemo(() => {
-    const current = fiscalStartYearForDate(new Date(), startMonth);
-    return Array.from({ length: 11 }, (_, index) => current + index - 5)
-      .filter((item) => item >= 1900 && item <= 9998)
-      .map((item) => {
-        let label = String(item);
-        try {
-          label = resolveFiscalBounds(item, startMonth, endMonth).label;
-        } catch {
-          // The API rejects a malformed tenant configuration before writing.
-        }
-        return { value: String(item), label };
-      });
-  }, [startMonth, endMonth]);
+  // Only years that are actually OPEN are offered. The old calendar-derived ±5
+  // window let an operator pick a year that already existed (rejected on submit
+  // as an overlap) or one that was never created. The list comes from the same
+  // tenant-readable endpoint every other picker uses, so starting/closing a year
+  // updates it everywhere at once.
+  const { years: fiscalYears } = useFiscalPeriodYears();
+  const yearOptions: DropdownOption[] = useMemo(
+    () =>
+      fiscalYears
+        .filter((period) => period.status === "OPEN")
+        .map((period) => {
+          let label = String(period.year);
+          try {
+            label = resolveFiscalBounds(period.year, startMonth, endMonth).label;
+          } catch {
+            // The API rejects a malformed tenant configuration before writing.
+          }
+          return { value: String(period.year), label };
+        })
+        .sort((a, b) => Number(a.value) - Number(b.value)),
+    [fiscalYears, startMonth, endMonth],
+  );
 
   const startMutation = useMutation({
     mutationFn: () => apiClient<{ success: boolean; data: FiscalPeriod }>("/fiscal/periods", {
       method: "POST",
-      body: JSON.stringify({ startYear: year }),
+      body: JSON.stringify({ startYear: suggestedYear }),
     }),
     onSuccess: async () => {
       toast.success(t("fiscal.messages.started"));
@@ -222,13 +230,13 @@ export function FiscalPeriodsView() {
               <div className="w-36">
                 <AppDropdown
                   options={yearOptions}
-                  value={selectedYear ?? String(suggestedYear)}
+                  value={selectedYear ?? (yearOptions[0]?.value ?? "")}
                   onChange={setSelectedYear}
                   clearable={false}
                   placeholder={t("fiscal.actions.selectYear")}
                 />
               </div>
-              <Button variant="primary" size="sm" onClick={() => setPendingAction({ action: "start", year })}>
+              <Button variant="primary" size="sm" onClick={() => setPendingAction({ action: "start", year: suggestedYear })}>
                 <Plus />
                 {t("fiscal.actions.startYear")}
               </Button>

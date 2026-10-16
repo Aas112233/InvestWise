@@ -10,6 +10,7 @@ import {
   auditLogs,
   deletedRecords,
   users,
+  systemSettings,
 } from '../../db/schema/index';
 import type { SQL } from 'drizzle-orm';
 import {
@@ -21,12 +22,31 @@ import {
 import { getPaginationParams, formatPaginatedResponse, requireTenant, type SessionUser } from '../../middleware/api';
 import {
   parsePositiveAmount,
-  splitDividendByShares,
   fromCents,
   toCents,
   parseDepositMonthToIso,
 } from '@/lib/money';
 import { assertIntegralShares } from '@/lib/shares';
+import { isAllowedDepositMethod, normalizePaymentMethods } from '@/lib/payment-methods';
+import { decideReversal } from '@/lib/transaction-reversal';
+import { DEPOSIT_FUND_REQUIRED_MESSAGE, isDepositFund } from '@/lib/deposit-fund';
+import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
+import {
+  depositMonthOccupiedCondition,
+  findDepositMonthOccupant,
+  depositMonthConflictMessage,
+} from '@/lib/deposit-month-limit';
+
+/**
+ * Dual-drizzle bridge. This service runs on the server/ drizzle instance
+ * (0.38) while the shared fiscal guard is typed against the root instance
+ * (0.45). The transaction objects are runtime-compatible — same postgres-js
+ * driver, same table metadata — so only the TS generics differ. Narrowing
+ * through `unknown` here keeps ONE source of truth for the closed-period rule
+ * instead of duplicating it in a server-local copy that could drift.
+ */
+const fiscalGuardTx = (tx: unknown): Parameters<typeof assertFiscalPeriodOpen>[0] =>
+  tx as Parameters<typeof assertFiscalPeriodOpen>[0];
 
 /**
  * Core financial engine — 1:1 behavioral port of the Express finance service
@@ -147,14 +167,6 @@ interface TransferInput {
   referenceNumber?: string;
 }
 
-interface DividendInput {
-  type: 'Global' | 'Project';
-  amount: number | string;
-  projectId?: string | null;
-  sourceFundId?: string | null;
-  description?: string | null;
-}
-
 interface EquityTransferInput {
   fromMemberId: string;
   transfers: Array<{ toMemberId: string; amount?: number; shares?: number }>;
@@ -177,6 +189,7 @@ interface EquityTransferInput {
 
 interface BulkDepositInput {
   fundId: string;
+  requestKey?: string;
   commonMonth?: string;
   cashierName?: string;
   depositMethod?: string;
@@ -188,7 +201,7 @@ interface BulkDepositInput {
   }>;
 }
 
-export type { DepositInput, ExpenseInput, EarningInput, TransferInput, DividendInput, EquityTransferInput, BulkDepositInput };
+export type { DepositInput, ExpenseInput, EarningInput, TransferInput, EquityTransferInput, BulkDepositInput };
 
 // ---------------------------------------------------------------------------
 // 1. getTransactions — Paginated ledger with totals
@@ -470,6 +483,7 @@ export async function addDeposit(
 
     const [fund] = await tx.select().from(funds).where(and(eq(funds.id, data.fundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
     if (!fund) throw new NotFoundError('Fund');
+    if (!isDepositFund(fund)) throw new AppError(DEPOSIT_FUND_REQUIRED_MESSAGE, 400, 'INVALID_FUND_TYPE');
     const [member] = await tx.select().from(members).where(and(eq(members.id, targetMemberId), eq(members.tenantId, tenantId))).for('update').limit(1);
     if (!member) throw new NotFoundError('Member');
 
@@ -485,6 +499,25 @@ export async function addDeposit(
     const collectedDate = resolveDepositDate(data.collectedDate ?? data.date, data.depositMonth);
     const depositMonthKey = resolveDepositMonthKey(data.depositMonth, collectedDate);
     const submittedDate = resolveSubmittedDate(data.submittedDate);
+
+    // §12: a posted deposit must land in an OPEN fiscal period (the native
+    // /api/deposits route enforces this — the service path must not be a
+    // closed-period back door).
+    await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, collectedDate);
+
+    // §12 one-deposit-per-member-per-month (canonical rule, any fund, also
+    // counts pending requests). The member row is locked FOR UPDATE above, so
+    // concurrent deposits for this member serialize on this check. A reverted
+    // direct deposit (category 'Deposit' + PENDING) freed its month and does
+    // not block.
+    const monthOccupant = await findDepositMonthOccupant(tx, {
+      tenantId,
+      memberId: targetMemberId,
+      depositMonthKey,
+    });
+    if (monthOccupant) {
+      throw new AppError(depositMonthConflictMessage(depositMonthKey, monthOccupant), 409, 'DUPLICATE_DEPOSIT');
+    }
 
     const [txn] = await tx
       .insert(transactions)
@@ -562,6 +595,11 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
     if (!existing) throw new NotFoundError('Transaction');
     if (existing.type !== 'Deposit') throw new AppError('Transaction is not a deposit', 400, 'INVALID_TYPE');
 
+    // §12 closed-period immutability: the revert leg below mutates the fund and
+    // member balances, so a settled deposit sitting in a CLOSED fiscal year
+    // must not be edited at all (mirrors DELETE /api/transactions/[id]).
+    if (existing.date) await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, existing.date);
+
     const isPrivileged =
       user.role === 'Admin' ||
       user.role === 'Administrator' ||
@@ -578,7 +616,7 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
       const isOwner = (userMemberId && existing.memberId === userMemberId) || existing.createdBy === user.id;
       if (!isOwner) throw new ForbiddenError('You can only edit your own deposit request');
       if (data.memberId && userMemberId && data.memberId !== userMemberId && data.memberId !== existing.memberId) {
-        throw new ForbiddenError('You cannot reassign a deposit request to another member');
+        throw new ForbiddenError('A deposit request cannot be reassigned to another member. Reject it and submit a new request for the correct member.');
       }
     }
 
@@ -593,7 +631,9 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
     const newStatus = data.status || existing.status || 'Completed';
     const isNowCompleted = newStatus === 'Success' || newStatus === 'Completed';
 
-    // 1. Revert old financial impact
+    // 1. Revert old financial impact. Shrinking a settled deposit is allowed
+    // while the member's free balance covers the reduction — the equity check
+    // below enforces that, same rule as revertDeposit.
     if (wasCompleted) {
       const [oldFund] = await tx.select().from(funds).where(and(eq(funds.id, oldFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
       if (oldFund) {
@@ -604,10 +644,22 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
       }
       const [oldMember] = await tx.select().from(members).where(and(eq(members.id, oldMemberId), eq(members.tenantId, tenantId))).for('update').limit(1);
       if (oldMember) {
+        // Un-committing the old deposit then re-applying the new one must never
+        // drive equity negative: money already invested in a project is not
+        // uncommitted and cannot be reclaimed by editing a deposit.
+        const equityCents = toCents(oldMember.totalContributed ?? '0');
+        const reappliedCents = isNowCompleted && newMemberId === oldMemberId ? newAmountCents : 0;
+        if (equityCents - oldAmountCents + reappliedCents < 0) {
+          throw new AppError(
+            `Cannot change this deposit: ${oldMember.name ?? 'the member'} has only ${(equityCents / 100).toFixed(2)} of uncommitted deposit balance — the rest is invested in a project. Wind that investment back first.`,
+            400,
+            'INSUFFICIENT_EQUITY',
+          );
+        }
         await tx
           .update(members)
           .set({
-            totalContributed: sql`GREATEST(0, (${members.totalContributed}::numeric - ${oldAmountCents / 100}))::numeric(15,2)`,
+            totalContributed: sql`(${members.totalContributed}::numeric - ${oldAmountCents / 100})::numeric(15,2)`,
             updatedAt: new Date(),
           })
           .where(eq(members.id, oldMemberId));
@@ -622,10 +674,42 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
     );
     const depositMonthKey = resolveDepositMonthKey(data.depositMonth || existing.depositMonth, depositDate);
 
+    // The new collected date must also land in an OPEN period — otherwise a
+    // back-entry edit could move a deposit into a closed year.
+    await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, depositDate);
+
+    // §12 one-deposit-per-member-per-month: an edit that moves the deposit
+    // (or reassigns it to another member) into a month that member already
+    // occupies must be refused — the edited row itself is excluded, so
+    // keeping a deposit in its own month never self-conflicts. Only checked
+    // when the RESULTING row occupies the month (settled, or a pending
+    // request-style row); a row staying a reverted-style pending deposit
+    // (category 'Deposit') frees its month and moves freely.
+    const editedOccupiesMonth =
+      isNowCompleted ||
+      (String(newStatus).toLowerCase() === 'pending' && (existing.category ?? '') !== 'Deposit');
+    if (editedOccupiesMonth) {
+      const monthOccupant = await findDepositMonthOccupant(tx, {
+        tenantId,
+        memberId: newMemberId,
+        depositMonthKey,
+        excludeId: existing.id,
+      });
+      if (monthOccupant) {
+        throw new AppError(depositMonthConflictMessage(depositMonthKey, monthOccupant), 409, 'DUPLICATE_DEPOSIT');
+      }
+    }
+
     // 2. Apply new financial impact
     if (isNowCompleted) {
       const [newFund] = await tx.select().from(funds).where(and(eq(funds.id, newFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
       if (!newFund) throw new NotFoundError('Target fund');
+      // Only a fund CHANGE is policed: a legacy deposit already sitting in a
+      // non-DEPOSIT fund must stay editable (amount, date, member), otherwise
+      // the tenant could never correct its other fields.
+      if (newFundId !== oldFundId && !isDepositFund(newFund)) {
+        throw new AppError(DEPOSIT_FUND_REQUIRED_MESSAGE, 400, 'INVALID_FUND_TYPE');
+      }
       await tx
         .update(funds)
         .set({ balance: sql`(${funds.balance}::numeric + ${newAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
@@ -747,6 +831,22 @@ export async function approveDeposit(id: string, user: SessionUser) {
     const [member] = await tx.select().from(members).where(and(eq(members.id, memberId), eq(members.tenantId, tenantId))).for('update').limit(1);
     if (!member) throw new NotFoundError('Member');
 
+    // §12 one-deposit-per-member-per-month: the final gate — approval credits
+    // settled money, so the month must be free of any OTHER occupant (the
+    // row being approved is excluded). Month key: stored deposit_month first,
+    // collected-date month as fallback (same rule as the native approve
+    // route).
+    const depositMonthKey = txn.depositMonth || (txn.date ? new Date(txn.date).toISOString().slice(0, 7) : new Date().toISOString().slice(0, 7));
+    const monthOccupant = await findDepositMonthOccupant(tx, {
+      tenantId,
+      memberId,
+      depositMonthKey,
+      excludeId: txn.id,
+    });
+    if (monthOccupant) {
+      throw new AppError(depositMonthConflictMessage(depositMonthKey, monthOccupant), 409, 'DUPLICATE_DEPOSIT');
+    }
+
     const txnCents = toCents(txn.amount);
 
     await tx
@@ -806,7 +906,7 @@ export async function revertDeposit(id: string, reason: string, user: SessionUse
       .limit(1);
     if (!txn) throw new NotFoundError('Transaction');
     if (txn.type !== 'Deposit') throw new AppError('Only deposits can be reverted', 400, 'INVALID_TYPE');
-    if (txn.isDeleted) throw new AppError('Deleted transactions cannot be reverted', 400, 'ALREADY_DELETED');
+    if (txn.isDeleted) throw new AppError('Deleted transactions cannot be reverted. Restore the transaction from the Deleted Transactions view first.', 400, 'ALREADY_DELETED');
     if (txn.status !== 'Completed' && txn.status !== 'Success') {
       throw new AppError('Only completed deposits can be reverted to request', 400, 'INVALID_STATUS');
     }
@@ -841,6 +941,20 @@ export async function revertDeposit(id: string, reason: string, user: SessionUse
       );
     }
 
+    // Revertible while the member's FREE balance covers the deposit:
+    // `totalContributed` is already net of project investment, so 5,000 + 5,000
+    // deposited with 1,000 invested leaves 9,000 free and a 5,000 deposit may
+    // revert. Only a larger reversal would un-fund a project (§12). The member
+    // row is locked above, so a concurrent investment cannot race this check.
+    const memberEquityCents = toCents(member.totalContributed ?? '0');
+    if (memberEquityCents < txnCents) {
+      throw new AppError(
+        `Cannot revert: ${member.name ?? 'the member'} only has ${(memberEquityCents / 100).toFixed(2)} of uncommitted deposit balance and this reversal removes ${(txnCents / 100).toFixed(2)}. Wind back the project investment first.`,
+        400,
+        'INSUFFICIENT_EQUITY',
+      );
+    }
+
     await tx
       .update(funds)
       .set({ balance: sql`(${funds.balance}::numeric - ${txnCents / 100})::numeric(15,2)`, updatedAt: new Date() })
@@ -849,7 +963,7 @@ export async function revertDeposit(id: string, reason: string, user: SessionUse
     await tx
       .update(members)
       .set({
-        totalContributed: sql`GREATEST(0, (${members.totalContributed}::numeric - ${txnCents / 100}))::numeric(15,2)`,
+        totalContributed: sql`(${members.totalContributed}::numeric - ${txnCents / 100})::numeric(15,2)`,
         updatedAt: new Date(),
       })
       .where(and(eq(members.id, txn.memberId!), eq(members.tenantId, tenantId)));
@@ -1106,7 +1220,7 @@ export async function editExpense(id: string, data: ExpenseInput, user: SessionU
     if (!newFund) throw new NotFoundError('Source fund');
 
     if (!newProjectId && newFund.type === 'PROJECT') {
-      throw new AppError('Project-specific funds cannot be used for general expenses.', 400, 'PROJECT_FUND_RESTRICTION');
+      throw new AppError('Project-specific funds cannot be used for general expenses. Select a general fund, or record the expense against the linked project instead.', 400, 'PROJECT_FUND_RESTRICTION');
     }
 
     if (toCents(newFund.balance ?? '0') < newAmountCents) {
@@ -1275,8 +1389,16 @@ export async function deleteTransaction(
   const db = getDb();
 
   const deletedAmountCents = await db.transaction(async (tx) => {
-    const [txn] = await tx.select().from(transactions).where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId))).limit(1);
+    // Lock the row so two concurrent deletes cannot both pass the isDeleted
+    // guard and reverse the fund balance twice (§12: no money duplication).
+    const [txn] = await tx
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId)))
+      .for('update')
+      .limit(1);
     if (!txn) throw new NotFoundError('Transaction');
+    if (txn.isDeleted) throw new AppError('Transaction is already deleted', 400, 'ALREADY_DELETED');
 
     const isPrivileged =
       user.role === 'Admin' ||
@@ -1302,28 +1424,50 @@ export async function deleteTransaction(
     const deletionReason = reason || 'Manual Deletion';
 
     if (txn.status === 'Success' || txn.status === 'Completed') {
-      // 1. Reverse fund balance
-      if (txnFundId) {
-        const [fund] = await tx.select().from(funds).where(and(eq(funds.id, txnFundId), eq(funds.tenantId, tenantId))).limit(1);
+      // 1. Reverse fund balance. The direction comes from the canonical
+      //    ledger classifier (lib/transaction-reversal) rather than a
+      //    hand-maintained type list, so this path can never drift from the
+      //    writers that created the movement (and matches the
+      //    DELETE /api/transactions/[id] route). A settled deposit is owned by
+      //    the revert route and must not be deleted here.
+      const reversal = decideReversal({
+        type: txn.type,
+        status: txn.status,
+        fundId: txnFundId,
+        amount: txn.amount,
+      });
+      if (reversal.requiresRevertPath) {
+        throw new AppError(reversal.revertHint ?? 'Use the revert path for this transaction', 400, 'REVERT_REQUIRED');
+      }
+      if (reversal.fundId && reversal.direction !== 0 && txnCents > 0) {
+        // Lock the fund row, then apply the signed delta with atomic SQL — a
+        // concurrent deposit/expense must never lose this reversal (§12).
+        const [fund] = await tx
+          .select()
+          .from(funds)
+          .where(and(eq(funds.id, reversal.fundId), eq(funds.tenantId, tenantId)))
+          .for('update')
+          .limit(1);
         if (fund) {
-          let adjustedCents = toCents(fund.balance ?? '0');
-          if (['Deposit', 'Earning', 'Investment'].includes(txn.type)) {
-            adjustedCents -= txnCents;
+          const deltaCents = reversal.direction * txnCents;
+          if (deltaCents < 0) {
+            const afterCents = toCents(fund.balance ?? '0') + deltaCents;
             const minReserveCents = toCents(fund.minimumBalance ?? '0');
-            if (adjustedCents < minReserveCents) {
+            if (afterCents < minReserveCents) {
               throw new AppError(
-                `Cannot delete transaction: reversing ${(txnCents / 100).toFixed(2)} would drop ${fund.name} balance below minimum reserve (${fund.balance} -> ${fromCents(Math.max(0, adjustedCents))})`,
+                `Cannot delete transaction: reversing ${(txnCents / 100).toFixed(2)} would drop ${fund.name} balance below minimum reserve`,
                 400,
                 'FUND_DEFICIT_PREVENTED',
               );
             }
-          } else if (['Withdrawal', 'Expense', 'Dividend'].includes(txn.type)) {
-            adjustedCents += txnCents;
           }
           await tx
             .update(funds)
-            .set({ balance: fmt(adjustedCents), updatedAt: new Date() })
-            .where(eq(funds.id, txnFundId));
+            .set({
+              balance: sql`(${funds.balance}::numeric + ${deltaCents / 100})::numeric(15,2)`,
+              updatedAt: new Date(),
+            })
+            .where(and(eq(funds.id, reversal.fundId), eq(funds.tenantId, tenantId)));
         }
       }
 
@@ -1335,7 +1479,7 @@ export async function deleteTransaction(
               WHERE member_id = ${txnMemberId}
                 AND tenant_id = ${tenantId}
                 AND type = 'Deposit'
-                AND status IN ('Completed')
+                AND status IN ('Completed', 'Success')
                 AND is_deleted = false
                 AND id != ${id}`,
         )) as unknown as Array<{ total: string }>;
@@ -1343,12 +1487,19 @@ export async function deleteTransaction(
         await tx
           .update(members)
           .set({ totalContributed: fromCents(Math.round(totalRemaining * 100)), updatedAt: new Date() })
-          .where(eq(members.id, txnMemberId));
+          .where(and(eq(members.id, txnMemberId), eq(members.tenantId, tenantId)));
       }
 
       // 3. Reverse project tracking
       if (txnProjectId) {
-        const [project] = await tx.select().from(projects).where(and(eq(projects.id, txnProjectId), eq(projects.tenantId, tenantId))).limit(1);
+        // Lock the project row so a concurrent project expense/earning cannot
+        // interleave its read-modify-write with this reversal (§12).
+        const [project] = await tx
+          .select()
+          .from(projects)
+          .where(and(eq(projects.id, txnProjectId), eq(projects.tenantId, tenantId)))
+          .for('update')
+          .limit(1);
         if (project) {
           let balAdjCents = 0;
           let earnAdjCents = 0;
@@ -1374,7 +1525,7 @@ export async function deleteTransaction(
               totalExpenses: fmt(Math.max(0, toCents(project.totalExpenses ?? '0') + expAdjCents)),
               updatedAt: new Date(),
             })
-            .where(eq(projects.id, txnProjectId));
+            .where(and(eq(projects.id, txnProjectId), eq(projects.tenantId, tenantId)));
         }
       }
     }
@@ -1399,7 +1550,7 @@ export async function deleteTransaction(
         deletionReason,
         updatedAt: new Date(),
       })
-      .where(eq(transactions.id, id));
+      .where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId)));
 
     // 6. Audit
     await tx.insert(auditLogs).values({
@@ -1458,7 +1609,7 @@ export async function transferFunds(data: TransferInput, user: SessionUser) {
     if (!targetFund) throw new NotFoundError('Target fund');
 
     if (sourceFund.currency && targetFund.currency && sourceFund.currency !== targetFund.currency) {
-      throw new AppError('Cannot transfer between funds with different currencies', 400, 'CURRENCY_MISMATCH');
+      throw new AppError('Cannot transfer between funds with different currencies. Choose a destination fund in the same currency as the source.', 400, 'CURRENCY_MISMATCH');
     }
 
     const amountCents = parsePositiveAmount(data.amount);
@@ -1565,183 +1716,17 @@ export async function transferFunds(data: TransferInput, user: SessionUser) {
 }
 
 // ---------------------------------------------------------------------------
-// 10. distributeDividends — exact shares-weighted split, idempotent batch
-// ---------------------------------------------------------------------------
-
-export interface DividendSummary {
-  batchId: string;
-  count: number;
-  totalDisbursed: number;
-  residual: number;
-}
-
-/**
- * @deprecated Superseded by the shared dividend engine + project settlement.
- *
- * This is a second, contradictory payout implementation: it retains no
- * statutory reserve and splits a PROJECT's proceeds by every member's
- * ORGANIZATION-WIDE share count, so a member who never funded the project is
- * paid from it and a majority funder can receive a minority share. The app does
- * not call it (`/api/dividends/distribute` is the live path); D3 replaces it
- * with per-project ownership from `project_members`. Kept for the Express
- * reference build until that lands.
- */
-export async function distributeDividends(data: DividendInput, user: SessionUser): Promise<DividendSummary> {
-  const tenantId = requireTenant(user);
-  const db = getDb();
-
-  return db.transaction(async (tx) => {
-    const batchId = `DIV-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-    const amountCents = parsePositiveAmount(data.amount, { maxCents: 100_000_000 * 100 });
-
-    const activeMembers = await tx
-      .select()
-      .from(members)
-      .where(
-        and(
-          eq(members.tenantId, tenantId),
-          eq(members.status, 'active'),
-          eq(members.isDeleted, false),
-          sql`${members.shares} > 0`,
-        ),
-      );
-
-    // Exact largest-remainder split in cents — sum(payouts) === disbursement
-    // never exceeds amountCents (verified in lib/money.test.ts).
-    const payouts = splitDividendByShares(
-      amountCents,
-      activeMembers.map((m) => ({ id: m.id, shares: Number(m.shares) })),
-    );
-
-    const dividendValues: Array<typeof transactions.$inferInsert> = payouts
-      .filter((p) => p.payoutCents > 0)
-      .map((p) => ({
-        tenantId,
-        type: 'Dividend',
-        amount: fmt(p.payoutCents),
-        description:
-          data.description || `Dividend Distribution: ${data.type} Settlement [${batchId}]`,
-        memberId: p.id,
-        projectId: data.type === 'Project' ? (data.projectId ?? null) : null,
-        fundId: data.type === 'Global' ? (data.sourceFundId ?? null) : null,
-        status: 'Completed',
-        referenceNumber: batchId,
-        authorizedBy: user.id,
-        createdBy: user.id,
-        updatedBy: user.id,
-        handlingOfficer: user.name,
-      }));
-
-    if (dividendValues.length === 0) {
-      throw new AppError('Calculated reward per member is too small for distribution', 400, 'SMALL_DISTRIBUTION');
-    }
-
-    const totalDisbursedCents = dividendValues.reduce((sum, v) => sum + toCents(String(v.amount)), 0);
-
-    // Deduct from source
-    let sourceDisplayName = '';
-    if (data.type === 'Project') {
-      const [project] = await tx.select().from(projects).where(and(eq(projects.id, data.projectId!), eq(projects.tenantId, tenantId))).limit(1);
-      if (!project) throw new NotFoundError('Project');
-      if (toCents(project.currentFundBalance ?? '0') < totalDisbursedCents) {
-        throw new AppError(
-          `Insufficient project balance. Required: ${fromCents(totalDisbursedCents)}, Available: ${project.currentFundBalance}`,
-          400,
-          'INSUFFICIENT_BALANCE',
-        );
-      }
-      await tx
-        .update(projects)
-        .set({ currentFundBalance: fmt(toCents(project.currentFundBalance ?? '0') - totalDisbursedCents), updatedAt: new Date() })
-        .where(eq(projects.id, data.projectId!));
-      sourceDisplayName = `Project: ${project.title}`;
-    } else {
-      const [fund] = await tx.select().from(funds).where(and(eq(funds.id, data.sourceFundId!), eq(funds.tenantId, tenantId))).limit(1);
-      if (!fund) throw new NotFoundError('Source Fund');
-      if (toCents(fund.balance ?? '0') < totalDisbursedCents) {
-        throw new AppError(
-          `Insufficient fund balance. Required: ${fromCents(totalDisbursedCents)}, Available: ${fund.balance}`,
-          400,
-          'INSUFFICIENT_BALANCE',
-        );
-      }
-      await tx
-        .update(funds)
-        .set({ balance: fmt(toCents(fund.balance ?? '0') - totalDisbursedCents), updatedAt: new Date() })
-        .where(eq(funds.id, data.sourceFundId!));
-      sourceDisplayName = `Fund: ${fund.name}`;
-    }
-
-    await tx.insert(transactions).values(dividendValues);
-
-    await tx.insert(auditLogs).values({
-      userId: user.id,
-      userName: user.name,
-      action: 'DISTRIBUTE_DIVIDENDS',
-      resourceType: 'Finance',
-      details: {
-        batchId,
-        type: data.type,
-        requestedAmount: amountCents / 100,
-        actualDisbursed: totalDisbursedCents / 100,
-        residual: (amountCents - totalDisbursedCents) / 100,
-        totalActiveShares: activeMembers.reduce((sum, m) => sum + Number(m.shares), 0),
-        recipientsCount: dividendValues.length,
-        source: sourceDisplayName,
-      },
-      status: 'SUCCESS',
-    });
-
-    return {
-      batchId,
-      count: dividendValues.length,
-      totalDisbursed: totalDisbursedCents / 100,
-      residual: (amountCents - totalDisbursedCents) / 100,
-    };
-  });
-}
-
-// ---------------------------------------------------------------------------
 // 11. transferEquity
 // ---------------------------------------------------------------------------
 
-// Ledger descriptions are stored text: they are written once, at operation
-// time, and never re-translated. They are therefore localized at write-time
-// in the actor's UI language (x-locale header → `locale` param). Unknown or
-// missing locales fall back to English so the books never come out empty.
-const EQUITY_MIGRATION_TEMPLATES: Record<
-  string,
-  {
-    received: (name: string, ref: string) => string;
-    transferred: (n: number, ref: string) => string;
-  }
-> = {
-  en: {
-    received: (name, ref) => `Equity Migration: Received from ${name} [Reference: ${ref}]`,
-    transferred: (n, ref) => `Equity Migration: Transferred to ${n} recipient(s) [Reference: ${ref}]`,
-  },
-  bn: {
-    received: (name, ref) => `ইকুইটি মাইগ্রেশন: ${name} থেকে প্ৰাপ্ত [Reference: ${ref}]`,
-    transferred: (n, ref) => `ইকুইটি মাইগ্রেশন: ${n} গ্রহীতার কাছতে হস্তান্তৰিত [Reference: ${ref}]`,
-  },
-  hi: {
-    received: (name, ref) => `इक़ुईटी माईग़्रेशन: ${name} सें प्राप्‍त [Reference: ${ref}]`,
-    transferred: (n, ref) => `इक़ुईटी माईग़्रेशन: ${n} प्राप्‍तकर्ताओं कें हस्तांतरित [Reference: ${ref}]`,
-  },
-  ur: {
-    received: (name, ref) => `ایکوئیٹی مائیگریشن: ${name} سے موصول [Reference: ${ref}]`,
-    transferred: (n, ref) => `ایکوئیٹی مائیگریشن: ${n} وصول کنندہ(وں) کو منتقل [Reference: ${ref}]`,
-  },
-};
-
-function equityMigrationStrings(locale?: string) {
-  return (locale && EQUITY_MIGRATION_TEMPLATES[locale]) || EQUITY_MIGRATION_TEMPLATES['en']!;
-}
-
-export async function transferEquity(data: EquityTransferInput, user: SessionUser, locale?: string) {
+// Ledger narrations are stored as canonical English and localized at render
+// time (lib/ledger-description.ts). Storing them in the actor's UI language
+// instead would freeze one language into the books and break every reader
+// after a language switch — the same row must read correctly in all four
+// locales, including rows written long before the reader chose a language.
+export async function transferEquity(data: EquityTransferInput, user: SessionUser) {
   const tenantId = requireTenant(user);
   const db = getDb();
-  const migrationStrings = equityMigrationStrings(locale);
 
   const batchId =
     (typeof data.referenceNumber === 'string' && data.referenceNumber.trim)
@@ -1787,7 +1772,7 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
     // A suspended holder settles through the exit path, not by pushing shares
     // out while frozen.
     if (sourceMember.status !== 'active') {
-      throw new AppError(`Member ${sourceMember.name} is ${sourceMember.status} and cannot transfer equity`, 400, 'SOURCE_NOT_ACTIVE');
+      throw new AppError(`Member ${sourceMember.name} is ${sourceMember.status} and cannot transfer equity. Reactivate the member in the Members screen first.`, 400, 'SOURCE_NOT_ACTIVE');
     }
 
     const transfers = data.transfers.map((t) => ({
@@ -1872,7 +1857,7 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
         tenantId,
         type: 'Equity-Transfer',
         amount: fmt(t.amountCents),
-        description: migrationStrings.received(sourceMember.name, data.reason),
+        description: `Equity Migration: Received from ${sourceMember.name} [Reference: ${data.reason}]`,
         memberId: t.toMemberId,
         date: now,
         status: 'Completed',
@@ -1907,7 +1892,7 @@ export async function transferEquity(data: EquityTransferInput, user: SessionUse
       tenantId,
       type: 'Equity-Transfer',
       amount: fmt(totalBeingTransferredCents),
-      description: migrationStrings.transferred(transfers.length, data.reason),
+      description: `Equity Migration: Transferred to ${transfers.length} recipient(s) [Reference: ${data.reason}]`,
       memberId: data.fromMemberId,
       date: now,
       status: 'Completed',
@@ -1975,14 +1960,23 @@ export async function reconcileFund(fundId: string, user: SessionUser) {
     .limit(1);
   if (!fund) throw new NotFoundError('Fund');
 
+  // The type lists below must mirror exactly the transaction types that
+  // actually move `funds.balance` (see addDeposit/addExpense/addEarning/
+  // transferFunds/projects route/dividend route). A type that credited or
+  // debited the fund but is missing here makes the fund report a permanent
+  // false DISCREPANCY; a type that never moved the fund makes it over-count.
+  // 'Dividend Distribution' is deliberately absent: it is the run-level
+  // informational row, while the real debit is the per-member 'Dividend' rows
+  // plus the 'Transfer Out' reserve sweep. Statuses match the shared settled
+  // set ('Completed', 'Success') used everywhere else in the ledger.
   const txSummary = await rawSql<{ total_in: string; total_out: string }[]>`
     SELECT
-      COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment', 'Transfer In') THEN amount::numeric ELSE 0 END), 0) as total_in,
-      COALESCE(SUM(CASE WHEN type IN ('Expense', 'Withdrawal', 'Dividend', 'Adjustment', 'Transfer Out') THEN amount::numeric ELSE 0 END), 0) as total_out
+      COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment', 'Project Investment', 'Transfer In', 'Statutory Reserve') THEN amount::numeric ELSE 0 END), 0) as total_in,
+      COALESCE(SUM(CASE WHEN type IN ('Expense', 'Withdrawal', 'Dividend', 'Disbursement', 'Transfer Out') THEN amount::numeric ELSE 0 END), 0) as total_out
     FROM transactions
     WHERE fund_id = ${fund.id}
       AND tenant_id = ${tenantId}
-      AND status IN ('Completed')
+      AND status IN ('Completed', 'Success')
       AND is_deleted = false
   `;
 
@@ -2013,6 +2007,25 @@ export async function reconcileFund(fundId: string, user: SessionUser) {
     })
     .where(and(eq(funds.id, fundId), eq(funds.tenantId, tenantId)));
 
+  // A reconciliation is a control action: who verified a fund, and against
+  // what numbers, must be reconstructable after the fact.
+  await db.insert(auditLogs).values({
+    userId: user.id,
+    userName: user.name,
+    tenantId,
+    action: 'RECONCILE_FUND',
+    resourceType: 'Fund',
+    resourceId: fundId,
+    details: {
+      fund: fund.name,
+      ledgerBalance: (calculatedBalanceCents / 100).toFixed(2),
+      recordedBalance: (actualBalanceCents / 100).toFixed(2),
+      result: isMatched ? 'VERIFIED' : 'DISCREPANCY',
+      projectMismatch,
+    },
+    status: 'SUCCESS',
+  });
+
   return {
     fund: fund.name,
     actualBalance: actualBalanceCents / 100,
@@ -2026,8 +2039,12 @@ export async function reconcileFund(fundId: string, user: SessionUser) {
 }
 
 // ---------------------------------------------------------------------------
-// 13. bulkAddDeposits — idempotent batch (unique batchId reference)
+// 13. bulkAddDeposits — idempotent batch (unique per-row references)
 // ---------------------------------------------------------------------------
+
+export function bulkDepositReference(batchId: string, rowIndex: number): string {
+  return `${batchId}-${String(rowIndex + 1).padStart(3, '0')}`;
+}
 
 export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser) {
   const tenantId = requireTenant(user);
@@ -2041,8 +2058,10 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
       .for('update')
       .limit(1);
     if (!fund) throw new NotFoundError('Target fund');
+    if (!isDepositFund(fund)) throw new AppError(DEPOSIT_FUND_REQUIRED_MESSAGE, 400, 'INVALID_FUND_TYPE');
 
-    const batchId = `BLK-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+    const batchId = `BLK-${data.requestKey ?? crypto.randomUUID()}`;
+    const rowReferences = data.deposits.map((_, index) => bulkDepositReference(batchId, index));
     const seenEntries = new Set<string>();
     const memberIds = data.deposits.map((d) => d.memberId);
 
@@ -2066,6 +2085,92 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
       .for('update');
     const memberMap = new Map(memberRows.map((m) => [m.id, m]));
 
+    // The fund lock serializes retries for this fund. If the first request committed
+    // but its response was lost, an identical retry returns the original result.
+    const existingBatchRows = await tx
+      .select({
+        id: transactions.id,
+        referenceNumber: transactions.referenceNumber,
+        type: transactions.type,
+        amount: transactions.amount,
+        memberId: transactions.memberId,
+        fundId: transactions.fundId,
+        date: transactions.date,
+        status: transactions.status,
+        depositMethod: transactions.depositMethod,
+        depositMonth: transactions.depositMonth,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.tenantId, tenantId),
+          eq(transactions.isDeleted, false),
+          inArray(transactions.referenceNumber, rowReferences),
+        ),
+      );
+
+    if (existingBatchRows.length > 0) {
+      const existingByReference = new Map(existingBatchRows.map((row) => [row.referenceNumber, row]));
+      const results: Array<{ member: string; amount: number; txId?: string }> = [];
+      let totalAmountCents = 0;
+      let matches = existingBatchRows.length === data.deposits.length;
+
+      for (const [index, dep] of data.deposits.entries()) {
+        const existing = existingByReference.get(bulkDepositReference(batchId, index));
+        const amountCents = parsePositiveAmount(dep.amount);
+        const month = dep.depositMonth || data.commonMonth || '';
+        const depositDate = resolveDepositDate(dep.date, month);
+        const monthKey = resolveDepositMonthKey(month, depositDate);
+        const member = memberMap.get(dep.memberId);
+        totalAmountCents += amountCents;
+
+        matches &&=
+          !!existing &&
+          existing.type === 'Deposit' &&
+          existing.status === 'Completed' &&
+          existing.memberId === dep.memberId &&
+          existing.fundId === data.fundId &&
+          toCents(existing.amount) === amountCents &&
+          existing.depositMonth === monthKey &&
+          existing.depositMethod === (data.depositMethod || 'Cash') &&
+          existing.date?.toISOString() === depositDate.toISOString();
+
+        results.push({
+          member: member?.name ?? dep.memberId,
+          amount: amountCents / 100,
+          txId: existing?.id,
+        });
+      }
+
+      if (!matches) {
+        throw new ConflictError(
+          'This bulk deposit request key was already used for different data.',
+          'IDEMPOTENCY_KEY_REUSED',
+        );
+      }
+
+      return {
+        batchId,
+        totalAmount: totalAmountCents / 100,
+        count: data.deposits.length,
+        results,
+        replayed: true,
+      };
+    }
+
+    const [paymentSettings] = await tx
+      .select({ paymentMethods: systemSettings.paymentMethods })
+      .from(systemSettings)
+      .where(eq(systemSettings.tenantId, tenantId))
+      .limit(1);
+    if (!isAllowedDepositMethod(data.depositMethod ?? null, normalizePaymentMethods(paymentSettings?.paymentMethods))) {
+      throw new AppError(
+        "[Field 'depositMethod', Code: invalid_payment_method] Unknown payment method — configure it in Settings → Governance first",
+        400,
+        'VALIDATION_ERROR',
+      );
+    }
+
     let totalBatchAmountCents = 0;
     const runningFundBalanceCents = toCents(fund.balance ?? '0');
     const txnInserts: Array<typeof transactions.$inferInsert> = [];
@@ -2073,14 +2178,22 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
     const memberLastMonth = new Map<string, string>();
     const batchSubmittedDate = new Date();
     const results: Array<{ member: string; amount: number; txId?: string }> = [];
+    // §12: every distinct posting date must land in an OPEN fiscal period.
+    // Deduped so a single-month batch takes the advisory lock once.
+    const fiscalCheckedDates = new Set<string>();
 
-    for (const dep of data.deposits) {
+    for (const [rowIndex, dep] of data.deposits.entries()) {
       const member = memberMap.get(dep.memberId);
       if (!member) throw new AppError(`Member with ID ${dep.memberId} not found`, 404, 'MEMBER_NOT_FOUND');
 
       const depositAmountCents = parsePositiveAmount(dep.amount);
       const month = dep.depositMonth || data.commonMonth || '';
       const depositDate = resolveDepositDate(dep.date, month);
+      const dateKey = depositDate.toISOString();
+      if (!fiscalCheckedDates.has(dateKey)) {
+        fiscalCheckedDates.add(dateKey);
+        await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, depositDate);
+      }
       // The explicitly selected month wins for the deposit-month record,
       // duplicate checks and lastDepositMonth; the resolved collected date
       // remains the ledger date (§12 accuracy — month ≠ collection day).
@@ -2088,25 +2201,37 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
 
       // Duplicate deposit check for the month the deposit is FOR (stored
       // month first, collected-date month for legacy rows without one).
+      // Canonical one-per-month rule: ANY fund (a member may not split one
+      // month across two containers), settled deposits AND pending requests
+      // both occupy the month. Member rows are locked FOR UPDATE above, so
+      // concurrent batches serialize on this check; the seenEntries set
+      // covers within-batch duplicates (the single batch insert at the end
+      // is not yet visible to earlier iterations).
+      // Dual-drizzle bridge (same rationale as fiscalGuardTx): the shared
+      // condition is built on the root drizzle instance, this service runs
+      // on the server instance — runtime-compatible, only the TS generics
+      // differ.
       const [existingDeposit] = await tx
-        .select({ id: transactions.id })
+        .select({
+          id: transactions.id,
+          memberId: transactions.memberId,
+          status: transactions.status,
+          category: transactions.category,
+          referenceNumber: transactions.referenceNumber,
+        })
         .from(transactions)
         .where(
-          and(
-            eq(transactions.tenantId, tenantId),
-            eq(transactions.type, 'Deposit'),
-            eq(transactions.memberId, dep.memberId),
-            eq(transactions.fundId, data.fundId),
-            eq(transactions.isDeleted, false),
-            sql`COALESCE(${transactions.depositMonth}, to_char(${transactions.date} AT TIME ZONE 'UTC', 'YYYY-MM')) = ${monthKey}`,
-            inArray(transactions.status, ['Completed']),
-          ),
+          depositMonthOccupiedCondition({
+            tenantId,
+            memberId: dep.memberId,
+            depositMonthKey: monthKey,
+          }) as unknown as SQL,
         )
         .limit(1);
 
       if (existingDeposit) {
         throw new AppError(
-          `Duplicate deposit detected: Member ${member.name} already has a deposit in ${monthKey} (Transaction ID: ${existingDeposit.id})`,
+          `Duplicate deposit detected: Member ${member.name} already has a deposit in ${monthKey} (Transaction ID: ${existingDeposit.id}). ${depositMonthConflictMessage(monthKey, existingDeposit)}`,
           409,
           'DUPLICATE_DEPOSIT',
         );
@@ -2132,7 +2257,7 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
         handlingOfficer: user.name || data.cashierName || 'System',
         depositMethod: data.depositMethod || 'Cash',
         depositMonth: monthKey || null,
-        referenceNumber: batchId,
+        referenceNumber: bulkDepositReference(batchId, rowIndex),
         balanceBefore: fmt(balanceBeforeCents),
         balanceAfter: fmt(balanceAfterCents),
       });

@@ -116,7 +116,7 @@ const writes = [
   ['POST', R('dividends/calculate')], ['POST', R('dividends/distribute')],
   ['POST', R('expenses')], ['POST', R('finance/deposits')], ['POST', R('finance/deposits/bulk')],
   ['POST', R('finance/expenses')], ['POST', R('finance/earnings')], ['POST', R('finance/transfer')],
-  ['POST', R('finance/equity/transfer')], ['POST', R('finance/dividends')],
+  ['POST', R('finance/equity/transfer')],
   ['POST', R(`finance/deposits/${z}/approve`)], ['POST', R(`finance/deposits/${z}/revert`)],
   ['POST', R(`finance/funds/${z}/reconcile`)],
   ['POST', R('fiscal/periods')], ['POST', R(`fiscal/periods/${z}`)],

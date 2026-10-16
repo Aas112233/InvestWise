@@ -5,6 +5,7 @@ import { eq, and, desc, sql, gte, lte, ilike } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { toCents, fromCents } from '@/lib/money';
+import { endOfRangeUtc } from '@/lib/formatters';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
@@ -70,7 +71,8 @@ export async function GET(request: NextRequest) {
       conditions.push(gte(transactions.date, new Date(startDate)));
     }
     if (endDate) {
-      conditions.push(lte(transactions.date, new Date(endDate)));
+      // Date-only end is inclusive of the whole day (see endOfRangeUtc).
+      conditions.push(lte(transactions.date, endOfRangeUtc(endDate)));
     }
     if (search) {
       conditions.push(sql`(${transactions.description} ILIKE ${'%' + search + '%'} OR ${transactions.referenceNumber} ILIKE ${'%' + search + '%'})`);
@@ -432,6 +434,22 @@ export async function POST(request: NextRequest) {
         description: description || null,
         receiptUrl: receiptUrl || null,
         referenceNumber: refNumber,
+      },
+      // Create flow: no before row. The after-state is the inserted expense —
+      // assembled from the same values the INSERT used (no extra query).
+      after: {
+        type: 'Expense',
+        amount: formattedAmount,
+        description: description || 'Operational expense',
+        expenseName: expenseName.trim(),
+        category,
+        referenceNumber: refNumber,
+        date: expenseDate.toISOString(),
+        status: 'Completed',
+        fundId,
+        projectId: projectId || null,
+        fundBalance: newFundBalance,
+        projectTotalExpenses: newProjectExpenses,
       },
     });
 

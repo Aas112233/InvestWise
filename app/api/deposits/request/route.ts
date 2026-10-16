@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, funds, members, systemSettings } from '@/db/schema/index';
 import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-methods';
+import { DEPOSIT_FUND_REQUIRED_MESSAGE, isDepositFund } from '@/lib/deposit-fund';
+import { findDepositMonthOccupant, depositMonthConflictMessage } from '@/lib/deposit-month-limit';
 import { eq, and, sql } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
@@ -54,6 +56,11 @@ export async function POST(request: NextRequest) {
       }
       depositMonthKey = depositMonth;
     }
+    // Effective month this request will occupy: the explicit selection, or
+    // the request-date month the approval falls back to. The one-per-month
+    // rule is enforced against this key so a month-less client cannot
+    // sidestep it.
+    const effectiveMonthKey = depositMonthKey ?? new Date().toISOString().slice(0, 7);
 
     // Integer-cents parsing (§12 — never parseFloat float math on money).
     // Legacy message precedence is preserved: a clean decimal(15,2) literal
@@ -84,8 +91,9 @@ export async function POST(request: NextRequest) {
     // Reference/member/fund lookups are independent of each other (all keyed
     // off the request payload) — batch them into one round-trip group instead
     // of three sequential ones. Error checks below preserve the original
-    // precedence (duplicate ref → missing member → missing fund).
-    const [existingDeposit, [member], [fund], [pmSettings]] = await Promise.all([
+    // precedence (duplicate ref → missing member → missing fund → month
+    // already taken).
+    const [existingDeposit, [member], [fund], [pmSettings], monthOccupant] = await Promise.all([
       // Duplicate reference number check (idempotency, tenant-scoped so one
       // tenant cannot squat or probe another tenant's reference).
       db
@@ -117,6 +125,17 @@ export async function POST(request: NextRequest) {
         .from(systemSettings)
         .where(eq(systemSettings.tenantId, scopedTenantId))
         .limit(1),
+      // One deposit per member per month (§12): the month this request is
+      // FOR must be free (a settled deposit or another pending request
+      // occupies it; reverted/rejected rows do not). Fast-path only — the
+      // authoritative re-check runs inside the insert transaction below,
+      // under the member row lock, so concurrent requests for the same
+      // member and month can never both book it.
+      findDepositMonthOccupant(db, {
+        tenantId: scopedTenantId,
+        memberId,
+        depositMonthKey: effectiveMonthKey,
+      }),
     ]);
 
     if (existingDeposit.length > 0) {
@@ -136,9 +155,24 @@ export async function POST(request: NextRequest) {
       throw new ValidationError('Member is not active');
     }
 
+    // A deposit request funds the member's deposit container — a PROJECT or
+    // RESERVE fund would book member money as that container's own.
+    if (!isDepositFund(fund)) {
+      throw new ValidationError(DEPOSIT_FUND_REQUIRED_MESSAGE);
+    }
+
     // Check if fund is active
     if (fund.status !== 'ACTIVE') {
       throw new ValidationError('Fund is not active');
+    }
+
+    // One deposit per member per month (§12). The member already deposited
+    // for, or has a pending request for, the month this request is FOR —
+    // approving a second one would double-count their contribution. Free
+    // the month first: reject/approve the pending request or revert the
+    // settled deposit.
+    if (monthOccupant) {
+      throw new ValidationError(depositMonthConflictMessage(effectiveMonthKey, monthOccupant));
     }
 
     // Payment method must be one this tenant configured (Settings →
@@ -154,6 +188,27 @@ export async function POST(request: NextRequest) {
     // Create pending deposit request transaction (tenant is mandatory — never
     // insert a NULL-tenant orphan row that no tenant filter can see).
     await db.transaction(async (tx) => {
+      // Lock the member row so two concurrent requests for the same member
+      // serialize, then re-check the month under that lock (the outer
+      // fast-path races). Same locking discipline as the direct-deposit
+      // route — the lock makes this check authoritative.
+      const [lockedMember] = await tx
+        .select({ id: members.id })
+        .from(members)
+        .where(and(eq(members.id, memberId), eq(members.tenantId, scopedTenantId)))
+        .for('update')
+        .limit(1);
+      if (!lockedMember) throw new NotFoundError('Member');
+
+      const monthOccupant = await findDepositMonthOccupant(tx, {
+        tenantId: scopedTenantId,
+        memberId,
+        depositMonthKey: effectiveMonthKey,
+      });
+      if (monthOccupant) {
+        throw new ValidationError(depositMonthConflictMessage(effectiveMonthKey, monthOccupant));
+      }
+
       await tx.insert(transactions).values({
         tenantId: scopedTenantId,
         type: 'Deposit',

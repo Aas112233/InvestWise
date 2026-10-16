@@ -43,15 +43,6 @@ export function parseDateTimeInput(value: unknown, field = 'date'): DateInputRes
   return { ok: true, date: parsed };
 }
 
-/** ISO instant -> the `YYYY-MM-DDTHH:mm` shape a datetime-local input expects. */
-export function toDateTimeLocal(iso: string | Date | null | undefined): string {
-  if (!iso) return '';
-  const d = iso instanceof Date ? iso : new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 /** Whole days from now until `iso`; negative once it has passed. */
 export function daysUntil(iso: string | Date | null | undefined): number | null {
   if (!iso) return null;

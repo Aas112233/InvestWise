@@ -166,6 +166,9 @@ export async function GET(request: NextRequest) {
       }
 
       const monthOffset = fiscalMonthOffsetForDate(bucketDate, fiscalYearStart);
+      // A deposit entered inside this FY but made FOR a month in another FY
+      // belongs to that FY's bar, not this one's.
+      if (fiscalStartYearForDate(bucketDate, fiscalYearStart) !== targetYear) continue;
       const trend = monthlyTrends[monthOffset];
       if (!trend) continue;
 
@@ -236,16 +239,32 @@ export async function GET(request: NextRequest) {
       ? allMembers
       : allMembers.filter((m) => m.id === selectedMemberId);
 
-    // Map member deposit occurrences by fiscal-month offset.
+    // Map member deposit occurrences by fiscal-month offset — bucketed by the
+    // deposit's OWN month (`deposit_month`), exactly like the monthly-trends
+    // chart above (#57) and the deposits ledger. A January contribution keyed
+    // in October counts for January. Settled means Completed/Success (the
+    // collected-capital definition used by every other money view). A deposit
+    // whose deposit month falls outside the requested FY is skipped, so a
+    // same-calendar-month deposit from another year cannot mark this FY paid.
     const memberMonthlyPaid = new Map<string, Set<number>>();
     for (const tx of yearTransactions) {
-      if (tx.type === "Deposit" && tx.status === "Completed" && tx.memberId && tx.date) {
-        const monthOffset = fiscalMonthOffsetForDate(new Date(tx.date), fiscalYearStart);
-        if (!memberMonthlyPaid.has(tx.memberId)) {
-          memberMonthlyPaid.set(tx.memberId, new Set());
+      if (tx.type !== "Deposit" || !tx.memberId || !tx.date) continue;
+      if (tx.status !== "Completed" && tx.status !== "Success") continue;
+      let bucketDate = new Date(tx.date);
+      if (tx.depositMonth && /^\d{4}-\d{2}$/.test(tx.depositMonth)) {
+        const parts = tx.depositMonth.split("-");
+        const y = Number(parts[0]);
+        const m = Number(parts[1]);
+        if (Number.isFinite(y) && Number.isFinite(m) && m >= 1 && m <= 12) {
+          bucketDate = new Date(Date.UTC(y, m - 1, 15));
         }
-        memberMonthlyPaid.get(tx.memberId)!.add(monthOffset);
       }
+      if (fiscalStartYearForDate(bucketDate, fiscalYearStart) !== targetYear) continue;
+      const monthOffset = fiscalMonthOffsetForDate(bucketDate, fiscalYearStart);
+      if (!memberMonthlyPaid.has(tx.memberId)) {
+        memberMonthlyPaid.set(tx.memberId, new Set());
+      }
+      memberMonthlyPaid.get(tx.memberId)!.add(monthOffset);
     }
 
     let totalExpectedSlots = 0;

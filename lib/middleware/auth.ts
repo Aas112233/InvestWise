@@ -5,11 +5,17 @@ import { eq, and, gt, isNull, ne, or } from 'drizzle-orm';
 import { verifyToken } from '@/lib/utils/jwt';
 import { COOKIE_NAMES } from '@/lib/utils/cookies';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
-import { isPlatformOwnerEmail } from '@/lib/platform-owner';
+
 import { getTenantSubscriptionBlocked } from '@/lib/subscription-guard';
 import { normalizeRole, isSuperAdminRole, type Role } from '@/lib/roles';
-import { hasScreenPermission, hasAnyScreenPermission } from '@/lib/permissions';
+import { hasScreenPermission } from '@/lib/permissions';
 import { moduleForApiPath, resolveModuleAccess } from '@/lib/tenant-modules';
+import {
+  SESSION_ACTIVITY_TOUCH_THROTTLE_MS,
+  SUPPORT_SESSION_LIFETIME_MS,
+  isAbsoluteSessionExpired,
+  isSessionIdle,
+} from '@/lib/session-limits';
 import crypto from 'node:crypto';
 
 // In-memory blacklist cache
@@ -20,10 +26,12 @@ let blacklistLastSweep = 0;
 // authenticated request still performs one indexed session/blacklist query so
 // logout and session revocation propagate immediately across Vercel instances;
 // this cache only avoids repeating user/tenant lookups. Status changes can take
-// up to 30s to propagate through cached identity snapshots.
-const MAINT_CACHE_TTL_MS = 30_000;
+// up to 10s to propagate through cached identity snapshots — tightened from
+// 30s after the 2026-10-13 audit (F-5): a suspension or role demotion should
+// not outlive a page navigation by much.
+const MAINT_CACHE_TTL_MS = 10_000;
 
-const AUTH_CACHE_TTL_MS = 30_000;
+const AUTH_CACHE_TTL_MS = 10_000;
 let authLastSweep = 0;
 // Keyed by sha256(token): never holds raw tokens. Value is the final authed
 // identity (post status checks), so hits skip straight to return.
@@ -66,7 +74,12 @@ async function isSessionTokenActive(token: string, userId: string, sessionId: st
   // The presented token is hashed before comparison: rows store sha256 hex.
   const db = getDb();
   const [state] = await db
-    .select({ blacklistId: blacklistedTokens.id, blacklistExpiry: blacklistedTokens.expiresAt })
+    .select({
+      blacklistId: blacklistedTokens.id,
+      blacklistExpiry: blacklistedTokens.expiresAt,
+      loginTime: sessions.loginTime,
+      lastActivity: sessions.lastActivity,
+    })
     .from(sessions)
     .leftJoin(
       blacklistedTokens,
@@ -81,7 +94,7 @@ async function isSessionTokenActive(token: string, userId: string, sessionId: st
         or(
           isNull(sessions.deviceInfo),
           ne(sessions.deviceInfo, 'Support'),
-          gt(sessions.loginTime, new Date(Date.now() - 30 * 60_000)),
+          gt(sessions.loginTime, new Date(Date.now() - SUPPORT_SESSION_LIFETIME_MS)),
         ),
       ),
     )
@@ -92,11 +105,34 @@ async function isSessionTokenActive(token: string, userId: string, sessionId: st
     if (state.blacklistExpiry) blacklistCache.set(hash, state.blacklistExpiry.getTime());
     return false;
   }
+  // Absolute cap (24h from login) + server-side idle kill (30m policy + 5m
+  // grace for the client warning countdown). The client idle timer alone is
+  // cosmetic — without this, a stolen refresh cookie lives the full 7d.
+  if (isAbsoluteSessionExpired(state.loginTime, now)) return false;
+  if (isSessionIdle(state.lastActivity, now)) return false;
+  // Throttled activity touch: records real API work (any tab) so the idle
+  // signal above reflects use, not just token rotation. Silent background
+  // refreshes deliberately do NOT touch lastActivity (see refresh route) —
+  // otherwise the idle kill could never fire.
+  if (state.lastActivity) {
+    const lastTouch = new Date(state.lastActivity).getTime();
+    if (!Number.isNaN(lastTouch) && now - lastTouch > SESSION_ACTIVITY_TOUCH_THROTTLE_MS) {
+      try {
+        await db
+          .update(sessions)
+          .set({ lastActivity: new Date(now), updatedAt: new Date(now) })
+          .where(and(eq(sessions.sessionId, sessionId), eq(sessions.userId, userId)));
+      } catch {
+        // Activity tracking must never fail authentication; the session is
+        // valid, only its timestamp write was lost.
+      }
+    }
+  }
   return true;
 }
 
 export type { Role } from "@/lib/roles";
-export type PermissionLevel = "READ" | "WRITE";
+export type PermissionLevel = "READ" | "WRITE" | "MANAGE";
 
 const ALL_SCREENS = [
   "DASHBOARD", "MEMBERS", "MEETINGS", "GOVERNANCE", "GOALS", "DEPOSITS", "REQUEST_DEPOSIT",
@@ -200,8 +236,12 @@ export async function getMaintenanceFlags(tenantId: string | null): Promise<Main
       };
     }
   } catch {
-    // If we can't check, allow through
-    value = { tenantMaintenance: false, globalMaintenance: false, globalMessage: null };
+    // Fail CLOSED: if the maintenance state cannot be read, the safe verdict
+    // is "maintenance on" — this gate is the operator's emergency off-switch,
+    // and a database incident is exactly when it will be needed. The verdict
+    // is deliberately NOT cached: a recovered database must clear the 503 on
+    // the very next request, not after another TTL window.
+    return { tenantMaintenance: true, globalMaintenance: false, globalMessage: null };
   }
   maintFlagsCache.set(cacheKey, { value, expiresAt: now + MAINT_CACHE_TTL_MS });
   return value;
@@ -506,15 +546,6 @@ export function requireAuth(user: AuthenticatedUser | null): AuthenticatedUser {
   return user;
 }
 
-export function requireAdmin(user: AuthenticatedUser | null): AuthenticatedUser {
-  const userWithAuth = requireAuth(user);
-  const role = normalizeRole(userWithAuth.role);
-  if (role !== 'Admin' && role !== 'SuperAdmin') {
-    throw new ForbiddenError('Admin access required');
-  }
-  return userWithAuth;
-}
-
 export function requireManagerOrAdmin(user: AuthenticatedUser | null): AuthenticatedUser {
   const userWithAuth = requireAuth(user);
   const role = normalizeRole(userWithAuth.role);
@@ -524,59 +555,14 @@ export function requireManagerOrAdmin(user: AuthenticatedUser | null): Authentic
   return userWithAuth;
 }
 
-export function requireRole(...roles: Role[]) {
-  return (user: AuthenticatedUser | null): AuthenticatedUser => {
-    const userWithAuth = requireAuth(user);
-    const role = normalizeRole(userWithAuth.role);
-    if (!roles.includes(role)) {
-      throw new ForbiddenError(`Requires one of: ${roles.join(', ')}`);
-    }
-    return userWithAuth;
-  };
-}
-
 export function requirePermission(screen: string, level: PermissionLevel) {
   return (user: AuthenticatedUser | null): AuthenticatedUser => {
     const userWithAuth = requireAuth(user);
     if (!hasScreenPermission(userWithAuth, screen, level)) {
-      throw new ForbiddenError(`${level === 'WRITE' ? 'Write' : 'Read'} permission required for: ${screen}`);
+      throw new ForbiddenError(`${level === 'WRITE' ? 'Write' : level === 'MANAGE' ? 'Manage' : 'Read'} permission required for: ${screen}`);
     }
     return userWithAuth;
   };
-}
-
-export function requireAnyPermission(screens: string[], level: PermissionLevel) {
-  return (user: AuthenticatedUser | null): AuthenticatedUser => {
-    const userWithAuth = requireAuth(user);
-    if (!hasAnyScreenPermission(userWithAuth, screens, level)) {
-      throw new ForbiddenError(`${level === 'WRITE' ? 'Write' : 'Read'} permission required for: ${screens.join(' or ')}`);
-    }
-    return userWithAuth;
-  };
-}
-
-// Deposit write permission check
-export function requireDepositWritePermission(user: AuthenticatedUser, status: string): AuthenticatedUser {
-  const isPendingRequest = status.toLowerCase() === 'pending';
-  if (isPendingRequest) {
-    if (!hasAnyScreenPermission(user, ['REQUEST_DEPOSIT', 'DEPOSITS'], 'WRITE')) {
-      throw new ForbiddenError('Write permission required for: REQUEST_DEPOSIT or DEPOSITS');
-    }
-  } else {
-    if (!hasScreenPermission(user, 'DEPOSITS', 'WRITE')) {
-      throw new ForbiddenError('Write permission required for: DEPOSITS');
-    }
-  }
-  return user;
-}
-
-// SuperAdmin check (SuperAdmin role or platform-owner allowlist)
-export function requireSuperAdmin(user: AuthenticatedUser | null): AuthenticatedUser {
-  const userWithAuth = requireAuth(user);
-  if (!isSuperAdminRole(userWithAuth.role) && !isPlatformOwnerEmail(userWithAuth.email)) {
-    throw new ForbiddenError('SuperAdmin access required');
-  }
-  return userWithAuth;
 }
 
 export async function getAuthContext(request: NextRequest): Promise<{
@@ -612,4 +598,3 @@ export async function getAuthContext(request: NextRequest): Promise<{
 }
 
 // Export all needed types and functions
-export { COOKIE_NAMES, hasScreenPermission, hasAnyScreenPermission };

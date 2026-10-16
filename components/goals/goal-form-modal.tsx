@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { Goal, Project } from "@/types";
 import { useLocale } from "@/lib/i18n";
 
@@ -121,7 +122,7 @@ export function GoalFormModal({
 
         <ERPFormSection title={t("goals.goalDetails", { defaultValue: "Goal Target & Scope" })}>
           <ERPFormGrid cols={2}>
-            <ERPFormField label={t("goals.title", { defaultValue: "Goal Title *" })}>
+            <ERPFormField label={t("goals.form.title", { defaultValue: "Goal Title" })}>
               <input
                 type="text"
                 placeholder={t("goals.titlePlaceholder", { defaultValue: "e.g. 2026 Real Estate Acquisition Reserve" })}
@@ -131,20 +132,22 @@ export function GoalFormModal({
               />
             </ERPFormField>
 
-            <ERPFormField label={t("goals.type", { defaultValue: "Goal Category *" })}>
+            <ERPFormField label={t("goals.form.type", { defaultValue: "Goal Type" })}>
               <AppDropdown
                 options={typeOptions}
                 value={type}
                 onChange={(val) => setType(val || "Savings")}
-                placeholder={t("goals.selectCategoryPlaceholder", { defaultValue: "Select category..." })}
+                placeholder={t("goals.form.selectType", { defaultValue: "Select Type" })}
               />
             </ERPFormField>
           </ERPFormGrid>
 
-          <ERPFormField label={t("goals.description", { defaultValue: "Description & Milestones" })}>
+          <ERPFormField label={t("goals.form.description", { defaultValue: "Description" })}>
             <textarea
               rows={3}
-              placeholder="Outline target milestones and timeline expectations..."
+              placeholder={t("goals.descriptionPlaceholder", {
+                defaultValue: "Outline target milestones and timeline expectations...",
+              })}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-3 py-2 text-xs bg-card border border-border/80 text-foreground rounded-xl placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
@@ -154,8 +157,8 @@ export function GoalFormModal({
 
         <ERPFormSection title={t("goals.financialTargets", { defaultValue: "Financial Targets & Deadlines" })}>
           <ERPFormGrid cols={2}>
-            <ERPFormField label={t("goals.targetAmount", { defaultValue: "Target Amount *" })}>
-              <input
+            <ERPFormField label={t("goals.form.targetAmount", { defaultValue: "Target Amount" })}>
+              <NumericInput
                 type="number"
                 step="0.01"
                 min="0.01"
@@ -166,8 +169,8 @@ export function GoalFormModal({
               />
             </ERPFormField>
 
-            <ERPFormField label={t("goals.currentAmount", { defaultValue: "Initial / Current Accumulated" })}>
-              <input
+            <ERPFormField label={t("goals.form.currentAmount", { defaultValue: "Current Amount" })}>
+              <NumericInput
                 type="number"
                 step="0.01"
                 min="0"
@@ -188,7 +191,7 @@ export function GoalFormModal({
           </ERPFormGrid>
 
           <ERPFormGrid cols={2}>
-            <ERPFormField label={t("goals.deadline", { defaultValue: "Target Deadline" })}>
+            <ERPFormField label={t("goals.form.deadline", { defaultValue: "Target Date" })}>
               <input
                 type="date"
                 value={deadline}
@@ -197,18 +200,18 @@ export function GoalFormModal({
               />
             </ERPFormField>
 
-            <ERPFormField label={t("goals.linkedProject", { defaultValue: "Linked Project (Optional)" })}>
+            <ERPFormField label={t("goals.form.linkedProject", { defaultValue: "Linked Project (Optional)" })}>
               <AppDropdown
                 options={projectOptions}
                 value={selectedProjectId}
                 onChange={(val) => setSelectedProjectId(val)}
-                placeholder={t("goals.selectProjectPlaceholder", { defaultValue: "Link to active project..." })}
+                placeholder={t("goals.form.selectProject", { defaultValue: "Select Project" })}
               />
             </ERPFormField>
           </ERPFormGrid>
         </ERPFormSection>
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-border">
           <Button variant="ghost" size="sm" type="button" onClick={onClose} disabled={isSubmitting}>
             {t("common.cancel", { defaultValue: "Cancel" })}
           </Button>

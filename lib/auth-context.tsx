@@ -150,9 +150,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // bounce. (An in-flight 401 resolving in that pre-flag window used to
     // surface a false "session expired" notice on every manual sign-out.)
     markSessionGone();
-    // revokeServer=false: inactivity timeouts in one tab must NOT blacklist
-    // the shared refresh cookie — cookies span all tabs, so a server revoke
-    // here would kill every other tab's session. Local state clears either way.
+    // revokeServer=false: reserved for cases where only THIS tab's local state
+    // must die without touching the shared session (no current caller needs
+    // it — idle timeouts now revoke server-side because cross-tab activity
+    // tracking in useInactivityTimeout guarantees every tab is truly idle).
+    // Local state clears either way.
     if (revokeServer) {
       try {
         await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
@@ -171,9 +173,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setTenantIdState(null);
     // Identity-handoff hygiene: the browser QueryClient is a module singleton
-    // whose keys (["members"], ["settings"], …) carry no tenant stamp, so
+    // whose keys (["members"], ["transactions"], …) carry no tenant stamp, so
     // without this purge the next login in the same tab renders the PREVIOUS
     // user's cached rows for the first 30s (staleTime) before refreshing.
+    // (["settings"] is tenant-namespaced since F-10 and self-heals; this
+    // clear is what covers every other key.)
     getQueryClient().clear();
     setUser(null);
   }, []);

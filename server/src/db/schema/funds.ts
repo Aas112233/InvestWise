@@ -26,5 +26,3 @@ export const funds = pgTable('funds', {
   index('idx_funds_type').on(table.type),
   unique('uq_funds_tenant_account').on(table.tenantId, table.accountNumber),
 ]);
-
-export type Fund = typeof funds.$inferSelect;

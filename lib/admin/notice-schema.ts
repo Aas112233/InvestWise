@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 export const NOTICE_SEVERITIES = ['info', 'warning', 'critical'] as const;
-export type NoticeSeverity = (typeof NOTICE_SEVERITIES)[number];
 
 const noticeBase = {
   title: z.string().trim().min(1).max(200),

@@ -6,14 +6,6 @@ import { eq } from 'drizzle-orm';
 // A tenant is blocked when its subscription is suspended/cancelled/expired, or
 // past-due beyond grace. Platform operators (null tenant) are never blocked.
 
-export type SubscriptionStatus =
-  | 'trial'
-  | 'active'
-  | 'past_due'
-  | 'suspended'
-  | 'cancelled'
-  | 'expired';
-
 const HARD_BLOCKED: ReadonlySet<string> = new Set(['suspended', 'cancelled', 'expired']);
 
 // 60s per-tenant cache: the subscription check ran 1 SELECT per API request.

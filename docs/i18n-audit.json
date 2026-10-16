@@ -1,100 +1,184 @@
 {
   "stats": {
     "locales": 4,
-    "enKeys": 1502,
+    "enKeys": 2294,
     "keyCounts": {
-      "en": 1502,
-      "ur": 1502,
-      "hi": 1502,
-      "bn": 1502
+      "en": 2294,
+      "ur": 2294,
+      "hi": 2294,
+      "bn": 2294
     },
-    "filesScanned": 220,
-    "usedKeys": 1008,
-    "coverage": "50.2%"
+    "filesScanned": 304,
+    "usedKeys": 1498,
+    "coverage": "60.2%"
   },
   "findings": {
     "broken": [
       {
-        "file": "app/goals/page.tsx",
-        "line": 63,
-        "key": "goals.updatedSuccess",
+        "file": "app/projects/page.tsx",
+        "line": 335,
+        "key": "common.allProjects",
         "hasDefault": true
       },
       {
-        "file": "app/goals/page.tsx",
-        "line": 64,
-        "key": "goals.createdSuccess",
+        "file": "app/projects/page.tsx",
+        "line": 356,
+        "key": "common.date",
         "hasDefault": true
       },
       {
-        "file": "app/goals/page.tsx",
-        "line": 82,
-        "key": "goals.deletedSuccess",
+        "file": "app/projects/page.tsx",
+        "line": 366,
+        "key": "common.type",
         "hasDefault": true
       },
       {
-        "file": "app/goals/page.tsx",
-        "line": 98,
-        "key": "goals.progressUpdated",
+        "file": "app/projects/page.tsx",
+        "line": 386,
+        "key": "finance.amount",
         "hasDefault": true
       },
       {
-        "file": "app/governance/page.tsx",
-        "line": 78,
-        "key": "governance.issuedSuccess",
+        "file": "app/projects/page.tsx",
+        "line": 404,
+        "key": "finance.description",
         "hasDefault": true
       },
       {
-        "file": "app/governance/page.tsx",
-        "line": 102,
-        "key": "governance.waivedSuccess",
+        "file": "app/projects/page.tsx",
+        "line": 413,
+        "key": "finance.balanceAfter",
         "hasDefault": true
       },
       {
-        "file": "app/governance/page.tsx",
-        "line": 118,
-        "key": "governance.recalculatedSuccess",
+        "file": "app/projects/page.tsx",
+        "line": 427,
+        "key": "common.date",
         "hasDefault": true
       },
       {
-        "file": "app/meetings/page.tsx",
-        "line": 59,
-        "key": "meetings.scheduledSuccess",
+        "file": "app/projects/page.tsx",
+        "line": 437,
+        "key": "transactions.reference",
         "hasDefault": true
       },
       {
-        "file": "app/meetings/page.tsx",
-        "line": 82,
-        "key": "meetings.attendanceSaved",
+        "file": "app/projects/page.tsx",
+        "line": 455,
+        "key": "common.type",
         "hasDefault": true
       },
       {
-        "file": "app/meetings/page.tsx",
-        "line": 105,
-        "key": "meetings.completedSuccess",
+        "file": "app/projects/page.tsx",
+        "line": 474,
+        "key": "finance.description",
         "hasDefault": true
       },
       {
-        "file": "app/meetings/page.tsx",
-        "line": 120,
-        "key": "meetings.deletedSuccess",
+        "file": "app/projects/page.tsx",
+        "line": 488,
+        "key": "finance.amount",
         "hasDefault": true
       },
       {
-        "file": "app/reports/page.tsx",
-        "line": 66,
-        "key": "reports.generatingNotice",
+        "file": "app/projects/page.tsx",
+        "line": 509,
+        "key": "projects.officer",
         "hasDefault": true
       },
       {
-        "file": "app/reports/page.tsx",
-        "line": 106,
-        "key": "reports.downloadSuccess",
+        "file": "app/projects/page.tsx",
+        "line": 522,
+        "key": "common.date",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 541,
+        "key": "common.type",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 595,
+        "key": "finance.amount",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 616,
+        "key": "projects.officer",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 716,
+        "key": "projects.managementSubtitle",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 733,
+        "key": "projects.addUpdate",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 846,
+        "key": "projects.filterProject",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 870,
+        "key": "projects.addUpdate",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 879,
+        "key": "projects.disbursementsLedger",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 882,
+        "key": "common.entries",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 897,
+        "key": "projects.noUpdatesRecorded",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 909,
+        "key": "projects.filterProject",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 929,
+        "key": "common.entries",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 957,
+        "key": "projects.filterProject",
+        "hasDefault": true
+      },
+      {
+        "file": "app/projects/page.tsx",
+        "line": 1008,
+        "key": "common.entries",
         "hasDefault": true
       },
       {
         "file": "app/transactions/page.tsx",
-        "line": 70,
+        "line": 80,
         "key": "transactions.deletedSuccess",
         "hasDefault": true
       },
@@ -111,1250 +195,404 @@
         "hasDefault": true
       },
       {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 48,
-        "key": "goals.types.savings",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 49,
-        "key": "goals.types.investment",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 50,
-        "key": "goals.types.emergency",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 51,
-        "key": "goals.types.other",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 59,
-        "key": "goals.validation.titleRequired",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 65,
-        "key": "goals.validation.validTarget",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 97,
-        "key": "goals.newGoal",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 98,
-        "key": "goals.formDescription",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 107,
-        "key": "goals.goalDetails",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 112,
-        "key": "goals.titlePlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 119,
-        "key": "goals.type",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 124,
-        "key": "goals.selectCategoryPlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 129,
-        "key": "goals.description",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 140,
-        "key": "goals.financialTargets",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 142,
-        "key": "goals.targetAmount",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 154,
-        "key": "goals.currentAmount",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 168,
-        "key": "goals.deadline",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 177,
-        "key": "goals.linkedProject",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 182,
-        "key": "goals.selectProjectPlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goal-form-modal.tsx",
-        "line": 193,
-        "key": "common.saveChanges",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goals-view.tsx",
-        "line": 201,
-        "key": "common.actions",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goals-view.tsx",
-        "line": 237,
-        "key": "goals.metrics.totalTarget",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goals-view.tsx",
-        "line": 243,
-        "key": "goals.metrics.currentAccumulated",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goals-view.tsx",
-        "line": 249,
-        "key": "goals.metrics.overallProgress",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goals-view.tsx",
-        "line": 255,
-        "key": "goals.metrics.achievedGoals",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goals-view.tsx",
-        "line": 280,
-        "key": "goals.status.inProgress",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goals-view.tsx",
-        "line": 281,
-        "key": "goals.status.achieved",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goals-view.tsx",
-        "line": 282,
-        "key": "goals.status.cancelled",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goals-view.tsx",
-        "line": 294,
-        "key": "goals.type.savings",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goals-view.tsx",
-        "line": 295,
-        "key": "goals.type.investment",
-        "hasDefault": true
-      },
-      {
-        "file": "components/goals/goals-view.tsx",
-        "line": 296,
-        "key": "goals.type.other",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 134,
-        "key": "governance.columns.member",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 151,
-        "key": "governance.columns.escalationTier",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 163,
-        "key": "governance.columns.violationReason",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 177,
-        "key": "governance.columns.deduction",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 190,
-        "key": "governance.columns.status",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 200,
-        "key": "governance.columns.issuedAt",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 209,
-        "key": "common.actions",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 219,
-        "key": "governance.waivePenalty",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 221,
-        "key": "governance.waive",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 233,
-        "key": "governance.columns.rank",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 242,
-        "key": "governance.columns.member",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 257,
-        "key": "governance.columns.grade",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 264,
-        "key": "governance.columns.score",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 275,
-        "key": "governance.columns.warnings",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 303,
-        "key": "governance.metrics.activePenalties",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 309,
-        "key": "governance.metrics.tier4Suspensions",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 315,
-        "key": "governance.metrics.waivedPenalties",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 321,
-        "key": "governance.metrics.totalDeductions",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 340,
-        "key": "governance.tabs.penaltyHub",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 351,
-        "key": "governance.tabs.leaderboard",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 363,
-        "key": "governance.recalculateAll",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 372,
-        "key": "governance.issuePenalty",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 385,
-        "key": "governance.searchPenalties",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 395,
-        "key": "governance.allTiers",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 396,
-        "key": "governance.tiers.tier1",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 397,
-        "key": "governance.tiers.tier2",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 398,
-        "key": "governance.tiers.tier3",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 399,
-        "key": "governance.tiers.tier4",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 411,
-        "key": "governance.statuses.active",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 412,
-        "key": "governance.statuses.waived",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 413,
-        "key": "governance.statuses.resolved",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 431,
-        "key": "governance.noPenaltiesRecorded",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/governance-view.tsx",
-        "line": 445,
-        "key": "governance.noLeaderboardData",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 46,
-        "key": "governance.tiers.tier1",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 47,
-        "key": "governance.tiers.tier2",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 48,
-        "key": "governance.tiers.tier3",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 49,
-        "key": "governance.tiers.tier4",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 53,
-        "key": "governance.penaltyTypes.verbalWarning",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 54,
-        "key": "governance.penaltyTypes.fundDeduction",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 55,
-        "key": "governance.penaltyTypes.suspension",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 78,
-        "key": "governance.validation.selectMember",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 82,
-        "key": "governance.validation.titleRequired",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 86,
-        "key": "governance.validation.reasonRequired",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 112,
-        "key": "governance.issuePenalty",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 113,
-        "key": "governance.issueDescription",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 122,
-        "key": "governance.penaltySpecification",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 124,
-        "key": "governance.selectTargetMember",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 129,
-        "key": "governance.selectMemberPlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 133,
-        "key": "governance.escalationTier",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 138,
-        "key": "governance.selectTierPlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 144,
-        "key": "governance.penaltyType",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 149,
-        "key": "governance.selectActionTypePlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 154,
-        "key": "governance.deductionAmount",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 169,
-        "key": "governance.documentation",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 170,
-        "key": "governance.penaltyTitle",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 180,
-        "key": "governance.violationReason",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/issue-penalty-modal.tsx",
-        "line": 196,
-        "key": "governance.confirmIssue",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/waive-penalty-modal.tsx",
-        "line": 34,
-        "key": "governance.validation.waiveReasonLength",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/waive-penalty-modal.tsx",
-        "line": 53,
-        "key": "governance.waivePenaltyTitle",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/waive-penalty-modal.tsx",
-        "line": 54,
-        "key": "governance.waiveAuditNotice",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/waive-penalty-modal.tsx",
-        "line": 66,
-        "key": "governance.columns.member",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/waive-penalty-modal.tsx",
-        "line": 70,
-        "key": "governance.columns.tier",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/waive-penalty-modal.tsx",
-        "line": 75,
-        "key": "governance.columns.deduction",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/waive-penalty-modal.tsx",
-        "line": 82,
-        "key": "governance.originalReason",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/waive-penalty-modal.tsx",
-        "line": 87,
-        "key": "governance.auditJustification",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/waive-penalty-modal.tsx",
-        "line": 88,
-        "key": "governance.waiveReasonLabel",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/waive-penalty-modal.tsx",
-        "line": 91,
-        "key": "governance.waiveReasonPlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/governance/waive-penalty-modal.tsx",
-        "line": 104,
-        "key": "governance.confirmWaive",
-        "hasDefault": true
-      },
-      {
         "file": "components/layout/sidebar.tsx",
-        "line": 165,
+        "line": 219,
         "key": "ui.clearSearch",
         "hasDefault": true
       },
       {
         "file": "components/layout/top-nav.tsx",
-        "line": 338,
+        "line": 466,
         "key": "common.signingOut",
         "hasDefault": true
       },
       {
         "file": "components/layout/top-nav.tsx",
-        "line": 338,
+        "line": 466,
         "key": "common.signOut",
         "hasDefault": true
       },
       {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 102,
-        "key": "meetings.confirmComplete",
+        "file": "components/projects/distribute-returns-modal.tsx",
+        "line": 296,
+        "key": "finance.validation.amountGreaterThanZero",
         "hasDefault": true
       },
       {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 133,
-        "key": "meetings.attendanceRoster",
+        "file": "components/projects/distribute-returns-modal.tsx",
+        "line": 301,
+        "key": "projects.validation.descriptionRequired",
         "hasDefault": true
       },
       {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 139,
-        "key": "meetings.total",
+        "file": "components/projects/distribute-returns-modal.tsx",
+        "line": 307,
+        "key": "projects.validation.insufficientBalanceForPayout",
         "hasDefault": true
       },
       {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 143,
-        "key": "meetings.present",
+        "file": "components/projects/distribute-returns-modal.tsx",
+        "line": 323,
+        "key": "projects.validation.noShareholdersForReturn",
         "hasDefault": true
       },
       {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 147,
-        "key": "meetings.absent",
+        "file": "components/projects/distribute-returns-modal.tsx",
+        "line": 347,
+        "key": "projects.validation.failedDistribute",
         "hasDefault": true
       },
       {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 151,
-        "key": "meetings.excused",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 185,
-        "key": "meetings.present",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 197,
-        "key": "meetings.excused",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 209,
-        "key": "meetings.absent",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 220,
-        "key": "meetings.meetingMinutes",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 224,
-        "key": "meetings.minutesPlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 234,
-        "key": "meetings.saveDraft",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-attendance-modal.tsx",
-        "line": 248,
-        "key": "meetings.completeAndEscalate",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 36,
-        "key": "meetings.types.foundingMember",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 37,
-        "key": "meetings.types.shareholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 38,
-        "key": "meetings.types.investor",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 39,
-        "key": "meetings.types.general",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 47,
-        "key": "meetings.validation.titleRequired",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 51,
-        "key": "meetings.validation.typeRequired",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 55,
-        "key": "meetings.validation.dateRequired",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 81,
-        "key": "meetings.editMeeting",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 81,
-        "key": "meetings.scheduleMeeting",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 82,
-        "key": "meetings.formDescription",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 91,
-        "key": "meetings.meetingDetails",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 93,
-        "key": "meetings.title",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 96,
-        "key": "meetings.titlePlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 103,
-        "key": "meetings.meetingType",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 108,
-        "key": "meetings.selectType",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 114,
-        "key": "meetings.dateTime",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 123,
-        "key": "meetings.location",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 135,
-        "key": "meetings.agendaSection",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 136,
-        "key": "meetings.agenda",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 139,
-        "key": "meetings.agendaPlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 146,
-        "key": "meetings.notes",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 149,
-        "key": "meetings.notesPlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 162,
-        "key": "common.saveChanges",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meeting-form-modal.tsx",
-        "line": 162,
-        "key": "meetings.scheduleButton",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 109,
-        "key": "meetings.columns.meeting",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 124,
-        "key": "meetings.columns.dateSchedule",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 143,
-        "key": "meetings.columns.attendance",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 152,
-        "key": "meetings.present",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 156,
-        "key": "meetings.turnout",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 165,
-        "key": "meetings.columns.status",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 172,
-        "key": "common.actions",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 187,
-        "key": "meetings.resume",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 188,
-        "key": "meetings.start",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 200,
-        "key": "common.details",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 210,
-        "key": "meetings.confirmDelete",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 227,
-        "key": "meetings.metrics.totalMeetings",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 233,
-        "key": "meetings.metrics.inProgress",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 239,
-        "key": "meetings.metrics.scheduled",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 245,
-        "key": "meetings.metrics.completed",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 259,
-        "key": "meetings.searchPlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 270,
-        "key": "meetings.statuses.scheduled",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 271,
-        "key": "meetings.statuses.inProgress",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 272,
-        "key": "meetings.statuses.completed",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 273,
-        "key": "meetings.statuses.cancelled",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 284,
-        "key": "meetings.allTypes",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 285,
-        "key": "meetings.types.foundingMember",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 286,
-        "key": "meetings.types.shareholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 287,
-        "key": "meetings.types.investor",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 288,
-        "key": "meetings.types.general",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 298,
-        "key": "meetings.scheduleButton",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 312,
-        "key": "meetings.noMeetingsFound",
-        "hasDefault": true
-      },
-      {
-        "file": "components/meetings/meetings-list-view.tsx",
-        "line": 313,
-        "key": "meetings.scheduleButton",
+        "file": "components/projects/distribute-returns-modal.tsx",
+        "line": 432,
+        "key": "projects.returns.descPlaceholder",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 55,
+        "line": 156,
+        "key": "projects.shareValue",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 191,
+        "key": "common.status",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 203,
         "key": "common.date",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 65,
+        "line": 213,
         "key": "common.type",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 85,
+        "line": 233,
         "key": "finance.amount",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 103,
+        "line": 251,
         "key": "finance.description",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 112,
+        "line": 260,
         "key": "finance.balanceAfter",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 141,
+        "line": 274,
+        "key": "common.date",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 284,
+        "key": "transactions.reference",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 293,
+        "key": "common.type",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 312,
+        "key": "finance.description",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 326,
+        "key": "finance.amount",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 347,
+        "key": "projects.officer",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 361,
         "key": "common.backToProjects",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 151,
+        "line": 384,
         "key": "projects.addUpdate",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 199,
+        "line": 433,
+        "key": "projects.expectedRoi",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 435,
+        "key": "projects.totalShares",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 444,
         "key": "projects.budgetUtilization",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 223,
+        "line": 516,
         "key": "projects.columns.budget",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 229,
+        "line": 522,
         "key": "projects.columns.balance",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 235,
+        "line": 528,
         "key": "projects.columns.earnings",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 241,
+        "line": 534,
         "key": "projects.columns.expenses",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 252,
+        "line": 540,
+        "key": "projects.totalShares",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 580,
+        "key": "common.members",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 624,
+        "key": "projects.netOperationalMargin",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-detail-view.tsx",
+        "line": 644,
         "key": "projects.disbursementsLedger",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 255,
-        "key": "common.entries",
+        "line": 653,
+        "key": "projects.addUpdate",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-detail-view.tsx",
-        "line": 267,
+        "line": 666,
         "key": "projects.noUpdatesRecorded",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 69,
+        "line": 179,
         "key": "projects.validation.titleRequired",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 73,
+        "line": 183,
         "key": "projects.validation.categoryRequired",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 77,
+        "line": 187,
         "key": "projects.validation.startDateRequired",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 83,
+        "line": 193,
         "key": "projects.validation.validBudget",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 113,
-        "key": "projects.editProject",
+        "line": 198,
+        "key": "projects.validation.fundNameRequired",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 113,
-        "key": "projects.newProject",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 114,
-        "key": "projects.formDescription",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 123,
-        "key": "projects.basicDetails",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 125,
-        "key": "projects.title",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 135,
-        "key": "projects.category",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 140,
-        "key": "projects.selectCategory",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 145,
-        "key": "projects.description",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 148,
-        "key": "projects.descriptionPlaceholder",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 156,
-        "key": "projects.financials",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 158,
-        "key": "projects.budget",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 182,
-        "key": "projects.expectedRoi",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 196,
-        "key": "projects.linkedFund",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 201,
-        "key": "projects.selectFund",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-form-modal.tsx",
-        "line": 205,
-        "key": "projects.status",
+        "line": 209,
+        "key": "projects.validation.duplicateShareholder",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
         "line": 216,
+        "key": "projects.validation.invalidShares",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 266,
+        "key": "projects.editProject",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 266,
+        "key": "projects.newProject",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 267,
+        "key": "projects.formDescription",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 278,
+        "key": "projects.basicDetails",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 280,
+        "key": "projects.title",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 290,
+        "key": "projects.category",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 295,
+        "key": "projects.selectCategory",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 309,
+        "key": "projects.description",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 312,
+        "key": "projects.descriptionPlaceholder",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 321,
+        "key": "projects.financials",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 323,
+        "key": "projects.budget",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 347,
+        "key": "projects.expectedRoi",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 362,
+        "key": "projects.fundStrategy",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 391,
+        "key": "projects.linkedFund",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 396,
+        "key": "projects.selectFund",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 416,
         "key": "projects.timeline",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 218,
+        "line": 418,
         "key": "projects.startDate",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 222,
+        "line": 422,
         "key": "projects.startDate",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 226,
+        "line": 426,
         "key": "projects.completionDate",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 230,
+        "line": 430,
         "key": "projects.completionDate",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 241,
-        "key": "common.saveChanges",
+        "line": 434,
+        "key": "projects.status",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-form-modal.tsx",
-        "line": 241,
+        "line": 496,
+        "key": "projects.shareholderMember",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-form-modal.tsx",
+        "line": 593,
         "key": "projects.createButton",
         "hasDefault": true
       },
@@ -1398,12 +636,6 @@
         "file": "components/projects/project-list-view.tsx",
         "line": 197,
         "key": "projects.columns.timeline",
-        "hasDefault": true
-      },
-      {
-        "file": "components/projects/project-list-view.tsx",
-        "line": 209,
-        "key": "common.actions",
         "hasDefault": true
       },
       {
@@ -1480,122 +712,128 @@
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 31,
+        "line": 101,
         "key": "projects.updateTypes.expense",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 32,
+        "line": 102,
         "key": "projects.updateTypes.earning",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 47,
+        "line": 135,
+        "key": "projects.validation.selectProjectRequired",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-update-modal.tsx",
+        "line": 140,
         "key": "finance.validation.amountGreaterThanZero",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 52,
+        "line": 145,
         "key": "projects.validation.descriptionRequired",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 57,
+        "line": 159,
         "key": "projects.validation.insufficientBalance",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 70,
+        "line": 178,
         "key": "common.errors.failedToRecordProjectUpdate",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 80,
+        "line": 190,
         "key": "projects.recordDisbursement",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 90,
+        "line": 191,
+        "key": "projects.selectProjectForUpdate",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-update-modal.tsx",
+        "line": 200,
         "key": "projects.updateDetails",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 92,
+        "line": 213,
         "key": "projects.transactionType",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 97,
+        "line": 218,
         "key": "projects.selectUpdateTypePlaceholder",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 101,
+        "line": 222,
         "key": "finance.amount",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 114,
+        "line": 236,
+        "key": "common.date",
+        "hasDefault": true
+      },
+      {
+        "file": "components/projects/project-update-modal.tsx",
+        "line": 262,
         "key": "finance.description",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 117,
+        "line": 265,
         "key": "projects.updateDescriptionPlaceholder",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 128,
+        "line": 276,
         "key": "finance.ledgerSnapshot",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 133,
+        "line": 281,
         "key": "finance.balanceBefore",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 141,
+        "line": 289,
         "key": "finance.balanceAfter",
         "hasDefault": true
       },
       {
         "file": "components/projects/project-update-modal.tsx",
-        "line": 161,
+        "line": 309,
         "key": "common.postTransaction",
         "hasDefault": true
       },
       {
         "file": "components/reports/reports-view.tsx",
-        "line": 277,
-        "key": "projects.linkedProject",
-        "hasDefault": true
-      },
-      {
-        "file": "components/reports/reports-view.tsx",
-        "line": 288,
-        "key": "members.selectMember",
-        "hasDefault": true
-      },
-      {
-        "file": "components/reports/reports-view.tsx",
-        "line": 299,
-        "key": "funds.selectFund",
+        "line": 173,
+        "key": "reports.validation.selectReport",
         "hasDefault": true
       },
       {
@@ -1636,188 +874,301 @@
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 86,
+        "line": 87,
         "key": "transactions.typeDeposit",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 87,
+        "line": 88,
         "key": "transactions.typeExpense",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 88,
+        "line": 89,
         "key": "transactions.typeDividend",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 89,
+        "line": 90,
         "key": "transactions.typeTransfer",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 95,
+        "line": 96,
         "key": "transactions.refHeader",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 104,
+        "line": 105,
         "key": "transactions.dateHeader",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 113,
+        "line": 114,
         "key": "transactions.typeHeader",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 133,
+        "line": 134,
         "key": "transactions.partyHeader",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 149,
+        "line": 150,
         "key": "transactions.amountHeader",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 162,
+        "line": 163,
         "key": "transactions.descriptionHeader",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 171,
+        "line": 172,
         "key": "transactions.statusHeader",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 180,
-        "key": "common.actions",
-        "hasDefault": true
-      },
-      {
-        "file": "components/transactions/transactions-list-view.tsx",
-        "line": 211,
+        "line": 212,
         "key": "transactions.totalInflow",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 218,
+        "line": 219,
         "key": "transactions.totalOutflow",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 225,
+        "line": 226,
         "key": "transactions.netBalance",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 251,
+        "line": 252,
         "key": "transactions.filterTypePlaceholder",
         "hasDefault": true
       },
       {
         "file": "components/transactions/transactions-list-view.tsx",
-        "line": 266,
+        "line": 267,
         "key": "transactions.emptyDescription",
         "hasDefault": true
       },
       {
         "file": "components/transactions/voucher-drawer.tsx",
-        "line": 47,
+        "line": 48,
         "key": "transactions.voucherTitle",
         "hasDefault": true
       },
       {
         "file": "components/ui/app-dropdown.tsx",
-        "line": 59,
+        "line": 74,
         "key": "common.noMatches",
         "hasDefault": true
+      },
+      {
+        "file": "lib/reports/data.ts",
+        "line": 1060,
+        "key": "quarters.quarter",
+        "hasDefault": false
       }
     ],
     "dynamic": [
       {
-        "file": "app/settings/page.tsx",
-        "line": 207,
-        "key": "settings.tabs.${Object.keys(variables)[0] ?? \"organization\"}",
+        "file": "app/admin/feature-flags/page.tsx",
+        "line": 271,
+        "key": "admin.featureFlags.category.${category}",
+        "resolved": []
+      },
+      {
+        "file": "app/admin/tenants/page.tsx",
+        "line": 218,
+        "key": "common.months.${short}",
         "resolved": []
       },
       {
         "file": "app/settings/page.tsx",
-        "line": 347,
+        "line": 552,
         "key": "common.months.${short}",
+        "resolved": []
+      },
+      {
+        "file": "app/signup/page.tsx",
+        "line": 206,
+        "key": "common.months.${short}",
+        "resolved": []
+      },
+      {
+        "file": "components/admin/tenant-module-access-panel.tsx",
+        "line": 105,
+        "key": "admin.featureFlags.category.${category}",
         "resolved": []
       },
       {
         "file": "components/deposits/bulk-deposit-modal.tsx",
-        "line": 70,
-        "key": "common.months.${s}",
-        "resolved": []
-      },
-      {
-        "file": "components/deposits/deposit-modal.tsx",
-        "line": 94,
+        "line": 69,
         "key": "common.months.${s}",
         "resolved": []
       },
       {
         "file": "components/deposits/deposits-list-view.tsx",
-        "line": 44,
+        "line": 43,
         "key": "common.months.${short}",
         "resolved": []
       },
       {
         "file": "components/deposits/deposits-list-view.tsx",
-        "line": 374,
+        "line": 494,
         "key": "common.months.${s}",
         "resolved": []
       },
       {
+        "file": "components/deposits/shared.ts",
+        "line": 41,
+        "key": "common.months.${key}",
+        "resolved": []
+      },
+      {
+        "file": "components/dividends/dividends-view.tsx",
+        "line": 187,
+        "key": "dividends.statusLabels.${(row.status || \"\").toLowerCase()}",
+        "resolved": null,
+        "manual": true
+      },
+      {
+        "file": "components/layout/notifications-menu.tsx",
+        "line": 62,
+        "key": "layout.notificationsActions.${action}",
+        "resolved": []
+      },
+      {
+        "file": "components/meetings/meeting-labels.ts",
+        "line": 28,
+        "key": "meetings.types.${toCamelKey(typeKey)}",
+        "resolved": []
+      },
+      {
+        "file": "components/meetings/meeting-labels.ts",
+        "line": 32,
+        "key": "meetings.statuses.${toCamelKey(status)}",
+        "resolved": []
+      },
+      {
         "file": "components/members/member-detail-sheet.tsx",
-        "line": 107,
+        "line": 137,
         "key": "members.statusLabels.${member.status.toLowerCase()}",
         "resolved": []
       },
       {
         "file": "components/members/members-list-view.tsx",
-        "line": 323,
+        "line": 45,
+        "key": "common.months.${short}",
+        "resolved": []
+      },
+      {
+        "file": "components/members/members-list-view.tsx",
+        "line": 441,
         "key": "members.statusLabels.${m.status.toLowerCase()}",
         "resolved": []
       },
       {
         "file": "components/members/members-list-view.tsx",
-        "line": 351,
+        "line": 475,
         "key": "members.statusLabels.${s}",
         "resolved": []
       },
       {
-        "file": "components/ui/erp-date-picker.tsx",
-        "line": 273,
+        "file": "components/reports/reports-view.tsx",
+        "line": 126,
         "key": "common.months.${key}",
         "resolved": []
       },
       {
         "file": "components/ui/erp-date-picker.tsx",
-        "line": 367,
+        "line": 283,
+        "key": "common.months.${key}",
+        "resolved": []
+      },
+      {
+        "file": "components/ui/erp-date-picker.tsx",
+        "line": 377,
         "key": "common.weekdays.${key}",
+        "resolved": []
+      },
+      {
+        "file": "components/users/user-form-modal.tsx",
+        "line": 71,
+        "key": "users.roleLabels.${r}",
+        "resolved": []
+      },
+      {
+        "file": "components/users/users-list-view.tsx",
+        "line": 268,
+        "key": "users.roleLabels.${normalizeRole(u.role)}",
+        "resolved": []
+      },
+      {
+        "file": "components/users/users-list-view.tsx",
+        "line": 278,
+        "key": "users.statusLabels.${(u.status || \"active\").toLowerCase()}",
+        "resolved": null,
+        "manual": true
+      },
+      {
+        "file": "components/users/users-list-view.tsx",
+        "line": 329,
+        "key": "users.statusLabels.${s}",
+        "resolved": []
+      },
+      {
+        "file": "lib/reports/data.ts",
+        "line": 1060,
+        "key": "reports.quarters.${quarter}",
+        "resolved": [
+          "reports.quarter"
+        ],
+        "partial": true
+      },
+      {
+        "file": "lib/reports/format.ts",
+        "line": 73,
+        "key": "common.months.${names[monthIndex] ?? \"jan\"}",
         "resolved": []
       }
     ],
     "orphan": [
+      "ledger.equityReceived",
+      "ledger.equityTransferred.one",
+      "ledger.equityTransferred.other",
+      "ledger.equityInvestment.one",
+      "ledger.equityInvestment.other",
+      "ledger.fundTransferOut",
+      "ledger.fundTransferIn",
+      "ledger.openingBalance",
+      "ledger.statutoryReserve",
+      "ledger.statutoryReserveSweep",
+      "ledger.dividendDistribution",
+      "ledger.dividendPayout.one",
+      "ledger.dividendPayout.other",
+      "ledger.projectProfitReturnToFund",
+      "ledger.projectProfitReturn",
+      "ledger.projectLossAbsorption",
+      "meetings.types.annualGeneralMeeting",
+      "meetings.defaultLocation",
       "common.add",
       "common.provision",
       "common.backToDashboard",
@@ -1825,6 +1176,7 @@
       "common.constructionDesc",
       "common.authorized",
       "common.rotateKey",
+      "common.pending",
       "common.verified",
       "common.authorizedBadge",
       "common.restrictedBadge",
@@ -1852,19 +1204,15 @@
       "common.months.nov",
       "common.months.dec",
       "common.allMonths",
-      "common.deposit",
-      "common.expense",
       "common.investment",
       "common.withdrawal",
       "common.earning",
-      "common.dividend",
       "common.equityTransfer",
       "common.failed",
       "common.bdt",
       "common.hidePreview",
       "common.all",
       "common.printReceipt",
-      "common.confirm",
       "common.weekdays.mon",
       "common.weekdays.tue",
       "common.weekdays.wed",
@@ -1886,9 +1234,12 @@
       "common.noDeadline",
       "common.complete",
       "common.percentLeft",
+      "common.errors.failedToLoadDividendHistory",
+      "common.errors.failedToGenerateReport",
       "nav.management",
       "nav.operations",
       "nav.strategy",
+      "nav.dashboard",
       "nav.members",
       "nav.goals",
       "nav.deposits",
@@ -1901,8 +1252,25 @@
       "nav.reports",
       "nav.settings",
       "nav.dividends",
+      "nav.fiscal",
       "nav.meetings",
       "nav.governance",
+      "nav.users",
+      "users.roleLabels.Admin",
+      "users.roleLabels.Manager",
+      "users.roleLabels.Auditor",
+      "users.roleLabels.Member",
+      "users.statusLabels.active",
+      "users.statusLabels.inactive",
+      "users.statusLabels.suspended",
+      "users.activatedToast",
+      "users.deactivatedToast",
+      "users.validation.nameMin",
+      "users.validation.emailRequired",
+      "users.validation.emailInvalid",
+      "users.form.passwordRequired",
+      "fiscal.messages.closed",
+      "fiscal.messages.reopened",
       "auth.terminal",
       "auth.identifier",
       "auth.passphrase",
@@ -1916,7 +1284,6 @@
       "dashboard.intelligence",
       "dashboard.investedCapital",
       "dashboard.totalMembers",
-      "dashboard.totalShares",
       "dashboard.yieldIndex",
       "dashboard.capitalTrends",
       "dashboard.trendDesc",
@@ -1930,7 +1297,6 @@
       "dashboard.efficiencyDesc",
       "dashboard.alphaMonths",
       "dashboard.alphaDesc",
-      "dashboard.equityHealth",
       "dashboard.stability",
       "dashboard.benchmarks",
       "dashboard.newObjective",
@@ -1953,7 +1319,6 @@
       "dashboard.cumulativeGrowth",
       "dashboard.cashFlowSub",
       "dashboard.growthSub",
-      "dashboard.depositsStream",
       "dashboard.cashInStream",
       "dashboard.cashOutStream",
       "dashboard.netDelta",
@@ -1964,8 +1329,6 @@
       "dashboard.netDeltaSub",
       "dashboard.benchmarkMode",
       "dashboard.benchmarkSub",
-      "dashboard.surplus",
-      "dashboard.deficit",
       "dashboard.targetBenchmark",
       "dashboard.actualRealized",
       "dashboard.projectRoiMode",
@@ -1976,6 +1339,16 @@
       "dashboard.totalPartners",
       "dashboard.active",
       "dashboard.monthlyGrowth",
+      "dashboard.dividendsShort",
+      "dashboard.capitalFlow",
+      "dashboard.capitalFlowDesc",
+      "dashboard.portfolioHealth",
+      "dashboard.addMember",
+      "dashboard.meetings",
+      "dashboard.healthGood",
+      "dashboard.healthStable",
+      "dashboard.healthAtRisk",
+      "dashboard.healthCritical",
       "members.vested",
       "members.cumulativePool",
       "members.filterPlaceholder",
@@ -2037,6 +1410,12 @@
       "members.statusLabels.suspended",
       "members.suspendedToast",
       "members.activatedToast",
+      "members.form.validation.nameMin",
+      "members.form.validation.emailRequired",
+      "members.form.validation.emailInvalid",
+      "members.form.validation.sharesRequired",
+      "members.form.validation.sharesWhole",
+      "members.form.validation.sharesMin",
       "funds.fundName",
       "funds.fundType",
       "funds.handlingOfficer",
@@ -2062,7 +1441,9 @@
       "funds.types.deposit",
       "funds.types.primary",
       "funds.types.project",
+      "funds.types.reserve",
       "funds.types.other",
+      "funds.types.emergency",
       "funds.reconcileAction",
       "funds.reconciling",
       "funds.reconciledToast",
@@ -2071,11 +1452,11 @@
       "funds.lastReconciled",
       "funds.neverReconciled",
       "roles.associateMember",
+      "roles.foundingMember",
       "roles.foundingPartner",
       "roles.leadInvestor",
       "roles.managingDirector",
       "roles.boardMember",
-      "projects.portfolio",
       "projects.capitalFlow",
       "projects.projectTransactions",
       "projects.performance",
@@ -2098,8 +1479,6 @@
       "projects.impactStatus",
       "projects.accrual",
       "projects.overhead",
-      "projects.cumulativeRevenue",
-      "projects.operatingOverhead",
       "projects.performanceMargin",
       "projects.equityParticipation",
       "projects.netEntitlement",
@@ -2125,10 +1504,8 @@
       "projects.capitalInjection",
       "projects.verifiedLedger",
       "projects.noProjects",
-      "projects.launchVenture",
       "projects.ventureGenesis",
       "projects.ventureActivities",
-      "projects.auditTrailDesc",
       "projects.ventureEntity",
       "projects.eventDetail",
       "projects.timestamp",
@@ -2144,7 +1521,6 @@
       "projects.initiateLaunch",
       "projects.financialEventRecord",
       "projects.strategicEventMemo",
-      "projects.targetEntity",
       "projects.transactionalNature",
       "projects.magnitude",
       "projects.commitEvent",
@@ -2162,20 +1538,20 @@
       "projects.newPlan",
       "projects.ventureCapital",
       "projects.stakeholderEquity",
-      "projects.memberLabel",
-      "projects.sharesLabel",
       "projects.totalSeedCapital",
       "projects.ventureUpdate",
       "projects.ledgerEntry",
       "projects.commitEntry",
       "projects.projectContext",
       "projects.eventType",
-      "projects.selectProject",
       "projects.eventDescription",
       "projects.descPlaceholder",
       "projects.deleteSuccess",
       "projects.project",
       "projects.processError",
+      "projects.distributions.selectFirst",
+      "projects.shareholders.shares",
+      "projects.returns.modalDesc",
       "analysis.portfolio",
       "analysis.intelligence",
       "analysis.projects",
@@ -2217,19 +1593,15 @@
       "analysis.currentValue",
       "analysis.totalReturn",
       "analysis.roiLabel",
+      "analysis.collectionEfficiencyHelperOne",
+      "analysis.collectionEfficiencyHelperOther",
       "reports.extractionProtocol",
       "reports.periodSelection",
-      "reports.periods.monthly",
-      "reports.periods.quarterly",
-      "reports.periods.yearly",
-      "reports.periods.custom",
       "reports.exportArch",
       "reports.projectFocus",
       "reports.selectProject",
       "reports.memberEntity",
-      "reports.selectMember",
       "reports.fundFocus",
-      "reports.selectFund",
       "reports.moduleProtocol",
       "reports.templateLogic",
       "reports.encryptionInProgress",
@@ -2256,6 +1628,8 @@
       "reports.types.roiAnalysis",
       "reports.types.ventureGrowth",
       "reports.types.fundLedger",
+      "reports.types.penaltiesAudit",
+      "reports.types.disbursements",
       "reports.descs.comprehensiveLedger",
       "reports.descs.projectLedger",
       "reports.descs.memberLedger",
@@ -2273,7 +1647,94 @@
       "reports.descs.roiAnalysis",
       "reports.descs.ventureGrowth",
       "reports.descs.fundLedger",
-      "reports.linkedProject",
+      "reports.descs.penaltiesAudit",
+      "reports.descs.disbursements",
+      "reports.quarters.q1",
+      "reports.quarters.q2",
+      "reports.quarters.q3",
+      "reports.quarters.q4",
+      "reports.summary.project",
+      "reports.summary.member",
+      "reports.summary.fund",
+      "reports.summary.totalInflow",
+      "reports.summary.totalOutflow",
+      "reports.summary.netCashFlow",
+      "reports.summary.closingBalance",
+      "reports.summary.totalDeposits",
+      "reports.summary.totalContributions",
+      "reports.summary.totalRevenue",
+      "reports.summary.totalEarnings",
+      "reports.summary.totalInterest",
+      "reports.summary.totalDividends",
+      "reports.summary.totalExpenses",
+      "reports.summary.totalProjectExpenses",
+      "reports.summary.totalDisbursements",
+      "reports.summary.totalPenalties",
+      "reports.summary.totalLiquidity",
+      "reports.summary.activeFunds",
+      "reports.summary.partners",
+      "reports.summary.projects",
+      "reports.summary.sharesHeld",
+      "reports.summary.totalContributed",
+      "reports.summary.rowCount",
+      "reports.columns.date",
+      "reports.columns.depositMonth",
+      "reports.columns.reference",
+      "reports.columns.type",
+      "reports.columns.member",
+      "reports.columns.memberCode",
+      "reports.columns.email",
+      "reports.columns.phone",
+      "reports.columns.role",
+      "reports.columns.shares",
+      "reports.columns.totalContributed",
+      "reports.columns.joinDate",
+      "reports.columns.fund",
+      "reports.columns.project",
+      "reports.columns.category",
+      "reports.columns.description",
+      "reports.columns.depositMethod",
+      "reports.columns.amount",
+      "reports.columns.debit",
+      "reports.columns.credit",
+      "reports.columns.runningBalance",
+      "reports.columns.handlingOfficer",
+      "reports.columns.authorizedBy",
+      "reports.columns.status",
+      "reports.columns.expenseName",
+      "reports.columns.fundName",
+      "reports.columns.fundType",
+      "reports.columns.balance",
+      "reports.columns.currency",
+      "reports.columns.custodian",
+      "reports.columns.accountNumber",
+      "reports.columns.depositsCount",
+      "reports.columns.totalDeposited",
+      "reports.columns.contributionShare",
+      "reports.columns.tier",
+      "reports.columns.penaltyTitle",
+      "reports.columns.penaltyType",
+      "reports.columns.deduction",
+      "reports.columns.issuedAt",
+      "reports.columns.waivedAt",
+      "reports.columns.waiveReason",
+      "reports.columns.reason",
+      "reports.columns.projectName",
+      "reports.columns.health",
+      "reports.columns.initialInvestment",
+      "reports.columns.budget",
+      "reports.columns.totalEarnings",
+      "reports.columns.totalExpenses",
+      "reports.columns.netProfit",
+      "reports.columns.netPosition",
+      "reports.columns.fundBalance",
+      "reports.columns.expectedRoi",
+      "reports.columns.actualRoi",
+      "reports.columns.variance",
+      "reports.columns.growthPercentage",
+      "reports.columns.totalShares",
+      "reports.columns.startDate",
+      "reports.columns.completionDate",
       "transactions.inflow",
       "transactions.received",
       "transactions.deployed",
@@ -2345,7 +1806,10 @@
       "deposits.statusFilter",
       "deposits.verifiedToast",
       "deposits.rejectedToast",
+      "deposits.modal.month",
       "deposits.modal.cashierPlaceholder",
+      "deposits.modal.txnDate",
+      "deposits.modal.depositMonthAuto",
       "deposits.bulk.member",
       "earnings.title",
       "earnings.subtitle",
@@ -2384,8 +1848,8 @@
       "expenses.archiveError",
       "expenses.debited",
       "expenses.noExpenses",
-      "expenses.expenseBy",
       "expenses.selectMember",
+      "expenses.general",
       "expenses.fundImpact",
       "expenses.deleteExpense",
       "expenses.deleteConfirm",
@@ -2398,51 +1862,28 @@
       "dividends.selectVenture",
       "dividends.surplus",
       "dividends.liquid",
+      "dividends.totalRevenue",
       "dividends.opsCosts",
       "dividends.capitalBase",
-      "dividends.distMemo",
-      "dividends.rationalePlaceholder",
       "dividends.readOnlyMode",
       "dividends.restrictedOfficer",
-      "dividends.totalRecipients",
-      "dividends.floatingShares",
-      "dividends.valuePerShare",
       "dividends.automatedAudit",
       "dividends.immutableHistory",
-      "dividends.migrationEngine",
-      "dividends.migrationSub",
-      "dividends.sourceMember",
-      "dividends.totalContribution",
-      "dividends.portfolio",
-      "dividends.sh",
-      "dividends.transferBanner",
-      "dividends.reallocationPlan",
-      "dividends.addTarget",
-      "dividends.recipientMember",
-      "dividends.selectTarget",
-      "dividends.transferCapital",
-      "dividends.transferShares",
-      "dividends.transferMemo",
-      "dividends.executeMigration",
+      "dividends.selectDeparting",
       "dividends.migrationRestricted",
       "dividends.treasuryAuth",
       "dividends.distFullEquity",
       "dividends.globalLedger",
       "dividends.selectProjectError",
       "dividends.selectSourceError",
-      "dividends.accuracyError",
-      "dividends.migrationSuccess",
-      "dividends.transferError",
       "dividends.selfTransferError",
-      "dividends.insufficientContribution",
-      "dividends.insufficientShares",
       "dividends.memberNotFound",
       "dividends.targetNotActive",
       "dividends.insufficientBalance",
-      "dividends.noActiveShares",
       "dividends.projectNotFound",
       "dividends.payoutExceedsBalance",
-      "dividends.distributionMethod.shareWeighted",
+      "dividends.statusLabels.completed",
+      "dividends.statusLabels.pending",
       "masterForm.title",
       "masterForm.subtitle",
       "masterForm.selectProject",
@@ -2472,25 +1913,11 @@
       "masterForm.restricted",
       "masterForm.noFund",
       "masterForm.runningBalance",
+      "goals.title",
       "goals.subtitle",
       "goals.addGoal",
       "goals.deleteConfirm",
-      "goals.form.title",
-      "goals.form.description",
-      "goals.form.targetAmount",
-      "goals.form.currentAmount",
-      "goals.form.deadline",
-      "goals.form.type",
-      "goals.form.linkedProject",
-      "goals.form.selectType",
-      "goals.form.selectProject",
       "goals.form.status",
-      "goals.form.types.savings",
-      "goals.form.types.investment",
-      "goals.form.types.other",
-      "goals.form.statuses.inProgress",
-      "goals.form.statuses.achieved",
-      "goals.form.statuses.cancelled",
       "goals.stats.totalGoals",
       "goals.stats.achieved",
       "goals.stats.inProgress",
@@ -2500,7 +1927,11 @@
       "goals.list.daysLeft",
       "goals.list.noGoals",
       "goals.allStatuses",
-      "settings.synced",
+      "settings.paymentMethods.types.cash",
+      "settings.paymentMethods.types.bank",
+      "settings.paymentMethods.types.mobile",
+      "settings.paymentMethods.types.check",
+      "settings.paymentMethods.types.other",
       "settings.governance.issuePenalty",
       "settings.governance.issueDescription",
       "settings.governance.selectMemberPlaceholder",
@@ -2524,14 +1955,54 @@
       "settings.governance.statuses.resolved",
       "settings.system.languages.english",
       "settings.system.languages.bengali",
-      "settings.system.refreshIntervals.1min",
-      "settings.system.refreshIntervals.5min",
+      "settings.system.languages.urdu",
+      "settings.system.languages.hindi",
       "settings.system.dateFormats.ddmmyyyy",
       "settings.system.dateFormats.mmddyyyy",
       "settings.system.dateFormats.yyyymmdd",
       "erp.dataTable.clearSelection",
       "audit.actionFilter",
       "audit.resourceFilter",
+      "layout.notificationsActor",
+      "layout.notificationsActorSystem",
+      "layout.notificationsActions.ADD_DEPOSIT",
+      "layout.notificationsActions.EDIT_DEPOSIT",
+      "layout.notificationsActions.APPROVE_DEPOSIT",
+      "layout.notificationsActions.REVERT_DEPOSIT",
+      "layout.notificationsActions.RECORD_DEPOSIT",
+      "layout.notificationsActions.REQUEST_DEPOSIT",
+      "layout.notificationsActions.BULK_DEPOSIT",
+      "layout.notificationsActions.ADD_EARNING",
+      "layout.notificationsActions.ADD_EXPENSE",
+      "layout.notificationsActions.ADD_PROJECT_UPDATE",
+      "layout.notificationsActions.CREATE_MEMBER",
+      "layout.notificationsActions.DELETE_MEMBER",
+      "layout.notificationsActions.CREATE_MEETING",
+      "layout.notificationsActions.DELETE_MEETING",
+      "layout.notificationsActions.START_MEETING",
+      "layout.notificationsActions.COMPLETE_MEETING",
+      "layout.notificationsActions.RECORD_ATTENDANCE",
+      "layout.notificationsActions.RECORD_MEETING_ATTENDANCE",
+      "layout.notificationsActions.ISSUE_PENALTY",
+      "layout.notificationsActions.CREATE_FISCAL_PERIOD",
+      "layout.notificationsActions.CLOSE_FISCAL_PERIOD",
+      "layout.notificationsActions.REOPEN_FISCAL_PERIOD",
+      "layout.notificationsActions.DISTRIBUTE_DIVIDEND",
+      "layout.notificationsActions.DISTRIBUTE_DIVIDENDS",
+      "layout.notificationsActions.FUND_TRANSFER",
+      "layout.notificationsActions.DELETE_GOAL",
+      "layout.notificationsActions.UPDATE_GOAL",
+      "layout.notificationsActions.CREATE_GOAL",
+      "layout.notificationsActions.UPDATE_SETTINGS",
+      "layout.notificationsActions.UPDATE_USER",
+      "layout.notificationsActions.DELETE_TRANSACTION",
+      "layout.notificationsActions.GENERATE_REPORT",
+      "layout.notificationsActions.CREATE_PROJECT",
+      "layout.notificationsActions.LOGIN",
+      "layout.notificationsActions.LOGIN_SUCCESS",
+      "layout.notificationsActions.LOGIN_FAILED",
+      "layout.notificationsActions.LOGOUT",
+      "layout.notificationsActions.UPDATE",
       "ui.closeDialog",
       "ui.rowActions",
       "requestDeposit.methods.bankTransfer",
@@ -2541,6 +2012,13 @@
       "requestDeposit.methods.cash",
       "requestDeposit.methods.other",
       "requestDeposit.successDetails",
+      "requestDeposit.history",
+      "requestDeposit.columns.date",
+      "requestDeposit.columns.fund",
+      "requestDeposit.columns.amount",
+      "requestDeposit.columns.method",
+      "requestDeposit.columns.reference",
+      "requestDeposit.columns.status",
       "admin.nav.management",
       "admin.nav.system",
       "admin.nav.overview",
@@ -2553,9 +2031,12 @@
       "admin.nav.users",
       "admin.nav.featureFlags",
       "admin.nav.settings",
+      "admin.overview.suspended",
       "admin.tenants.createTitle",
       "admin.tenants.created",
       "admin.tenants.createFailed",
+      "admin.tenants.fieldName",
+      "admin.billing.trialEnds",
       "admin.impersonate.userId",
       "admin.impersonate.issue",
       "admin.impersonate.issued",
@@ -2565,31 +2046,38 @@
       "admin.impersonate.copyFailed",
       "admin.impersonate.revoke",
       "admin.impersonate.revoked",
-      "admin.impersonate.revokeFailed"
+      "admin.impersonate.revokeFailed",
+      "admin.featureFlags.category.core",
+      "admin.featureFlags.category.finance",
+      "admin.featureFlags.category.operations",
+      "tenantModules.members",
+      "tenantModules.funds",
+      "tenantModules.settings",
+      "tenantModules.deposits",
+      "tenantModules.transactions",
+      "tenantModules.expenses",
+      "tenantModules.dividends",
+      "tenantModules.analysis",
+      "tenantModules.reports",
+      "tenantModules.projects",
+      "tenantModules.meetings",
+      "tenantModules.governance",
+      "tenantModules.goals",
+      "tenantModules.requestDeposit",
+      "tenantModules.audit"
     ],
-    "placeholder": [],
-    "hardcoded": [],
-    "serverLeak": [
+    "placeholder": [
       {
-        "file": "app/forgot-password/page.tsx",
-        "line": 34,
-        "text": "toast.success(res.message ?? t(\"auth.forgot.success\"));"
-      },
-      {
-        "file": "app/register/page.tsx",
-        "line": 117,
-        "text": "toast.success(res.message ?? t(\"auth.register.success\", { name: values.name.trim() }));"
-      },
-      {
-        "file": "components/deposits/deposit-modal.tsx",
-        "line": 125,
-        "text": "toast.success(res.message ?? t(\"deposits.recordedToast\", { amount: values.amount.trim(), member: memberName }));"
-      },
-      {
-        "file": "components/deposits/deposit-request-view.tsx",
-        "line": 100,
-        "text": "toast.success(res.message ?? t(\"requestDeposit.success\"));"
+        "file": "app/admin/tenants/page.tsx",
+        "line": 495,
+        "key": "admin.tenants.onboardSuccessDesc",
+        "var": "email",
+        "declared": [
+          "name"
+        ]
       }
-    ]
+    ],
+    "hardcoded": [],
+    "serverLeak": []
   }
 }

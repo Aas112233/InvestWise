@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { TopSheet } from "@/components/ui/top-sheet";
 import { ERPConfirmDialog } from "@/components/ui/erp-confirm-dialog";
 import { ERPFormField } from "@/components/ui/erp-form-layout";
+import { formatDate } from "@/lib/formatters";
 
 type Severity = "info" | "warning" | "critical";
 
@@ -225,7 +226,7 @@ export default function AdminNoticesPage() {
                     <Trash2 size={13} />
                   </Button>
                   <span className="font-mono text-[11px] text-muted-foreground ml-1 hidden sm:inline">
-                    {notice.createdAt ? new Date(notice.createdAt).toLocaleString() : ""}
+                    {notice.createdAt ? formatDate(notice.createdAt, true) : ""}
                   </span>
                 </div>
               </div>

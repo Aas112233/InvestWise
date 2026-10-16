@@ -35,12 +35,3 @@ export function getSql() {
   getDb();
   return sql!;
 }
-
-/** Close the pool explicitly (tests / graceful shutdown). */
-export async function closeDb() {
-  if (sql) {
-    await sql.end();
-    sql = null;
-    db = null;
-  }
-}

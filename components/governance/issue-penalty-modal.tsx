@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { Member, MemberPenalty } from "@/types";
 import { useLocale } from "@/lib/i18n";
 import { useTenantPenaltyRules, useTenantCurrency } from "@/lib/use-tenant-settings";
@@ -116,7 +117,7 @@ export function IssuePenaltyModal({
       });
       onClose();
     } catch (err: any) {
-      setErrorMessage(err?.message || "Failed to issue penalty.");
+      setErrorMessage(err?.message || t("common.errors.failedToIssuePenalty", { defaultValue: "Failed to issue penalty" }));
     } finally {
       setIsSubmitting(false);
     }
@@ -169,14 +170,14 @@ export function IssuePenaltyModal({
 
             {type === "FUND_DEDUCTION" && (
               <ERPFormField label={t("governance.deductionAmount", { defaultValue: "Deduction Amount *" })}>
-                <input
+                <NumericInput
                   type="number"
                   step="0.01"
                   min="0"
                   placeholder="500.00"
                   value={deductionAmount}
                   onChange={(e) => setDeductionAmount(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
+                  className="w-full px-3 py-1.5 text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-input rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
                 />
               </ERPFormField>
             )}
@@ -187,25 +188,25 @@ export function IssuePenaltyModal({
           <ERPFormField label={t("governance.penaltyTitle", { defaultValue: "Penalty Notice Title *" })}>
             <input
               type="text"
-              placeholder="e.g. Unexcused absence from mandatory Q3 AGM"
+              placeholder={t("governance.penaltyTitlePlaceholder", { defaultValue: "e.g. Unexcused absence from mandatory Q3 AGM" })}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
+              className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-input rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
             />
           </ERPFormField>
 
           <ERPFormField label={t("governance.violationReason", { defaultValue: "Detailed Reason & Incident Report *" })}>
             <textarea
               rows={4}
-              placeholder="Document the exact circumstances and committee resolution..."
+              placeholder={t("governance.violationReasonPlaceholder", { defaultValue: "Document the exact circumstances and committee resolution..." })}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
+              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-input rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
             />
           </ERPFormField>
         </ERPFormSection>
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-border">
           <Button variant="ghost" size="sm" type="button" onClick={onClose} disabled={isSubmitting}>
             {t("common.cancel", { defaultValue: "Cancel" })}
           </Button>

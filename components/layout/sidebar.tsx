@@ -17,17 +17,29 @@ interface SidebarProps {
   onToggle?: () => void;
 }
 
-function canRead(user: PermissionUser | null | undefined, id: string): boolean {
+// Exported for AppShell's route-level access gate — one evaluator for "can
+// this user see this screen", shared by the sidebar filter and the 403 screen.
+export function canRead(user: PermissionUser | null | undefined, id: string): boolean {
   // DASHBOARD stays visible as the landing shell; every other item goes
   // through the shared evaluator (role baseline + explicit overrides +
   // parent fallback). Fail-closed: unknown role or NONE grant hides the item.
   if (id === "DASHBOARD") return true;
   // The user directory is role-gated (Admin/Manager/SuperAdmin) rather than
   // screen-permission-gated: GET /api/auth/users rejects anyone else, so an
-  // Auditor with a READ grant here would only reach a 403.
-  if (id === "USERS") {
+  // Auditor with a READ grant here would only reach a 403. The audit trail
+  // follows the same contract (GET /api/audit + /metadata + /notifications
+  // all 403 non-Admin/Manager) — same role gate here.
+  if (id === "USERS" || id === "AUDIT") {
     const role = normalizeRole(user?.role);
     return role === "Admin" || role === "Manager" || role === "SuperAdmin";
+  }
+  // Recovery desk: restoring retracted money movements is an admin act, so
+  // this is role-gated (Admin/SuperAdmin) rather than screen-permission-gated
+  // — a Manager/Auditor with TRANSACTIONS read must not see it. The API
+  // re-checks the same role server-side.
+  if (id === "TRANSACTIONS_DELETED") {
+    const role = normalizeRole(user?.role);
+    return role === "Admin" || role === "SuperAdmin";
   }
   return hasScreenPermission(user, id, "READ");
 }

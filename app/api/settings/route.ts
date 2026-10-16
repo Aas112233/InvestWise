@@ -8,6 +8,7 @@ import { AuthError, ForbiddenError, LockedError, ValidationError, readJsonBody }
 import { updateSettingsSchema, UpdateSettingsInput } from '@/lib/utils/validation';
 import { normalizePaymentMethods } from '@/lib/payment-methods';
 import { logAudit } from '@/lib/utils/audit';
+import { ensureShareValueLocked } from '@/lib/utils/share-value-lock';
 
 const SETTINGS_CACHE_TTL = 5 * 60_000; // 5 minutes
 // Cache is PER-TENANT — a shared singleton key leaked tenant A's settings
@@ -65,38 +66,6 @@ function formatSettingsResponse(settings: any): Record<string, unknown> {
   };
 }
 
-/**
- * Auto-lock share value if transactions exist (this tenant only). Returns
- * the tenant's full settings row, fresh after any lock update, so the caller
- * doesn't pay a second round trip to read the same data.
- */
-async function checkAndAutoLockShareValue(tenantId: string) {
-  const db = getDb();
-  const [settings] = await db
-    .select()
-    .from(systemSettings)
-    .where(eq(systemSettings.tenantId, tenantId))
-    .limit(1);
-
-  if (!settings) return null;
-  if (settings.isShareValueLocked) return settings;
-
-  const [txResult] = await db
-    .select({ count: count() })
-    .from(transactions)
-    .where(and(eq(transactions.tenantId, tenantId), eq(transactions.isDeleted, false)));
-
-  if (Number(txResult?.count ?? 0) > 0) {
-    await db
-      .update(systemSettings)
-      .set({ isShareValueLocked: true, updatedAt: new Date() })
-      .where(eq(systemSettings.id, settings.id));
-    return { ...settings, isShareValueLocked: true, updatedAt: new Date() };
-  }
-
-  return settings;
-}
-
 function hasSettingsWritePermission(user: AuthenticatedUser): boolean {
   const role = normalizeRole(user.role);
   const userPermissions = user.permissions ?? {};
@@ -134,7 +103,7 @@ export async function GET(request: NextRequest) {
 
     // Auto-lock share value if transactions exist (this tenant only). The
     // helper returns the fresh settings row, so no second read is needed.
-    let settings = await checkAndAutoLockShareValue(tenantId);
+    let settings = (await ensureShareValueLocked(tenantId, user)).settings;
 
     if (!settings) {
       const [created] = await db
@@ -238,7 +207,7 @@ export async function PUT(request: NextRequest) {
           .where(eq(fiscalPeriods.tenantId, tenantId))
           .limit(1);
         if (existingPeriod) {
-          throw new LockedError('Fiscal year months cannot be changed after a fiscal period has been created');
+          throw new LockedError('Fiscal year start and end months cannot be changed once a fiscal period exists — they apply to newly created periods.');
         }
       }
     }
@@ -286,7 +255,7 @@ export async function PUT(request: NextRequest) {
       }
       if (data.financial.shareValueBdt !== undefined) {
         if (currentSettings.isShareValueLocked) {
-          throw new LockedError('Share value is locked and cannot be changed');
+          throw new LockedError('Share value is locked because transactions already exist for this tenant — it derives from ledger history and cannot be changed.');
         }
         updateData.shareValueBdt = String(data.financial.shareValueBdt);
       }
@@ -416,6 +385,8 @@ export async function PUT(request: NextRequest) {
 
     // Audit log — `logAudit` takes a nested `user` object; passing flat
     // userId/userName silently wrote the row with no actor recorded.
+    // Zero extra queries: `currentSettings` is the row read for the merge
+    // above; `updated` is the UPDATE's .returning().
     await logAudit({
       tenantId,
       user: { id: user.id, name: user.name || user.email },
@@ -425,6 +396,8 @@ export async function PUT(request: NextRequest) {
       details: {
         updatedFields: Object.keys(updateData),
       },
+      before: currentSettings,
+      after: updated,
       status: 'SUCCESS',
     });
 

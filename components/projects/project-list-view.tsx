@@ -10,14 +10,17 @@ import {
   Search,
   Filter,
   Eye,
+  Printer,
   FileEdit,
   Trash2,
   Calendar,
   Layers,
   CheckCircle2,
   AlertCircle,
+  Lock,
 } from "lucide-react";
 import { Project, ProjectUpdateRecord } from "@/types";
+import { openPrintTab } from "@/lib/documents";
 import {
   ERPDataTable,
   ERPColumn,
@@ -29,7 +32,13 @@ import {
   StatusTone,
   ERPConfirmDialog,
 } from "@/components/ui";
-import { formatMoney, formatDate } from "@/lib/formatters";
+import { formatMoney, formatDateOnly } from "@/lib/formatters";
+import {
+  intlLocaleFor,
+  projectHealthLabel,
+  projectSectorLabel,
+  projectStatusLabel,
+} from "./project-labels";
 import { useLocale } from "@/lib/i18n";
 import { usePermissions } from "@/lib/use-permissions";
 
@@ -52,7 +61,8 @@ export function ProjectListView({
   onOpenAddUpdate,
   onDeleteProject,
 }: ProjectListViewProps) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
   const { can } = usePermissions();
   const canWrite = can("PROJECT_MANAGEMENT", "WRITE");
 
@@ -140,7 +150,7 @@ export function ProjectListView({
             {p.title}
           </span>
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {p.category}
+            {projectSectorLabel(t, p.category)}
           </span>
         </div>
       ),
@@ -152,7 +162,7 @@ export function ProjectListView({
       sortable: true,
       render: (p) => (
         <span className="font-mono text-sm font-medium text-slate-900 dark:text-slate-100">
-          {formatMoney(p.budget)}
+          {fm(p.budget)}
         </span>
       ),
     },
@@ -163,7 +173,7 @@ export function ProjectListView({
       sortable: true,
       render: (p) => (
         <span className="font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-          {formatMoney(p.currentFundBalance)}
+          {fm(p.currentFundBalance)}
         </span>
       ),
     },
@@ -182,14 +192,22 @@ export function ProjectListView({
       key: "status",
       header: t("projects.columns.status", { defaultValue: "STATUS" }),
       render: (p) => (
-        <StatusBadge tone={mapStatusTone(p.status)} label={p.status} />
+        <div className="flex items-center gap-1.5">
+          <StatusBadge tone={mapStatusTone(p.status)} label={projectStatusLabel(t, p.status)} />
+          {p.isLocked && (
+            <Lock
+              className="w-3.5 h-3.5 text-muted-foreground shrink-0"
+              aria-label={t("projects.lockedTooltip", { defaultValue: "Completed and permanently locked" })}
+            />
+          )}
+        </div>
       ),
     },
     {
       key: "health",
       header: t("projects.columns.health", { defaultValue: "HEALTH" }),
       render: (p) => (
-        <StatusBadge tone={mapHealthTone(p.health)} label={p.health || "Stable"} />
+          <StatusBadge tone={mapHealthTone(p.health)} label={projectHealthLabel(t, p.health)} />
       ),
     },
     {
@@ -197,9 +215,9 @@ export function ProjectListView({
       header: t("projects.columns.timeline", { defaultValue: "TIMELINE" }),
       render: (p) => (
         <div className="text-xs text-slate-600 dark:text-slate-400 font-mono">
-          <span>{formatDate(p.startDate)}</span>
+          <span>{formatDateOnly(p.startDate)}</span>
           {p.completionDate && (
-            <span className="text-slate-400"> → {formatDate(p.completionDate)}</span>
+            <span className="text-slate-400"> → {formatDateOnly(p.completionDate)}</span>
           )}
         </div>
       ),
@@ -222,7 +240,21 @@ export function ProjectListView({
             <Eye className="w-3.5 h-3.5" />
           </Button>
 
-          {canWrite && onOpenEdit && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              openPrintTab("project", p.id);
+            }}
+            title={t("documents.projectCharter", { defaultValue: "Project Charter" })}
+          >
+            <Printer className="w-3.5 h-3.5" />
+          </Button>
+
+          {/* Settled & locked projects are immutable records: no edit, no
+              postings, no delete. View + the printable charter stay open. */}
+          {canWrite && onOpenEdit && !p.isLocked && (
             <Button
               variant="ghost"
               size="sm"
@@ -236,7 +268,7 @@ export function ProjectListView({
             </Button>
           )}
 
-          {canWrite && onOpenAddUpdate && (
+          {canWrite && onOpenAddUpdate && !p.isLocked && (
             <Button
               variant="outline"
               size="sm"
@@ -250,7 +282,7 @@ export function ProjectListView({
             </Button>
           )}
 
-          {canWrite && onDeleteProject && (
+          {canWrite && onDeleteProject && !p.isLocked && (
             <Button
               variant="destructive"
               size="sm"
@@ -281,19 +313,19 @@ export function ProjectListView({
         />
         <ERPMetricCard
           label={t("projects.metrics.allocatedBudget", { defaultValue: "Allocated Budget" })}
-          value={formatMoney(metrics.totalBudget)}
+          value={fm(metrics.totalBudget)}
           icon={DollarSign}
           tone="slate"
         />
         <ERPMetricCard
           label={t("projects.metrics.currentBalance", { defaultValue: "Available Balance" })}
-          value={formatMoney(metrics.totalBalance)}
+          value={fm(metrics.totalBalance)}
           icon={TrendingUp}
           tone="emerald"
         />
         <ERPMetricCard
           label={t("projects.metrics.totalEarnings", { defaultValue: "Disbursed Earnings" })}
-          value={formatMoney(metrics.totalEarnings)}
+          value={fm(metrics.totalEarnings)}
           icon={Activity}
           tone="amber"
         />
@@ -318,9 +350,9 @@ export function ProjectListView({
             <AppDropdown
               options={[
                 { value: "ALL", label: t("common.allStatuses", { defaultValue: "All Statuses" }) },
-                { value: "In Progress", label: "In Progress" },
-                { value: "Completed", label: "Completed" },
-                { value: "Review", label: "Review" },
+                { value: "In Progress", label: t("projects.statuses.inProgress", { defaultValue: "In Progress" }) },
+                { value: "Completed", label: t("projects.statuses.completed", { defaultValue: "Completed" }) },
+                { value: "Review", label: t("projects.statuses.review", { defaultValue: "Review" }) },
               ]}
               value={selectedStatus}
               onChange={(val) => setSelectedStatus(val || "ALL")}
@@ -334,7 +366,7 @@ export function ProjectListView({
               <AppDropdown
                 options={[
                   { value: "ALL", label: t("common.allCategories", { defaultValue: "All Categories" }) },
-                  ...categories.map((c) => ({ value: c, label: c })),
+                  ...categories.map((c) => ({ value: c, label: projectSectorLabel(t, c) })),
                 ]}
                 value={selectedCategory}
                 onChange={(val) => setSelectedCategory(val || "ALL")}
@@ -368,8 +400,8 @@ export function ProjectListView({
 
       <ERPConfirmDialog
         isOpen={pendingDelete !== null}
-        title={t("projects.deleteTitle", { defaultValue: "Cancel this project?" })}
-        description={t("projects.confirmDelete", { defaultValue: "This marks the project as Cancelled. Financial history is retained." })}
+        title={t("projects.deleteTitle", { defaultValue: "Delete this project?" })}
+        description={t("projects.confirmDelete", { defaultValue: "This permanently deletes the project and returns shareholder investment to member deposits. Only a project with no earnings or expenses can be deleted." })}
         confirmLabel={t("common.delete", { defaultValue: "Delete" })}
         cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
         confirmVariant="destructive"

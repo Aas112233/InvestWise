@@ -3,6 +3,10 @@ import { users } from './users';
 
 export const blacklistedTokens = pgTable('blacklisted_tokens', {
   id: uuid('id').defaultRandom().primaryKey(),
+  // Stores sha256(token) hex — NOT the raw JWT (which was stored historically).
+  // Hashing keeps a database/backup leak from yielding replayable credentials;
+  // every writer (refresh rotation, logout, impersonation revoke) and every
+  // reader (lib/middleware/auth.ts, refresh route) keys on the same hash.
   token: text('token').notNull(),
   type: varchar('type', { length: 20 }).notNull(),
   userId: uuid('user_id').notNull().references(() => users.id),
@@ -13,7 +17,9 @@ export const blacklistedTokens = pgTable('blacklisted_tokens', {
 }, (table) => ({
   expiresAtIdx: index('idx_blacklisted_tokens_expires_at').on(table.expiresAt),
   userIdIdx: index('idx_blacklisted_tokens_user_id').on(table.userId),
-  // Hot auth-path lookup `WHERE token = ? AND expires_at > ?` previously
-  // seq-scanned; unique also enforces one row per token (replay guard).
+  // Hot auth-path lookup `WHERE token = ? AND expires_at > ?` (per cold cache
+  // miss in authenticateRequest + refresh rotation) previously seq-scanned.
+  // Unique also enforces one row per token, matching the 23505 replay guard
+  // in the refresh route.
   tokenIdx: uniqueIndex('uq_blacklisted_tokens_token').on(table.token),
 }));

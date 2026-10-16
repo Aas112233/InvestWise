@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/db/index';
-import { systemSettings, transactions } from '@/db/schema/index';
-import { eq, and, count } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
-
-interface ShareValueStatus {
-  isLocked: boolean;
-  transactionCount: number;
-}
+import { ensureShareValueLocked } from '@/lib/utils/share-value-lock';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,36 +15,15 @@ export async function GET(request: NextRequest) {
     // §6: share-value lock is a per-tenant financial invariant.
     if (!tenantId) throw new ForbiddenError('Tenant context required');
 
-    const db = getDb();
-
-    const [settings] = await db
-      .select()
-      .from(systemSettings)
-      .where(eq(systemSettings.tenantId, tenantId))
-      .limit(1);
+    const { settings, transactionCount } = await ensureShareValueLocked(tenantId, user);
     if (!settings) {
       return NextResponse.json({ isLocked: false, transactionCount: 0 });
     }
 
-    const [txResult] = await db
-      .select({ count: count() })
-      .from(transactions)
-      .where(and(eq(transactions.tenantId, tenantId), eq(transactions.isDeleted, false)));
-
-    const transactionCount = Number(txResult?.count ?? 0);
-    let isLocked = Boolean(settings.isShareValueLocked);
-
-    // Auto-lock if transactions exist but not yet locked
-    if (transactionCount > 0 && !isLocked) {
-      await db
-        .update(systemSettings)
-        .set({ isShareValueLocked: true, updatedAt: new Date() })
-        .where(eq(systemSettings.id, settings.id));
-
-      isLocked = true;
-    }
-
-    return NextResponse.json({ isLocked, transactionCount });
+    return NextResponse.json({
+      isLocked: Boolean(settings.isShareValueLocked),
+      transactionCount,
+    });
   } catch (error: any) {
     console.error('[GET SHARE VALUE STATUS ERROR]', error);
     

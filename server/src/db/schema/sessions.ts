@@ -1,8 +1,10 @@
 import { pgTable, uuid, varchar, timestamp, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
-// Mirrors the canonical root db/schema/sessions.ts because both Next.js routes
-// and the legacy server runtime share the same PostgreSQL sessions table.
+// Canonical sessions table. server/src/db/schema/sessions.ts mirrors this file
+// (both runtimes share one PostgreSQL table) — keep the two in lockstep,
+// especially the uniqueIndex name below: a `drizzle-kit push` run from either
+// side rewrites constraint names, so the two files must declare the same one.
 export const sessions = pgTable('sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').references(() => users.id).notNull(),

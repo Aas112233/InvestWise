@@ -129,6 +129,13 @@ export async function POST(
         referenceNumber: deposit.referenceNumber,
         rejectionReason: rejectionReason.trim(),
       },
+      // Zero extra queries: `deposit` is the row already fetched above.
+      before: deposit,
+      after: {
+        status: 'REJECTED',
+        description: `${deposit.description} - REJECTED: ${rejectionReason.trim()}`,
+        updatedBy: user.id,
+      },
     });
 
     return NextResponse.json({

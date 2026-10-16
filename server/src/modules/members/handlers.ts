@@ -3,6 +3,7 @@ import {
   requirePermission,
   requireSession,
   requireTenant,
+  validateBody,
   validateQuery,
   readJsonObject,
   errorResponse,
@@ -10,10 +11,10 @@ import {
 } from '@/server/middleware/api';
 import { listMembers } from './service';
 import * as fundsService from '../funds/service';
-import * as projectsService from '../projects/service';
+import { updateFundSchema } from '../funds/validation';
 import { z } from 'zod';
 
-/** Read-side handlers: /api/members, /api/funds, /api/projects. */
+/** Read-side handlers: /api/members, /api/funds. */
 
 const listMembersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
@@ -102,24 +103,11 @@ export async function handleUpdateFund(request: NextRequest, id: string) {
     assertUuid(id);
     const user = await requirePermission('FUNDS_MANAGEMENT', 'WRITE');
     const tenantId = requireTenant(user);
-    const body = await readJsonObject(request);
-    const fund = await fundsService.updateFund(id, body as never, tenantId);
+    // Parse with the shared schema: the earlier `body as never` let any field
+    // (and any value shape) reach the service allowlist unfiltered.
+    const data = await validateBody(request, updateFundSchema);
+    const fund = await fundsService.updateFund(id, data, tenantId, user);
     return Response.json(fund);
-  } catch (err) {
-    return errorResponse(err);
-  }
-}
-
-export async function handleListProjects(request: NextRequest) {
-  try {
-    // Fail-closed tenant resolution: platform operators must use /api/admin.
-    const user = await requireSession();
-    const tenantId = requireTenant(user);
-    const url = new URL(request.url);
-    const fundId = url.searchParams.get('fundId') || undefined;
-    const status = url.searchParams.get('status') || undefined;
-    const result = await projectsService.listProjects({ fundId, status }, tenantId);
-    return Response.json(result);
   } catch (err) {
     return errorResponse(err);
   }

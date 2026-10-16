@@ -7,6 +7,7 @@ import { apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
 import { ERPDataTable, type ERPColumn } from "@/components/ui/erp-data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { formatDate } from "@/lib/formatters";
 import { Button, Input } from "@/components/ui";
 
 interface AuditLogRow {
@@ -104,7 +105,7 @@ export default function AdminAuditLogsPage() {
       header: t("admin.auditLogs.timestamp", { defaultValue: "Timestamp" }),
       render: (row) => (
         <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
-          {row.createdAt ? new Date(row.createdAt).toLocaleString() : "—"}
+          {row.createdAt ? formatDate(row.createdAt, true) : "—"}
         </span>
       ),
     },
@@ -163,7 +164,7 @@ export default function AdminAuditLogsPage() {
       header: t("admin.auditLogs.timestamp", { defaultValue: "Timestamp" }),
       render: (row) => (
         <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
-          {row.createdAt ? new Date(row.createdAt).toLocaleString() : "—"}
+          {row.createdAt ? formatDate(row.createdAt, true) : "—"}
         </span>
       ),
     },

@@ -26,9 +26,21 @@ import {
   DropdownOption,
   StatusTone,
 } from "@/components/ui";
-import { formatMoney, formatDate } from "@/lib/formatters";
+import { formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
-import { useTenantCurrency } from "@/lib/use-tenant-settings";
+import { useTenantCurrency, useFormatDate } from "@/lib/use-tenant-settings";
+
+/** Stored enum -> message key. Unknown values fall back to the raw enum. */
+const PENALTY_TYPE_KEYS: Record<string, string> = {
+  VERBAL_WARNING: "governance.penaltyTypes.verbalWarning",
+  FUND_DEDUCTION: "governance.penaltyTypes.fundDeduction",
+  SUSPENSION: "governance.penaltyTypes.suspension",
+};
+const PENALTY_STATUS_KEYS: Record<string, string> = {
+  ACTIVE: "governance.statuses.active",
+  WAIVED: "governance.statuses.waived",
+  RESOLVED: "governance.statuses.resolved",
+};
 
 interface GovernanceViewProps {
   leaderboard: LeaderboardEntry[];
@@ -51,6 +63,18 @@ export function GovernanceView({
 }: GovernanceViewProps) {
   const { t } = useLocale();
   const currency = useTenantCurrency();
+  const formatTenantDate = useFormatDate();
+
+  // Enum renderers — the stored value stays canonical English; the label is
+  // localized at render time (same rule as ledger narrations).
+  const penaltyTypeLabel = (type?: string | null): string => {
+    const key = type ? PENALTY_TYPE_KEYS[type] : undefined;
+    return key ? t(key) : (type ?? "").replace(/_/g, " ");
+  };
+  const penaltyStatusLabel = (status?: string | null): string => {
+    const key = status ? PENALTY_STATUS_KEYS[status] : undefined;
+    return key ? t(key) : (status ?? "");
+  };
 
   const [activeTab, setActiveTab] = useState<"LEADERBOARD" | "PENALTIES">("PENALTIES");
   const [searchQuery, setSearchQuery] = useState("");
@@ -142,7 +166,7 @@ export function GovernanceView({
           </span>
           {p.memberDisplayId && (
             <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-              ID: {p.memberDisplayId}
+              {t("governance.idLabel", { id: p.memberDisplayId, defaultValue: "ID: {id}" })}
             </span>
           )}
         </div>
@@ -153,9 +177,12 @@ export function GovernanceView({
       header: t("governance.columns.escalationTier", { defaultValue: "TIER & ACTION" }),
       render: (p) => (
         <div className="flex items-center gap-1.5">
-          <StatusBadge tone={mapTierTone(p.tier)} label={`Tier ${p.tier}`} />
+          <StatusBadge
+            tone={mapTierTone(p.tier)}
+            label={t("governance.tierLabel", { tier: p.tier, defaultValue: "Tier {tier}" })}
+          />
           <span className="text-xs font-mono text-slate-600 dark:text-slate-400">
-            {p.type?.replace(/_/g, " ")}
+            {penaltyTypeLabel(p.type)}
           </span>
         </div>
       ),
@@ -193,7 +220,7 @@ export function GovernanceView({
       render: (p) => (
         <StatusBadge
           tone={p.status === "ACTIVE" ? "rose" : p.status === "WAIVED" ? "amber" : "emerald"}
-          label={p.status}
+          label={penaltyStatusLabel(p.status)}
         />
       ),
     },
@@ -202,7 +229,7 @@ export function GovernanceView({
       header: t("governance.columns.issuedAt", { defaultValue: "ISSUED DATE" }),
       render: (p) => (
         <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-          {formatDate(p.issuedAt)}
+          {formatTenantDate(p.issuedAt)}
         </span>
       ),
     },
@@ -249,7 +276,11 @@ export function GovernanceView({
             {l.name}
           </span>
           <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-            ID: {l.memberId} • {l.shares} Shares
+            {t("governance.memberIdShares", {
+              id: l.memberId,
+              count: l.shares,
+              defaultValue: "ID: {id} • {count} Shares",
+            })}
           </span>
         </div>
       ),
@@ -387,7 +418,7 @@ export function GovernanceView({
                 placeholder={t("governance.searchPenalties", { defaultValue: "Search by member, reason..." })}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-input rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
               />
             </div>
 

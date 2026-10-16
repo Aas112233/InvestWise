@@ -1,8 +1,10 @@
 import { pgTable, uuid, varchar, decimal, integer, timestamp, index } from 'drizzle-orm/pg-core';
 import { users } from './users';
+import { tenants } from './tenants';
 
 export const fiscalPeriods = pgTable('fiscal_periods', {
   id: uuid('id').defaultRandom().primaryKey(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
   year: integer('year').notNull(),
   periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
   periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
@@ -22,6 +24,7 @@ export const fiscalPeriods = pgTable('fiscal_periods', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  index('idx_fiscal_tenant').on(table.tenantId),
   index('idx_fiscal_year').on(table.year),
   index('idx_fiscal_status').on(table.status),
 ]);

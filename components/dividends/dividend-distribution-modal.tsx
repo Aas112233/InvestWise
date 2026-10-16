@@ -13,6 +13,7 @@ import {
   ERPFormSection,
 } from "@/components/ui/erp-form-layout";
 import { TopSheet } from "@/components/ui/top-sheet";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { useFundsList } from "@/components/funds/shared";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { formatMoney } from "@/lib/formatters";
@@ -239,7 +240,7 @@ export function DividendDistributionModal({
               required
               error={touched && !canSubmit ? t("dividends.invalidAmount") : undefined}
             >
-              <input
+              <NumericInput
                 type="text"
                 inputMode="decimal"
                 value={grossEarnings}
@@ -253,7 +254,7 @@ export function DividendDistributionModal({
             </ERPFormField>
 
             <ERPFormField label={t("dividends.reservePercent")} required>
-              <input
+              <NumericInput
                 type="text"
                 inputMode="decimal"
                 value={reservePercent}

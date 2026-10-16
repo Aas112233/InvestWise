@@ -7,6 +7,7 @@ import { AppDropdown } from "@/components/ui/app-dropdown";
 import { Button } from "@/components/ui/button";
 import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/components/ui/erp-form-layout";
 import { TopSheet } from "@/components/ui/top-sheet";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
@@ -152,7 +153,7 @@ export function FundTransferModal({
               required
               error={touched && !amountValid ? t("funds.transferModal.invalidAmountError") : touched && !sufficient ? t("funds.transferModal.insufficientError") : undefined}
             >
-              <input
+              <NumericInput
                 type="text"
                 inputMode="decimal"
                 placeholder="0.00"
@@ -162,7 +163,7 @@ export function FundTransferModal({
               />
             </ERPFormField>
             <ERPFormField label={t("funds.transferModal.available")}>
-              <p className="px-3 py-2 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 font-mono text-xs">
+              <p className="px-3 py-2 rounded border border-slate-200 dark:border-border bg-slate-50 dark:bg-slate-800/50 font-mono text-xs">
                 {source ? formatMoney(Math.max(0, available).toFixed(2), currency) : "—"}
               </p>
             </ERPFormField>

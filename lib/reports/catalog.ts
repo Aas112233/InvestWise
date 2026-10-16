@@ -19,9 +19,6 @@ export type ReportCategory = "ledger" | "deposits" | "incomes" | "expenses" | "p
  */
 export type ReportFormat = "xlsx" | "pdf" | "csv" | "json";
 
-/** Downloadable formats only — the viewer format is not a UI download choice. */
-export type ReportDownloadFormat = Exclude<ReportFormat, "json">;
-
 export type ReportEntity = "project" | "member" | "fund";
 
 export type ReportPeriodType = "Monthly" | "Quarterly" | "Yearly" | "Custom";

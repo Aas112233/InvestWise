@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { blocksNumericKey, sanitizeNumericPaste } from "@/lib/numeric-input";
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   isNumeric?: boolean;
@@ -17,52 +18,9 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const isPhoneType = Boolean(isPhone) || type === "tel" || props.inputMode === "tel";
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (isNumberType) {
-        if (
-          e.ctrlKey ||
-          e.metaKey ||
-          e.altKey ||
-          e.key === "Backspace" ||
-          e.key === "Delete" ||
-          e.key === "Tab" ||
-          e.key === "Enter" ||
-          e.key === "Escape" ||
-          e.key.startsWith("Arrow") ||
-          e.key === "Home" ||
-          e.key === "End"
-        ) {
-          onKeyDown?.(e);
-          return;
-        }
-
-        if (e.key.length === 1) {
-          if (/^[0-9]$/.test(e.key)) {
-            onKeyDown?.(e);
-            return;
-          }
-
-          if (e.key === "." || e.key === ",") {
-            const val = e.currentTarget.value;
-            if (!val.includes(".") && !val.includes(",")) {
-              onKeyDown?.(e);
-              return;
-            }
-          }
-
-          if (e.key === "-") {
-            const minNum = props.min !== undefined ? Number(props.min) : undefined;
-            if (minNum === undefined || minNum < 0) {
-              const val = e.currentTarget.value;
-              if (!val.includes("-") && e.currentTarget.selectionStart === 0) {
-                onKeyDown?.(e);
-                return;
-              }
-            }
-          }
-
-          e.preventDefault();
-          return;
-        }
+      if (isNumberType && blocksNumericKey(e, { min: props.min })) {
+        e.preventDefault();
+        return;
       }
 
       if (isPhoneType && e.key.length === 1 && !(e.ctrlKey || e.metaKey || e.altKey)) {
@@ -78,9 +36,9 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
       if (isNumberType) {
         const text = e.clipboardData?.getData("text") || "";
-        if (/[^0-9.,-]/.test(text)) {
+        const clean = sanitizeNumericPaste(text, { min: props.min });
+        if (clean !== text) {
           e.preventDefault();
-          const clean = text.replace(/[^0-9.,-]/g, "");
           if (clean) {
             try {
               document.execCommand("insertText", false, clean);

@@ -237,9 +237,11 @@ _agent/
 _agents/
 skills-lock.json
 
-# Scratch scripts
+# Scratch scripts (one-off helpers at the repo root — real scripts live in scripts/)
 _dream_query*.py
 fix_vite.js
+/*.cjs
+/.tmp-*
 *.pyc
 __pycache__/
 .env*
@@ -247,6 +249,7 @@ __pycache__/
 # Session/agent artifacts (ephemeral)
 .playwright-cli/
 tour-output/
+brag-output/
 shot-*.png
 *.yaml.playwright
 members.yaml
@@ -254,6 +257,4 @@ projects.yaml
 txns.yaml
 root?
 root*
-
-.vercel
-.env*
+/monthly_check.json

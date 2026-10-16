@@ -17,14 +17,18 @@ import {
   expenseSchema,
   earningSchema,
   transferSchema,
-  dividendSchema,
   equityTransferSchema,
   deleteTransactionSchema,
   transactionQuerySchema,
   revertDepositSchema,
-  type DividendPayload,
 } from './validation';
 import * as finance from './service';
+import { bucketKey, consumeBucket, type BucketOutcome } from '@/lib/rate-limit';
+
+const BULK_DEPOSIT_MAX_BODY_BYTES = 256 * 1024;
+const BULK_DEPOSIT_USER_LIMIT = 12;
+const BULK_DEPOSIT_TENANT_LIMIT = 60;
+const BULK_DEPOSIT_RATE_WINDOW_SECS = 60;
 
 /**
  * Financial API — Next.js App Router route handlers.
@@ -58,8 +62,44 @@ export async function handleAddDeposit(request: NextRequest) {
 
 export async function handleBulkAddDeposits(request: NextRequest) {
   try {
-    const body = await validateBody(request, bulkDepositSchema);
     const user = await requirePermission('DEPOSITS', 'WRITE');
+    const tenantId = requireTenant(user);
+
+    let budgets: [BucketOutcome, BucketOutcome];
+    try {
+      budgets = await Promise.all([
+        consumeBucket(
+          bucketKey('bulk-deposit:user', `${tenantId}:${user.id}`),
+          BULK_DEPOSIT_USER_LIMIT,
+          BULK_DEPOSIT_RATE_WINDOW_SECS,
+        ),
+        consumeBucket(
+          bucketKey('bulk-deposit:tenant', tenantId),
+          BULK_DEPOSIT_TENANT_LIMIT,
+          BULK_DEPOSIT_RATE_WINDOW_SECS,
+        ),
+      ]);
+    } catch {
+      console.error('[BULK_DEPOSIT] rate counter unavailable, denying request');
+      return Response.json(
+        { success: false, message: 'Bulk deposits are temporarily unavailable. Please try again.', code: 'RATE_LIMIT_UNAVAILABLE' },
+        { status: 503 },
+      );
+    }
+
+    const blocked = budgets.filter((budget) => !budget.ok);
+    if (blocked.length > 0) {
+      const retryAfter = Math.max(...blocked.map((budget) => budget.retryAfterSec));
+      return Response.json(
+        { success: false, message: 'Too many bulk deposit attempts. Please try again later.', code: 'RATE_LIMITED' },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+      );
+    }
+
+    const body = await validateBody(request, bulkDepositSchema, {
+      maxBytes: BULK_DEPOSIT_MAX_BODY_BYTES,
+      requireJsonContentType: true,
+    });
     const result = await finance.bulkAddDeposits(body, user as SessionUser);
     return Response.json(result, { status: 201 });
   } catch (err) {
@@ -159,26 +199,13 @@ export async function handleTransferFunds(request: NextRequest) {
   }
 }
 
-export async function handleDistributeDividends(request: NextRequest) {
-  try {
-    const body = await validateBody<DividendPayload>(request, dividendSchema);
-    const user = await requirePermission('DIVIDENDS', 'WRITE');
-    const result = await finance.distributeDividends(body, user as SessionUser);
-    return Response.json(result, { status: 201 });
-  } catch (err) {
-    return errorResponse(err);
-  }
-}
-
 export async function handleTransferEquity(request: NextRequest) {
   try {
     const body = await validateBody(request, equityTransferSchema);
     const user = await requirePermission('DIVIDENDS', 'WRITE');
-    // The actor's UI language (set by the client i18n provider) — the ledger
-    // descriptions are written in it at operation time.
-    const rawLocale = request.headers.get('x-locale');
-    const locale = rawLocale === 'en' || rawLocale === 'bn' || rawLocale === 'hi' || rawLocale === 'ur' ? rawLocale : undefined;
-    const result = await finance.transferEquity(body, user as SessionUser, locale);
+    // Narrations are stored canonically (English) and localized at render time
+    // by lib/ledger-description.ts, so no locale is needed here.
+    const result = await finance.transferEquity(body, user as SessionUser);
     return Response.json(result, { status: 201 });
   } catch (err) {
     return errorResponse(err);

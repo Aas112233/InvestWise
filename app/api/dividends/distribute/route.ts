@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
       fiscalPeriod = lookup ?? null;
 
       if (fiscalPeriodId && !fiscalPeriod) throw new ValidationError('Fiscal period not found for this tenant');
-      if (fiscalPeriod?.status === 'CLOSED') throw new LockedError('Dividend payouts cannot be allocated to a closed fiscal period');
+      if (fiscalPeriod?.status === 'CLOSED') throw new LockedError('Dividend payouts cannot be allocated to a closed fiscal period. Choose a fiscal period that is still open.');
       if (
         fiscalPeriodId &&
         fiscalPeriod &&

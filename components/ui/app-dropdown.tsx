@@ -274,7 +274,7 @@ export function AppDropdown({
             role="listbox"
             aria-labelledby={listId}
             onKeyDown={onListKeyDown}
-            className="z-[100] rounded-xl border border-border/80 bg-popover text-popover-foreground shadow-xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-100"
+            className="z-[100] rounded-xl border border-border/80 dark:border-white/10 bg-popover text-popover-foreground shadow-xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-100"
             // top/left/width are written onto this node by placePanel() in a
             // layout effect, before the first paint. Keeping them out of React
             // state is what stops the one-frame flash at the document origin.

@@ -3,7 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { apiClient } from "./api-client";
-import { formatMoney, formatDatePattern } from "./formatters";
+import { useAuth } from "./auth-context";
+import { formatMoney, formatDatePattern, formatDateOnly } from "./formatters";
 import { DEFAULT_PAYMENT_METHODS, type PaymentMethodConfig } from "./payment-methods";
 
 export interface PenaltyRuleSetting {
@@ -75,11 +76,27 @@ export const DEFAULT_TENANT_PENALTY_RULES: PenaltyRuleSetting[] = [
 ];
 
 /**
+ * Shared cache key for tenant settings (audit F-10, 2026-10-13).
+ *
+ * The payload is owned by the session tenant, so the key carries it: an
+ * identity switch inside one browser tab (logout → login as another
+ * organisation, without a reload) otherwise replayed the PREVIOUS tenant's
+ * currency / share value / penalty rules from the module-level QueryClient
+ * until the next refetch. Consumers that read OR write the cache (notably
+ * app/settings/page.tsx) must build the key through this hook so optimistic
+ * writes land on the same entry.
+ */
+export function useTenantSettingsQueryKey(): readonly unknown[] {
+  const { user } = useAuth();
+  return ["settings", user?.tenantId ?? null];
+}
+
+/**
  * Single source of truth for tenant settings on the client.
  */
 export function useTenantSettings() {
   return useQuery({
-    queryKey: ["settings"],
+    queryKey: useTenantSettingsQueryKey(),
     queryFn: () => apiClient<TenantSettings>("/settings"),
     staleTime: SETTINGS_STALE_MS,
     refetchOnMount: false,
@@ -155,6 +172,19 @@ export function useFormatDate() {
     (date: string | Date | null | undefined, includeTime: boolean = false) => {
       return formatDatePattern(date, dateFormat, includeTime);
     },
+    [dateFormat],
+  );
+}
+
+/**
+ * Formats a DATE-ONLY value (a calendar day: ledger posting dates, project
+ * start/completion dates) in UTC using the tenant's date pattern. See
+ * formatDateOnly — local formatting shifts the day for viewers west of UTC.
+ */
+export function useFormatDateOnly() {
+  const dateFormat = useTenantDateFormat();
+  return useCallback(
+    (date: string | Date | null | undefined) => formatDateOnly(date, dateFormat),
     [dateFormat],
   );
 }

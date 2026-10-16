@@ -7,8 +7,9 @@ export const members = pgTable('members', {
   id: uuid('id').defaultRandom().primaryKey(),
   tenantId: uuid('tenant_id').references(() => tenants.id),
   // Uniqueness is PER TENANT (uq_members_* below): global unique columns in a
-  // shared-DB multi-tenant model block two orgs registering the same person and
-  // turn the create route into a cross-tenant existence oracle.
+  // shared-DB multi-tenant model mean one org cannot register a person whose
+  // email exists in another org, and the 409 turns the endpoint into a
+  // cross-tenant existence oracle.
   memberId: varchar('member_id', { length: 50 }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }).notNull(),
@@ -40,15 +41,23 @@ export const members = pgTable('members', {
   nomineeRelation: varchar('nominee_relation', { length: 100 }),
   nomineeNidOrPassport: varchar('nominee_nid_or_passport', { length: 100 }),
   nomineePhone: varchar('nominee_phone', { length: 50 }),
-  // Soft delete (AGENTS.md §12): row + ledger history survive; directory reads
-  // and dividend rosters filter isDeleted = false.
+  // Soft delete (AGENTS.md §12, same pattern as transactions): the row and
+  // its ledger/penalty history survive; directory reads, dropdown feeds and
+  // dividend rosters filter on isDeleted = false. Hard-deleting members was
+  // silently cascading away meeting attendance, project membership and
+  // arrears via ON DELETE CASCADE FKs.
   isDeleted: boolean('is_deleted').default(false).notNull(),
   deletedBy: uuid('deleted_by').references(() => users.id),
   deletionReason: varchar('deletion_reason', { length: 500 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  // memberId is a permanent, user-facing code referenced across the app, so
+  // it stays unique over live AND soft-deleted rows (a code is never reused).
   uniqueIndex('uq_members_tenant_member_id').on(table.tenantId, table.memberId),
+  // Email is unique only among LIVE rows: soft-deleting a member frees their
+  // email for re-registration (the code's dup-check filters is_deleted=false,
+  // so this partial index keeps DB and application logic in lockstep).
   uniqueIndex('uq_members_tenant_email').on(table.tenantId, table.email).where(sql`is_deleted = false`),
   index('idx_members_tenant').on(table.tenantId),
   index('idx_members_status_name').on(table.status, table.name),
@@ -61,5 +70,3 @@ export const members = pgTable('members', {
   index('idx_members_role_status').on(table.role, table.status),
   index('idx_members_created_at').on(table.createdAt),
 ]);
-
-export type Member = typeof members.$inferSelect;

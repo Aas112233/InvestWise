@@ -34,7 +34,7 @@ export async function POST(
 
     const db = getDb();
 
-    const updatedPenalty = await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const [penalty] = await tx
         .select()
         .from(memberPenalties)
@@ -81,8 +81,10 @@ export async function POST(
         .where(and(eq(memberPenalties.id, id), eq(memberPenalties.tenantId, tenantId)))
         .returning();
 
-      return waived;
+      return { waived, before: penalty };
     });
+
+    const updatedPenalty = result.waived;
 
     await logAudit({
       user: { id: user.id, name: user.name },
@@ -90,6 +92,10 @@ export async function POST(
       resourceType: 'MemberPenalty',
       resourceId: id,
       details: { waiveReason, restoredDeduction: updatedPenalty?.calculatedDeduction },
+      // Zero extra queries: `before` is the locked pre-waive penalty row from
+      // the transaction; `updatedPenalty` is the UPDATE's .returning().
+      before: result.before,
+      after: updatedPenalty,
       tenantId,
     });
 

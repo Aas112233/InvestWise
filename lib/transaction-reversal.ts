@@ -80,7 +80,7 @@ export function decideReversal(tx: ReversalInput): ReversalDecision {
       direction: 0,
       requiresRevertPath: true,
       revertHint:
-        'Completed deposits cannot be deleted. Revert to request instead (POST /api/deposits/[id]/revert) so fund and member balances are reversed.',
+        'Completed deposits cannot be deleted. Revert to request in the Deposits screen first — this reverses the fund and member balances so the ledger stays consistent.',
     };
   }
 

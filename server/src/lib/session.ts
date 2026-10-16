@@ -5,6 +5,12 @@ import { getDb } from './db';
 import { users, sessions, blacklistedTokens } from '../db/schema/index';
 import { verifyToken, COOKIE_NAMES } from './jwt';
 import { normalizeRole } from '../shared/roles';
+import {
+  SESSION_ACTIVITY_TOUCH_THROTTLE_MS,
+  SUPPORT_SESSION_LIFETIME_MS,
+  isAbsoluteSessionExpired,
+  isSessionIdle,
+} from '@/lib/session-limits';
 
 /**
  * Session/user cache — identical resolution logic to the Express `protect`
@@ -44,6 +50,11 @@ function cacheKey(token: string): string {
   return `${hash.slice(0, 24)}`;
 }
 
+/** sha256 hex of a token — rows store the hash, never the raw JWT. */
+function tokenHash(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
 export async function getSessionUser(): Promise<CachedUser | null> {
   sweepCache();
   const token = (await cookies()).get(COOKIE_NAMES.ACCESS_TOKEN)?.value;
@@ -63,12 +74,18 @@ export async function getSessionUser(): Promise<CachedUser | null> {
   // Check both per-token revocation and active-session status before consulting
   // the cached identity. This keeps logout-all and single-session revocation
   // immediate across instances and prevents the user cache bypassing revocation.
+  // Rows store sha256(token) hex — hash before matching, or rotated/logged-out
+  // tokens stay valid here until their 15m JWT expiry (was: raw comparison).
   const [sessionState] = await db
-    .select({ blacklistId: blacklistedTokens.id })
+    .select({
+      blacklistId: blacklistedTokens.id,
+      loginTime: sessions.loginTime,
+      lastActivity: sessions.lastActivity,
+    })
     .from(sessions)
     .leftJoin(
       blacklistedTokens,
-      and(eq(blacklistedTokens.token, token), gt(blacklistedTokens.expiresAt, new Date())),
+      and(eq(blacklistedTokens.token, tokenHash(token)), gt(blacklistedTokens.expiresAt, new Date())),
     )
     .where(
       and(
@@ -79,12 +96,31 @@ export async function getSessionUser(): Promise<CachedUser | null> {
         or(
           isNull(sessions.deviceInfo),
           ne(sessions.deviceInfo, 'Support'),
-          gt(sessions.loginTime, new Date(Date.now() - 30 * 60_000)),
+          gt(sessions.loginTime, new Date(Date.now() - SUPPORT_SESSION_LIFETIME_MS)),
         ),
       ),
     )
     .limit(1);
   if (!sessionState || sessionState.blacklistId) return null;
+  // Same lifetime bounds as the modern gate (lib/middleware/auth.ts):
+  // absolute 24h cap + server-side idle kill. Without these, the money API
+  // would accept sessions the main stack already considers dead.
+  const now = Date.now();
+  if (isAbsoluteSessionExpired(sessionState.loginTime, now)) return null;
+  if (isSessionIdle(sessionState.lastActivity, now)) return null;
+  if (sessionState.lastActivity) {
+    const lastTouch = new Date(sessionState.lastActivity).getTime();
+    if (!Number.isNaN(lastTouch) && now - lastTouch > SESSION_ACTIVITY_TOUCH_THROTTLE_MS) {
+      try {
+        await db
+          .update(sessions)
+          .set({ lastActivity: new Date(now), updatedAt: new Date(now) })
+          .where(and(eq(sessions.sessionId, decoded.sessionId), eq(sessions.userId, decoded.id)));
+      } catch {
+        // Activity tracking must never fail authentication.
+      }
+    }
+  }
 
   const cached = userCache.get(cacheKey(token));
   if (cached && cached.expires > Date.now()) return cached.user;

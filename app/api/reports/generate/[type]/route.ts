@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/middleware/auth";
 import { requireTenant } from "@/lib/tenant";
-import { logAudit } from "@/lib/utils/audit";
 import { getDb } from "@/db/index";
 import { systemSettings } from "@/db/schema/index";
 import { eq } from "drizzle-orm";
@@ -144,21 +143,9 @@ export async function GET(
     const data = await fetchReportData(slug, ctx, period, periodParams, { projectId, memberId, fundId });
     const doc = buildReportDocument(data, ctx, periodParams, entityNames, letterhead);
 
-    await logAudit({
-      user: { id: user.id, name: user.name },
-      tenantId: scopedTenantId,
-      action: "GENERATE_REPORT",
-      resourceType: "Report",
-      resourceId: slug,
-      details: {
-        reportType: slug,
-        format,
-        rowCount: doc.rows.length,
-        truncated: doc.truncated,
-        period: doc.periodLine,
-      },
-      status: "SUCCESS",
-    });
+    // Report generation is deliberately NOT audited: it reads existing data and
+    // changes nothing, and a read-heavy export would bury the real financial
+    // trail in the audit log.
 
     const filename = `${doc.fileBase}.${format}`;
     const disposition = `attachment; filename="${filename}"`;

@@ -144,6 +144,10 @@ export async function PUT(
       resourceType: 'Goal',
       resourceId: id,
       details: { updatedFields: Object.keys(updateFields) },
+      // Zero extra queries: `existing` was fetched for the guard checks;
+      // `updated` is the UPDATE's .returning().
+      before: existing,
+      after: updated,
     });
 
     return NextResponse.json({
@@ -192,6 +196,9 @@ export async function DELETE(
       action: 'DELETE_GOAL',
       resourceType: 'Goal',
       resourceId: id,
+      // Hard delete: the snapshot is the only surviving record of the row.
+      // `existing` was already fetched for the ownership guard.
+      before: existing,
     });
 
     return NextResponse.json({

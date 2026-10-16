@@ -5,10 +5,29 @@
  * - Money: decimal(15,2) 2dp string boundary, zero float artifacts.
  */
 
+/**
+ * UI locale -> Intl tag for number/currency formatting.
+ * All locales are pinned to Western digits (nu-latn) — the app's previous
+ * behavior was en-US everywhere, and BD users expect ৳ + Western numerals,
+ * not Bengali numerals (০১২৩).
+ */
+export const intlLocaleFor = (uiLocale: string): string => {
+  switch (uiLocale) {
+    case "bn":
+      return "bn-BD-u-nu-latn";
+    case "hi":
+      return "hi-IN-u-nu-latn";
+    case "ur":
+      return "ur-u-nu-latn";
+    default:
+      return "en-US";
+  }
+};
+
 export const formatMoney = (
   amount: number | string | null | undefined,
   currencyCode: string = "BDT",
-  options?: { minimumFractionDigits?: number; maximumFractionDigits?: number }
+  options?: { minimumFractionDigits?: number; maximumFractionDigits?: number; locale?: string }
 ): string => {
   if (amount === null || amount === undefined || amount === "") return "-";
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
@@ -16,16 +35,17 @@ export const formatMoney = (
 
   const minDigits = options?.minimumFractionDigits ?? 2;
   const maxDigits = options?.maximumFractionDigits ?? 2;
+  const locale = options?.locale ?? "en-US";
 
   try {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: currencyCode || "BDT",
       minimumFractionDigits: minDigits,
       maximumFractionDigits: maxDigits,
     }).format(num);
   } catch {
-    return `${currencyCode || "BDT"} ${num.toLocaleString("en-US", {
+    return `${currencyCode || "BDT"} ${num.toLocaleString(locale, {
       minimumFractionDigits: minDigits,
       maximumFractionDigits: maxDigits,
     })}`;
@@ -66,9 +86,6 @@ export const formatDate = (
   return `${day}/${month}/${year} ${hours}:${minutes}`;
 };
 
-export const toIsoDateString = (date: Date): string => {
-  return date.toISOString().split("T")[0]!;
-};
 
 /**
  * 'YYYY-MM-DD' for a Date in the VIEWER'S LOCAL timezone.
@@ -110,4 +127,45 @@ export const formatDatePattern = (
     out += ` ${hours}:${minutes}`;
   }
   return out;
+};
+
+/**
+ * Format a DATE-ONLY value (a calendar day: ledger posting dates, project
+ * start/completion dates, goal deadlines) against a tenant pattern, in UTC.
+ *
+ * The server anchors these days at UTC midnight (it parses `YYYY-MM-DD` with
+ * `new Date()`). Reading them back with the LOCAL components (formatDate)
+ * drops a day for every viewer west of UTC, so a posting made "on the 2nd"
+ * rendered as the 1st. Date-only values are therefore formatted in UTC — the
+ * same convention the server-side reports use (formatUtcDate). Timestamps
+ * that carry a real time-of-day (createdAt, lastLogin) still use formatDate.
+ */
+export const formatDateOnly = (
+  value: string | Date | null | undefined,
+  pattern: string = "DD/MM/YYYY",
+): string => {
+  if (!value) return "-";
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (isNaN(d.getTime())) return "-";
+
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const year = String(d.getUTCFullYear());
+  return pattern.replace("DD", day).replace("MM", month).replace("YYYY", year);
+};
+
+/**
+ * Inclusive end-of-day (UTC) for a date-only "YYYY-MM-DD" range end.
+ *
+ * A date-only end must cover the WHOLE day: `new Date("2026-03-31")` is UTC
+ * midnight, so `lte(date, that)` silently drops every row collected after
+ * 00:00 on the 31st — the "Collected this month" badge understated by the
+ * last day's collections every month. Full ISO timestamps pass through
+ * unchanged (the caller already chose an exact instant). Mirrors the
+ * convention reports/catalog.ts uses for custom ranges.
+ */
+export const endOfRangeUtc = (value: string): Date => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return new Date(value);
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59, 999));
 };

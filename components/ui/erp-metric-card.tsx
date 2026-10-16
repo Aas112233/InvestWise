@@ -80,7 +80,7 @@ export function ERPMetricCard({
     return (
       <div
         className={cn(
-          "flex flex-col rounded-xl border border-border/50 bg-card p-4 shadow-xs",
+          "flex flex-col rounded-xl bg-card p-4 shadow-xs",
           className,
         )}
         aria-busy="true"
@@ -111,7 +111,7 @@ export function ERPMetricCard({
   return (
     <div
       className={cn(
-        "p-4 rounded-xl border border-border/50 bg-card text-card-foreground flex-1 min-w-[200px] shadow-xs flex flex-col justify-between min-h-[104px] transition-all duration-200 hover:border-border/80",
+        "p-4 rounded-xl bg-card text-card-foreground flex-1 min-w-[200px] shadow-xs flex flex-col justify-between min-h-[104px] transition-shadow duration-200 hover:shadow-sm",
         className,
       )}
     >

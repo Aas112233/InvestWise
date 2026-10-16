@@ -3,12 +3,14 @@
 import { useEffect } from "react";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * Route-segment error boundary (issue #55). Unlike global-error.tsx this renders
- * INSIDE the root layout, so Tailwind tokens and the app's Button are available.
- * It catches render/data errors in any page below the root and keeps the shell
- * (sidebar, header) interactive instead of blanking the whole app.
+ * INSIDE the root layout, so Tailwind tokens, the app's Button and the i18n
+ * provider are available. It catches render/data errors in any page below the
+ * root and keeps the shell (sidebar, header) interactive instead of blanking
+ * the whole app.
  */
 export default function Error({
   error,
@@ -17,6 +19,8 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const { t } = useLocale();
+
   useEffect(() => {
     console.error("[PAGE ERROR]", error);
   }, [error]);
@@ -30,11 +34,10 @@ export default function Error({
         <AlertTriangle className="h-5 w-5" />
       </div>
       <h2 className="text-sm font-semibold tracking-tight text-foreground">
-        This page could not be loaded
+        {t("errors.page.title")}
       </h2>
       <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-        Something went wrong while rendering this screen. Nothing has been saved
-        or changed — retry, or move to another section and come back.
+        {t("errors.page.message")}
       </p>
       {error.digest && (
         <p className="font-mono text-[10px] text-muted-foreground/70">
@@ -43,7 +46,7 @@ export default function Error({
       )}
       <div className="mt-1 flex items-center gap-2">
         <Button variant="primary" size="sm" onClick={() => reset()} icon={RotateCcw}>
-          Try again
+          {t("errors.page.retry")}
         </Button>
       </div>
     </div>

@@ -2,9 +2,11 @@ import { pgTable, uuid, varchar, decimal, integer, timestamp, index } from 'driz
 import { members } from './members';
 import { fiscalPeriods } from './fiscal_periods';
 import { users } from './users';
+import { tenants } from './tenants';
 
 export const profitAllocations = pgTable('profit_allocations', {
   id: uuid('id').defaultRandom().primaryKey(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
   fiscalPeriodId: uuid('fiscal_period_id').references(() => fiscalPeriods.id),
   memberId: uuid('member_id').references(() => members.id).notNull(),
   allocationType: varchar('allocation_type', { length: 50 }).notNull(),
@@ -16,6 +18,7 @@ export const profitAllocations = pgTable('profit_allocations', {
   allocatedAt: timestamp('allocated_at', { withTimezone: true }).defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  index('idx_allocation_tenant').on(table.tenantId),
   index('idx_allocation_period').on(table.fiscalPeriodId),
   index('idx_allocation_member').on(table.memberId),
   index('idx_allocation_type').on(table.allocationType),

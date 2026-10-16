@@ -1,9 +1,10 @@
 import { eq, and, desc, asc, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '../../lib/db';
-import { funds, transactions } from '../../db/schema/index';
+import { funds, transactions, projects } from '../../db/schema/index';
 import { getPaginationParams, formatPaginatedResponse, type SessionUser } from '../../middleware/api';
 import { AppError, NotFoundError } from '../../shared/errors';
 import { parsePositiveAmount, fromCents, toCents } from '@/lib/money';
+import { logAudit } from '@/lib/utils/audit';
 
 /** Fund balances, creation and inter-fund operations support. */
 
@@ -20,16 +21,41 @@ export interface CreateFundData {
   linkedProjectId?: string;
 }
 
+// Field types match the Zod schema outputs in ./validation (the handler parses
+// request bodies with it), so the parsed object flows through uncast.
 export interface UpdateFundData {
   name?: string;
-  type?: 'DEPOSIT' | 'PRIMARY' | 'PROJECT' | 'RESERVE' | 'OTHER';
-  description?: string;
-  status?: 'ACTIVE' | 'INACTIVE' | 'CLOSED';
-  currency?: string;
-  handlingOfficer?: string;
-  accountNumber?: string;
+  type?: string;
+  description?: string | null;
+  status?: string;
+  currency?: string | null;
+  handlingOfficer?: string | null;
+  accountNumber?: string | null;
   minimumBalance?: number | string;
-  linkedProjectId?: string;
+  linkedProjectId?: string | null;
+}
+
+/**
+ * A fund's linked project must belong to the caller's tenant. The uuid column
+ * carries no FK (db/schema/funds.ts), and the only reader reconciles
+ * tenant-scoped (finance/service.ts), so a foreign id would silently dangle.
+ * Same ownership check the goals routes apply (app/api/goals/route.ts).
+ */
+async function assertProjectInTenant(projectId: string, tenantId: string | null | undefined): Promise<void> {
+  if (!tenantId) {
+    throw new AppError('Tenant context required', 403, 'TENANT_REQUIRED');
+  }
+  const db = getDb();
+  const [project] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
+    .limit(1);
+  if (!project) {
+    // Deliberately not "not found": the message must not confirm whether the
+    // id exists in another tenant.
+    throw new AppError('Linked project must belong to your organization', 400, 'INVALID_LINKED_PROJECT');
+  }
 }
 
 export async function listFunds(
@@ -112,9 +138,17 @@ export async function createFund(data: CreateFundData, user: SessionUser, tenant
     );
   }
 
+  // A linked project id is only accepted when it resolves inside this tenant.
+  // Empty/whitespace means "no link" — the same normalization the Zod schema
+  // applies (validation.ts).
+  const createLinkedProjectId = data.linkedProjectId?.trim() || null;
+  if (createLinkedProjectId) {
+    await assertProjectInTenant(createLinkedProjectId, effectiveTenantId);
+  }
+
   const minBalCents = data.minimumBalance ? parsePositiveAmount(data.minimumBalance) : 0;
 
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     const [fund] = await tx
       .insert(funds)
       .values({
@@ -128,7 +162,7 @@ export async function createFund(data: CreateFundData, user: SessionUser, tenant
         description: data.description ?? null,
         handlingOfficer: data.handlingOfficer ?? null,
         accountNumber: data.accountNumber ?? null,
-        linkedProjectId: data.linkedProjectId ?? null,
+        linkedProjectId: createLinkedProjectId,
       })
       .returning();
 
@@ -157,9 +191,31 @@ export async function createFund(data: CreateFundData, user: SessionUser, tenant
 
     return fund;
   });
+
+  // Fund CRUD is money-container management (account numbers, types, minimum
+  // balances) — it belongs in the tenant audit trail. `created` comes from the
+  // insert's .returning(): no extra query.
+  await logAudit({
+    user: { id: user.id, name: user.name },
+    tenantId: effectiveTenantId,
+    action: 'CREATE_FUND',
+    resourceType: 'Fund',
+    resourceId: created.id,
+    details: {
+      name: created.name,
+      type: created.type,
+      status: created.status,
+      currency: created.currency,
+      accountNumber: created.accountNumber,
+      openingBalance: created.balance,
+    },
+    after: created,
+  });
+
+  return created;
 }
 
-export async function updateFund(id: string, data: UpdateFundData, tenantId?: string | null) {
+export async function updateFund(id: string, data: UpdateFundData, tenantId?: string | null, user?: SessionUser) {
   const db = getDb();
   const conditions = [eq(funds.id, id)];
   if (tenantId) conditions.push(eq(funds.tenantId, tenantId));
@@ -172,7 +228,7 @@ export async function updateFund(id: string, data: UpdateFundData, tenantId?: st
   if (!existing) throw new NotFoundError('Fund');
 
   if (data.type === 'PROJECT' && existing.type !== 'PROJECT') {
-    throw new AppError('Cannot manually change a fund to PROJECT type', 400, 'PROJECT_FUND_NOT_ALLOWED');
+    throw new AppError('A fund cannot be changed to PROJECT type manually — project funds are created automatically when a project is initialized.', 400, 'PROJECT_FUND_NOT_ALLOWED');
   }
 
   // A dividend run needs one reachable active RESERVE fund, so refuse to strand
@@ -218,6 +274,18 @@ export async function updateFund(id: string, data: UpdateFundData, tenantId?: st
     }
   }
 
+  // linkedProjectId: '' / whitespace means unlink (same normalization the Zod
+  // schema applies); a non-empty id must resolve inside the caller's tenant.
+  const linkedProjectId =
+    data.linkedProjectId === undefined
+      ? undefined
+      : data.linkedProjectId?.trim()
+        ? data.linkedProjectId.trim()
+        : null;
+  if (linkedProjectId) {
+    await assertProjectInTenant(linkedProjectId, tenantId);
+  }
+
   const updateFields: Record<string, unknown> = { updatedAt: new Date() };
   if (data.name !== undefined) updateFields.name = data.name;
   if (data.type !== undefined) updateFields.type = data.type;
@@ -239,35 +307,19 @@ export async function updateFund(id: string, data: UpdateFundData, tenantId?: st
     .set(updateFields)
     .where(and(...conditions))
     .returning();
-  return updated;
-}
 
-export async function deleteFund(id: string, tenantId?: string | null) {
-  const db = getDb();
-  const conditions = [eq(funds.id, id)];
-  if (tenantId) conditions.push(eq(funds.tenantId, tenantId));
-
-  const [existing] = await db
-    .select()
-    .from(funds)
-    .where(and(...conditions))
-    .limit(1);
-  if (!existing) throw new NotFoundError('Fund');
-
-  const curBalanceCents = toCents(existing.balance ?? '0');
-  if (curBalanceCents > 0) {
-    throw new AppError(
-      `Cannot remove fund with remaining balance of ${fromCents(curBalanceCents)}. Transfer all funds before closing.`,
-      400,
-      'FUND_HAS_BALANCE',
-    );
-  }
-
-  const [updated] = await db
-    .update(funds)
-    .set({ status: 'CLOSED', updatedAt: new Date() })
-    .where(and(...conditions))
-    .returning();
+  // Zero extra queries: `existing` is the row this function already fetched
+  // for its validation guards; `updated` is the UPDATE's .returning().
+  await logAudit({
+    user: user ? { id: user.id, name: user.name } : null,
+    tenantId: tenantId ?? null,
+    action: 'UPDATE_FUND',
+    resourceType: 'Fund',
+    resourceId: id,
+    details: { fields: Object.keys(updateFields).filter((k) => k !== 'updatedAt') },
+    before: existing,
+    after: updated,
+  });
 
   return updated;
 }

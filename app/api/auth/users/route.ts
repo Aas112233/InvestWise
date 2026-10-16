@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { users } from '@/db/schema/index';
+import { members, users } from '@/db/schema/index';
 import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
@@ -31,7 +31,7 @@ const USER_SELECT = {
   updatedAt: users.updatedAt,
 } as const;
 
-function toUserResponse(row: Record<string, unknown>) {
+export function toUserResponse(row: Record<string, unknown>) {
   const permissions: Record<string, string> =
     typeof row.permissions === 'object' && row.permissions !== null
       ? (row.permissions as Record<string, string>)
@@ -48,6 +48,11 @@ function toUserResponse(row: Record<string, unknown>) {
     permissions,
     avatar: (row.avatar as string) ?? null,
     memberId: (row.memberId as string) ?? null,
+    // Member-directory identity for the link chip: the uuid claims the live
+    // row, memberCode is the stable MEM-XXXX display code.
+    memberUuid: (row.memberUuid as string) ?? null,
+    memberName: (row.memberName as string) ?? null,
+    memberCode: (row.memberCode as string) ?? null,
     lastLogin: row.lastLogin instanceof Date ? row.lastLogin.toISOString() : null,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : '',
     updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : '',
@@ -76,12 +81,27 @@ export async function GET(request: NextRequest) {
 
     // Directory screens send page/limit and get the standard paginated
     // envelope; dropdown callers (no params) keep the legacy bare array.
+    // Both join the member directory on members.user_id (uuid FK): one
+    // tenant-scoped left join, so the link chip renders without N+1. The
+    // tenant scoping on the join is required even though the user rows are
+    // already scoped — without it a member uuid collision across tenants
+    // could surface another org's member name.
+    const memberJoin = tenantId
+      ? and(eq(members.userId, users.id), eq(members.tenantId, tenantId))
+      : eq(members.userId, users.id);
+    const DIRECTORY_SELECT = {
+      ...USER_SELECT,
+      memberUuid: members.id,
+      memberName: members.name,
+      memberCode: members.memberId,
+    } as const;
     const { searchParams } = new URL(request.url);
     const paginated = searchParams.has('page') || searchParams.has('limit');
     if (!paginated) {
       const rows = await db
-        .select(USER_SELECT)
+        .select(DIRECTORY_SELECT)
         .from(users)
+        .leftJoin(members, memberJoin)
         .where(scope)
         .orderBy(desc(users.createdAt));
       return NextResponse.json(rows.map(toUserResponse));
@@ -106,8 +126,9 @@ export async function GET(request: NextRequest) {
     const where = filters.length ? and(...filters) : undefined;
 
     const rows = await db
-      .select(USER_SELECT)
+      .select(DIRECTORY_SELECT)
       .from(users)
+      .leftJoin(members, memberJoin)
       .where(where)
       .orderBy(sortOrder(sortCol))
       .limit(limit)

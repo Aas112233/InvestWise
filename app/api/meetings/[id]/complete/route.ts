@@ -156,7 +156,7 @@ export async function POST(
         issued += 1;
       }
 
-      return { meeting: updated, issued, existing, absentees: absentees.length, alreadyCompleted };
+      return { meeting: updated, beforeMeeting: meeting, issued, existing, absentees: absentees.length, alreadyCompleted };
     });
 
     await logAudit({
@@ -171,6 +171,10 @@ export async function POST(
         absentees: result.absentees,
         reCompleted: result.alreadyCompleted,
       },
+      // Zero extra queries: both rows come from the transaction above —
+      // `beforeMeeting` (locked pre-completion row) and `meeting` (updated).
+      before: result.beforeMeeting,
+      after: result.meeting,
     });
 
     return NextResponse.json({

@@ -1,10 +1,12 @@
 "use client";
 
 import React from "react";
-import { Printer, X, FileText, CheckCircle2, ShieldCheck, Building2 } from "lucide-react";
+import { Printer, Building2, ShieldCheck } from "lucide-react";
 import { TopSheet, Button, StatusBadge } from "@/components/ui";
-import { formatMoney, formatDate } from "@/lib/formatters";
+import { useFormatDateOnly, useFormatMoney } from "@/lib/use-tenant-settings";
 import { useLocale } from "@/lib/i18n";
+import { translateLedgerDescription } from "@/lib/ledger-description";
+import { getTransactionTypeLabel, getTransactionStatusLabel, getTransactionStatusTone } from "./shared";
 
 export interface TransactionVoucherData {
   id: string;
@@ -31,6 +33,8 @@ interface VoucherDrawerProps {
 
 export function VoucherDrawer({ isOpen, onClose, voucher }: VoucherDrawerProps) {
   const { t } = useLocale();
+  const formatDate = useFormatDateOnly();
+  const formatMoney = useFormatMoney();
 
   if (!voucher) return null;
 
@@ -38,14 +42,21 @@ export function VoucherDrawer({ isOpen, onClose, voucher }: VoucherDrawerProps) 
     window.print();
   };
 
-  const isDeposit = voucher.type === "Deposit" || voucher.type === "Earning";
+  const norm = (voucher.type || "").toLowerCase();
+  const isDeposit = norm === "deposit" || norm === "earning";
+  const typeLabel = getTransactionTypeLabel(voucher.type, t);
+  const statusLabel = getTransactionStatusLabel(voucher.status, t);
+  const statusTone = getTransactionStatusTone(voucher.status);
 
   return (
     <TopSheet
       isOpen={isOpen}
       onClose={onClose}
       title={t("transactions.voucherTitle", { defaultValue: "Financial Voucher" })}
-      description={`Reference: ${voucher.referenceNumber || voucher.id}`}
+      description={t("transactions.voucherReference", {
+        ref: voucher.referenceNumber || voucher.id,
+        defaultValue: `Reference: ${voucher.referenceNumber || voucher.id}`,
+      })}
     >
       <div className="space-y-6">
         {/* Printable Voucher Paper Card */}
@@ -60,12 +71,12 @@ export function VoucherDrawer({ isOpen, onClose, voucher }: VoucherDrawerProps) 
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Financial Voucher
+                {t("transactions.voucherSubtitle", { defaultValue: "Official Financial Voucher" })}
               </p>
             </div>
-            <div className="text-right">
+            <div className="text-right rtl:text-left">
               <span className="font-mono text-xs font-semibold text-foreground block">
-                {voucher.referenceNumber || "N/A"}
+                {voucher.referenceNumber || t("common.na", { defaultValue: "—" })}
               </span>
               <span className="text-[11px] text-muted-foreground">
                 {formatDate(voucher.date)}
@@ -76,19 +87,20 @@ export function VoucherDrawer({ isOpen, onClose, voucher }: VoucherDrawerProps) 
           {/* Hero Amount */}
           <div className="p-4 bg-muted/40 rounded-xl border border-border/60 text-center">
             <span className="text-xs font-semibold uppercase text-muted-foreground block mb-1">
-              {voucher.type} Amount
+              {t("transactions.voucherAmount", { type: typeLabel, defaultValue: `${typeLabel} Amount` })}
             </span>
             <div className={`text-2xl font-bold font-mono ${isDeposit ? "text-emerald-500" : "text-destructive"}`}>
               {formatMoney(Number(voucher.amount))}
             </div>
             <div className="mt-2 flex items-center justify-center gap-2">
-              <StatusBadge
-                tone={voucher.status === "Completed" ? "emerald" : "amber"}
-              >
-                {voucher.status}
+              <StatusBadge tone={statusTone}>
+                {statusLabel}
               </StatusBadge>
               <span className="text-xs text-muted-foreground">
-                Method: {voucher.depositMethod || "Ledger Entry"}
+                {t("transactions.voucherMethod", {
+                  method: voucher.depositMethod || t("transactions.ledgerEntry", { defaultValue: "Ledger Entry" }),
+                  defaultValue: `Method: ${voucher.depositMethod || "Ledger Entry"}`,
+                })}
               </span>
             </div>
           </div>
@@ -96,33 +108,43 @@ export function VoucherDrawer({ isOpen, onClose, voucher }: VoucherDrawerProps) 
           {/* Particulars Table */}
           <div className="space-y-3 text-xs">
             <div className="flex justify-between py-1.5 border-b border-border/60">
-              <span className="text-muted-foreground font-medium">Beneficiary / Member</span>
+              <span className="text-muted-foreground font-medium">
+                {t("transactions.beneficiaryMember", { defaultValue: "Beneficiary / Member" })}
+              </span>
               <span className="font-semibold text-foreground">
-                {voucher.memberName ? `${voucher.memberName} (${voucher.memberCode || "N/A"})` : "N/A"}
+                {voucher.memberName ? `${voucher.memberName} (${voucher.memberCode || t("common.na", { defaultValue: "—" })})` : t("common.na", { defaultValue: "—" })}
               </span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border/60">
-              <span className="text-muted-foreground font-medium">Associated Portfolio / Fund</span>
+              <span className="text-muted-foreground font-medium">
+                {t("transactions.associatedFund", { defaultValue: "Associated Portfolio / Fund" })}
+              </span>
               <span className="font-semibold text-foreground">
-                {voucher.fundName || voucher.projectName || "General Treasury"}
+                {voucher.fundName || voucher.projectName || t("transactions.generalTreasury", { defaultValue: "General Treasury" })}
               </span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border/60">
-              <span className="text-muted-foreground font-medium">Category</span>
+              <span className="text-muted-foreground font-medium">
+                {t("transactions.categoryLabel", { defaultValue: "Category" })}
+              </span>
               <span className="font-semibold text-foreground">
-                {voucher.category || "General Operations"}
+                {voucher.category || t("transactions.generalOperations", { defaultValue: "General Operations" })}
               </span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border/60">
-              <span className="text-muted-foreground font-medium">Handling Officer</span>
+              <span className="text-muted-foreground font-medium">
+                {t("transactions.handlingOfficer", { defaultValue: "Handling Officer" })}
+              </span>
               <span className="font-semibold text-foreground">
-                {voucher.handlingOfficer || "System Treasury"}
+                {voucher.handlingOfficer || t("transactions.systemTreasury", { defaultValue: "System Treasury" })}
               </span>
             </div>
             <div className="py-2">
-              <span className="text-muted-foreground font-medium block mb-1">Narration / Description</span>
+              <span className="text-muted-foreground font-medium block mb-1">
+                {t("transactions.narrationDescription", { defaultValue: "Narration / Description" })}
+              </span>
               <p className="text-foreground bg-muted/40 p-2.5 rounded-xl border border-border/60">
-                {voucher.description || "Official ledger transaction disbursement."}
+                {translateLedgerDescription(voucher.description, t) || t("transactions.defaultNarration", { defaultValue: "Official ledger transaction spending." })}
               </p>
             </div>
           </div>
@@ -131,9 +153,9 @@ export function VoucherDrawer({ isOpen, onClose, voucher }: VoucherDrawerProps) 
           <div className="pt-4 border-t border-border/80 flex items-center justify-between text-[11px] text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <ShieldCheck size={14} className="text-emerald-500" />
-              <span>Cryptographically Audited Transaction</span>
+              <span>{t("transactions.auditedBadge", { defaultValue: "Cryptographically Audited Transaction" })}</span>
             </div>
-            <span>ERP Immutable Receipt</span>
+            <span>{t("transactions.immutableReceipt", { defaultValue: "ERP Immutable Receipt" })}</span>
           </div>
         </div>
 

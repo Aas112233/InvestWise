@@ -19,6 +19,30 @@ import { verifyEdgeAccessToken, isPlatformEdge } from '@/lib/edge-auth';
 const ACCESS_COOKIE = 'accessToken';
 const REFRESH_COOKIE = 'refreshToken';
 
+// Per-request CSP nonce (audit F-1, 2026-10-13). Production policy stamps
+// Next's own script tags with this nonce via 'strict-dynamic' and drops
+// 'unsafe-inline' entirely: any injected inline script then fails to execute.
+// Development keeps 'unsafe-inline' + 'unsafe-eval' — Turbopack/HMR evaluates
+// modules and injects bootstraps that cannot carry a nonce.
+const isDev = process.env.NODE_ENV === 'development';
+
+function buildCsp(nonce: string): string {
+  const scriptSrc = isDev
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`;
+  return [
+    "default-src 'self'",
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ');
+}
+
 // Same-origin only. The app serves its own UI and API from one origin and
 // never accepts cross-site credentialed requests; a hostile page therefore has
 // no reason to send a form POST / XHR carrying the session cookie. State-
@@ -64,7 +88,18 @@ export async function middleware(request: NextRequest) {
   for (const h of ['x-user-id', 'x-user-role', 'x-tenant-id', 'x-user-email', 'x-user-permissions', 'x-user-name', 'x-user-member-id']) {
     cleanHeaders.delete(h);
   }
-  const forward = () => NextResponse.next({ request: { headers: cleanHeaders } });
+  // One nonce per request. Forwarded on the REQUEST so Next stamps its own
+  // script tags with it, echoed on the RESPONSE so the browser enforces it.
+  // The request-side copy is read by Next's bootstrap only.
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const csp = buildCsp(nonce);
+  cleanHeaders.set('x-nonce', nonce);
+  cleanHeaders.set('content-security-policy', csp);
+  const forward = () => {
+    const response = NextResponse.next({ request: { headers: cleanHeaders } });
+    response.headers.set('content-security-policy', csp);
+    return response;
+  };
 
   if (
     pathname.startsWith('/_next') ||

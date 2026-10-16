@@ -4,9 +4,13 @@
  * localized summary block, striped data table with repeated header,
  * totals row, and a per-page footer (page x/y, timestamp, confidentiality).
  *
- * Localized documents (Rule §10): non-Latin locales embed their Noto-family
- * font (Bengali / Devanagari / Naskh Arabic) at request time; Urdu tables
- * render right-aligned.
+ * Localized documents (Rule §10): every text run is set in a font covering
+ * its script — Bengali runs in Hind Siliguri, Devanagari in Hind, Arabic in
+ * Amiri — regardless of the UI locale. Tenant data (member names, letterhead,
+ * descriptions) routinely carries Bengali script while the operator works in
+ * English; keying the font on the locale alone sent those runs through
+ * Helvetica/WinAnsi and printed Latin mojibake. Pure-Latin runs keep the
+ * locale font (today's rendering, unchanged). Urdu tables render right-aligned.
  *
  * Shaping (#106): pdfkit lays text out through fontkit's HarfBuzz-style
  * shapers, so Indic matra reordering (কি → matra before ka), conjunct
@@ -25,15 +29,45 @@ interface PdfFont {
   family: string;
 }
 
-// Static Google-Fonts families that bundle Latin + the local script: one font
-// per document, so every glyph in a mixed-script string (labels, names,
-// money) exists in the same font. Script-only Noto builds render blanks for
-// ASCII — do not swap them back in.
+// Static Google-Fonts families that bundle Latin + the local script: a run is
+// set in the font covering its script (script-only Noto builds render blanks
+// for ASCII — do not swap them back in). All three load up front; pdfkit
+// embeds only the glyphs actually used, so the PDF stays small.
 const LOCALE_FONTS: Partial<Record<ReportDocument["locale"], PdfFont>> = {
   bn: { file: "HindSiliguri-Regular.ttf", family: "HindSiliguri" },
   hi: { file: "Hind-Regular.ttf", family: "Hind" },
   ur: { file: "Amiri-Regular.ttf", family: "Amiri" },
 };
+
+// Codepoint ranges checked numerically, so no script literals live in source.
+const SCRIPT_RANGES: Array<{ key: "bn" | "hi" | "ur"; ranges: Array<[number, number]> }> = [
+  { key: "bn", ranges: [[0x0980, 0x09ff]] },
+  { key: "hi", ranges: [[0x0900, 0x097f]] },
+  { key: "ur", ranges: [[0x0600, 0x06ff], [0x0750, 0x077f], [0xfb50, 0xfdff], [0xfe70, 0xfeff]] },
+];
+
+/**
+ * Dominant non-Latin script in a run, by codepoint count (null when the run
+ * is Latin-only). Mixed-script runs set in the majority script's font — every
+ * script font here bundles Latin too, so the remainder still renders.
+ */
+function dominantScriptKey(sample: string): "bn" | "hi" | "ur" | null {
+  let best: "bn" | "hi" | "ur" | null = null;
+  let bestCount = 0;
+  for (const { key, ranges } of SCRIPT_RANGES) {
+    let count = 0;
+    for (const ch of sample) {
+      const cp = ch.codePointAt(0) ?? 0;
+      if (ranges.some(([lo, hi]) => cp >= lo && cp <= hi)) count += 1;
+    }
+    if (count > bestCount) {
+      bestCount = count;
+      best = key;
+    }
+  }
+  return best;
+}
+
 
 const FONT_DIR = path.join(process.cwd(), "lib", "reports", "fonts");
 const fontCache = new Map<string, Buffer>();
@@ -87,23 +121,35 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   });
   pdf.lineGap(0);
 
-  // Font: localized families get the embedded TTF under explicit names
-  // (regular + bold alias the same file — no bold cut exists, and pdfkit
-  // otherwise warns and falls back when a style is requested unregistered).
-  const fontInfo = LOCALE_FONTS[doc.locale];
-  let regName = "Helvetica";
-  let boldName = "Helvetica-Bold";
-  if (fontInfo) {
-    const buf = loadFontBuffer(fontInfo.file);
-    if (buf) {
-      pdf.registerFont(fontInfo.family, buf);
-      pdf.registerFont(`${fontInfo.family}:bold`, buf);
-      regName = fontInfo.family;
-      boldName = `${fontInfo.family}:bold`;
-    }
+  // Fonts: every script family registers up front (regular + bold alias the
+  // same file — no bold cut exists, and pdfkit otherwise warns and falls back
+  // when a style is requested unregistered). Runs pick the family by script
+  // below; a missing/unreadable file degrades that script to Helvetica
+  // instead of failing the export.
+  const availableFamilies = new Set<string>();
+  for (const info of Object.values(LOCALE_FONTS)) {
+    if (!info) continue;
+    const buf = loadFontBuffer(info.file);
+    if (!buf) continue;
+    pdf.registerFont(info.family, buf);
+    pdf.registerFont(`${info.family}:bold`, buf);
+    availableFamilies.add(info.family);
   }
-  const selectFont = (weight: "normal" | "bold") => {
-    pdf.font(weight === "bold" ? boldName : regName);
+  const localeFont = LOCALE_FONTS[doc.locale];
+  const selectFont = (weight: "normal" | "bold", sample = "") => {
+    // Script-first: a run containing Bengali/Devanagari/Arabic sets in that
+    // script's font no matter the UI locale (tenant data routinely carries
+    // Bengali names under an English UI). Pure-Latin runs keep the locale
+    // font — the pre-existing rendering, unchanged.
+    const scriptKey = dominantScriptKey(sample);
+    const scriptFont = scriptKey ? LOCALE_FONTS[scriptKey] : undefined;
+    const pick =
+      scriptFont && availableFamilies.has(scriptFont.family)
+        ? scriptFont.family
+        : localeFont && availableFamilies.has(localeFont.family)
+          ? localeFont.family
+          : null;
+    pdf.font(pick ? (weight === "bold" ? `${pick}:bold` : pick) : weight === "bold" ? "Helvetica-Bold" : "Helvetica");
     return pdf;
   };
 
@@ -119,7 +165,7 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
     y: number,
     opts: { size: number; color: string; weight?: "normal" | "bold"; align?: "left" | "right" },
   ) => {
-    selectFont(opts.weight ?? "normal").fontSize(opts.size).fillColor(opts.color);
+    selectFont(opts.weight ?? "normal", str).fontSize(opts.size).fillColor(opts.color);
     pdf.text(str, MARGIN, y, {
       width: contentWidth,
       align: opts.align ?? baseAlign,
@@ -168,9 +214,9 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   if (doc.summary.length > 0) {
     const valueX = MARGIN + 55 * MM;
     for (const entry of doc.summary) {
-      selectFont("normal").fontSize(8.5).fillColor(MUTED);
+      selectFont("normal", entry.label).fontSize(8.5).fillColor(MUTED);
       pdf.text(entry.label, MARGIN, cursorY, { width: 55 * MM, align: baseAlign, lineBreak: false });
-      selectFont("bold").fontSize(8.5).fillColor(DARK);
+      selectFont("bold", entry.value).fontSize(8.5).fillColor(DARK);
       pdf.text(entry.value, valueX, cursorY, { lineBreak: false });
       cursorY += 4.8 * MM;
     }
@@ -203,7 +249,13 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   // set to the content width: shrink proportionally when over, grow columns
   // toward the cap when under (never stretching a capped column further).
   selectFont("normal").fontSize(BODY_FS);
-  const widthOf = (s: string) => pdf.widthOfString(String(s ?? ""));
+  // Measure each string in the font it will be set in — Hind Siliguri and
+  // Helvetica advance widths differ, and measuring Bangla text with the Latin
+  // font squeezes its column.
+  const widthOf = (s: string) => {
+    selectFont("normal", String(s ?? "")).fontSize(BODY_FS);
+    return pdf.widthOfString(String(s ?? ""));
+  };
   const desired = cols.map((c, i) => {
     let w = widthOf(c.label);
     for (const row of doc.rows) w = Math.max(w, widthOf(renderCell(row[c.key], c.type, doc)));
@@ -225,7 +277,7 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   const chunkForWidth = (s: string, i: number, size: number): string => {
     const usable = (widths[i] ?? contentWidth) - PAD_X * 2;
     if (usable <= 4) return s;
-    pdf.fontSize(size);
+    selectFont("normal", String(s ?? "")).fontSize(size);
     const tokens = String(s ?? "").split(" ");
     const out: string[] = [];
     for (const token of tokens) {
@@ -250,10 +302,11 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
 
   const drawTableHeader = (y: number): number => {
     pdf.rect(MARGIN, y, contentWidth, headerHeight).fill(HEADER_BG);
-    selectFont("normal").fontSize(HEAD_FS).fillColor(WHITE);
+    pdf.fillColor(WHITE);
     cols.forEach((c, i) => {
       const x = colX[i] ?? MARGIN;
       const w = widths[i] ?? contentWidth;
+      selectFont("normal", c.label).fontSize(HEAD_FS).fillColor(WHITE);
       const label = chunkForWidth(c.label, i, HEAD_FS);
       pdf.text(label, x + PAD_X, y + PAD_Y, {
         width: w - PAD_X * 2,
@@ -265,12 +318,18 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   };
 
   const startTablePage = (): number => {
+    // addPage WITHOUT size/layout falls back to US-Letter portrait while page
+    // 1 is A4 landscape — the wide table then overflows the narrow page and
+    // every landscape-coordinate rect overshoots. Pin the same size+layout.
     pdf.addPage({
+      size: "A4",
+      layout: landscape ? "landscape" : "portrait",
       margins: { top: 18 * MM, bottom: TABLE_BOTTOM, left: MARGIN, right: MARGIN },
     });
     // Slim running header on continuation pages.
-    selectFont("normal").fontSize(7).fillColor(MUTED);
+    selectFont("normal", doc.letterhead.name).fontSize(7).fillColor(MUTED);
     pdf.text(doc.letterhead.name, MARGIN, 24, { width: contentWidth, align: baseAlign, lineBreak: false });
+    selectFont("normal", doc.title).fontSize(7).fillColor(MUTED);
     pdf.text(doc.title, MARGIN, 24, { width: contentWidth, align: rtl ? "left" : "right", lineBreak: false });
     let y = 18 * MM;
     return drawTableHeader(y);
@@ -286,25 +345,28 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   for (let r = 0; r < bodyRows.length; r += 1) {
     const isTotals = hasTotals && r === bodyRows.length - 1;
     const cells = bodyRows[r] ?? [];
-    selectFont(isTotals ? "bold" : "normal").fontSize(BODY_FS);
+    const weight = isTotals ? "bold" : "normal";
     const wrapped = cells.map((cell, i) => chunkForWidth(cell ?? "", i, BODY_FS));
-    const heights = cols.map((c, i) =>
-      pdf.heightOfString(wrapped[i] ?? "", { width: (widths[i] ?? contentWidth) - PAD_X * 2 }),
-    );
+    // Measure each cell in the font it will be set in (heightOfString uses
+    // the ambient font — select per cell, not once per row).
+    const heights = cols.map((c, i) => {
+      selectFont(weight, wrapped[i] ?? "").fontSize(BODY_FS);
+      return pdf.heightOfString(wrapped[i] ?? "", { width: (widths[i] ?? contentWidth) - PAD_X * 2 });
+    });
     const rowHeight = Math.max(...heights, BODY_FS * 1.3) + PAD_Y * 2;
     if (y + rowHeight > pageHeight - TABLE_BOTTOM) {
       y = startTablePage();
-      selectFont(isTotals ? "bold" : "normal").fontSize(BODY_FS);
     }
     if (isTotals) {
       pdf.rect(MARGIN, y, contentWidth, rowHeight).fill(TOTAL_BG);
     } else if (r % 2 === 1) {
       pdf.rect(MARGIN, y, contentWidth, rowHeight).fill(ZEBRA_BG);
     }
-    selectFont(isTotals ? "bold" : "normal").fontSize(BODY_FS).fillColor(DARK);
+    pdf.fillColor(DARK);
     cols.forEach((c, i) => {
       const x = colX[i] ?? MARGIN;
       const w = widths[i] ?? contentWidth;
+      selectFont(weight, wrapped[i] ?? "").fontSize(BODY_FS).fillColor(DARK);
       pdf.text(wrapped[i] ?? "", x + PAD_X, y + PAD_Y, {
         width: w - PAD_X * 2,
         align: moneyIdx.has(i) ? "right" : baseAlign,
@@ -314,27 +376,41 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   }
 
   // ── Footers (page x/y + confidentiality) ─────────────────────────
+  // The footer zone sits BELOW the page bottom margin, and pdfkit auto-adds
+  // a page whenever a text() starts past maxY — which used to append a blank
+  // page per footer line. Zero the bottom margin while stamping footers so
+  // maxY equals the page height and no page is ever added here.
   const range = pdf.bufferedPageRange();
-  for (let p = range.start; p < range.start + range.count; p += 1) {
+  const pageCount = range.count;
+  for (let p = range.start; p < range.start + pageCount; p += 1) {
     pdf.switchToPage(p);
+    // Geometry from the CURRENT page, never the first-page closure: a past
+    // size mismatch drew the rule line off the edge of continuation pages.
+    const pw = pdf.page.width;
+    const cw = pw - MARGIN * 2;
     const h = pdf.page.height;
     pdf
       .moveTo(MARGIN, h - 9 * MM)
-      .lineTo(pageWidth - MARGIN, h - 9 * MM)
+      .lineTo(pw - MARGIN, h - 9 * MM)
       .lineWidth(0.2)
       .strokeColor(RULE)
       .stroke();
-    selectFont("normal").fontSize(6.5).fillColor(MUTED);
+    const savedBottom = pdf.page.margins.bottom;
+    pdf.page.margins.bottom = 0;
+    const pageLabel = `${doc.generatedAt}  |  ${p - range.start + 1} / ${pageCount}`;
+    selectFont("normal", doc.footerNote).fontSize(6.5).fillColor(MUTED);
     pdf.text(doc.footerNote, MARGIN, h - 5.5 * MM - 1.5, {
-      width: contentWidth * 0.7,
+      width: cw * 0.7,
       align: "left",
       lineBreak: false,
     });
-    pdf.text(`${doc.generatedAt}  |  ${p + 1} / ${range.count}`, MARGIN + contentWidth * 0.3, h - 5.5 * MM - 1.5, {
-      width: contentWidth * 0.7,
+    selectFont("normal", pageLabel).fontSize(6.5).fillColor(MUTED);
+    pdf.text(pageLabel, MARGIN + cw * 0.3, h - 5.5 * MM - 1.5, {
+      width: cw * 0.7,
       align: "right",
       lineBreak: false,
     });
+    pdf.page.margins.bottom = savedBottom;
   }
 
   pdf.end();

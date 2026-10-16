@@ -31,7 +31,13 @@ import {
   ERPColumn,
   StatusTone,
 } from "@/components/ui";
-import { formatMoney, formatDate } from "@/lib/formatters";
+import { formatMoney, formatDateOnly } from "@/lib/formatters";
+import {
+  intlLocaleFor,
+  projectHealthLabel,
+  projectSectorLabel,
+  projectStatusLabel,
+} from "./project-labels";
 import { useLocale } from "@/lib/i18n";
 import { usePermissions } from "@/lib/use-permissions";
 import { apiClient } from "@/lib/api-client";
@@ -69,7 +75,8 @@ export function ProjectDetailView({
   onOpenEdit,
   onOpenDistributeReturns,
 }: ProjectDetailViewProps) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
   const { can } = usePermissions();
   const canWrite = can("PROJECT_MANAGEMENT", "WRITE");
 
@@ -157,7 +164,7 @@ export function ProjectDetailView({
       align: "right",
       render: (m) => (
         <span className="font-mono text-xs text-muted-foreground">
-          {formatMoney(m.tenantShareValue || tenantShareValue)}
+          {fm(m.tenantShareValue || tenantShareValue)}
         </span>
       ),
     },
@@ -170,7 +177,7 @@ export function ProjectDetailView({
         const capital = m.totalInvested !== undefined ? m.totalInvested : (m.sharesInvested || 0) * tenantShareValue;
         return (
           <span className="font-mono text-xs font-semibold text-foreground">
-            {formatMoney(capital)}
+            {fm(capital)}
           </span>
         );
       },
@@ -204,7 +211,7 @@ export function ProjectDetailView({
       sortable: true,
       render: (u) => (
         <span className="text-xs font-mono text-muted-foreground">
-          {formatDate(u.date, true)}
+          {formatDateOnly(u.date)}
         </span>
       ),
     },
@@ -242,7 +249,7 @@ export function ProjectDetailView({
           }`}
         >
           {u.type === "Earning" ? "+" : "-"}
-          {formatMoney(u.amount)}
+          {fm(u.amount)}
         </span>
       ),
     },
@@ -261,7 +268,7 @@ export function ProjectDetailView({
       align: "right",
       render: (u) => (
         <span className="font-mono text-xs text-muted-foreground">
-          {u.balanceAfter !== undefined ? formatMoney(u.balanceAfter) : "-"}
+          {u.balanceAfter !== undefined ? fm(u.balanceAfter) : "-"}
         </span>
       ),
     },
@@ -275,7 +282,7 @@ export function ProjectDetailView({
       sortable: true,
       render: (tx) => (
         <span className="text-xs font-mono text-muted-foreground">
-          {formatDate(tx.date, true)}
+          {formatDateOnly(tx.date)}
         </span>
       ),
     },
@@ -337,7 +344,7 @@ export function ProjectDetailView({
             }`}
           >
             {isPositive ? "+" : "-"}
-            {formatMoney(tx.amount)}
+            {fm(tx.amount)}
           </span>
         );
       },
@@ -373,15 +380,17 @@ export function ProjectDetailView({
             </Button>
           )}
 
-          {canWrite && onOpenEdit && (
+          {/* Settled & locked projects are immutable records: no edit, no
+              postings. Distribute Returns stays — its modal shows the lock. */}
+          {canWrite && onOpenEdit && !project.isLocked && (
             <Button variant="outline" size="sm" onClick={onOpenEdit} icon={Pencil}>
               {t("common.edit", { defaultValue: "Edit" })}
             </Button>
           )}
 
-          {canWrite && (
+          {canWrite && !project.isLocked && (
             <Button variant="primary" size="sm" onClick={onOpenAddUpdate} icon={Plus}>
-              {t("projects.addUpdate", { defaultValue: "Post Disbursement / Earning" })}
+              {t("projects.addUpdate", { defaultValue: "Post Spending / Earning" })}
             </Button>
           )}
         </div>
@@ -393,12 +402,12 @@ export function ProjectDetailView({
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                {project.category}
+                {projectSectorLabel(t, project.category)}
               </span>
-              <StatusBadge tone={mapStatusTone(project.status)} label={project.status} />
+              <StatusBadge tone={mapStatusTone(project.status)} label={projectStatusLabel(t, project.status)} />
               <StatusBadge
                 tone={project.health === "Stable" ? "emerald" : "amber"}
-                label={project.health || "Stable"}
+                label={projectHealthLabel(t, project.health)}
               />
               {project.linkedFundName && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300">
@@ -420,8 +429,8 @@ export function ProjectDetailView({
             <div className="flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
               <span>
-                {formatDate(project.startDate)}
-                {project.completionDate && ` → ${formatDate(project.completionDate)}`}
+                {formatDateOnly(project.startDate)}
+                {project.completionDate && ` → ${formatDateOnly(project.completionDate)}`}
               </span>
             </div>
             {project.projectFundHandler && (
@@ -444,7 +453,7 @@ export function ProjectDetailView({
               {t("projects.budgetUtilization", { defaultValue: "Budget Utilization" })}
             </span>
             <span className="font-mono text-muted-foreground">
-              {budgetUsedPercent}% ({formatMoney(project.totalExpenses || 0)} of {formatMoney(project.budget)})
+              {budgetUsedPercent}% ({fm(project.totalExpenses || 0)} of {fm(project.budget)})
             </span>
           </div>
           <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
@@ -514,25 +523,25 @@ export function ProjectDetailView({
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <ERPMetricCard
               label={t("projects.columns.budget", { defaultValue: "Total Budget" })}
-              value={formatMoney(project.budget)}
+              value={fm(project.budget)}
               icon={DollarSign}
               tone="slate"
             />
             <ERPMetricCard
               label={t("projects.columns.balance", { defaultValue: "Available Balance" })}
-              value={formatMoney(project.currentFundBalance)}
+              value={fm(project.currentFundBalance)}
               icon={TrendingUp}
               tone="emerald"
             />
             <ERPMetricCard
               label={t("projects.columns.earnings", { defaultValue: "Total Earnings" })}
-              value={formatMoney(project.totalEarnings)}
+              value={fm(project.totalEarnings)}
               icon={Activity}
               tone="cyan"
             />
             <ERPMetricCard
               label={t("projects.columns.expenses", { defaultValue: "Total Expenses" })}
-              value={formatMoney(project.totalExpenses)}
+              value={fm(project.totalExpenses)}
               icon={DollarSign}
               tone="rose"
             />
@@ -544,7 +553,7 @@ export function ProjectDetailView({
             />
             <ERPMetricCard
               label={t("projects.shareholders.capital", { defaultValue: "Capitalized Equity" })}
-              value={formatMoney(totalCapitalContributed)}
+              value={fm(totalCapitalContributed)}
               icon={Users}
               tone="emerald"
             />
@@ -559,27 +568,16 @@ export function ProjectDetailView({
                 </h2>
                 <p className="text-[11px] text-muted-foreground">
                   {t("projects.shareholders.tenantShareValue", {
-                    value: formatMoney(tenantShareValue),
-                    defaultValue: `Valuation: ${formatMoney(tenantShareValue)} per unit share`,
+                    value: fm(tenantShareValue),
+                    defaultValue: `Valuation: ${fm(tenantShareValue)} per unit share`,
                   })}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                {canWrite && onOpenDistributeReturns && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onOpenDistributeReturns}
-                    icon={TrendingUp}
-                  >
-                    {t("projects.shareholders.distributeReturns", { defaultValue: "Distribute Returns" })}
-                  </Button>
-                )}
-                <span className="text-xs text-muted-foreground font-mono">
-                  {shareholders.length} {t("common.members", { defaultValue: "shareholders" })}
-                </span>
-              </div>
+              {/* Count only — Distribute Returns lives once in the top action header. */}
+              <span className="text-xs text-muted-foreground font-mono">
+                {shareholders.length} {t("common.members", { defaultValue: "shareholders" })}
+              </span>
             </div>
 
             <ERPDataTable
@@ -606,7 +604,7 @@ export function ProjectDetailView({
                 {t("projects.cumulativeRevenue", { defaultValue: "Cumulative Earnings" })}
               </span>
               <span className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                +{formatMoney(project.totalEarnings || 0)}
+                +{fm(project.totalEarnings || 0)}
               </span>
             </div>
 
@@ -615,7 +613,7 @@ export function ProjectDetailView({
                 {t("projects.operatingOverhead", { defaultValue: "Cumulative Expenses" })}
               </span>
               <span className="text-lg font-bold font-mono text-rose-600 dark:text-rose-400">
-                -{formatMoney(project.totalExpenses || 0)}
+                -{fm(project.totalExpenses || 0)}
               </span>
             </div>
 
@@ -631,28 +629,23 @@ export function ProjectDetailView({
                 }`}
               >
                 {netOperationalMargin >= 0 ? "+" : ""}
-                {formatMoney(netOperationalMargin)}
+                {fm(netOperationalMargin)}
               </span>
             </div>
           </div>
 
-          {/* Disbursements & Earnings History Table */}
+          {/* Disbursements & Earnings History Table — the Post action lives once
+              in the top action header. */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-                  {t("projects.disbursementsLedger", { defaultValue: "Disbursements & Earnings History" })}
+                  {t("projects.disbursementsLedger", { defaultValue: "Spending & Earnings History" })}
                 </h2>
                 <p className="text-[11px] text-muted-foreground">
                   {t("projects.auditTrailDesc", { defaultValue: "All income and expense entries for this project" })}
                 </p>
               </div>
-
-              {canWrite && (
-                <Button variant="primary" size="sm" onClick={onOpenAddUpdate} icon={Plus}>
-                  {t("projects.addUpdate", { defaultValue: "Post Disbursement / Earning" })}
-                </Button>
-              )}
             </div>
 
             <ERPDataTable
@@ -663,7 +656,7 @@ export function ProjectDetailView({
               totalCount={updates.length}
               onPageChange={setUpdatesPage}
               onPageSizeChange={setUpdatesPageSize}
-              emptyMessage={t("projects.noUpdatesRecorded", { defaultValue: "No disbursement or earning records for this project." })}
+              emptyMessage={t("projects.noUpdatesRecorded", { defaultValue: "No spending or earning records for this project." })}
             />
           </div>
         </div>
@@ -675,10 +668,10 @@ export function ProjectDetailView({
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-                {t("projects.timeline.title", { defaultValue: "Project Lifecycle & Financial Timeline" })}
+                {t("projects.timelineTitle", { defaultValue: "Project Lifecycle & Financial Timeline" })}
               </h2>
               <p className="text-[11px] text-muted-foreground">
-                {t("projects.timeline.totalEvents", { count: transactionsData.length, defaultValue: `${transactionsData.length} ledger events recorded` })}
+                {t("projects.timelineTotalEvents", { count: transactionsData.length, defaultValue: "{count} ledger events recorded" })}
               </p>
             </div>
           </div>
@@ -691,7 +684,7 @@ export function ProjectDetailView({
             totalCount={transactionsData.length}
             onPageChange={setTimelinePage}
             onPageSizeChange={setTimelinePageSize}
-            emptyMessage={t("projects.timeline.empty", { defaultValue: "No transactions or ledger events recorded for this project yet." })}
+            emptyMessage={t("projects.timelineEmpty", { defaultValue: "No transactions or ledger events recorded for this project yet." })}
           />
         </div>
       )}

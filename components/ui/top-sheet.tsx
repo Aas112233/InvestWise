@@ -129,7 +129,7 @@ export function TopSheet({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "relative z-[101] w-full flex flex-col max-h-[92vh] bg-card text-card-foreground rounded-b-2xl border-b border-x border-border/80 shadow-2xl animate-in slide-in-from-top-4 duration-200 overflow-hidden my-0",
+          "relative z-[101] w-full flex flex-col max-h-[92vh] bg-card text-card-foreground rounded-b-2xl border-b border-x border-border/80 dark:border-white/10 shadow-2xl animate-in slide-in-from-top-4 duration-200 overflow-hidden my-0",
           wide ? "max-w-5xl" : (maxWidth ? maxWidthClasses[maxWidth] : "max-w-4xl"),
           className,
         )}

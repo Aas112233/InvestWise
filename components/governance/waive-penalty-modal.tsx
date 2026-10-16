@@ -6,6 +6,13 @@ import { MemberPenalty } from "@/types";
 import { useLocale } from "@/lib/i18n";
 import { formatMoney } from "@/lib/formatters";
 
+/** Stored enum -> message key. Unknown values fall back to the raw enum. */
+const PENALTY_TYPE_KEYS: Record<string, string> = {
+  VERBAL_WARNING: "governance.penaltyTypes.verbalWarning",
+  FUND_DEDUCTION: "governance.penaltyTypes.fundDeduction",
+  SUSPENSION: "governance.penaltyTypes.suspension",
+};
+
 interface WaivePenaltyModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -40,7 +47,7 @@ export function WaivePenaltyModal({
       await onWaive(penalty.id, waiveReason.trim());
       onClose();
     } catch (err: any) {
-      setErrorMessage(err?.message || "Failed to waive penalty.");
+      setErrorMessage(err?.message || t("common.errors.failedToWaivePenalty", { defaultValue: "Failed to waive penalty" }));
     } finally {
       setIsSubmitting(false);
     }
@@ -61,14 +68,20 @@ export function WaivePenaltyModal({
         )}
 
         {/* Penalty Summary Card */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs space-y-2">
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-input rounded-lg text-xs space-y-2">
           <div className="flex justify-between">
             <span className="text-slate-500 dark:text-slate-400">{t("governance.columns.member", { defaultValue: "Member:" })}</span>
             <span className="font-semibold text-slate-800 dark:text-slate-200">{penalty.memberName}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-slate-500 dark:text-slate-400">{t("governance.columns.tier", { defaultValue: "Tier:" })}</span>
-            <span className="font-mono font-medium text-slate-800 dark:text-slate-200">Tier {penalty.tier} • {penalty.type}</span>
+            <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
+              {t("governance.tierLabel", { tier: penalty.tier, defaultValue: "Tier {tier}" })} •{" "}
+              {(() => {
+                const key = PENALTY_TYPE_KEYS[penalty.type ?? ""];
+                return key ? t(key) : (penalty.type ?? "").replace(/_/g, " ");
+              })()}
+            </span>
           </div>
           {Number(penalty.calculatedDeduction || penalty.deductionAmount || 0) > 0 && (
             <div className="flex justify-between">
@@ -78,7 +91,7 @@ export function WaivePenaltyModal({
               </span>
             </div>
           )}
-          <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+          <div className="pt-2 border-t border-slate-200 dark:border-input">
             <span className="text-slate-500 dark:text-slate-400 block mb-0.5">{t("governance.originalReason", { defaultValue: "Original Violation:" })}</span>
             <span className="text-slate-700 dark:text-slate-300 italic">{penalty.reason}</span>
           </div>
@@ -91,12 +104,12 @@ export function WaivePenaltyModal({
               placeholder={t("governance.waiveReasonPlaceholder", { defaultValue: "Explain why this penalty is being waived (e.g., Medical exemption verified, Board unanimous resolution)..." })}
               value={waiveReason}
               onChange={(e) => setWaiveReason(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
+              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-input rounded-md focus:outline-none focus:ring-1 focus:ring-slate-400"
             />
           </ERPFormField>
         </ERPFormSection>
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-border">
           <Button variant="ghost" size="sm" type="button" onClick={onClose} disabled={isSubmitting}>
             {t("common.cancel", { defaultValue: "Cancel" })}
           </Button>

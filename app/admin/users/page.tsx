@@ -22,6 +22,7 @@ import { AppDropdown } from "@/components/ui/app-dropdown";
 import { TopSheet } from "@/components/ui/top-sheet";
 import { ERPFormField, ERPFormGrid, ERPFormSection } from "@/components/ui/erp-form-layout";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { formatDate } from "@/lib/formatters";
 import { Button, Input } from "@/components/ui";
 
 interface AdminUserRow {
@@ -57,7 +58,7 @@ function statusTone(status: string): "emerald" | "amber" | "rose" | "slate" {
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+  return Number.isNaN(d.getTime()) ? "—" : formatDate(d);
 }
 
 export default function AdminUsersPage() {

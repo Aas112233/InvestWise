@@ -38,9 +38,11 @@ import {
 } from "recharts";
 import { ERPMetricCard, AppDropdown, Button, DropdownOption, CardGridSkeleton } from "@/components/ui";
 import { AnalysisData, Member } from "@/types";
-import { formatMoney } from "@/lib/formatters";
+import { formatMoney, intlLocaleFor } from "@/lib/formatters";
+import { projectSectorLabel } from "@/components/projects/project-labels";
 import { useLocale } from "@/lib/i18n";
-import { fiscalMonthSequence, fiscalStartYearForDate, resolveFiscalBounds } from "@/lib/fiscal-periods";
+import { fiscalMonthSequence, resolveFiscalBounds } from "@/lib/fiscal-periods";
+import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
 import { cn } from "@/lib/utils";
 
 interface AnalysisViewProps {
@@ -86,9 +88,9 @@ export function AnalysisView({
   onRefresh,
 }: AnalysisViewProps) {
   const { t, locale } = useLocale();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
   const [activeTab, setActiveTab] = useState<"overview" | "regularity" | "leaderboard">("overview");
 
-  const currentFiscalStartYear = fiscalStartYearForDate(new Date(), fiscalStartMonth);
   const fiscalYearLabel = resolveFiscalBounds(selectedYear, fiscalStartMonth, fiscalEndMonth).label;
   const fiscalYearDisplay = `${t("layout.fiscalYearAbbrev", { defaultValue: "FY" })} ${fiscalYearLabel}`;
   const fiscalMonths = useMemo(() => fiscalMonthSequence(fiscalStartMonth), [fiscalStartMonth]);
@@ -96,13 +98,9 @@ export function AnalysisView({
     () => new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" }),
     [locale],
   );
-  const yearOptions: DropdownOption[] = useMemo(() => {
-    return [currentFiscalStartYear, currentFiscalStartYear - 1, currentFiscalStartYear - 2, currentFiscalStartYear - 3]
-      .map((year) => ({
-        value: String(year),
-        label: `${t("layout.fiscalYearAbbrev", { defaultValue: "FY" })} ${resolveFiscalBounds(year, fiscalStartMonth, fiscalEndMonth).label}`,
-      }));
-  }, [currentFiscalStartYear, fiscalStartMonth, fiscalEndMonth, t]);
+  // Every created fiscal year, marked (Open)/(Closed) — reporting covers closed
+  // history, so this list is not narrowed to the postable one.
+  const { yearOptionsIncluding, currentFiscalYear } = useFiscalPeriodOptions();
   const chartMonthlyTrends = useMemo(
     () => data?.monthlyTrends.map((trend, offset) => {
       const month = fiscalMonths[offset];
@@ -112,8 +110,52 @@ export function AnalysisView({
     [data?.monthlyTrends, fiscalMonths, monthFormatter],
   );
 
+  // Deposit-month columns: each fiscal slot maps to the calendar YYYY-MM the
+  // money belongs to (selectedYear is the fiscal START year, so months before
+  // the start month fall in selectedYear + 1). Headers and tooltips name that
+  // month, so a January contribution keyed in October still reads January.
+  const regularityColumns = useMemo(() => {
+    const startCalIndex = fiscalMonths[0]?.index ?? 0;
+    return fiscalMonths.map((m) => {
+      const calYear = m.index >= startCalIndex ? selectedYear : selectedYear + 1;
+      return {
+        ...m,
+        calYear,
+        depositMonth: `${calYear}-${String(m.index + 1).padStart(2, "0")}`,
+        short: monthFormatter.format(new Date(Date.UTC(2020, m.index, 1))),
+      };
+    });
+  }, [fiscalMonths, selectedYear, monthFormatter]);
+
+  // Per-month paid/evaluated counts across the roster — the footer's totals row.
+  const regularityTotals = useMemo(() => {
+    const rows = data?.paymentMatrix ?? [];
+    return regularityColumns.map((col) => {
+      let paid = 0;
+      let evaluated = 0;
+      for (const r of rows) {
+        const s = r.months[col.key];
+        if (s === "PAID") {
+          paid += 1;
+          evaluated += 1;
+        } else if (s === "MISSED") {
+          evaluated += 1;
+        }
+      }
+      return { paid, evaluated, rate: evaluated > 0 ? Math.round((paid / evaluated) * 100) : null };
+    });
+  }, [data?.paymentMatrix, regularityColumns]);
+
+  const regularityOverall = useMemo(() => {
+    const paid = regularityTotals.reduce((sum, c) => sum + c.paid, 0);
+    const evaluated = regularityTotals.reduce((sum, c) => sum + c.evaluated, 0);
+    return { paid, evaluated, rate: evaluated > 0 ? Math.round((paid / evaluated) * 100) : null };
+  }, [regularityTotals]);
+
   const memberOptions: DropdownOption[] = useMemo(() => {
-    const list: DropdownOption[] = [{ value: "all", label: "All Shareholders (Consolidated)" }];
+    const list: DropdownOption[] = [
+      { value: "all", label: t("analysis.allShareholders", { defaultValue: "All Shareholders (Consolidated)" }) },
+    ];
     members.forEach((m) => {
       list.push({
         value: m.id,
@@ -121,7 +163,7 @@ export function AnalysisView({
       });
     });
     return list;
-  }, [members]);
+  }, [members, t]);
 
   const metrics = data?.metrics;
 
@@ -132,9 +174,9 @@ export function AnalysisView({
         <div className="flex flex-wrap items-center gap-2">
           <div className="w-44">
             <AppDropdown
-              options={yearOptions}
+              options={yearOptionsIncluding(String(selectedYear))}
               value={String(selectedYear)}
-              onChange={(val) => onYearChange(parseInt(val || String(currentFiscalStartYear), 10))}
+              onChange={(val) => onYearChange(parseInt(val || currentFiscalYear, 10))}
               placeholder={t("fiscal.actions.selectYear")}
             />
           </div>
@@ -144,7 +186,7 @@ export function AnalysisView({
               options={memberOptions}
               value={selectedMemberId}
               onChange={(val) => onMemberChange(val || "all")}
-              placeholder="Filter by Shareholder"
+              placeholder={t("analysis.filterByShareholder", { defaultValue: "Filter by Shareholder" })}
             />
           </div>
 
@@ -155,7 +197,7 @@ export function AnalysisView({
             disabled={isLoading}
             icon={RefreshCw}
           >
-            Refresh
+            {t("analysis.refresh", { defaultValue: "Refresh" })}
           </Button>
         </div>
       </div>
@@ -167,7 +209,7 @@ export function AnalysisView({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <ERPMetricCard
             label={t("analysis.totalCapitalInvested")}
-            value={formatMoney(metrics?.totalInvested ?? 0)}
+            value={fm(metrics?.totalInvested ?? 0)}
             icon={Wallet}
             tone="slate"
             helperText={t("analysis.capitalInvestedHelper", {
@@ -176,7 +218,7 @@ export function AnalysisView({
           />
           <ERPMetricCard
             label={t("analysis.consolidatedPortfolioValue")}
-            value={formatMoney(metrics?.totalAssetValue ?? 0)}
+            value={fm(metrics?.totalAssetValue ?? 0)}
             icon={Landmark}
             tone="emerald"
             helperText={t("analysis.consolidatedPortfolioHelper", {
@@ -185,7 +227,7 @@ export function AnalysisView({
           />
           <ERPMetricCard
             label={t("analysis.portfolioNetReturn")}
-            value={formatMoney(metrics?.netProfit ?? 0)}
+            value={fm(metrics?.netProfit ?? 0)}
             icon={TrendingUp}
             tone={(metrics?.netProfit ?? 0) >= 0 ? "emerald" : "rose"}
             helperText={t("analysis.realizedReturn", { value: metrics?.roi ?? 0 })}
@@ -209,7 +251,7 @@ export function AnalysisView({
       )}
 
       {/* Navigation Tabs */}
-      <div className="border-b border-slate-200 dark:border-slate-800">
+      <div className="border-b border-slate-200 dark:border-border">
         <div className="flex items-center gap-6">
           <button
             type="button"
@@ -222,7 +264,7 @@ export function AnalysisView({
             )}
           >
             <BarChart3 className="w-4 h-4" />
-            Cash Flow & Sector Allocation
+            {t("analysis.tabOverview", { defaultValue: "Cash Flow & Sector Allocation" })}
           </button>
           <button
             type="button"
@@ -235,7 +277,7 @@ export function AnalysisView({
             )}
           >
             <Clock className="w-4 h-4" />
-            Shareholder Regularity Index
+            {t("analysis.tabRegularity", { defaultValue: "Shareholder Regularity Index" })}
           </button>
           <button
             type="button"
@@ -248,7 +290,7 @@ export function AnalysisView({
             )}
           >
             <Award className="w-4 h-4" />
-            Equity & Contribution Leaderboard
+            {t("analysis.tabLeaderboard", { defaultValue: "Equity & Contribution Leaderboard" })}
           </button>
         </div>
       </div>
@@ -263,10 +305,12 @@ export function AnalysisView({
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                      Monthly Cash Flow Dynamics ({fiscalYearDisplay})
+                      {t("analysis.monthlyCashFlowTitle", { defaultValue: "Monthly Cash Flow Dynamics ({fy})", fy: fiscalYearDisplay })}
                     </h2>
                     <p className="text-xs text-muted-foreground">
-                      Comparison of monthly deposits & earnings (Inflow) versus expenses & dividends (Outflow)
+                      {t("analysis.monthlyCashFlowDesc", {
+                        defaultValue: "Comparison of monthly deposits & earnings (Inflow) versus expenses & dividends (Outflow)",
+                      })}
                     </p>
                   </div>
                 </div>
@@ -311,12 +355,12 @@ export function AnalysisView({
                             fontSize: "12px",
                             color: "#f8fafc",
                           }}
-                          formatter={(value: any) => [formatMoney(Number(value) || 0), ""]}
+                          formatter={(value: any) => [fm(Number(value) || 0), " "]}
                         />
                         <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "12px" }} />
                         <Area
                           type="monotone"
-                          name="Inflow (Deposits)"
+                          name={t("analysis.chartInflow", { defaultValue: "Inflow (Deposits)" })}
                           dataKey="inflow"
                           stroke="#10B981"
                           strokeWidth={2}
@@ -325,7 +369,7 @@ export function AnalysisView({
                         />
                         <Area
                           type="monotone"
-                          name="Outflow (Expenses/Dividends)"
+                          name={t("analysis.chartOutflow", { defaultValue: "Outflow (Expenses/Dividends)" })}
                           dataKey="outflow"
                           stroke="#EF4444"
                           strokeWidth={2}
@@ -335,20 +379,24 @@ export function AnalysisView({
                       </AreaChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                      No transaction records registered for {fiscalYearDisplay}
-                    </div>
+                      <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                        {t("analysis.noTransactionsForYear", { defaultValue: "No transaction records registered for {fy}", fy: fiscalYearDisplay })}
+                      </div>
                   )}
                 </div>
               </div>
 
               {/* Monthly Net Summary Pills */}
-              <div className="grid grid-cols-6 gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                {data?.monthlyTrends.slice(0, 6).map((item) => (
+              <div className="grid grid-cols-6 gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-border">
+                {data?.monthlyTrends.slice(0, 6).map((item, index) => (
                   <div key={item.month} className="text-center p-1.5 rounded bg-slate-50 dark:bg-slate-800/50">
-                    <span className="text-[10px] font-semibold text-slate-500 uppercase">{item.month}</span>
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase">
+                      {fiscalMonths[index]
+                        ? monthFormatter.format(new Date(Date.UTC(2020, fiscalMonths[index].index, 1)))
+                        : item.month}
+                    </span>
                     <p className={cn("text-xs font-bold mt-0.5", item.net >= 0 ? "text-emerald-600" : "text-rose-600")}>
-                      {item.net >= 0 ? `+${formatMoney(item.net)}` : formatMoney(item.net)}
+                      {item.net >= 0 ? `+${fm(item.net)}` : fm(item.net)}
                     </p>
                   </div>
                 ))}
@@ -401,20 +449,20 @@ export function AnalysisView({
                             fontSize: "12px",
                             color: "#f8fafc",
                           }}
-                          formatter={(value: any) => [formatMoney(Number(value) || 0), "Capital"]}
+                          formatter={(value: any) => [fm(Number(value) || 0), t("analysis.capital", { defaultValue: "Capital" })]}
                         />
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                      No project capital deployed yet
-                    </div>
+                      <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                        {t("analysis.noCapitalDeployed", { defaultValue: "No project capital deployed yet" })}
+                      </div>
                   )}
                 </div>
               </div>
 
               {/* Sector Breakdown Legend */}
-              <div className="space-y-1.5 pt-3 border-t border-slate-100 dark:border-slate-800 max-h-36 overflow-y-auto">
+              <div className="space-y-1.5 pt-3 border-t border-slate-100 dark:border-border max-h-36 overflow-y-auto">
                 {data?.sectorAllocations.map((item, index) => (
                   <div key={item.name} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
@@ -422,14 +470,14 @@ export function AnalysisView({
                         className="w-2.5 h-2.5 rounded-full shrink-0"
                         style={{ backgroundColor: SECTOR_COLORS[index % SECTOR_COLORS.length] }}
                       />
-                      <span className="text-slate-600 dark:text-slate-300 truncate max-w-[130px]" title={item.name}>
-                        {item.name}
+                      <span className="text-slate-600 dark:text-slate-300 truncate max-w-[130px]" title={projectSectorLabel(t, item.name)}>
+                        {projectSectorLabel(t, item.name)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 font-mono">
                       <span className="text-slate-400 text-[11px]">{item.percentage}%</span>
                       <span className="font-semibold text-slate-700 dark:text-slate-200">
-                        {formatMoney(item.value)}
+                        {fm(item.value)}
                       </span>
                     </div>
                   </div>
@@ -441,10 +489,12 @@ export function AnalysisView({
           {/* Project Health & Risk Distribution */}
           <div className="bg-card p-5 rounded-xl border border-border/80 shadow-sm">
             <h2 className="text-sm font-bold uppercase tracking-wider text-foreground mb-1">
-              Project Portfolio Health Matrix
+              {t("analysis.healthMatrixTitle", { defaultValue: "Project Portfolio Health Matrix" })}
             </h2>
             <p className="text-xs text-muted-foreground mb-4">
-              Real-time operational status and capital exposure by project health tier
+              {t("analysis.healthMatrixDesc", {
+                defaultValue: "Real-time operational status and capital exposure by project health tier",
+              })}
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -454,22 +504,28 @@ export function AnalysisView({
                 );
                 const count = item?.count ?? 0;
                 const value = item?.value ?? 0;
-                const toneClass = HEALTH_COLORS[tier] || HEALTH_COLORS.Stable;
+                 const toneClass = HEALTH_COLORS[tier] || HEALTH_COLORS.Stable;
+                 const tierLabel =
+                   tier === "Stable"
+                     ? t("analysis.health.stable", { defaultValue: "Stable" })
+                     : tier === "At Risk"
+                       ? t("analysis.health.atRisk", { defaultValue: "At Risk" })
+                       : t("analysis.health.critical", { defaultValue: "Critical" });
 
-                return (
+                 return (
                   <div
                     key={tier}
                     className={cn("p-4 rounded-lg border flex items-center justify-between", toneClass)}
                   >
                     <div>
-                      <span className="text-xs font-semibold uppercase tracking-wider block opacity-80">
-                        {tier} Projects
-                      </span>
+                        <span className="text-xs font-semibold uppercase tracking-wider block opacity-80">
+                          {t("analysis.tierProjects", { defaultValue: "{tier} Projects", tier: tierLabel })}
+                        </span>
                       <span className="text-xl font-bold mt-1 block">{count}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-[11px] opacity-75 block">Capital Exposure</span>
-                      <span className="text-xs font-mono font-bold mt-0.5 block">{formatMoney(value)}</span>
+                        <span className="text-[11px] opacity-75 block">{t("analysis.capitalExposure", { defaultValue: "Capital Exposure" })}</span>
+                      <span className="text-xs font-mono font-bold mt-0.5 block">{fm(value)}</span>
                     </div>
                   </div>
                 );
@@ -485,40 +541,52 @@ export function AnalysisView({
           <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                Shareholder Regularity & Punctuality Matrix ({fiscalYearDisplay})
+                {t("analysis.regularityMatrixTitle", { defaultValue: "Shareholder Regularity & Punctuality Matrix ({fy})", fy: fiscalYearDisplay })}
               </h2>
               <p className="text-xs text-muted-foreground">
-                12-month payment verification across shareholders to monitor commitment and discipline
+                {t("analysis.regularityMatrixDesc", {
+                  defaultValue: "12-month payment verification by deposit month — each cell reflects the month the deposit was made for, not the date it was entered",
+                })}
               </p>
             </div>
 
             <div className="flex items-center gap-3 text-xs font-semibold">
               <span className="flex items-center gap-1.5 text-emerald-600">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Paid On-Time
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> {t("analysis.paidOnTime", { defaultValue: "Paid On-Time" })}
               </span>
               <span className="flex items-center gap-1.5 text-rose-600">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Missed / Arrears
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> {t("analysis.missedArrears", { defaultValue: "Missed / Arrears" })}
               </span>
               <span className="flex items-center gap-1.5 text-slate-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-700" /> Pending
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-700" /> {t("analysis.pending", { defaultValue: "Pending" })}
               </span>
             </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left border-collapse">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-slate-800">
+              <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-border">
                 <tr>
-                  <th className="py-3 px-4">Shareholder</th>
-                  {fiscalMonths.map((month) => (
-                    <th key={month.key} className="py-3 px-2 text-center">
-                      {monthFormatter.format(new Date(Date.UTC(2020, month.index, 1)))}
+                  <th className="py-3 px-4">{t("analysis.shareholder", { defaultValue: "Shareholder" })}</th>
+                  {regularityColumns.map((col) => (
+                    <th
+                      key={col.key}
+                      className="py-3 px-2 text-center"
+                      title={t("analysis.depositMonthTitle", {
+                        depositMonth: col.depositMonth,
+                        defaultValue: "Deposits made for {depositMonth}",
+                      })}
+                    >
+                      <span className="block">{col.short}</span>
+                      <span className="block text-[10px] font-mono font-normal opacity-70">
+                        {String(col.calYear).slice(2)}
+                      </span>
                     </th>
                   ))}
-                  <th className="py-3 px-4 text-right">Punctuality</th>
+                  <th className="py-3 px-4 text-right">{t("analysis.punctuality", { defaultValue: "Punctuality" })}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-slate-100 dark:divide-border">
                 {data && data.paymentMatrix.length > 0 ? (
                   data.paymentMatrix.map((item) => (
                     <tr
@@ -530,22 +598,26 @@ export function AnalysisView({
                         <div className="text-[11px] font-mono text-slate-400">{item.memberId}</div>
                       </td>
 
-                      {fiscalMonths.map((month) => {
-                        const status = item.months[month.key];
+                      {regularityColumns.map((col) => {
+                        const status = item.months[col.key];
                         let badgeClass = "bg-slate-100 text-slate-400 dark:bg-slate-800";
                         let text = "—";
+                        let title = `${t("analysis.pending", { defaultValue: "Pending" })} · ${col.depositMonth}`;
 
                         if (status === "PAID") {
                           badgeClass = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold";
                           text = "OK";
+                          title = `${t("analysis.paidOnTime", { defaultValue: "Paid On-Time" })} · ${t("analysis.depositMonthTitle", { depositMonth: col.depositMonth, defaultValue: "Deposits made for {depositMonth}" })}`;
                         } else if (status === "MISSED") {
                           badgeClass = "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 font-bold";
                           text = "X";
+                          title = `${t("analysis.missedArrears", { defaultValue: "Missed / Arrears" })} · ${col.depositMonth}`;
                         }
 
                         return (
-                          <td key={month.key} className="py-3 px-2 text-center">
+                          <td key={col.key} className="py-3 px-2 text-center">
                             <span
+                              title={title}
                               className={cn(
                                 "inline-block w-6 h-6 leading-6 text-[10px] rounded text-center font-mono",
                                 badgeClass,
@@ -577,12 +649,52 @@ export function AnalysisView({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={14} className="py-8 text-center text-slate-400">
-                      No shareholder records found
-                    </td>
+                      <td colSpan={regularityColumns.length + 2} className="py-8 text-center text-slate-400">
+                        {t("analysis.noShareholderRecords", { defaultValue: "No shareholder records found" })}
+                      </td>
                   </tr>
                 )}
               </tbody>
+              {data && data.paymentMatrix.length > 0 && (
+                <tfoot className="border-t border-slate-200 dark:border-border bg-slate-50/70 dark:bg-slate-800/40">
+                  <tr>
+                    <td className="py-2.5 px-4 font-semibold uppercase tracking-wider text-[11px] text-slate-500">
+                      {t("analysis.paidOnTime", { defaultValue: "Paid On-Time" })}
+                    </td>
+                    {regularityTotals.map((col, i) => (
+                      <td
+                        key={regularityColumns[i]?.key ?? i}
+                        className="py-2.5 px-2 text-center font-mono text-[11px]"
+                        title={
+                          col.rate === null
+                            ? `${t("analysis.pending", { defaultValue: "Pending" })} · ${regularityColumns[i]?.depositMonth}`
+                            : `${col.paid}/${col.evaluated} · ${col.rate}%`
+                        }
+                      >
+                        {col.evaluated === 0 ? (
+                          <span className="text-slate-400">—</span>
+                        ) : (
+                          <span className={cn(
+                            "font-semibold",
+                            col.rate !== null && col.rate >= 90
+                              ? "text-emerald-600"
+                              : col.rate !== null && col.rate >= 70
+                                ? "text-amber-600"
+                                : "text-rose-600",
+                          )}>
+                            {col.paid}/{col.evaluated}
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                    <td className="py-2.5 px-4 text-right font-mono text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                      {regularityOverall.rate === null
+                        ? "—"
+                        : `${regularityOverall.paid}/${regularityOverall.evaluated} · ${regularityOverall.rate}%`}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
@@ -593,10 +705,12 @@ export function AnalysisView({
         <div className="bg-card rounded-xl border border-border/80 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-border/80">
             <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-              Shareholder Equity & Contribution Rankings
+              {t("analysis.leaderboardTitle", { defaultValue: "Shareholder Equity & Contribution Rankings" })}
             </h2>
             <p className="text-xs text-muted-foreground">
-              Ranked by cumulative capital invested and fractional voting equity
+              {t("analysis.leaderboardDesc", {
+                defaultValue: "Ranked by cumulative capital invested and fractional voting equity",
+              })}
             </p>
           </div>
 
@@ -604,21 +718,21 @@ export function AnalysisView({
             <table className="w-full text-xs text-left border-collapse">
               <thead className="bg-muted/30 text-muted-foreground uppercase tracking-wider font-semibold border-b border-border/80">
                 <tr>
-                  <th className="py-3 px-4 w-16 text-center">Rank</th>
-                  <th className="py-3 px-4">Shareholder</th>
-                  <th className="py-3 px-4 text-center">Member ID</th>
-                  <th className="py-3 px-4 text-center">Shares Owned</th>
-                  <th className="py-3 px-4 text-right">Cumulative Capital</th>
-                  <th className="py-3 px-4 text-right">Equity Share %</th>
+                  <th className="py-3 px-4 w-16 text-center">{t("analysis.rank", { defaultValue: "Rank" })}</th>
+                  <th className="py-3 px-4">{t("analysis.shareholder", { defaultValue: "Shareholder" })}</th>
+                  <th className="py-3 px-4 text-center">{t("analysis.memberId", { defaultValue: "Member ID" })}</th>
+                  <th className="py-3 px-4 text-center">{t("analysis.sharesOwned", { defaultValue: "Shares Owned" })}</th>
+                  <th className="py-3 px-4 text-right">{t("analysis.cumulativeCapital", { defaultValue: "Cumulative Capital" })}</th>
+                  <th className="py-3 px-4 text-right">{t("analysis.equitySharePercent", { defaultValue: "Equity Share %" })}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
                 {data && data.leaderboard.length > 0 ? (
                   data.leaderboard.map((item) => {
                     let rankBadge = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
-                    if (item.rank === 1) rankBadge = "bg-amber-100 text-amber-800 font-bold border border-amber-300";
-                    if (item.rank === 2) rankBadge = "bg-slate-200 text-slate-700 font-bold border border-slate-300";
-                    if (item.rank === 3) rankBadge = "bg-orange-100 text-orange-800 font-bold border border-orange-300";
+                    if (item.rank === 1) rankBadge = "bg-amber-100 text-amber-800 font-bold border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800";
+                    if (item.rank === 2) rankBadge = "bg-slate-200 text-slate-700 font-bold border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-border";
+                    if (item.rank === 3) rankBadge = "bg-orange-100 text-orange-800 font-bold border border-orange-300 dark:bg-orange-950/60 dark:text-orange-300 dark:border-orange-800";
 
                     return (
                       <tr
@@ -642,10 +756,10 @@ export function AnalysisView({
                           {item.memberId}
                         </td>
                         <td className="py-3 px-4 text-center font-mono font-bold text-slate-700 dark:text-slate-200">
-                          {item.shares.toLocaleString()}
+                          {item.shares.toLocaleString(intlLocaleFor(locale))}
                         </td>
                         <td className="py-3 px-4 text-right font-mono font-bold text-slate-900 dark:text-white">
-                          {formatMoney(item.totalContributed)}
+                          {fm(item.totalContributed)}
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-2 font-mono">
@@ -665,9 +779,9 @@ export function AnalysisView({
                   })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400">
-                      No contributor data available
-                    </td>
+                      <td colSpan={6} className="py-8 text-center text-slate-400">
+                        {t("analysis.noContributorData", { defaultValue: "No contributor data available" })}
+                      </td>
                   </tr>
                 )}
               </tbody>

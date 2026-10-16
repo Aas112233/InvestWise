@@ -28,6 +28,14 @@ const moneyField = (max: number, maxMessage: string) =>
     .max(max, maxMessage);
 
 const positiveAmount = moneyField(10_000_000, 'Maximum amount is 10,000,000');
+const depositMonthField = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Month must be in YYYY-MM format');
+const isoDateField = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, 'Date must be in YYYY-MM-DD format')
+  .refine((value) => {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  }, 'Date must be a real calendar date');
 
 export const depositSchema = z.object({
   memberId: uuidField,
@@ -50,22 +58,24 @@ export const revertDepositSchema = z.object({
 
 export const bulkDepositSchema = z.object({
   fundId: uuidField,
-  commonMonth: z.string().optional(),
-  cashierName: z.string().optional(),
-  depositMethod: z.string().optional(),
+  requestKey: uuidField.optional(),
+  commonMonth: depositMonthField,
+  cashierName: z.string().trim().min(1).max(255).optional(),
+  depositMethod: z.string().trim().min(1).max(50).optional(),
   deposits: z
     .array(
-      z.object({
-        memberId: uuidField,
-        amount: positiveAmount,
-        shareNumber: z.number().optional(),
-        depositMonth: z.string().optional(),
-        date: z.string().optional(),
-      }),
+      z
+        .object({
+          memberId: uuidField,
+          amount: positiveAmount,
+          depositMonth: depositMonthField.optional(),
+          date: isoDateField.optional(),
+        })
+        .strict(),
     )
     .min(1, 'At least one deposit is required')
     .max(500, 'Maximum 500 deposits per batch'),
-});
+}).strict();
 
 export const expenseSchema = z.object({
   amount: positiveAmount,
@@ -92,33 +102,6 @@ export const transferSchema = z.object({
   amount: positiveAmount,
   description: z.string().max(500).optional(),
   referenceNumber: z.string().max(100).optional(),
-});
-
-const dividendSchemaBase = z.object({
-  type: z.enum(['Global', 'Project']),
-  // Dividend runs span the whole membership, so the ceiling is higher than the
-  // per-member default — the sole intended difference from `positiveAmount`.
-  amount: moneyField(100_000_000, 'Maximum amount is 100,000,000'),
-  projectId: uuidField.nullish(),
-  sourceFundId: uuidField.nullish(),
-  description: z.string().max(500).nullish(),
-});
-
-export const dividendSchema = dividendSchemaBase.superRefine((val, ctx) => {
-  if (val.type === 'Project' && !val.projectId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['type'],
-      message: 'Project type requires projectId',
-    });
-  }
-  if (val.type === 'Global' && !val.sourceFundId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['type'],
-      message: 'Global type requires sourceFundId',
-    });
-  }
 });
 
 const equityTransferRowSchema = z.object({
@@ -184,10 +167,3 @@ export const transactionQuerySchema = z.object({
   year: z.string().optional(),
 });
 
-export type DepositPayload = z.infer<typeof depositSchema>;
-export type BulkDepositPayload = z.infer<typeof bulkDepositSchema>;
-export type ExpensePayload = z.infer<typeof expenseSchema>;
-export type EarningPayload = z.infer<typeof earningSchema>;
-export type TransferPayload = z.infer<typeof transferSchema>;
-export type DividendPayload = z.infer<typeof dividendSchema>;
-export type EquityTransferPayload = z.infer<typeof equityTransferSchema>;

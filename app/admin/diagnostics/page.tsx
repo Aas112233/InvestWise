@@ -110,7 +110,7 @@ export default function AdminDiagnosticsPage() {
       </div>
 
       {/* Liveness Banner */}
-      <div className="rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="rounded-xl bg-card p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
           <div
             className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
@@ -185,7 +185,7 @@ export default function AdminDiagnosticsPage() {
       {/* Detailed Check Panels */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Database Panel */}
-        <div className="rounded-xl border border-border/80 bg-card p-4 space-y-3 shadow-xs">
+        <div className="rounded-xl bg-card p-4 space-y-3 shadow-xs">
           <div className="flex items-center gap-2 border-b border-border/60 pb-2">
             <Database className="h-4 w-4 text-primary" />
             <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground">
@@ -211,7 +211,7 @@ export default function AdminDiagnosticsPage() {
         </div>
 
         {/* Security & Isolation Panel */}
-        <div className="rounded-xl border border-border/80 bg-card p-4 space-y-3 shadow-xs">
+        <div className="rounded-xl bg-card p-4 space-y-3 shadow-xs">
           <div className="flex items-center gap-2 border-b border-border/60 pb-2">
             <Lock className="h-4 w-4 text-primary" />
             <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground">
@@ -235,7 +235,7 @@ export default function AdminDiagnosticsPage() {
         </div>
 
         {/* Process & Runtime Panel */}
-        <div className="rounded-xl border border-border/80 bg-card p-4 space-y-3 shadow-xs">
+        <div className="rounded-xl bg-card p-4 space-y-3 shadow-xs">
           <div className="flex items-center gap-2 border-b border-border/60 pb-2">
             <Cpu className="h-4 w-4 text-primary" />
             <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground">

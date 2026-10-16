@@ -9,13 +9,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AppDropdown } from "@/components/ui/app-dropdown";
 import { Button } from "@/components/ui/button";
 import { ERPDatePicker } from "@/components/ui/erp-date-picker";
+import { ERPFiscalMonthPicker } from "@/components/ui/erp-fiscal-month-picker";
 import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/components/ui/erp-form-layout";
 import { TopSheet } from "@/components/ui/top-sheet";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
+import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
 import { useTenantShareValue, useTenantPaymentMethods } from "@/lib/use-tenant-settings";
 import { PAYMENT_TYPE_LABEL_KEY, type PaymentType } from "@/lib/payment-methods";
-import { buildDepositMonthOptions, buildDepositYearOptions, monthKeyOf, useFundOptions, useHasOpenFiscalPeriod, useMemberOptions, type DepositRow } from "./shared";
+import { monthKeyOf, useFundOptions, useHasOpenFiscalPeriod, useMemberOptions, type DepositRow } from "./shared";
+import { DEPOSIT_FUND_TYPE } from "@/lib/deposit-fund";
+import { openPrintTab, releasePrintWindow, reservePrintWindow } from "@/lib/documents";
 
 // Amount stays a string end-to-end (2dp, no float) to match the API contract.
 const depositSchema = z.object({
@@ -31,10 +36,12 @@ const depositSchema = z.object({
   notes: z.string().trim().optional(),
   collectedDate: z.string().min(1),
   submittedDate: z.string().nullable().optional(),
-  // Month/year dropdowns — the month the deposit is FOR. Required at submit
-  // in both modes; edit mode pre-fills from the saved deposit month.
+  // Period the deposit is FOR, picked on the tenant's fiscal calendar and
+  // required at submit in both modes; edit mode pre-fills from the saved
+  // deposit month. depositMonth is the absolute YYYY-MM sent on the wire,
+  // depositFiscalYear the picker's parent (fiscal start year).
   depositMonth: z.string().optional(),
-  depositYear: z.string().optional(),
+  depositFiscalYear: z.string().optional(),
 });
 
 type DepositForm = z.infer<typeof depositSchema>;
@@ -62,9 +69,14 @@ export function DepositModal({
   const queryClient = useQueryClient();
   const isEdit = !!initial;
   const tenantShareValue = useTenantShareValue();
+  // Fiscal period options (Rule §8): the deposit month is an accounting
+  // period, so its dropdowns follow the tenant's fiscal calendar — and for a
+  // posting form, only the year the ledger is open for (lib/fiscal-guard.ts
+  // rejects every other one at submit).
+  const { yearOptionsIncluding, monthsFor, fiscalStartYearOf } = useFiscalPeriodOptions();
 
   const membersQuery = useMemberOptions();
-  const fundsQuery = useFundOptions();
+  const fundsQuery = useFundOptions(DEPOSIT_FUND_TYPE);
 
   const {
     register,
@@ -85,7 +97,7 @@ export function DepositModal({
       collectedDate: null as unknown as string,
       submittedDate: null,
       depositMonth: "",
-      depositYear: "",
+      depositFiscalYear: "",
     },
   });
 
@@ -103,8 +115,8 @@ export function DepositModal({
       });
       setValue("submittedDate", initial.submittedDate ? initial.submittedDate.slice(0, 10) : null);
       const savedMonth = initial.depositMonth || monthKeyOf(initial.date);
-      setValue("depositYear", savedMonth ? savedMonth.slice(0, 4) : "");
-      setValue("depositMonth", savedMonth ? savedMonth.slice(5, 7) : "");
+      setValue("depositMonth", savedMonth);
+      setValue("depositFiscalYear", savedMonth ? fiscalStartYearOf(savedMonth) ?? "" : "");
     } else if (open && !initial) {
       reset({
         memberId: "",
@@ -116,10 +128,10 @@ export function DepositModal({
         collectedDate: null as unknown as string,
         submittedDate: null,
         depositMonth: "",
-        depositYear: "",
+        depositFiscalYear: "",
       });
     }
-  }, [open, initial, setValue, reset]);
+  }, [open, initial, setValue, reset, fiscalStartYearOf]);
 
   const memberId = watch("memberId") ?? "";
   const fundId = watch("fundId") ?? "";
@@ -127,7 +139,7 @@ export function DepositModal({
   const collectedDate = watch("collectedDate") ?? null;
   const submittedDate = watch("submittedDate") ?? null;
   const depositMonth = watch("depositMonth") ?? "";
-  const depositYear = watch("depositYear") ?? "";
+  const depositFiscalYear = watch("depositFiscalYear") ?? "";
 
   // Amount autofill (explicit user request, §15-sanctioned): selecting a
   // member defaults the amount to their shares × tenant share value. Fires
@@ -200,8 +212,10 @@ export function DepositModal({
     }
     return opts;
   }, [paymentMethods, t, isEdit, initial?.depositMethod]);
-  const monthOptions = buildDepositMonthOptions(t);
-  const yearOptions = buildDepositYearOptions();
+  // Keeps the row's own period visible when editing a deposit that sits in a
+  // closed or never-created fiscal year.
+  const yearOptions = yearOptionsIncluding(depositFiscalYear || null);
+  const monthOptions = monthsFor(depositFiscalYear || null);
 
   const close = () => {
     reset({
@@ -214,20 +228,20 @@ export function DepositModal({
       collectedDate: null as unknown as string,
       submittedDate: null,
       depositMonth: "",
-      depositYear: "",
+      depositFiscalYear: "",
     });
     lastAutofilledMember.current = "";
     onClose();
   };
 
   const onSubmit = async (values: DepositForm) => {
-    // Month + year are explicit user choices (§15) — the server validates
-    // the combined YYYY-MM and stores it as the deposit month.
-    if (!values.depositMonth || !values.depositYear) {
+    // Fiscal year + month are explicit user choices (§15); the month option is
+    // already the absolute YYYY-MM the server validates and stores.
+    if (!values.depositMonth) {
       toast.error(t("deposits.modal.selectMonth"));
       return;
     }
-    const selectedMonth = `${values.depositYear}-${values.depositMonth}`;
+    const selectedMonth = values.depositMonth;
     try {
       if (isEdit && initial) {
         // Edit goes through the single finance path (atomic revert + apply
@@ -251,7 +265,11 @@ export function DepositModal({
         queryClient.invalidateQueries({ queryKey: ["funds"] });
         toast.success(t("deposits.updatedToast"));
       } else {
-        await apiClient<{ success: boolean; message?: string }>("/deposits", {
+        // Pre-open the receipt tab while this submit's user gesture is still
+        // live: the POST's round trip ends the gesture, and a window.open
+        // fired after that is eaten by popup blockers (see lib/documents.ts).
+        reservePrintWindow();
+        const res = await apiClient<{ success: boolean; message?: string; data?: { id?: string } }>("/deposits", {
           method: "POST",
           body: JSON.stringify({
             memberId: values.memberId,
@@ -272,9 +290,17 @@ export function DepositModal({
         // Localized copy is authoritative; the server `message` is an English
         // duplicate and would defeat ur/hi/bn.
         toast.success(t("deposits.recordedToast", { amount: values.amount.trim(), member: memberName }));
+        // The deposit is now recorded — open its printable receipt. Only the
+        // create path produces a new document (edit has none, mirroring the
+        // projects flow); if the server did not return the row id, drop the
+        // reserved blank tab instead of leaving an empty window behind.
+        if (res?.data?.id) openPrintTab("deposit", res.data.id);
+        else releasePrintWindow();
       }
       close();
     } catch (err) {
+      // A refused/failed create must never leave the pre-opened blank tab.
+      releasePrintWindow();
       toast.error(err instanceof ApiError ? err.message : t("deposits.loadFailed"));
     }
   };
@@ -322,7 +348,7 @@ export function DepositModal({
             </ERPFormGrid>
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("deposits.modal.amount")} required error={errors.amount?.message}>
-                <input type="text" inputMode="decimal" placeholder="0.00" {...register("amount")} className={`${inputCls} font-mono`} />
+                <NumericInput type="text" inputMode="decimal" placeholder="0.00" {...register("amount")} className={`${inputCls} font-mono`} />
               </ERPFormField>
               <ERPFormField label={t("deposits.modal.method")} required error={errors.method ? t("deposits.modal.selectMethod") : undefined}>
                 <AppDropdown
@@ -353,24 +379,20 @@ export function DepositModal({
                 />
               </ERPFormField>
             </ERPFormGrid>
-            <ERPFormGrid columns={2}>
-                <ERPFormField label={t("deposits.modal.depositMonth")} required>
-                  <AppDropdown
-                    options={monthOptions}
-                    value={depositMonth || null}
-                    onChange={(v) => setValue("depositMonth", v ?? "")}
-                    placeholder={t("deposits.modal.selectMonth")}
-                  />
-                </ERPFormField>
-                <ERPFormField label={t("deposits.modal.depositYear")} required>
-                  <AppDropdown
-                    options={yearOptions}
-                    value={depositYear || null}
-                    onChange={(v) => setValue("depositYear", v ?? "")}
-                    placeholder={t("deposits.modal.selectYear")}
-                  />
-                </ERPFormField>
-              </ERPFormGrid>
+            <ERPFiscalMonthPicker
+              fiscalYears={yearOptions}
+              months={monthOptions}
+              required
+              value={{
+                fiscalYear: depositFiscalYear || null,
+                month: depositMonth || null,
+              }}
+              onChange={(v) => {
+                setValue("depositFiscalYear", v.fiscalYear ?? "");
+                setValue("depositMonth", v.month ?? "");
+              }}
+              monthLabel={t("deposits.modal.depositMonth")}
+            />
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("deposits.modal.reference")}>
                 <input type="text" placeholder={t("deposits.modal.referencePlaceholder")} {...register("reference")} className={`${inputCls} font-mono`} disabled={isEdit} />

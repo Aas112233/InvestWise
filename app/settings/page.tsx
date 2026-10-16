@@ -26,10 +26,12 @@ import { Button } from "@/components/ui/button";
 import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/components/ui/erp-form-layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useLocale } from "@/lib/i18n";
 import { hasScreenPermission } from "@/lib/permissions";
+import { useTenantSettingsQueryKey } from "@/lib/use-tenant-settings";
 import { cn } from "@/lib/utils";
 import {
   PAYMENT_TYPES,
@@ -126,10 +128,13 @@ export default function SettingsPage() {
   const { t, setLocale } = useLocale();
   const { setTheme } = useTheme();
   const queryClient = useQueryClient();
+  const settingsQueryKey = useTenantSettingsQueryKey();
   const [tab, setTab] = useState<SettingsTab>("organization");
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ["settings"],
+    // Same namespaced key as useTenantSettings (F-10) — both queries share
+    // one cache entry, and the save mutation below writes through it.
+    queryKey: settingsQueryKey,
     queryFn: () => apiClient<SettingsResponse>("/settings"),
     staleTime: 60_000,
   });
@@ -325,6 +330,7 @@ interface BodyProps {
 function SettingsBody(props: BodyProps) {
   const { tab, setTab, isLoading, isError, isFetching, refetch, canWrite, queryClient } = props;
   const { t } = useLocale();
+  const settingsQueryKey = useTenantSettingsQueryKey();
 
   const saveMutation = useMutation({
     mutationFn: (args: { section: SettingsTab; payload: Record<string, unknown> }) =>
@@ -333,8 +339,10 @@ function SettingsBody(props: BodyProps) {
         body: JSON.stringify(args.payload),
       }),
     onSuccess: (updated, { section }) => {
-      queryClient.setQueryData(["settings"], updated);
-      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      // Exact-key write + prefix invalidation both hit the same namespaced
+      // entry (F-10), so every other settings reader refreshes from here.
+      queryClient.setQueryData(settingsQueryKey, updated);
+      queryClient.invalidateQueries({ queryKey: settingsQueryKey });
       const label = t(SETTINGS_SECTION_LABEL[section]);
       toast.success(t("settings.saved", { section: label }));
     },
@@ -613,7 +621,7 @@ function FinancialTab({
               />
             </ERPFormField>
             <ERPFormField label={t("settings.financial.taxRate")}>
-              <input
+              <NumericInput
                 type="number"
                 min="0"
                 max="100"
@@ -641,7 +649,7 @@ function FinancialTab({
             hint={shareLocked ? t("settings.financial.shareLockedNote") : undefined}
           >
             <div className="flex items-center gap-3">
-              <input
+              <NumericInput
                 type="number"
                 min="1"
                 step="0.01"
@@ -661,7 +669,7 @@ function FinancialTab({
 
           <ERPFormGrid columns={2}>
             <ERPFormField label={t("settings.financial.withdrawalLimit")}>
-              <input
+              <NumericInput
                 type="number"
                 min="0"
                 max="100"
@@ -672,7 +680,7 @@ function FinancialTab({
               />
             </ERPFormField>
             <ERPFormField label={t("settings.financial.withdrawalNotice")}>
-              <input
+              <NumericInput
                 type="number"
                 min="0"
                 value={fin.withdrawalNoticeDays}
@@ -684,7 +692,7 @@ function FinancialTab({
 
           <ERPFormGrid columns={2}>
             <ERPFormField label={t("settings.financial.maxWithdrawal")}>
-              <input
+              <NumericInput
                 type="number"
                 min="0"
                 step="0.01"
@@ -694,7 +702,7 @@ function FinancialTab({
               />
             </ERPFormField>
             <ERPFormField label={t("settings.financial.statutoryReserve")}>
-              <input
+              <NumericInput
                 type="number"
                 min="0"
                 max="100"
@@ -817,7 +825,7 @@ function GovernanceTab({
             </h3>
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("settings.governance.monthlyMeetingDay")} hint="Day of the month (1-28)">
-                <input
+                <NumericInput
                   type="number"
                   min="1"
                   max="28"
@@ -827,7 +835,7 @@ function GovernanceTab({
                 />
               </ERPFormField>
               <ERPFormField label={t("settings.governance.depositDueDate")} hint="Monthly deadline (1-28)">
-                <input
+                <NumericInput
                   type="number"
                   min="1"
                   max="28"
@@ -840,7 +848,7 @@ function GovernanceTab({
 
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("settings.governance.gracePeriodDays")} hint="Buffer for current month">
-                <input
+                <NumericInput
                   type="number"
                   min="0"
                   max="30"
@@ -853,7 +861,7 @@ function GovernanceTab({
                 label={t("settings.governance.lateDepositGraceMonths")}
                 hint={t("settings.governance.lateDepositGraceMonthsNote")}
               >
-                <input
+                <NumericInput
                   type="number"
                   min="0"
                   max="6"
@@ -875,7 +883,7 @@ function GovernanceTab({
                 label={t("settings.governance.inactiveAfterMonths")}
                 hint={t("settings.governance.inactiveAfterMonthsNote")}
               >
-                <input
+                <NumericInput
                   type="number"
                   min="1"
                   max="36"
@@ -888,7 +896,7 @@ function GovernanceTab({
                 label={t("settings.governance.suspendedAfterMonths")}
                 hint={t("settings.governance.suspendedAfterMonthsNote")}
               >
-                <input
+                <NumericInput
                   type="number"
                   min="2"
                   max="60"
@@ -1090,7 +1098,7 @@ function GovernanceTab({
                   />
                 </ERPFormField>
                 <ERPFormField label={t("settings.governance.deduction")}>
-                  <input
+                  <NumericInput
                     type="number"
                     min="0"
                     step="0.01"

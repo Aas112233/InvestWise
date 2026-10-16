@@ -1,24 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { convertToCsv } from '../modules/reports/service';
-
-describe('Reports CSV Exporter', () => {
-  it('converts array of objects to CSV format correctly', () => {
-    const data = [
-      { id: '1', name: 'John Doe', amount: 5000, date: '2026-08-14' },
-      { id: '2', name: 'Jane Smith, MBA', amount: 7500.5, date: '2026-08-15' },
-    ];
-
-    const csv = convertToCsv(data);
-    expect(csv).toContain('id,name,amount,date');
-    expect(csv).toContain('"1","John Doe","5000","2026-08-14"');
-    expect(csv).toContain('"2","Jane Smith, MBA","7500.5","2026-08-15"');
-  });
-
-  it('handles empty data gracefully', () => {
-    const csv = convertToCsv([]);
-    expect(csv).toBe('');
-  });
-});
 
 describe('Financial Math & Settlement Formulas', () => {
   it('calculates statutory reserves and distributable surplus correctly', () => {

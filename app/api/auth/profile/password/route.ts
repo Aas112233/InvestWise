@@ -4,6 +4,7 @@ import { users } from '@/db/schema/index';
 import { eq } from 'drizzle-orm';
 import { comparePassword, hashPassword, validatePasswordStrength } from '@/lib/utils/password';
 import { getAuthContext } from '@/lib/middleware/auth';
+import { logAudit } from '@/lib/utils/audit';
 import { AuthError, NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 
 export async function PUT(request: NextRequest) {
@@ -52,6 +53,16 @@ export async function PUT(request: NextRequest) {
       .update(users)
       .set({ password: hashed, updatedAt: new Date() })
       .where(eq(users.id, userId));
+
+    // Credential change: action-only audit — never snapshot password material.
+    await logAudit({
+      user: { id: authUser.id, name: authUser.name },
+      tenantId: authUser.tenantId ?? null,
+      action: 'PASSWORD_CHANGE',
+      resourceType: 'User',
+      resourceId: userId,
+      details: { email: authUser.email, selfService: true },
+    });
 
     return NextResponse.json({
       success: true,

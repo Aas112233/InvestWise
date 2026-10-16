@@ -13,21 +13,24 @@ import {
   ERPDatePicker,
   StatusBadge,
 } from "@/components/ui";
-import { Plus, Trash2, AlertCircle, Info, Landmark, Layers } from "lucide-react";
+import { NumericInput } from "@/components/ui/numeric-input";
+import { Plus, Trash2, AlertCircle, Info, Landmark, Layers, Lock } from "lucide-react";
 import { useLocale } from "@/lib/i18n";
 import { Project, Member } from "@/types";
 import { formatMoney } from "@/lib/formatters";
+import { intlLocaleFor } from "./project-labels";
 
 interface ShareholderInputRow {
   memberId: string;
   shares: number;
+  sourceFundId: string;
 }
 
 interface ProjectFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (projectData: any) => Promise<void>;
-  funds: Array<{ id: string; name: string; balance: number }>;
+  funds: Array<{ id: string; name: string; balance: number; type?: string; minimumBalance?: number }>;
   members?: Member[];
   tenantShareValue?: number;
   initialData?: Project | null;
@@ -42,7 +45,8 @@ export function ProjectFormModal({
   tenantShareValue = 1000,
   initialData,
 }: ProjectFormModalProps) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
 
   // Basic Information
   const [title, setTitle] = useState(initialData?.title || "");
@@ -56,9 +60,6 @@ export function ProjectFormModal({
 
   // Financials & ROI
   const [budget, setBudget] = useState(initialData?.budget ? String(initialData.budget) : "");
-  const [initialInvestment, setInitialInvestment] = useState(
-    initialData?.initialInvestment ? String(initialData.initialInvestment) : ""
-  );
   const [expectedRoi, setExpectedRoi] = useState(
     initialData?.expectedRoi !== undefined ? String(initialData.expectedRoi) : ""
   );
@@ -74,8 +75,11 @@ export function ProjectFormModal({
   const [startDate, setStartDate] = useState(initialData?.startDate || "");
   const [completionDate, setCompletionDate] = useState(initialData?.completionDate || "");
 
-  // Shareholders & Equity Allocation (Option A)
+  // Shareholders & Equity Allocation (Option A) — the same editor on create and
+  // edit. On edit it is prefilled from the ledger, and locked once the project
+  // has earnings or expenses (their capital structure is history).
   const [shareholders, setShareholders] = useState<ShareholderInputRow[]>([]);
+  const capitalLocked = Boolean(initialData?.capitalLocked);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -87,14 +91,19 @@ export function ProjectFormModal({
       setCategory(initialData.category || "");
       setDescription(initialData.description || "");
       setBudget(initialData.budget ? String(initialData.budget) : "");
-      setInitialInvestment(initialData.initialInvestment ? String(initialData.initialInvestment) : "");
       setExpectedRoi(initialData.expectedRoi !== undefined ? String(initialData.expectedRoi) : "");
       setStartDate(initialData.startDate || "");
       setCompletionDate(initialData.completionDate || "");
       setSelectedFundId(initialData.linkedFundId || null);
       setStatus(initialData.status || "In Progress");
       setFundStrategy("linkExisting");
-      setShareholders([]);
+      setShareholders(
+        (initialData.involvedMembers || []).map((p) => ({
+          memberId: p.memberId,
+          shares: Number(p.sharesInvested || 0),
+          sourceFundId: p.sourceFundId || "",
+        })),
+      );
       setProjectManagerId(
         initialData.projectFundHandler
           ? members.find((m) => m.name === initialData.projectFundHandler)?.id ?? null
@@ -105,7 +114,6 @@ export function ProjectFormModal({
       setCategory("");
       setDescription("");
       setBudget("");
-      setInitialInvestment("");
       setExpectedRoi("");
       setStartDate("");
       setCompletionDate("");
@@ -121,16 +129,40 @@ export function ProjectFormModal({
 
   const fundOptions: DropdownOption[] = funds.map((f) => ({
     value: f.id,
-    label: `${f.name} (Bal: ${formatMoney(f.balance)})`,
+    label: `${f.name} (Bal: ${fm(f.balance)})`,
   }));
 
   const memberOptions: DropdownOption[] = members.map((m) => {
     const depositBal = Number(m.totalContributed || 0);
     return {
       value: m.id,
-      label: `${m.name} (${m.memberId}) — Bal: ${formatMoney(depositBal)}`,
+      label: `${m.name} (${m.memberId}) — Bal: ${fm(depositBal)}`,
     };
   });
+
+  // Invested capital has to leave a real deposit fund, so project funds are not
+  // offered as a source (a project cannot fund itself out of its own balance).
+  // The destination fund is excluded too: drawing from it would credit the
+  // project fund with no matching debit, which the server rejects. Funds with
+  // no spendable cash (balance already at or below their minimum reserve) are
+  // not offered at all — they cannot fund an investment.
+  const sourceFundOptions: DropdownOption[] = funds
+    .filter((f) => (f.type || '').toUpperCase() !== 'PROJECT')
+    .filter((f) => !(fundStrategy === 'linkExisting' && f.id === selectedFundId))
+    .filter((f) => Number(f.balance || 0) - Number(f.minimumBalance || 0) > 0)
+    .map((f) => ({ value: f.id, label: `${f.name} (Bal: ${fm(f.balance)})` }));
+
+  // A prefilled allocation must stay visible even if that fund no longer
+  // qualifies as a source (drained balance, retype), otherwise an edit would
+  // show an empty fund for money that is really there.
+  const sourceOptionsForRow = (selected: string): DropdownOption[] => {
+    if (!selected || sourceFundOptions.some((o) => o.value === selected)) return sourceFundOptions;
+    const fund = funds.find((f) => f.id === selected);
+    return [
+      ...sourceFundOptions,
+      { value: selected, label: fund ? `${fund.name} (Bal: ${fm(fund.balance)})` : selected },
+    ];
+  };
 
   const categoryOptions: DropdownOption[] = [
     { value: "Real Estate", label: t("projects.sectors.realEstate", { defaultValue: "Real Estate" }) },
@@ -150,21 +182,53 @@ export function ProjectFormModal({
   // Helper calculations for shareholders
   const totalShares = shareholders.reduce((acc, s) => acc + (Number(s.shares) || 0), 0);
   const totalShareholderCapital = totalShares * tenantShareValue;
+  // Total Budget is the ceiling on capital raised — the server rejects an
+  // over-subscription, so flag it live instead of letting the submit fail.
+  const numBudgetInput = parseFloat(budget) || 0;
+  const overBudget = !capitalLocked && totalShareholderCapital > numBudgetInput;
+
+  // On edit the server refunds this project's existing allocation before
+  // re-investing, so a member's headroom is their live equity PLUS what this
+  // project already holds from them. Comparing against raw equity alone makes
+  // an unchanged row look permanently under-funded.
+  const committedByMember = new Map<string, number>();
+  const committedByFund = new Map<string, number>();
+  for (const p of initialData?.involvedMembers || []) {
+    const invested = Number(p.totalInvested || 0);
+    if (!invested) continue;
+    committedByMember.set(p.memberId, (committedByMember.get(p.memberId) ?? 0) + invested);
+    if (p.sourceFundId) {
+      committedByFund.set(p.sourceFundId, (committedByFund.get(p.sourceFundId) ?? 0) + invested);
+    }
+  }
+
+  // Shareholder picker shows the amount the member can actually invest here —
+  // live equity plus this project's existing holdback — not raw equity, which
+  // an edit has already deducted.
+  const shareholderMemberOptions: DropdownOption[] = members.map((m) => ({
+    value: m.id,
+    label: `${m.name} (${m.memberId}) — Bal: ${fm(Number(m.totalContributed || 0) + (committedByMember.get(m.id) ?? 0))}`,
+  }));
 
   const handleAddShareholder = () => {
-    setShareholders((prev) => [...prev, { memberId: "", shares: 1 }]);
+    setShareholders((prev) => [...prev, { memberId: "", shares: 1, sourceFundId: "" }]);
   };
 
   const handleRemoveShareholder = (index: number) => {
     setShareholders((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleShareholderChange = (index: number, field: "memberId" | "shares", value: any) => {
+  const handleShareholderChange = (index: number, field: "memberId" | "shares" | "sourceFundId", value: any) => {
     setShareholders((prev) =>
       prev.map((row, i) => {
         if (i !== index) return row;
         if (field === "memberId") {
           return { ...row, memberId: String(value || "") };
+        }
+        if (field === "sourceFundId") {
+          // §5: changing the parent (source fund) resets the dependent member,
+          // because the chosen member's deposit may not live in this fund.
+          return { ...row, sourceFundId: String(value || ""), memberId: "" };
         }
         return { ...row, shares: Number(value) || 1 };
       })
@@ -200,11 +264,23 @@ export function ProjectFormModal({
     }
 
     // Validate shareholders
-    const validShareholders: Array<{ memberId: string; shares: number }> = [];
+    const validShareholders: Array<{ memberId: string; shares: number; sourceFundId: string }> = [];
     const seenIds = new Set<string>();
+    const drawBySourceFund = new Map<string, number>();
 
     for (const sh of shareholders) {
       if (!sh.memberId) continue;
+      // While locked the rows are display-only, so their balances and (for
+      // allocations pred migration 0015) possibly unknown source funds are not
+      // re-validated — nothing about them can change.
+      if (!sh.sourceFundId && !capitalLocked) {
+        setErrorMessage(
+          t("projects.shareholders.sourceFundRequired", {
+            defaultValue: "Select the deposit fund each shareholder's capital is drawn from.",
+          }),
+        );
+        return;
+      }
       if (seenIds.has(sh.memberId)) {
         setErrorMessage(t("projects.validation.duplicateShareholder", { defaultValue: "Each member can only be added once as a shareholder." }));
         return;
@@ -217,19 +293,67 @@ export function ProjectFormModal({
         return;
       }
 
-      // Check deposit balance
+      // Locked rows pass through untouched — no balance math to re-validate.
+      if (capitalLocked) {
+        validShareholders.push({ memberId: sh.memberId, shares, sourceFundId: sh.sourceFundId });
+        continue;
+      }
+
+      // Check deposit balance — headroom counts what this project already holds
+      // from the member, because the edit refunds it before re-investing.
       const member = members.find((m) => m.id === sh.memberId);
-      const memberBalance = Number(member?.totalContributed || 0);
+      const memberBalance =
+        Number(member?.totalContributed || 0) + (committedByMember.get(sh.memberId) ?? 0);
       const requiredCapital = shares * tenantShareValue;
 
       if (memberBalance < requiredCapital) {
         setErrorMessage(
-          `${member?.name || "Member"} has insufficient deposit balance (Available: ${formatMoney(memberBalance)}, Required: ${formatMoney(requiredCapital)})`
+          `${member?.name || "Member"} has insufficient deposit balance (Available: ${fm(memberBalance)}, Required: ${fm(requiredCapital)})`
         );
         return;
       }
 
-      validShareholders.push({ memberId: sh.memberId, shares });
+      // Cash side: the chosen fund must still hold the capital after every
+      // draw assigned to it, keeping its minimum reserve.
+      const sourceFund = funds.find((f) => f.id === sh.sourceFundId);
+      if (!sourceFund) {
+        setErrorMessage(t("projects.shareholders.sourceFundRequired", { defaultValue: "Select the deposit fund each shareholder's capital is drawn from." }));
+        return;
+      }
+      const alreadyDrawnCents = Math.round((drawBySourceFund.get(sourceFund.id) ?? 0) * 100);
+      const requiredCents = Math.round(requiredCapital * 100);
+      // Same refund-before-reinvest logic on the cash side.
+      const fundHeadroomCents = Math.round(
+        (Number(sourceFund.balance) + (committedByFund.get(sourceFund.id) ?? 0)) * 100,
+      );
+      const availableCents = fundHeadroomCents - alreadyDrawnCents;
+      const reserveCents = Math.round((sourceFund.minimumBalance ?? 0) * 100);
+      if (!capitalLocked && availableCents - requiredCents < reserveCents) {
+        setErrorMessage(
+          `${sourceFund.name} has insufficient balance for this investment (Available: ${fm(availableCents / 100)}, Required: ${fm(requiredCents / 100)})`
+        );
+        return;
+      }
+      drawBySourceFund.set(sourceFund.id, (drawBySourceFund.get(sourceFund.id) ?? 0) + requiredCapital);
+
+      validShareholders.push({ memberId: sh.memberId, shares, sourceFundId: sh.sourceFundId });
+    }
+
+    // Hard gate mirroring the server: subscribed capital may never exceed the
+    // declared budget.
+    const submittedCapitalCents = validShareholders.reduce(
+      (acc, s) => acc + Math.round(s.shares * tenantShareValue * 100),
+      0,
+    );
+    if (!capitalLocked && submittedCapitalCents > Math.round(numBudget * 100)) {
+      setErrorMessage(
+        t("projects.validation.capitalExceedsBudget", {
+          invested: fm(submittedCapitalCents / 100),
+          budget: fm(numBudget),
+          defaultValue: `Total shareholder investment (${fm(submittedCapitalCents / 100)}) cannot exceed the project budget (${fm(numBudget)}).`,
+        }),
+      );
+      return;
     }
 
     try {
@@ -240,15 +364,20 @@ export function ProjectFormModal({
         category,
         description: description.trim(),
         budget: numBudget,
-        initialInvestment: parseFloat(initialInvestment) || 0,
+        // initialInvestment is never sent: both create and edit derive it from
+        // the capital actually drawn from shareholder deposits (§12).
         expectedRoi: parseFloat(expectedRoi) || 0,
         startDate,
         completionDate: completionDate || undefined,
         linkedFundId: fundStrategy === "linkExisting" ? (selectedFundId || undefined) : undefined,
-        createNewFund: fundStrategy === "createNew",
-        newFundName: fundStrategy === "createNew" ? (newFundName.trim() || `${title.trim()} Fund`) : undefined,
+        // A dedicated fund can only be minted at creation; an edit re-links.
+        createNewFund: !initialData && fundStrategy === "createNew",
+        newFundName: !initialData && fundStrategy === "createNew" ? (newFundName.trim() || `${title.trim()} Fund`) : undefined,
         status,
-        shareholders: validShareholders,
+        // Prefilled on edit. PUT compares it against the ledger: identical means
+        // no money moves, different means the allocation is refunded and
+        // re-invested. While locked it is not sent at all — nothing may change.
+        shareholders: capitalLocked ? undefined : validShareholders,
         projectFundHandler: managerMember?.name || undefined,
       });
       onClose();
@@ -321,7 +450,7 @@ export function ProjectFormModal({
         <ERPFormSection title={t("projects.financials", { defaultValue: "Capital & ROI Projection" })}>
           <ERPFormGrid cols={3}>
             <ERPFormField label={t("projects.budget", { defaultValue: "Total Budget *" })}>
-              <input
+              <NumericInput
                 type="number"
                 step="0.01"
                 min="0"
@@ -333,19 +462,18 @@ export function ProjectFormModal({
             </ERPFormField>
 
             <ERPFormField label={t("projects.initialInvestment", { defaultValue: "Initial Investment" })}>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={initialInvestment}
-                onChange={(e) => setInitialInvestment(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-mono bg-card border border-border/80 text-foreground rounded-xl placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
-              />
+              <div className="px-3 py-2 text-xs font-mono font-semibold text-foreground bg-muted/30 border border-border/60 rounded-xl">
+                {fm(initialData ? Number(initialData.initialInvestment || 0) : totalShareholderCapital)}
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                {t("projects.initialInvestmentFromDeposits", {
+                  defaultValue: "Auto-funded: drawn from shareholder deposit balances, never entered manually.",
+                })}
+              </p>
             </ERPFormField>
 
             <ERPFormField label={t("projects.expectedRoi", { defaultValue: "Expected ROI (%)" })}>
-              <input
+              <NumericInput
                 type="number"
                 step="0.1"
                 min="0"
@@ -392,7 +520,18 @@ export function ProjectFormModal({
                 <AppDropdown
                   options={fundOptions}
                   value={selectedFundId}
-                  onChange={(val) => setSelectedFundId(val)}
+                  disabled={capitalLocked}
+                  onChange={(val) => {
+                    setSelectedFundId(val);
+                    // §5: the destination can no longer be a source, so any row
+                    // drawing from it is reset rather than left holding a value
+                    // the server would reject.
+                    if (val) {
+                      setShareholders((prev) =>
+                        prev.map((row) => (row.sourceFundId === val ? { ...row, sourceFundId: "", memberId: "" } : row)),
+                      );
+                    }
+                  }}
                   placeholder={t("projects.selectFund", { defaultValue: "Select fund to link..." })}
                 />
               </ERPFormField>
@@ -442,25 +581,40 @@ export function ProjectFormModal({
           </ERPFormGrid>
         </ERPFormSection>
 
-        {/* Section 5: Project Shareholders & Equity Allocation (Option A) */}
-        {!initialData && (
+        {/* Section 5: Project Shareholders & Equity Allocation (Option A).
+            Same editor on create and edit; locked once the ledger has moved. */}
+        {(
           <ERPFormSection title={t("projects.shareholders.title", { defaultValue: "Project Shareholders & Equity Ownership" })}>
             <div className="space-y-3">
+              {capitalLocked && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300">
+                  <Lock className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span className="font-medium">
+                    {t("projects.shareholders.capitalLockedNote", {
+                      defaultValue: "Locked: this project already has earnings or expenses recorded, so its shareholders, shares and source funds can no longer be changed.",
+                    })}
+                  </span>
+                </div>
+              )}
               {/* Option A Policy Banner */}
               <div className="p-3 bg-muted/40 border border-border/80 rounded-xl flex items-start gap-2.5 text-xs text-muted-foreground">
                 <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <p className="font-semibold text-foreground">
                     {t("projects.shareholders.tenantShareValue", {
-                      value: formatMoney(tenantShareValue),
-                      defaultValue: `Tenant Share Value: ${formatMoney(tenantShareValue)} per share`,
+                      value: fm(tenantShareValue),
+                      defaultValue: `Tenant Share Value: ${fm(tenantShareValue)} per share`,
                     })}
                   </p>
                   <p className="text-[11px] leading-relaxed">
-                    {t("projects.shareholders.optionANote", {
-                      defaultValue:
-                        "Option A Active: On project creation, this capital will be deducted from each member's existing deposit account and transferred into the project fund.",
-                    })}
+                    {capitalLocked
+                      ? t("projects.shareholders.optionALockedNote", {
+                          defaultValue: "Recorded allocation. Changing it would strand the postings already made against this capital.",
+                        })
+                      : t("projects.shareholders.optionANote", {
+                          defaultValue:
+                            "Option A Active: On project creation, this capital will be deducted from each member's existing deposit account and transferred into the project fund.",
+                        })}
                   </p>
                 </div>
               </div>
@@ -479,9 +633,20 @@ export function ProjectFormModal({
                 <div className="space-y-2">
                   {shareholders.map((row, index) => {
                     const selectedMember = members.find((m) => m.id === row.memberId);
-                    const memberDeposit = Number(selectedMember?.totalContributed || 0);
+                    const memberDeposit =
+                      Number(selectedMember?.totalContributed || 0) + (committedByMember.get(row.memberId) ?? 0);
                     const requiredCapital = (row.shares || 0) * tenantShareValue;
                     const isInsufficient = selectedMember && memberDeposit < requiredCapital;
+                    // A member already picked in another shareholder row cannot be
+                    // chosen here again (duplicates are rejected on submit + server),
+                    // but this row's own selection stays visible.
+                    const takenElsewhere = new Set(
+                      shareholders
+                        .filter((_, i) => i !== index)
+                        .map((s) => s.memberId)
+                        .filter(Boolean),
+                    );
+                    const rowMemberOptions = shareholderMemberOptions.filter((o) => !takenElsewhere.has(o.value));
 
                     return (
                       <div
@@ -490,32 +655,51 @@ export function ProjectFormModal({
                           isInsufficient ? "border-rose-300 dark:border-rose-900 bg-rose-50/20" : "border-border/80"
                         }`}
                       >
+                        {/* Parent → child order (§5): the source fund is chosen
+                            first, then the member whose capital is invested. */}
                         <div className="grid grid-cols-12 gap-3 items-center">
+                          <div className="col-span-6">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
+                              {t("projects.shareholders.sourceFund", { defaultValue: "Source Deposit Fund" })}
+                            </label>
+                            <AppDropdown
+                              options={sourceOptionsForRow(row.sourceFundId)}
+                              value={row.sourceFundId || null}
+                              onChange={(val) => handleShareholderChange(index, "sourceFundId", val || "")}
+                              disabled={capitalLocked}
+                              placeholder={t("projects.shareholders.selectSourceFund", { defaultValue: "Select fund to draw from..." })}
+                            />
+                          </div>
+
                           <div className="col-span-6">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
                               {t("projects.shareholderMember", { defaultValue: "Member" })}
                             </label>
                             <AppDropdown
-                              options={memberOptions}
+                              options={rowMemberOptions}
                               value={row.memberId || null}
                               onChange={(val) => handleShareholderChange(index, "memberId", val || "")}
+                              disabled={capitalLocked}
                               placeholder={t("projects.shareholders.selectMember", { defaultValue: "Select member..." })}
                             />
                           </div>
+                        </div>
 
-                          <div className="col-span-2">
+                        <div className="grid grid-cols-12 gap-3 items-center">
+                          <div className="col-span-3">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
                               {t("projects.sharesLabel", { defaultValue: "Shares" })}
                             </label>
-                            <input
+                            <NumericInput
                               type="number"
                               min="1"
                               step="1"
                               value={row.shares}
+                              disabled={capitalLocked}
                               onChange={(e) =>
                                 handleShareholderChange(index, "shares", Math.max(1, parseInt(e.target.value) || 1))
                               }
-                              className="w-full px-2.5 py-2 text-xs font-mono bg-card border border-border/80 text-foreground rounded-xl outline-none focus:border-primary"
+                              className="w-full px-2.5 py-2 text-xs font-mono bg-card border border-border/80 text-foreground rounded-xl outline-none focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
                             />
                           </div>
 
@@ -524,29 +708,32 @@ export function ProjectFormModal({
                               {t("projects.shareholders.capital", { defaultValue: "Required Capital" })}
                             </label>
                             <div className="px-2.5 py-2 text-xs font-mono font-semibold text-foreground bg-muted/30 border border-border/60 rounded-xl">
-                              {formatMoney(requiredCapital)}
+                              {fm(requiredCapital)}
                             </div>
                           </div>
 
-                          <div className="col-span-1 flex justify-end pt-5">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              icon={Trash2}
-                              onClick={() => handleRemoveShareholder(index)}
-                              className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 h-8 w-8 p-0"
-                            />
-                          </div>
+                          {!capitalLocked && (
+                            <div className="col-span-6 flex justify-end pt-5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                type="button"
+                                icon={Trash2}
+                                onClick={() => handleRemoveShareholder(index)}
+                                className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 h-8 w-8 p-0"
+                              />
+                            </div>
+                          )}
                         </div>
 
                         {/* Balance Warning / Status */}
-                        {isInsufficient && (
+                        {!capitalLocked && isInsufficient && (
                           <div className="text-[11px] text-rose-600 dark:text-rose-400 flex items-center gap-1 font-medium pt-1">
                             <AlertCircle className="w-3.5 h-3.5" />
                             <span>
                               {t("projects.shareholders.insufficientDeposit", {
-                                available: formatMoney(memberDeposit),
-                                defaultValue: `Insufficient deposit balance (Available: ${formatMoney(memberDeposit)})`,
+                                available: fm(memberDeposit),
+                                defaultValue: `Insufficient deposit balance (Available: ${fm(memberDeposit)})`,
                               })}
                             </span>
                           </div>
@@ -558,15 +745,17 @@ export function ProjectFormModal({
               )}
 
               <div className="flex items-center justify-between pt-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  icon={Plus}
-                  type="button"
-                  onClick={handleAddShareholder}
-                >
-                  {t("projects.shareholders.add", { defaultValue: "Add Shareholder" })}
-                </Button>
+                {!capitalLocked && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={Plus}
+                    type="button"
+                    onClick={handleAddShareholder}
+                  >
+                    {t("projects.shareholders.add", { defaultValue: "Add Shareholder" })}
+                  </Button>
+                )}
 
                 {shareholders.length > 0 && (
                   <div className="flex items-center gap-4 text-xs font-mono text-muted-foreground">
@@ -576,16 +765,29 @@ export function ProjectFormModal({
                     </span>
                     <span>
                       {t("projects.shareholders.totalMemberCapital", { defaultValue: "Total Capital" })}:{" "}
-                      <strong className="text-foreground">{formatMoney(totalShareholderCapital)}</strong>
+                      <strong className="text-foreground">{fm(totalShareholderCapital)}</strong>
                     </span>
                   </div>
                 )}
               </div>
+
+              {overBudget && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl flex items-start gap-2 text-[11px] text-rose-700 dark:text-rose-300">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                  <span className="font-medium">
+                    {t("projects.validation.capitalExceedsBudget", {
+                      invested: fm(totalShareholderCapital),
+                      budget: fm(numBudgetInput),
+                      defaultValue: `Total shareholder investment (${fm(totalShareholderCapital)}) cannot exceed the project budget (${fm(numBudgetInput)}).`,
+                    })}
+                  </span>
+                </div>
+              )}
             </div>
           </ERPFormSection>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-border">
           <Button variant="ghost" size="sm" type="button" onClick={onClose} disabled={isSubmitting}>
             {t("common.cancel", { defaultValue: "Cancel" })}
           </Button>

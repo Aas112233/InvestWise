@@ -279,14 +279,3 @@ export function monthKeyToUtcStart(monthKey: string): Date | null {
   return new Date(`${iso}T00:00:00.000Z`);
 }
 
-/** Last millisecond (UTC) of an ISO `yyyy-mm` period key. */
-export function monthKeyToUtcEnd(monthKey: string): Date | null {
-  const start = monthKeyToUtcStart(monthKey);
-  if (!start) return null;
-  return new Date(start.getTime() + 31 * 24 * 60 * 60 * 1000 - 1);
-}
-
-/** Format cents for display, e.g. 123456 -> "1,234.56". */
-export function formatCents(cents: number): string {
-  return fromCents(cents).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}

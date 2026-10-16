@@ -322,7 +322,7 @@ export function ERPDatePicker({
             ref={panelRef}
             role="dialog"
             aria-label={t("erp.datePicker.dialogLabel")}
-            className="z-[100] rounded-xl border border-border/80 bg-popover text-popover-foreground shadow-xl p-3 w-[300px] animate-in fade-in-50 zoom-in-95 duration-100"
+            className="z-[100] rounded-xl border border-border/80 dark:border-white/10 bg-popover text-popover-foreground shadow-xl p-3 w-[300px] animate-in fade-in-50 zoom-in-95 duration-100"
             style={{ position: "absolute" }}
           >
             <div className="flex items-center gap-1 mb-2">

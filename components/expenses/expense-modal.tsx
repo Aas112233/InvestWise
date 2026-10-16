@@ -12,6 +12,7 @@ import {
   DropdownOption,
   Button,
 } from "@/components/ui";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/i18n";
@@ -300,7 +301,7 @@ export function ExpenseModal({ isOpen, onClose, currency = "BDT" }: ExpenseModal
             </ERPFormField>
 
             <ERPFormField label="Amount" required>
-              <input
+              <NumericInput
                 type="number"
                 step="0.01"
                 min="0.01"

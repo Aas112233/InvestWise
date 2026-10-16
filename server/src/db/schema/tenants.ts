@@ -1,8 +1,5 @@
-import { pgTable, uuid, varchar, boolean, integer, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, integer, jsonb, timestamp, index } from 'drizzle-orm/pg-core';
 
-// Platform tenants for shared-DB multi-tenancy.
-// Every business table carries tenantId -> tenants.id (nullable during
-// rollout, backfilled to the 'default' tenant by ensureDefaultTenant).
 export const tenants = pgTable('tenants', {
   id: uuid('id').defaultRandom().primaryKey(),
   slug: varchar('slug', { length: 100 }).unique().notNull(),
@@ -11,6 +8,9 @@ export const tenants = pgTable('tenants', {
   plan: varchar('plan', { length: 50 }).default('standard').notNull(),
   isMaintenanceMode: boolean('is_maintenance_mode').default(false).notNull(),
   maxUsers: integer('max_users').default(100).notNull(),
+  // Per-tenant module licensing. Partial/null means "all modules at their
+  // declared default" — see lib/tenant-modules.ts resolveModuleAccess.
+  moduleAccess: jsonb('module_access').default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [

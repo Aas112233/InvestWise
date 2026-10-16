@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TopSheet, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { useLocale } from "@/lib/i18n";
 import { Project } from "@/types";
-import { formatMoney } from "@/lib/formatters";
+import { formatMoney, todayLocalIso } from "@/lib/formatters";
+import { intlLocaleFor, projectSectorLabel } from "./project-labels";
 import { newIdempotencyRef } from "@/lib/idempotency";
 import { apiClient } from "@/lib/api-client";
 
@@ -31,8 +33,6 @@ interface InvolvedMember {
   memberCode?: string;
 }
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
-
 export function ProjectUpdateModal({
   isOpen,
   onClose,
@@ -40,13 +40,14 @@ export function ProjectUpdateModal({
   project,
   projects = [],
 }: ProjectUpdateModalProps) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>(project?.id || "");
   const [type, setType] = useState<"Earning" | "Expense">("Expense");
   const [amount, setAmount] = useState<string>("");
   const [description, setDescription] = useState<string>("");
-  const [date, setDate] = useState<string>(todayISO());
+  const [date, setDate] = useState<string>(todayLocalIso());
   const [handledByMemberId, setHandledByMemberId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -60,7 +61,7 @@ export function ProjectUpdateModal({
     setType("Expense");
     setAmount("");
     setDescription("");
-    setDate(todayISO());
+    setDate(todayLocalIso());
     setHandledByMemberId(null);
     setErrorMessage(null);
   }, []);
@@ -94,7 +95,7 @@ export function ProjectUpdateModal({
 
   const projectOptions: DropdownOption[] = projects.map((p) => ({
     value: p.id,
-    label: `${p.title} (Bal: ${formatMoney(p.currentFundBalance)})`,
+    label: `${p.title} (Bal: ${fm(p.currentFundBalance)})`,
   }));
 
   const typeOptions: DropdownOption[] = [
@@ -118,7 +119,7 @@ export function ProjectUpdateModal({
     !!amount ||
     !!description.trim() ||
     type !== "Expense" ||
-    date !== todayISO() ||
+    date !== todayLocalIso() ||
     !!handledByMemberId;
 
   const discardAndClose = () => {
@@ -150,7 +151,7 @@ export function ProjectUpdateModal({
       setErrorMessage(t("projects.validation.dateRequired", { defaultValue: "Date is required." }));
       return;
     }
-    if (date > todayISO()) {
+    if (date > todayLocalIso()) {
       setErrorMessage(t("projects.validation.dateFuture", { defaultValue: "Date cannot be in the future." }));
       return;
     }
@@ -187,8 +188,8 @@ export function ProjectUpdateModal({
       onClose={onClose}
       onDiscard={discardAndClose}
       isDirty={isDirty}
-      title={t("projects.recordDisbursement", { defaultValue: "Project Disbursement & Update" })}
-      description={effectiveProject ? `${effectiveProject.title} (${effectiveProject.category})` : t("projects.selectProjectForUpdate", { defaultValue: "Record income or expense against a project" })}
+      title={t("projects.recordDisbursement", { defaultValue: "Project Spending & Update" })}
+      description={effectiveProject ? `${effectiveProject.title} (${projectSectorLabel(t, effectiveProject.category)})` : t("projects.selectProjectForUpdate", { defaultValue: "Record income or expense against a project" })}
     >
       <form method="post" onSubmit={handleSubmit} className="space-y-6">
         {errorMessage && (
@@ -197,7 +198,7 @@ export function ProjectUpdateModal({
           </div>
         )}
 
-        <ERPFormSection title={t("projects.updateDetails", { defaultValue: "Disbursement Specification" })}>
+        <ERPFormSection title={t("projects.updateDetails", { defaultValue: "Spending Specification" })}>
           {!project && projects.length > 0 && (
             <ERPFormField label={t("projects.targetEntity", { defaultValue: "Target Project *" })}>
               <AppDropdown
@@ -220,7 +221,7 @@ export function ProjectUpdateModal({
             </ERPFormField>
 
             <ERPFormField label={t("finance.amount", { defaultValue: "Amount *" })}>
-              <input
+              <NumericInput
                 type="number"
                 step="0.01"
                 min="0.01"
@@ -237,7 +238,7 @@ export function ProjectUpdateModal({
               <input
                 type="date"
                 value={date}
-                max={todayISO()}
+                max={todayLocalIso()}
                 onChange={(e) => setDate(e.target.value)}
                 className="w-full px-3 py-2 text-xs font-mono bg-card border border-border/80 text-foreground rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
               />
@@ -262,7 +263,7 @@ export function ProjectUpdateModal({
           <ERPFormField label={t("finance.description", { defaultValue: "Description / Purpose *" })}>
             <textarea
               rows={3}
-              placeholder={t("projects.updateDescriptionPlaceholder", { defaultValue: "Reason for disbursement or source of earned income..." })}
+              placeholder={t("projects.updateDescriptionPlaceholder", { defaultValue: "Reason for spending or source of earned income..." })}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-3 py-2 text-xs bg-card border border-border/80 text-foreground rounded-xl placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
@@ -281,7 +282,7 @@ export function ProjectUpdateModal({
                 {t("finance.balanceBefore", { defaultValue: "Current Balance:" })}
               </span>
               <span className="font-mono font-medium text-foreground text-sm">
-                {formatMoney(currentBalance)}
+                {fm(currentBalance)}
               </span>
             </div>
             <div>
@@ -295,18 +296,18 @@ export function ProjectUpdateModal({
                     : "text-emerald-600 dark:text-emerald-400"
                 }`}
               >
-                {formatMoney(simulatedNewBalance)}
+                {fm(simulatedNewBalance)}
               </span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-border">
           <Button variant="ghost" size="sm" type="button" onClick={discardAndClose} disabled={isSubmitting}>
             {t("common.cancel", { defaultValue: "Cancel" })}
           </Button>
           <Button variant="primary" size="sm" type="submit" loading={isSubmitting}>
-            {t("common.postTransaction", { defaultValue: "Post Disbursement" })}
+            {t("common.postTransaction", { defaultValue: "Post Spending" })}
           </Button>
         </div>
       </form>

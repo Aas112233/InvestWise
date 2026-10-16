@@ -1,9 +1,11 @@
 import { pgTable, uuid, varchar, decimal, timestamp, index } from 'drizzle-orm/pg-core';
 import { members } from './members';
 import { users } from './users';
+import { tenants } from './tenants';
 
 export const memberArrears = pgTable('member_arrears', {
   id: uuid('id').defaultRandom().primaryKey(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
   memberId: uuid('member_id').references(() => members.id, { onDelete: 'cascade' }).notNull(),
   periodKey: varchar('period_key', { length: 7 }).notNull(),
   requiredAmount: decimal('required_amount', { precision: 15, scale: 2 }).notNull(),
@@ -15,6 +17,7 @@ export const memberArrears = pgTable('member_arrears', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  index('idx_arrears_tenant').on(table.tenantId),
   index('idx_arrears_member_period').on(table.memberId, table.periodKey),
   index('idx_arrears_status').on(table.status),
   // Arrears recalculation and list views filter by period_key directly; the

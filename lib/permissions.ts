@@ -8,7 +8,29 @@
 
 import { normalizeRole, roleBaselineGrant, type Role } from "./roles";
 
-export type PermissionLevel = "READ" | "WRITE";
+export type PermissionLevel = "READ" | "WRITE" | "MANAGE";
+
+/**
+ * Ranked grant levels: NONE < READ < WRITE < MANAGE.
+ * MANAGE is the top grant — it satisfies READ, WRITE and MANAGE checks
+ * (user management, approvals, configuration on that screen).
+ * Stored values remain WRITE/READ/NONE compatible: existing WRITE grants
+ * keep passing READ/WRITE checks but NOT new MANAGE checks.
+ */
+const GRANT_RANK: Record<string, number> = {
+  NONE: 0,
+  READ: 1,
+  WRITE: 2,
+  MANAGE: 3,
+};
+
+function grantSatisfies(granted: string | undefined, required: PermissionLevel): boolean {
+  if (!granted) return false;
+  const grantRank = GRANT_RANK[granted] ?? -1;
+  const requiredRank = GRANT_RANK[required] ?? 99;
+  if (granted === "NONE") return false;
+  return grantRank >= requiredRank;
+}
 
 export interface PermissionUser {
   role?: string;
@@ -22,12 +44,14 @@ function parentGrant(
 ): boolean | undefined {
   if (screen === "MEETINGS" || screen === "GOVERNANCE") {
     const parent = permissions?.["MEMBERS"];
-    if (parent === "WRITE") return true;
+    if (parent === "MANAGE") return true;
+    if (parent === "WRITE") return requiredLevel !== "MANAGE";
     if (parent === "READ" && requiredLevel === "READ") return true;
     if (parent === "NONE") return false;
   } else if (screen === "TRANSACTIONS") {
     const parent = permissions?.["DEPOSITS"];
-    if (parent === "WRITE") return true;
+    if (parent === "MANAGE") return true;
+    if (parent === "WRITE") return requiredLevel !== "MANAGE";
     if (parent === "READ" && requiredLevel === "READ") return true;
     if (parent === "NONE") return false;
   }
@@ -45,19 +69,15 @@ export function hasScreenPermission(
   if (role === "SuperAdmin" || role === "Admin") return true;
 
   const explicit = user.permissions?.[screen];
-  if (explicit === "WRITE") return true;
-  if (explicit === "READ" && requiredLevel === "READ") return true;
-  if (explicit === "NONE") return false;
-
-  if (!explicit) {
-    const inherited = parentGrant(user.permissions, screen, requiredLevel);
-    if (inherited !== undefined) return inherited;
+  if (explicit !== undefined) {
+    return grantSatisfies(explicit, requiredLevel);
   }
 
+  const inherited = parentGrant(user.permissions, screen, requiredLevel);
+  if (inherited !== undefined) return inherited;
+
   const baseline = roleBaselineGrant(role, screen);
-  if (baseline === "WRITE") return true;
-  if (baseline === "READ") return requiredLevel === "READ";
-  return false;
+  return grantSatisfies(baseline, requiredLevel);
 }
 
 export function hasAnyScreenPermission(

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { projects, projectMembers, members, funds, transactions, systemSettings } from '@/db/schema/index';
-import { eq, and, desc, ilike, or, count, inArray, sql, type SQL } from 'drizzle-orm';
+import { projects, projectMembers, funds, transactions, systemSettings } from '@/db/schema/index';
+import { eq, and, desc, ilike, or, count, type SQL } from 'drizzle-orm';
 import { logAudit } from '@/lib/utils/audit';
 import { projectCreateSchema } from '@/lib/utils/validation';
 import { requireProjectContext, zodMessage } from './_helpers';
 import { toCents, fromCents } from '@/lib/money';
+import { investProjectCapital } from '@/lib/project-capital';
 import crypto from 'node:crypto';
 import { ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
@@ -145,114 +146,35 @@ export async function POST(request: NextRequest) {
         targetFundId = existingFund.id;
       }
 
-      // 3. Process Shareholders under Option A:
-      // Deduct required investment (shares * shareValue) from member deposit
-      // equity. All rows lock in ONE deterministic-order statement and write
-      // back in one grouped UPDATE — N shareholders cost 2 round-trips, not 2N.
+      // 3. Invested capital is drawn out of member deposit equity and out of the
+      // named source deposit funds, then credited to the project's fund. This is
+      // the shared ledger primitive used by create, edit and delete so the three
+      // money paths cannot drift apart.
       const rawShareholders = data.shareholders || [];
-      const totalShares = rawShareholders.reduce((acc, s) => acc + s.shares, 0);
 
-      // Prevent duplicate members in the shareholder list
-      const seenMemberIds = new Set<string>();
-      for (const s of rawShareholders) {
-        if (seenMemberIds.has(s.memberId)) {
-          throw new ValidationError('Duplicate member found in project shareholder list');
-        }
-        seenMemberIds.add(s.memberId);
+      // Funding guard (§12): an initial investment must be backed by member
+      // deposits. Checked before any write — capital with no shareholder source
+      // would otherwise be money created from nowhere.
+      if (data.initialInvestment > 0 && rawShareholders.length === 0) {
+        throw new ValidationError(
+          'Initial investment must be funded from member deposits: add at least one shareholder whose invested capital covers it.',
+        );
       }
 
-      const shareholderIds = rawShareholders.map((s) => s.memberId).sort();
-      const lockedMembers = shareholderIds.length
-        ? await tx
-            .select({ id: members.id, name: members.name, totalContributed: members.totalContributed })
-            .from(members)
-            .where(and(inArray(members.id, shareholderIds), eq(members.tenantId, tenantId)))
-            .orderBy(members.id)
-            .for('update')
-        : [];
-      const memberById = new Map(lockedMembers.map((m) => [m.id, m]));
+      const capital = await investProjectCapital(tx, {
+        tenantId,
+        shareValue,
+        destinationFundId: targetFundId,
+        budgetCents: toCents(data.budget),
+        shareholders: rawShareholders,
+        now,
+      });
 
-      let totalShareholderCapitalCents = 0;
-      const processedShareholders: Array<{
-        memberId: string;
-        memberName: string;
-        shares: number;
-        investmentCents: number;
-        investmentFormatted: string;
-        ownershipPercentage: string;
-        memberEquityBefore: string;
-        memberEquityAfter: string;
-      }> = [];
-
-      // Validate every balance before writing anything — a mid-list failure
-      // rolls the transaction back either way, but failing first keeps the
-      // error deterministic and the locks brief.
-      for (const sh of rawShareholders) {
-        const member = memberById.get(sh.memberId);
-        if (!member) {
-          throw new ValidationError(`Member not found: ${sh.memberId}`);
-        }
-
-        const requiredAmount = sh.shares * shareValue;
-        const requiredAmountCents = toCents(requiredAmount);
-        totalShareholderCapitalCents += requiredAmountCents;
-
-        const availableCents = toCents(member.totalContributed ?? '0');
-        if (availableCents < requiredAmountCents) {
-          throw new ValidationError(
-            `Member '${member.name}' has insufficient deposit balance (Available: ${fromCents(availableCents)}, Required: ${fromCents(requiredAmountCents)})`,
-          );
-        }
-
-        const ownershipPercentage = totalShares > 0
-          ? ((sh.shares / totalShares) * 100).toFixed(2)
-          : '0.00';
-
-        processedShareholders.push({
-          memberId: member.id,
-          memberName: member.name,
-          shares: sh.shares,
-          investmentCents: requiredAmountCents,
-          investmentFormatted: fromCents(requiredAmountCents),
-          ownershipPercentage,
-          memberEquityBefore: fromCents(availableCents),
-          memberEquityAfter: fromCents(availableCents - requiredAmountCents),
-        });
-      }
-
-      if (processedShareholders.length > 0) {
-        // Grouped equity deduction: one round-trip under the row locks held
-        // above. The §6 tenant predicate stays in the WHERE — a VALUES join
-        // must never widen the write scope.
-        await tx.execute(sql`
-          UPDATE ${members} AS m
-          SET total_contributed = v.balance::numeric,
-              updated_at = ${now.toISOString()}::timestamptz
-          FROM (VALUES ${sql.join(
-            processedShareholders.map((ps) => sql`(${ps.memberId}::uuid, ${ps.memberEquityAfter}::numeric)`),
-            sql`, `,
-          )}) AS v(id, balance)
-          WHERE m.id = v.id AND m.tenant_id = ${tenantId}
-        `);
-      }
-
-      // 4. Initial balance: the project fund starts with shareholder capital
-      // only. `initialInvestment` stays a descriptive planning field — it is
-      // NOT credited to the fund because it has no identifiable source
-      // account (§12: no money without a counter-entry; real initial spend is
-      // posted as a journaled project Expense after creation).
-      const startingProjectBalanceStr = fromCents(totalShareholderCapitalCents);
-
-      // If linked/created fund, credit the starting balance
-      if (targetFundId) {
-        await tx
-          .update(funds)
-          .set({
-            balance: sql<string>`(${funds.balance}::numeric + ${startingProjectBalanceStr}::numeric)::numeric(15,2)`,
-            updatedAt: new Date(),
-          })
-          .where(and(eq(funds.id, targetFundId), eq(funds.tenantId, tenantId)));
-      }
+      const processedShareholders = capital.shareholders;
+      const totalShares = capital.totalShares;
+      // The recorded investment and the starting balance are exactly the capital
+      // just deducted from member deposits (§12 double entry).
+      const startingProjectBalanceStr = fromCents(capital.totalCents);
 
       // 5. Insert project record
       const [project] = await tx
@@ -263,7 +185,7 @@ export async function POST(request: NextRequest) {
           category: data.category,
           description: data.description,
           budget: String(data.budget),
-          initialInvestment: String(data.initialInvestment),
+          initialInvestment: startingProjectBalanceStr,
           expectedRoi: String(data.expectedRoi),
           totalShares: totalShares,
           status: data.status,
@@ -319,6 +241,9 @@ export async function POST(request: NextRequest) {
             memberId: ps.memberId,
             projectId: project.id,
             fundId: targetFundId,
+            // The fund the cash actually left — lets deletion credit the same
+            // fund back instead of leaving the treasury inflated.
+            sourceFundId: ps.sourceFundId,
             handlingOfficer: user.name,
             balanceBefore: ps.memberEquityBefore,
             balanceAfter: ps.memberEquityAfter,
@@ -345,6 +270,9 @@ export async function POST(request: NextRequest) {
         totalShares: createdProject.totalShares,
         shareholderCount: createdProject.shareholders.length,
       },
+      // Create flow: after-only — `createdProject` comes from the
+      // transaction's inserts (no extra query).
+      after: createdProject,
     });
 
     return NextResponse.json(

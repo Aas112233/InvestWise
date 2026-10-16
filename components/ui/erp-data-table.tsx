@@ -22,6 +22,19 @@ export type BivariantCellClass<T> = BivariantCellClassShim<T>["bivarianceHack"];
 
 export const PAGE_SIZES = [10, 20, 50, 100] as const;
 
+/**
+ * Human-friendly labels for fields a table sorts by by default but that are not
+ * a rendered column (e.g. members sort by `createdAt` with no Created column).
+ * Used only for the "Sorted by …" indicator strip.
+ */
+const SORT_FIELD_LABELS: Record<string, string> = {
+  createdAt: "Created",
+  updatedAt: "Updated",
+  deletedAt: "Deleted",
+  createdDate: "Created",
+  date: "Date",
+};
+
 export interface ERPDataTableProps<T> {
   data: T[];
   columns: ERPColumn<T>[];
@@ -34,6 +47,9 @@ export interface ERPDataTableProps<T> {
   onEmptyAction?: () => void;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
+  // Optional human-readable label for the active sort field. Shown in the
+  // indicator strip when the sorted column is not itself rendered.
+  sortByLabel?: string;
   onSort?: (field: string) => void;
   rowKey?: (item: T, index: number) => string | number;
   rowClassName?: (item: T) => string;
@@ -57,6 +73,7 @@ export function ERPDataTable<T>({
   onEmptyAction,
   sortBy,
   sortOrder,
+  sortByLabel,
   onSort,
   rowKey,
   rowClassName,
@@ -88,9 +105,34 @@ export function ERPDataTable<T>({
   const totalPages = showFooter && pageSize > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 1;
   const startRow = showFooter && totalCount > 0 ? (page - 1) * pageSize + 1 : 0;
   const endRow = showFooter ? Math.min(page * pageSize, totalCount) : 0;
+  // The header arrow only appears on a rendered, sortable column that matches
+  // the active sort. When the default sort field is NOT such a column (e.g.
+  // members sort by `createdAt` with no Created column), fall back to a small
+  // indicator strip so the newest-first ordering is never silent.
+  const sortedViaArrow = !!onSort && columns.some((col) => col.sortable && col.key === sortBy);
+  const showSortStrip = !!sortBy && !sortedViaArrow;
+  const sortFieldLabel = sortBy
+    ? sortByLabel ??
+      SORT_FIELD_LABELS[sortBy] ??
+      sortBy.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase())
+    : "";
 
   return (
-    <div className="w-full bg-card rounded-xl border border-border/80 shadow-xs overflow-hidden">
+    <div className="w-full bg-card rounded-xl shadow-xs overflow-hidden">
+      {showSortStrip && (
+        <div className="flex items-center justify-end gap-1 px-3.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <span>
+              {t("erp.dataTable.sortedBy", { defaultValue: "Sorted by" })} {sortFieldLabel}
+            </span>
+            {sortOrder === "asc" ? (
+              <ArrowUp size={11} className="text-primary" />
+            ) : (
+              <ArrowDown size={11} className="text-primary" />
+            )}
+          </span>
+        </div>
+      )}
       <div className="overflow-x-auto w-full">
         <table className="w-full border-collapse">
           <thead>
@@ -107,7 +149,7 @@ export function ERPDataTable<T>({
                   <th
                     key={col.key}
                     className={cn(
-                      "px-3.5 py-2.5 border-r border-border/60 last:border-r-0 select-none",
+                      "px-3.5 py-2.5 select-none border-l border-border/60",
                       alignmentClass,
                       isSortable &&
                         "cursor-pointer hover:text-foreground transition-colors group",
@@ -157,7 +199,7 @@ export function ERPDataTable<T>({
                   {columns.map((col, cIdx) => (
                     <td
                       key={`loading-col-${cIdx}`}
-                      className="px-3.5 py-3 border-r border-border/60 last:border-r-0"
+                      className="px-3.5 py-3 border-l border-border/60"
                     >
                       {cIdx === 0 ? (
                         <div className="flex items-center gap-2">
@@ -185,7 +227,7 @@ export function ERPDataTable<T>({
               ))
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-12 text-center">
+                <td colSpan={columns.length} className="px-4 py-12 text-center border-l border-border/60">
                   <div className="flex flex-col items-center gap-3">
                     <Inbox size={22} className="text-muted-foreground/60" />
                     <div className="text-xs font-medium text-muted-foreground">{emptyMessage}</div>
@@ -217,7 +259,7 @@ export function ERPDataTable<T>({
                       <td
                         key={col.key}
                         className={cn(
-                          "px-3.5 py-2.5 text-xs text-foreground border-r border-border/60 last:border-r-0",
+                          "px-3.5 py-2.5 text-xs text-foreground border-l border-border/60",
                           alignmentClass,
                           customCellClass,
                         )}

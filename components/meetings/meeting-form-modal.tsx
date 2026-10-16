@@ -5,6 +5,7 @@ import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, App
 import { useLocale } from "@/lib/i18n";
 import { useTenantMeetingTypes } from "@/lib/use-tenant-settings";
 import { Meeting } from "@/types";
+import { meetingTypeLabel } from "./meeting-labels";
 
 interface MeetingFormModalProps {
   isOpen: boolean;
@@ -27,7 +28,7 @@ export function MeetingFormModal({
   const [meetingDate, setMeetingDate] = useState(
     initialData?.meetingDate ? new Date(initialData.meetingDate).toISOString().slice(0, 16) : ""
   );
-  const [location, setLocation] = useState(initialData?.location || "HQ / Online");
+  const [location, setLocation] = useState(initialData?.location || "");
   const [agenda, setAgenda] = useState(initialData?.agenda || "");
   const [notes, setNotes] = useState(initialData?.notes || "");
 
@@ -44,22 +45,16 @@ export function MeetingFormModal({
     setMeetingDate(
       initialData?.meetingDate ? new Date(initialData.meetingDate).toISOString().slice(0, 16) : ""
     );
-    setLocation(initialData?.location || "HQ / Online");
+    setLocation(initialData?.location || "");
     setAgenda(initialData?.agenda || "");
     setNotes(initialData?.notes || "");
     setErrorMessage(null);
   }, [isOpen, initialData]);
 
-  const meetingTypeOptions: DropdownOption[] = configuredMeetingTypes.map((typeKey) => {
-    const formatted = typeKey
-      .split("_")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-      .join(" ");
-    return {
-      value: typeKey,
-      label: formatted,
-    };
-  });
+  const meetingTypeOptions: DropdownOption[] = configuredMeetingTypes.map((typeKey) => ({
+    value: typeKey,
+    label: meetingTypeLabel(t, typeKey),
+  }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,7 +79,7 @@ export function MeetingFormModal({
         title: title.trim(),
         meetingType,
         meetingDate: new Date(meetingDate).toISOString(),
-        location: location.trim(),
+        location: location.trim() || undefined,
         agenda: agenda.trim(),
         notes: notes.trim(),
       });
@@ -145,7 +140,7 @@ export function MeetingFormModal({
             <ERPFormField label={t("meetings.location", { defaultValue: "Location / Venue" })}>
               <input
                 type="text"
-                placeholder="HQ Meeting Room / Google Meet"
+                placeholder={t("meetings.locationPlaceholder", { defaultValue: "HQ Meeting Room / Google Meet" })}
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-card border border-border/80 text-foreground rounded-xl placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
@@ -176,7 +171,7 @@ export function MeetingFormModal({
           </ERPFormField>
         </ERPFormSection>
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-border">
           <Button variant="ghost" size="sm" type="button" onClick={onClose} disabled={isSubmitting}>
             {t("common.cancel", { defaultValue: "Cancel" })}
           </Button>

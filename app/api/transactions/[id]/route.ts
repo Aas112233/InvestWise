@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { transactions, members, funds, projects, users } from '@/db/schema/index';
-import { eq, and, sql } from 'drizzle-orm';
+import { transactions, members, funds, projects, users, deletedRecords, projectUpdates } from '@/db/schema/index';
+import { eq, and, ne, sql, isNull } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
-import { normalizeRole } from '@/lib/roles';
+import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/utils/errors';
+import { LockedError, NotFoundError, ValidationError, ForbiddenError } from '@/lib/utils/errors';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import { toCents } from '@/lib/money';
 import { decideReversal, shouldRefundProjectExpenses, shouldRefundProjectEarnings } from '@/lib/transaction-reversal';
@@ -87,9 +87,12 @@ export async function DELETE(
     }
     if (!tenantId) throw new ForbiddenError('Tenant context required');
 
-    const callerRole = normalizeRole(user.role);
-    if (callerRole !== 'Admin' && callerRole !== 'Manager' && callerRole !== 'SuperAdmin') {
-      throw new ForbiddenError('Admin privilege required to soft-delete transactions');
+    // Screen-permission gate, not a bare role check: an explicit READ grant on
+    // TRANSACTIONS overrides the role baseline, so the old role-only check let
+    // a read-only user delete ledger rows. Write access on the screen is the
+    // floor for any destructive ledger edit (Admin/SuperAdmin bypass inside).
+    if (!hasScreenPermission(user, 'TRANSACTIONS', 'WRITE')) {
+      throw new ForbiddenError('Write access to the transactions screen is required to soft-delete transactions');
     }
 
     const { id } = await params;
@@ -110,7 +113,7 @@ export async function DELETE(
     // broader than completed rows: a closed period is immutable, and locking
     // here also prevents a pending deposit from being approved concurrently
     // while this deletion is in flight.
-    const { existing, softDeleted, reversalApplied } = await db.transaction(async (tx) => {
+    const { existing, softDeleted, reversalApplied, siblingLeg } = await db.transaction(async (tx) => {
       const [candidate] = await tx
         .select()
         .from(transactions)
@@ -132,6 +135,21 @@ export async function DELETE(
         throw new ValidationError('Transaction is already deleted');
       }
 
+      // A permanently locked (settled) project is an immutable record — its
+      // ledger rows cannot be reversed out from under it.
+      if (lockedExisting.projectId) {
+        const [hostProject] = await tx
+          .select({ isLocked: projects.isLocked })
+          .from(projects)
+          .where(and(eq(projects.id, lockedExisting.projectId), eq(projects.tenantId, tenantId)))
+          .limit(1);
+        if (hostProject?.isLocked) {
+          throw new LockedError(
+            'This transaction belongs to a completed, permanently locked project — it cannot be deleted.',
+          );
+        }
+      }
+
       // Real-money rules — deposits are owned by the revert route; expenses and
       // transfers must have their balance effect reversed here. The decision
       // logic is pure and unit-tested (lib/transaction-reversal.ts).
@@ -146,31 +164,38 @@ export async function DELETE(
         throw new ValidationError(reversal.revertHint!);
       }
 
+      // Single fund-balance adjustment used for both the deleted leg and its
+      // paired transfer leg below: row lock + integer-cents arithmetic in SQL
+      // (§12 atomic arithmetic, never float). deltaCents is signed.
+      const applyFundDeltaCents = async (fundId: string, deltaCents: number) => {
+        await tx
+          .select({ id: funds.id })
+          .from(funds)
+          .where(and(eq(funds.id, fundId), eq(funds.tenantId, tenantId)))
+          .for('update')
+          .limit(1);
+        await tx
+          .update(funds)
+          .set({
+            balance: sql`(${funds.balance}::numeric + ${deltaCents / 100})::numeric(15,2)`,
+            updatedAt: now,
+          })
+          .where(and(eq(funds.id, fundId), eq(funds.tenantId, tenantId)));
+      };
+
       const reversalFundId = reversal.fundId;
       const reversalDeltaCents = reversal.direction;
 
       if (reversalFundId && reversalDeltaCents !== 0) {
         const amountCents = toCents(lockedExisting.amount ?? '0');
         if (amountCents > 0) {
-          const delta = (reversalDeltaCents * amountCents) / 100;
           // Lock the fund row before mutating so a concurrent expense/transfer
           // cannot lose this reversal (§12 atomic arithmetic, never float).
-          await tx
-            .select({ id: funds.id })
-            .from(funds)
-            .where(and(eq(funds.id, reversalFundId), eq(funds.tenantId, tenantId)))
-            .for('update')
-            .limit(1);
-          await tx
-            .update(funds)
-            .set({
-              balance: sql`(${funds.balance}::numeric + ${delta})::numeric(15,2)`,
-              updatedAt: now,
-            })
-            .where(and(eq(funds.id, reversalFundId), eq(funds.tenantId, tenantId)));
+          await applyFundDeltaCents(reversalFundId, reversalDeltaCents * amountCents);
 
           // Expense attributed to a project also inflated projects.totalExpenses
-          // — refund that too, else project spend overstates reality forever.
+          // and debited projects.currentFundBalance (see addExpense) — refund
+          // both, else the project's spend and live balance drift forever.
           if (
             shouldRefundProjectExpenses({
               type: lockedExisting.type,
@@ -184,14 +209,16 @@ export async function DELETE(
               .update(projects)
               .set({
                 totalExpenses: sql`(coalesce(${projects.totalExpenses}, 0) - ${amountCents / 100})::numeric(15,2)`,
+                currentFundBalance: sql`(coalesce(${projects.currentFundBalance}, 0) + ${amountCents / 100})::numeric(15,2)`,
                 updatedAt: now,
               })
               .where(and(eq(projects.id, lockedExisting.projectId), eq(projects.tenantId, tenantId)));
           }
 
           // #108b: symmetric refund — a settled Earning attributed to a project
-          // inflated projects.totalEarnings; deleting it must decrement that
-          // rollup or the project overstates revenue forever.
+          // inflated projects.totalEarnings and credited
+          // projects.currentFundBalance (see addEarning); deleting it must
+          // decrement both or the project overstates revenue and balance.
           if (
             shouldRefundProjectEarnings({
               type: lockedExisting.type,
@@ -205,10 +232,69 @@ export async function DELETE(
               .update(projects)
               .set({
                 totalEarnings: sql`(coalesce(${projects.totalEarnings}, 0) - ${amountCents / 100})::numeric(15,2)`,
+                currentFundBalance: sql`(coalesce(${projects.currentFundBalance}, 0) - ${amountCents / 100})::numeric(15,2)`,
                 updatedAt: now,
               })
               .where(and(eq(projects.id, lockedExisting.projectId), eq(projects.tenantId, tenantId)));
           }
+        }
+      }
+
+      // Transfer atomicity: one fund transfer posts TWO legs (Transfer Out +
+      // Transfer In) linked by transferGroupId. Reversing only the deleted leg
+      // strands the sibling's movement — e.g. deleting Transfer In debits the
+      // destination back while the source stays debited, and the money
+      // vanishes from both funds. So deleting a settled transfer leg voids the
+      // whole transfer: the live sibling is reversed and soft-deleted
+      // atomically here, restoring both funds. Legs without a group id
+      // predate the link and keep the legacy per-leg behaviour.
+      let siblingLeg: { id: string; type: string | null; reversed: boolean } | null = null;
+      const isSettledTransferLeg =
+        (lockedExisting.type === 'Transfer In' || lockedExisting.type === 'Transfer Out') &&
+        reversalDeltaCents !== 0;
+      if (isSettledTransferLeg && lockedExisting.transferGroupId) {
+        const [sibling] = await tx
+          .select()
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.transferGroupId, lockedExisting.transferGroupId),
+              eq(transactions.tenantId, tenantId),
+              ne(transactions.id, id),
+              eq(transactions.isDeleted, false),
+            ),
+          )
+          .for('update')
+          .limit(1);
+        if (sibling) {
+          if (!sibling.date) throw new ValidationError('Paired transfer leg is missing its date');
+          await assertFiscalPeriodOpen(tx, tenantId, sibling.date);
+          const siblingReversal = decideReversal({
+            type: sibling.type,
+            status: sibling.status,
+            fundId: sibling.fundId,
+            amount: sibling.amount,
+          });
+          if (siblingReversal.requiresRevertPath) {
+            throw new ValidationError(siblingReversal.revertHint!);
+          }
+          const siblingAmountCents = toCents(sibling.amount ?? '0');
+          let siblingReversed = false;
+          if (siblingReversal.fundId && siblingReversal.direction !== 0 && siblingAmountCents > 0) {
+            await applyFundDeltaCents(siblingReversal.fundId, siblingReversal.direction * siblingAmountCents);
+            siblingReversed = true;
+          }
+          await tx
+            .update(transactions)
+            .set({
+              isDeleted: true,
+              deletedAt: now,
+              deletedBy: user.id,
+              deletionReason: `Paired leg of deleted transfer ${lockedExisting.referenceNumber ?? lockedExisting.id}: ${reason.trim()}`,
+              updatedAt: now,
+            })
+            .where(and(eq(transactions.id, sibling.id), eq(transactions.tenantId, tenantId)));
+          siblingLeg = { id: sibling.id, type: sibling.type, reversed: siblingReversed };
         }
       }
 
@@ -225,10 +311,61 @@ export async function DELETE(
         .where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId)))
         .returning();
       if (!deleted) throw new NotFoundError('Transaction');
+
+      // Immutable archive (§12): the soft-delete modal promises the row is
+      // "never permanently expunged". The finance service path already writes
+      // this archive; without it here, everything deleted through the live
+      // client path left no forensic copy. Archive the primary row and any
+      // paired transfer leg voided above.
+      const archiveRows: Array<typeof transactions.$inferSelect> = [deleted];
+      if (siblingLeg) {
+        const [siblingRow] = await tx
+          .select()
+          .from(transactions)
+          .where(and(eq(transactions.id, siblingLeg.id), eq(transactions.tenantId, tenantId)))
+          .limit(1);
+        if (siblingRow) archiveRows.push(siblingRow);
+      }
+      await tx.insert(deletedRecords).values(
+        archiveRows.map((row) => ({
+          originalId: row.id,
+          collectionName: 'Transaction',
+          data: row as unknown as Record<string, unknown>,
+          reason: row.deletionReason ?? reason.trim(),
+          deletedBy: user.id,
+          deletedAt: now,
+        })),
+      );
+
+      // Mirror the soft-delete onto the project_updates row that backs the
+      // "Financial Updates" tab, so a deleted project posting doesn't linger
+      // there. The two rows are always written with the same (project, type,
+      // amount, date, balance_after); there is no explicit link between them.
+      if (lockedExisting.projectId && lockedExisting.date) {
+        const puBalanceMatch =
+          lockedExisting.balanceAfter == null
+            ? isNull(projectUpdates.balanceAfter)
+            : eq(projectUpdates.balanceAfter, lockedExisting.balanceAfter);
+        await tx
+          .update(projectUpdates)
+          .set({ isDeleted: true })
+          .where(
+            and(
+              eq(projectUpdates.projectId, lockedExisting.projectId),
+              eq(projectUpdates.tenantId, tenantId),
+              eq(projectUpdates.type, lockedExisting.type),
+              eq(projectUpdates.amount, lockedExisting.amount),
+              eq(projectUpdates.date, lockedExisting.date),
+              puBalanceMatch,
+            ),
+          );
+      }
+
       return {
         existing: lockedExisting,
         softDeleted: deleted,
         reversalApplied: reversalDeltaCents !== 0 && toCents(lockedExisting.amount ?? '0') > 0,
+        siblingLeg,
       };
     });
 
@@ -247,6 +384,10 @@ export async function DELETE(
         // of this delete — makes the money-integrity behaviour auditable.
         fundId: existing.fundId,
         balanceReversed: reversalApplied,
+        // Paired transfer leg voided alongside this delete, if any.
+        siblingLegId: siblingLeg?.id ?? null,
+        siblingLegType: siblingLeg?.type ?? null,
+        siblingBalanceReversed: siblingLeg?.reversed ?? false,
       },
     });
 
@@ -254,10 +395,14 @@ export async function DELETE(
       success: true,
       data: softDeleted,
       balanceReversed: reversalApplied,
-      message: reversalApplied
-        ? 'Transaction soft-deleted and its fund balance effect reversed'
-        : 'Transaction successfully soft-deleted with audit logging',
+      siblingLegReversed: siblingLeg?.reversed ?? false,
+      message: siblingLeg
+        ? 'Transfer leg soft-deleted; paired leg reversed too — both funds restored'
+        : reversalApplied
+          ? 'Transaction soft-deleted and its fund balance effect reversed'
+          : 'Transaction successfully soft-deleted with audit logging',
     });
+
   } catch (err: any) {
     console.error('[TRANSACTION DELETE ERROR]', err);
     return NextResponse.json(

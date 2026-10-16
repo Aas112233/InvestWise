@@ -9,7 +9,7 @@
       "url": "https://mcp.vercel.com"
     },
     "codemesh": {
-      "command": "c:\\Users\\mhass\\.antigravity-ide\\extensions\\codemesh.vscode-codemesh-0.4.312-universal\\bin\\win32-x64\\codemesh.exe",
+      "command": "c:\\Users\\mhass\\.antigravity-ide\\extensions\\codemesh.vscode-codemesh-0.4.315-universal\\bin\\win32-x64\\codemesh.exe",
       "args": [
         "mcp-stdio"
       ],

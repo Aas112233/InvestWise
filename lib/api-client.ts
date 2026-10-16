@@ -3,6 +3,8 @@
  * Adheres to AGENTS.md §11 (Universal API Error Formatting & Unmasked Toasts).
  */
 
+import { SESSION_ACTIVITY_HEADER } from "@/lib/session-limits";
+
 export class ApiError extends Error {
   status: number;
   data: any;
@@ -86,14 +88,15 @@ export function clearSessionGone(): void {
   redirectedToLogin = false;
 }
 
-async function performRefresh(): Promise<boolean> {
+async function performRefresh(activity = false): Promise<boolean> {
+  const headers = activity ? { [SESSION_ACTIVITY_HEADER]: "1" } : undefined;
   try {
-    const res = await fetch("/api/auth/refresh", { method: "POST", credentials: "include" });
+    const res = await fetch("/api/auth/refresh", { method: "POST", credentials: "include", ...(headers ? { headers } : {}) });
     if (res.ok) return true;
     if (res.status === 401) {
       // Rotation race retry (see above).
       await new Promise((resolve) => setTimeout(resolve, 250));
-      const retry = await fetch("/api/auth/refresh", { method: "POST", credentials: "include" });
+      const retry = await fetch("/api/auth/refresh", { method: "POST", credentials: "include", ...(headers ? { headers } : {}) });
       return retry.ok;
     }
     return false;
@@ -102,19 +105,28 @@ async function performRefresh(): Promise<boolean> {
   }
 }
 
-function refreshSessionSingleFlight(): Promise<boolean> {
+function refreshSessionSingleFlight(activity = false): Promise<boolean> {
   if (!refreshInFlight) {
-    refreshInFlight = performRefresh().finally(() => {
+    refreshInFlight = performRefresh(activity).finally(() => {
       refreshInFlight = null;
     });
+    return refreshInFlight;
   }
-  return refreshInFlight;
+  if (!activity) return refreshInFlight;
+  // An explicit user gesture ("Stay signed in") must record activity
+  // server-side. If a silent rotation is already in flight it carries no
+  // activity flag, so chain a flagged rotation after it settles instead of
+  // sharing it — sequential, never concurrent, so no rotation race.
+  return refreshInFlight.then(() => refreshSessionSingleFlight(true));
 }
 
 // Exported so every caller (the idle-timeout "Extend" button, the proactive
 // keep-alive in AppShell) shares ONE in-flight rotation. A second, independent
 // `fetch("/api/auth/refresh")` rotates the session concurrently and the loser
 // comes back TOKEN_REVOKED, which is what bounced people mid-work.
+// Pass activity=true only for explicit user gestures: the flagged rotation
+// records server-side activity (see the refresh route); silent callers share
+// the unflagged flight so background keep-alives never extend idle sessions.
 export { refreshSessionSingleFlight };
 
 function isAuthEndpoint(url: string): boolean {

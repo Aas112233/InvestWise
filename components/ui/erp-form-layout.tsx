@@ -19,7 +19,7 @@ export function ERPFormSection({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border/80 bg-card p-5 shadow-2xs space-y-4 text-card-foreground",
+        "rounded-xl bg-card p-5 shadow-2xs space-y-4 text-card-foreground",
         className,
       )}
     >
@@ -121,27 +121,4 @@ export function ERPFormLayout({
   className?: string;
 }) {
   return <div className={cn("space-y-5", className)}>{children}</div>;
-}
-
-export function ERPFormActions({
-  children,
-  className,
-  sticky = false,
-}: {
-  children: ReactNode;
-  className?: string;
-  sticky?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center justify-end gap-2.5 pt-4",
-        sticky &&
-          "sticky bottom-0 z-10 border-t border-border/80 bg-card py-3 px-6 -mx-6",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
 }

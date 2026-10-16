@@ -13,6 +13,7 @@ import {
   ERPFormSection,
 } from "@/components/ui/erp-form-layout";
 import { TopSheet } from "@/components/ui/top-sheet";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
@@ -258,7 +259,7 @@ export function ShareDivisionModal({
                     />
                   </ERPFormField>
                   <ERPFormField label={t("dividends.transferShares")}>
-                    <input
+                    <NumericInput
                       type="text"
                       inputMode="numeric"
                       value={row.shares}
@@ -271,7 +272,7 @@ export function ShareDivisionModal({
                     />
                   </ERPFormField>
                   <ERPFormField label={t("dividends.transferCapital")}>
-                    <input
+                    <NumericInput
                       type="text"
                       inputMode="decimal"
                       value={row.amount}

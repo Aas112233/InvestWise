@@ -9,6 +9,7 @@ import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
 import { toCents, fromCents, parsePositiveAmount } from '@/lib/money';
+import { endOfRangeUtc } from '@/lib/formatters';
 import { inflowSqlPredicate, outflowSqlPredicate } from '@/lib/ledger-selectors';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 
@@ -79,7 +80,8 @@ export async function GET(request: NextRequest) {
       conditions.push(gte(transactions.date, new Date(startDate)));
     }
     if (endDate) {
-      conditions.push(lte(transactions.date, new Date(endDate)));
+      // Date-only end is inclusive of the whole day (see endOfRangeUtc).
+      conditions.push(lte(transactions.date, endOfRangeUtc(endDate)));
     }
     if (search) {
       const term = search.trim();

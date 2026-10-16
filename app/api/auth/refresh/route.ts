@@ -7,6 +7,12 @@ import { tokenHash } from '@/lib/middleware/auth';
 import { getTenantSubscriptionBlocked } from '@/lib/subscription-guard';
 import { setAuthCookies, COOKIE_NAMES } from '@/lib/utils/cookies';
 import { getTokenExpiry } from '@/lib/token-expiry';
+import {
+  SESSION_ACTIVITY_HEADER,
+  SUPPORT_SESSION_LIFETIME_MS,
+  isAbsoluteSessionExpired,
+  isSessionIdle,
+} from '@/lib/session-limits';
 import { AppError, AuthError } from '@/lib/utils/errors';
 import { normalizeRole } from '@/lib/roles';
 import crypto from 'node:crypto';
@@ -44,7 +50,11 @@ export async function POST(request: NextRequest) {
     // minted unless the persisted session is still active.
     const [[sessionState], [user]] = await Promise.all([
       db
-        .select({ blacklistId: blacklistedTokens.id })
+        .select({
+          blacklistId: blacklistedTokens.id,
+          loginTime: sessions.loginTime,
+          lastActivity: sessions.lastActivity,
+        })
         .from(sessions)
         .leftJoin(
           blacklistedTokens,
@@ -60,7 +70,7 @@ export async function POST(request: NextRequest) {
             or(
               isNull(sessions.deviceInfo),
               ne(sessions.deviceInfo, 'Support'),
-              gt(sessions.loginTime, new Date(Date.now() - 30 * 60_000)),
+              gt(sessions.loginTime, new Date(Date.now() - SUPPORT_SESSION_LIFETIME_MS)),
             ),
           ),
         )
@@ -74,6 +84,24 @@ export async function POST(request: NextRequest) {
 
     if (!sessionState || sessionState.blacklistId) {
       throw new AuthError('Refresh token or session has been revoked', 'TOKEN_REVOKED');
+    }
+
+    // Lifetime bounds (same policy as both auth gates). Expired sessions are
+    // ended terminally here so a later refresh cannot revive them.
+    if (isAbsoluteSessionExpired(sessionState.loginTime)) {
+      await db
+        .update(sessions)
+        .set({ isActive: false, isExpired: true, logoutTime: new Date(), updatedAt: new Date() })
+        .where(and(eq(sessions.sessionId, decoded.sessionId), eq(sessions.userId, decoded.id)));
+      throw new AuthError('Session has expired. Please sign in again.', 'SESSION_EXPIRED');
+    }
+
+    if (isSessionIdle(sessionState.lastActivity)) {
+      await db
+        .update(sessions)
+        .set({ isActive: false, isExpired: true, logoutTime: new Date(), updatedAt: new Date() })
+        .where(and(eq(sessions.sessionId, decoded.sessionId), eq(sessions.userId, decoded.id)));
+      throw new AuthError('Session expired due to inactivity. Please sign in again.', 'SESSION_IDLE_EXPIRED');
     }
 
     if (!user) {
@@ -94,6 +122,14 @@ export async function POST(request: NextRequest) {
     // it into both new tokens, and move the persisted session row onto it in
     // the same step that records the rotation.
     const rotatedSessionId = crypto.randomUUID();
+
+    // Only an explicit user gesture (the idle-warning "Stay signed in", which
+    // sends SESSION_ACTIVITY_HEADER) counts as activity. Silent rotations —
+    // the 10m background keep-alive and 401 retries — must NOT touch
+    // lastActivity, or the server-side idle kill could never fire: the
+    // keep-alive alone would hold every abandoned session open indefinitely.
+    // Real API work still records activity via the auth-gate touch.
+    const userInitiated = request.headers.get(SESSION_ACTIVITY_HEADER) === '1';
 
     // Rotate: record the blacklist entry, re-key the session row, and resolve
     // the subscription gate concurrently — token signing waits on all three
@@ -140,7 +176,11 @@ export async function POST(request: NextRequest) {
       })(),
       db
         .update(sessions)
-        .set({ sessionId: rotatedSessionId, lastActivity: new Date(), updatedAt: new Date() })
+        .set(
+          userInitiated
+            ? { sessionId: rotatedSessionId, lastActivity: new Date(), updatedAt: new Date() }
+            : { sessionId: rotatedSessionId, updatedAt: new Date() },
+        )
         .where(
           and(
             eq(sessions.sessionId, decoded.sessionId),

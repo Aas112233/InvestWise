@@ -249,7 +249,7 @@ export function AdminShell({
                 />
               </button>
               {localeOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl border border-border/80 bg-popover p-1 shadow-xl z-50 animate-in fade-in-50 zoom-in-95">
+                <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl border border-border/80 dark:border-white/10 bg-popover p-1 shadow-xl z-50 animate-in fade-in-50 zoom-in-95">
                   {LOCALES.map((l) => (
                     <button
                       key={l}

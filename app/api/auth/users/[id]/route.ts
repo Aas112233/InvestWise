@@ -42,7 +42,7 @@ const updateSchema = z
     // requires every enum key (full record), which would reject a partial
     // per-screen override payload like { DEPOSITS: 'READ' }.
     permissions: z
-      .partialRecord(z.enum(ALL_SCREENS as [string, ...string[]]), z.enum(['WRITE', 'READ', 'NONE']))
+      .partialRecord(z.enum(ALL_SCREENS as [string, ...string[]]), z.enum(['MANAGE', 'WRITE', 'READ', 'NONE']))
       .optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
@@ -79,7 +79,7 @@ async function loadTenantTarget(id: string, callerTenantId: string) {
   // Platform operators must never be manageable from a tenant console, even if
   // a legacy row carries this tenant's id.
   if (isSuperAdminRole(target.role) || isPlatformOwnerEmail(target.email)) {
-    throw new ForbiddenError('Platform accounts cannot be managed here');
+    throw new ForbiddenError('Platform accounts cannot be managed from tenant screens. Use the admin console instead.');
   }
   return target;
 }
@@ -146,7 +146,7 @@ export async function PATCH(
 
     if (target.id === admin.user.id && (demoting || deactivating)) {
       throw new ConflictError(
-        "[Field 'role', Code: self_demotion] You cannot demote or deactivate your own account",
+        "[Field 'role', Code: self_demotion] You cannot demote or deactivate your own account. Ask another Admin to make the change.",
       );
     }
 
@@ -205,6 +205,11 @@ export async function PATCH(
         to: { role: updated.role, status: updated.status },
         permissionsChanged: permissions !== undefined,
       },
+      // Zero extra queries: `target` is the row loaded for the guards above;
+      // `updated` is the UPDATE's .returning(). Both carry the same
+      // permission-relevant fields (no password material either way).
+      before: target,
+      after: updated,
       status: 'SUCCESS',
     });
 

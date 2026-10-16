@@ -15,6 +15,7 @@ import { AppDropdown } from "@/components/ui/app-dropdown";
 import { ERPFormField } from "@/components/ui/erp-form-layout";
 import { ERPMetricCard } from "@/components/ui/erp-metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { formatDate } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -72,7 +73,7 @@ function toneFor(status: string | null): "emerald" | "amber" | "rose" | "cyan" |
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+  return Number.isNaN(d.getTime()) ? "—" : formatDate(d);
 }
 
 export default function AdminBillingPage() {
@@ -413,7 +414,7 @@ export default function AdminBillingPage() {
       </div>
 
       {/* Plan catalogue */}
-      <div className="rounded-xl border border-border/80 bg-card shadow-xs">
+      <div className="rounded-xl bg-card shadow-xs">
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/80">
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <Layers className="h-4 w-4 text-primary" />

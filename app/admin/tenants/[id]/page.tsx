@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { ERPDataTable, type ERPColumn } from "@/components/ui/erp-data-table";
 import { ERPConfirmDialog } from "@/components/ui/erp-confirm-dialog";
 import { TenantModuleAccessPanel } from "@/components/admin/tenant-module-access-panel";
+import { formatDate } from "@/lib/formatters";
 
 // decimal(15,2) string -> display. Grouping only; no arithmetic.
 function formatCentsOnly(value: string | undefined): string {
@@ -170,7 +171,7 @@ export default function TenantDetailPage({
       header: t("admin.tenants.detail.userJoined", { defaultValue: "Joined" }),
       render: (u) => (
         <span className="font-mono text-[11px] text-muted-foreground">
-          {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
+          {u.createdAt ? formatDate(u.createdAt) : "—"}
         </span>
       ),
     },
@@ -237,7 +238,7 @@ export default function TenantDetailPage({
       </div>
 
       {/* Hero Header */}
-      <div className="rounded-xl border border-border/80 bg-card p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="rounded-xl bg-card p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <Building2 className="h-6 w-6" />
@@ -317,7 +318,7 @@ export default function TenantDetailPage({
       {/* Financial throughput — the platform operator needs to see a tenant's
           money, not just its row counts. Rendered from server-side decimal
           sums; the client never re-adds. */}
-      <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+      <div className="rounded-xl bg-card p-4 shadow-xs">
         <h2 className="text-sm font-bold text-foreground mb-3">
           {t("admin.tenants.detail.financials", { defaultValue: "Financial Throughput" })}
         </h2>

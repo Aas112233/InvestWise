@@ -36,6 +36,16 @@ import {
   sumDecimal,
   type ServerT,
 } from "./format";
+import { translateLedgerDescription } from "@/lib/ledger-description";
+import {
+  getCategoryLabel,
+  getFundTypeLabel,
+  getHealthLabel,
+  getPenaltyTypeLabel,
+  getRoleLabel,
+  getTransactionStatusLabel,
+  getTransactionTypeLabel,
+} from "@/lib/transaction-labels";
 
 export interface ReportRequestContext {
   tenantId: string;
@@ -277,6 +287,8 @@ then ${transactions.amount}::numeric else 0::numeric end), 0)`;
 
 async function fetchTransactionRows(opts: {
   tenantId: string;
+  /** Active report locale — ledger narrations are localized at render time. */
+  locale: ReportLocale;
   period?: ResolvedPeriod;
   memberId?: string | null;
   projectId?: string | null;
@@ -284,6 +296,7 @@ async function fetchTransactionRows(opts: {
   types?: string[];
 }): Promise<{ rows: TxRow[]; truncated: boolean; totals: { inflow: string; outflow: string; rowCount: number } }> {
   const db = getDb();
+  const t = createServerT(opts.locale);
   const authorizer = aliasedTable(users, "report_authorizer");
 
   const conditions = [
@@ -361,7 +374,9 @@ async function fetchTransactionRows(opts: {
       project: emptyToBlank(r.projectTitle),
       category: r.category ?? "",
       expenseName: emptyToBlank(r.expenseName),
-      description: r.description ?? "",
+      // Stored narrations are canonical English; localize them for display so
+      // the ledger reads in the viewer's language (Rule §9/§10).
+      description: translateLedgerDescription(r.description, t),
       depositMethod: r.depositMethod ?? "",
       amount: fromCents(amountCents),
       debit: fromCents(debitCents),
@@ -473,6 +488,7 @@ function entitySummary(args: BuildArgs): ReportSummaryEntry[] {
 async function buildLedger(args: BuildArgs, types?: string[]): Promise<ReportData> {
   const { rows, truncated, totals } = await fetchTransactionRows({
     tenantId: args.ctx.tenantId,
+    locale: args.ctx.locale,
     period: args.period,
     memberId: args.memberId,
     projectId: args.projectId,
@@ -571,6 +587,7 @@ async function buildMemberHistory(args: BuildArgs): Promise<ReportData> {
 
   const { rows, truncated, totals } = await fetchTransactionRows({
     tenantId: args.ctx.tenantId,
+    locale: args.ctx.locale,
     period: args.period,
     memberId,
     types: ["Deposit"],
@@ -608,6 +625,7 @@ async function buildMemberHistory(args: BuildArgs): Promise<ReportData> {
 async function buildMemberContribution(args: BuildArgs): Promise<ReportData> {
   const { rows, truncated } = await fetchTransactionRows({
     tenantId: args.ctx.tenantId,
+    locale: args.ctx.locale,
     period: args.period,
     memberId: args.memberId,
     types: ["Deposit"],
@@ -761,6 +779,7 @@ async function buildPenaltiesAudit(args: BuildArgs): Promise<ReportData> {
 async function buildTypeLedger(args: BuildArgs, types: string[]): Promise<{ rows: TxRow[]; truncated: boolean }> {
   return fetchTransactionRows({
     tenantId: args.ctx.tenantId,
+    locale: args.ctx.locale,
     period: args.period,
     memberId: args.memberId,
     projectId: args.projectId,
@@ -1101,10 +1120,26 @@ export function buildReportDocument(
       type: c.type,
       total: c.total === true,
     })),
-    rows: data.rows.map((r) =>
+    rows: data.rows.map((r) => {
+      const out: Record<string, string | number | null> = { ...r };
+      // Raw DB enum values are canonical English; localize them the same way
+      // the transactions screen does (Rule §9/§10) so the exported files and
+      // the in-app viewer read in the active locale. Unknown values pass
+      // through verbatim — they are stored data, not UI copy.
+      if (typeof out.type === "string" && out.type) out.type = getTransactionTypeLabel(out.type, t);
+      if (typeof out.status === "string" && out.status) out.status = getTransactionStatusLabel(out.status, t);
+      // The remaining enum-like columns: categories, fund types, member roles,
+      // project health and penalty kinds are all stored as canonical English.
+      if (typeof out.category === "string" && out.category) out.category = getCategoryLabel(out.category, t);
+      if (typeof out.fundType === "string" && out.fundType) out.fundType = getFundTypeLabel(out.fundType, t);
+      if (typeof out.role === "string" && out.role) out.role = getRoleLabel(out.role, t);
+      if (typeof out.health === "string" && out.health) out.health = getHealthLabel(out.health, t);
+      if (typeof out.penaltyType === "string" && out.penaltyType)
+        out.penaltyType = getPenaltyTypeLabel(out.penaltyType, t);
       // Empty completion date = project still running — localized label.
-      r.completionDate === "" ? { ...r, completionDate: t("reports.columns.ongoing") } : r,
-    ),
+      if (out.completionDate === "") out.completionDate = t("reports.columns.ongoing");
+      return out;
+    }),
     totalsLabel: t("reports.summary.total"),
     truncated: data.truncated,
     truncatedNote: t("reports.summary.truncatedNote"),

@@ -41,19 +41,6 @@ export class AuthError extends AppError {
   }
 }
 
-/** Share-value lock: settings immutable once transactions exist (AGENTS.md §12). */
-export class LockedError extends AppError {
-  constructor(message = 'Share value is locked and cannot be changed') {
-    super(message, 409, 'SHARE_VALUE_LOCKED');
-  }
-}
-
-export class ValidationError extends AppError {
-  constructor(message = 'Validation failed', details?: unknown) {
-    super(message, 400, 'VALIDATION_ERROR', details);
-  }
-}
-
 const PG_ERROR_MAP: Record<string, { status: number; message: string; code: string }> = {
   '23505': { status: 409, message: 'A record with that value already exists (duplicate key).', code: 'DUPLICATE_KEY' },
   '23503': { status: 409, message: 'This action would violate a database relationship constraint.', code: 'FK_VIOLATION' },

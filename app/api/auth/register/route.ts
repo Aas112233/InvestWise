@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { tenants, users } from '@/db/schema/index';
+import { members, tenants, users } from '@/db/schema/index';
 import { and, count, eq } from 'drizzle-orm';
 import { hashPassword, validatePasswordStrength } from '@/lib/utils/password';
 import { logAudit } from '@/lib/utils/audit';
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await readJsonBody(request);
-    const { name, email, password, role, memberId, permissions } = body;
+    const { name, email, password, role, memberId, memberUuid, permissions } = body;
 
     // Validation
     if (!name || name.length < 2) {
@@ -102,6 +102,22 @@ export async function POST(request: NextRequest) {
     const passwordValidation = validatePasswordStrength(password);
     if (!passwordValidation.valid) {
       throw new ValidationError(passwordValidation.message || 'Invalid password');
+    }
+
+    // Permissions payload allowlist (MANAGE/WRITE/READ/NONE per known screen).
+    const PERMISSION_VALUES = new Set(['MANAGE', 'WRITE', 'READ', 'NONE']);
+    if (permissions !== undefined && permissions !== null) {
+      if (typeof permissions !== 'object' || Array.isArray(permissions)) {
+        throw new ValidationError(`[Field 'permissions', Code: invalid_type] Permissions must be an object`);
+      }
+      for (const [screen, level] of Object.entries(permissions as Record<string, unknown>)) {
+        if (!ALL_SCREENS.includes(screen)) {
+          throw new ValidationError(`[Field 'permissions.${screen}', Code: unknown_screen] Unknown permission screen`);
+        }
+        if (typeof level !== 'string' || !PERMISSION_VALUES.has(level)) {
+          throw new ValidationError(`[Field 'permissions.${screen}', Code: invalid_level] Permission must be MANAGE, WRITE, READ or NONE`);
+        }
+      }
     }
 
     const normalizedEmail = normalizeEmail(email);
@@ -132,21 +148,6 @@ export async function POST(request: NextRequest) {
       .where(eq(tenants.id, callerTenantId))
       .limit(1);
     const seatCap = Number(tenantRow?.maxUsers ?? 0);
-    if (seatCap > 0) {
-      const [seatCount] = await db
-        .select({ count: count() })
-        .from(users)
-        .where(eq(users.tenantId, callerTenantId))
-        .limit(1);
-      if (Number(seatCount?.count ?? 0) >= seatCap) {
-        throw new ConflictError(
-          `[Seat limit reached: ${seatCap} users] Remove a deactivated user or ask the platform operator to raise your plan's user limit.`
-        );
-      }
-    }
-    // ponytail: count-then-insert can race a few seats over under parallel
-    // creates; acceptable for a soft licence cap. Move to an advisory lock
-    // inside the insert transaction if billing needs exactness.
 
     const hashed = await hashPassword(password);
 
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
     // SuperAdmin through this endpoint would be privilege escalation.
     const newRole = normalizeRole(role);
     if (isSuperAdminRole(newRole)) {
-      throw new ForbiddenError('SuperAdmin accounts cannot be created here');
+      throw new ForbiddenError('SuperAdmin accounts cannot be created from a tenant. Platform operators are managed in the admin console.');
     }
 
     // The same escalation via a different door: requireSuperAdmin trusts the
@@ -166,20 +167,100 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError('This email address is reserved for platform use');
     }
 
-    const [created] = await db
-      .insert(users)
-      .values({
-        tenantId: callerTenantId,
-        name,
-        email: normalizedEmail,
-        password: hashed,
-        role: newRole,
-        memberId: memberId || null,
-        permissions: (permissions && Object.keys(permissions).length > 0
-          ? permissions
-          : getDefaultPermissions(newRole)) as Record<string, string>,
-      })
-      .returning(USER_SELECT);
+    // Seat cap, enforced race-free (F-6): the count and the insert run inside
+    // one transaction that first locks the tenant row, so concurrent creates
+    // for the same tenant serialize on the lock instead of racing the
+    // count-then-insert window.
+    const created = await db.transaction(async (tx) => {
+      await tx
+        .select({ id: tenants.id })
+        .from(tenants)
+        .where(eq(tenants.id, callerTenantId))
+        .for('update')
+        .limit(1);
+
+      if (seatCap > 0) {
+        const [seatCount] = await tx
+          .select({ count: count() })
+          .from(users)
+          .where(eq(users.tenantId, callerTenantId))
+          .limit(1);
+        if (Number(seatCount?.count ?? 0) >= seatCap) {
+          throw new ConflictError(
+            `[Seat limit reached: ${seatCap} users] Remove a deactivated user or ask the platform operator to raise your plan's user limit.`
+          );
+        }
+      }
+
+      // Member link (optional): resolves a tenant member by uuid (preferred)
+      // or MEM-XXXX code, tenant-scoped and live-row only. Rejects members
+      // already linked to another login so one member never fans out to two
+      // accounts. The member row is claimed inside the same transaction as the
+      // user insert, so concurrent creates cannot double-claim it.
+      let linkedMember: { id: string; memberId: string; name: string } | null = null;
+      const memberLookup = typeof memberUuid === 'string' && memberUuid.trim()
+        ? memberUuid.trim()
+        : typeof memberId === 'string' && memberId.trim() && !/^\S+@\S+\.\S+$/.test(memberId.trim())
+          ? memberId.trim()
+          : null;
+      if (memberLookup) {
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const [memberRow] = await tx
+          .select({ id: members.id, memberId: members.memberId, name: members.name, userId: members.userId })
+          .from(members)
+          .where(
+            and(
+              eq(members.tenantId, callerTenantId),
+              eq(members.isDeleted, false),
+              UUID_RE.test(memberLookup) ? eq(members.id, memberLookup) : eq(members.memberId, memberLookup),
+            ),
+          )
+          .limit(1);
+        if (!memberRow) {
+          throw new ValidationError(`[Field 'memberUuid', Code: not_found] Linked member not found in this organization`);
+        }
+        if (memberRow.userId) {
+          throw new ConflictError(`[Field 'memberUuid', Code: already_linked] ${memberRow.name} is already linked to a login`);
+        }
+        // Legacy guard: another login may claim the same MEM-XXXX code via the
+        // un-FK'd users.member_id varchar.
+        const [codeClaim] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.tenantId, callerTenantId), eq(users.memberId, memberRow.memberId)))
+          .limit(1);
+        if (codeClaim) {
+          throw new ConflictError(`[Field 'memberUuid', Code: already_linked] ${memberRow.name} is already linked to a login`);
+        }
+        linkedMember = { id: memberRow.id, memberId: memberRow.memberId, name: memberRow.name };
+      }
+
+      const [row] = await tx
+        .insert(users)
+        .values({
+          tenantId: callerTenantId,
+          name,
+          email: normalizedEmail,
+          password: hashed,
+          role: newRole,
+          memberId: linkedMember ? linkedMember.memberId : (typeof memberId === 'string' && memberId.trim() ? memberId.trim() : null),
+          permissions: (permissions && Object.keys(permissions).length > 0
+            ? permissions
+            : getDefaultPermissions(newRole)) as Record<string, string>,
+        })
+        .returning(USER_SELECT);
+
+      // Claim both directions: users.member_id (legacy varchar code used by
+      // delete-guard + sessions) AND members.user_id/has_user_access (uuid FK
+      // used by PII masking). Same transaction — never half-linked.
+      if (row && linkedMember) {
+        await tx
+          .update(members)
+          .set({ userId: row.id, hasUserAccess: true, updatedAt: new Date() })
+          .where(and(eq(members.id, linkedMember.id), eq(members.tenantId, callerTenantId)));
+      }
+      return row;
+    });
 
     if (!created) {
       throw new AppError('Failed to create user', 500);
@@ -189,7 +270,7 @@ export async function POST(request: NextRequest) {
       action: 'CREATE_USER',
       resourceType: 'User',
       resourceId: created.id,
-      details: { createdBy: userId, email: normalizedEmail, role: newRole },
+      details: { createdBy: userId, email: normalizedEmail, role: newRole, memberId: created.memberId ?? null },
       status: 'SUCCESS',
     });
 

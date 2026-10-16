@@ -6,6 +6,7 @@ import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
 import { getPaginationParams, formatPaginatedResponse } from '@/lib/utils/types';
+import { endOfRangeUtc } from '@/lib/formatters';
 
 interface AuditLogQuery {
   page?: string;
@@ -72,7 +73,8 @@ export async function GET(request: NextRequest) {
     }
 
     if (query.endDate) {
-      conditions.push(lte(auditLogs.createdAt, new Date(query.endDate)));
+      // Date-only end is inclusive of the whole day (see endOfRangeUtc).
+      conditions.push(lte(auditLogs.createdAt, endOfRangeUtc(query.endDate)));
     }
 
     if (query.search) {

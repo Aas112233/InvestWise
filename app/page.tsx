@@ -29,6 +29,7 @@ export default function DashboardPage() {
           monthlyGrowthRate: null,
           totalDeposits: 0,
           depositCount: 0,
+          totalIncome: 0,
           totalExpenses: 0,
           netReserveBalance: 0,
           totalShares: 0,

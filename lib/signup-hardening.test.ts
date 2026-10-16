@@ -54,8 +54,16 @@ describe("bot protection posture", () => {
     vi.unstubAllEnvs();
   });
 
+  it("skips bot protection entirely when the kill switch is off", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "0x4AAAAAAAAAJ3_xxxxxxxxxxxxxxxxxxxxx");
+    const { turnstileState } = await import("./turnstile");
+    expect(turnstileState().mode).toBe("skipped");
+  });
+
   it("fails closed in production when the secret is missing", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("TURNSTILE_ENABLED", "true");
     vi.stubEnv("TURNSTILE_SECRET_KEY", undefined);
     const { turnstileState } = await import("./turnstile");
     expect(turnstileState().mode).toBe("unavailable");
@@ -63,6 +71,7 @@ describe("bot protection posture", () => {
 
   it("refuses Cloudflare's always-pass test vector in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("TURNSTILE_ENABLED", "true");
     vi.stubEnv("TURNSTILE_SECRET_KEY", "1x0000000000000000000000000000000");
     const { turnstileState } = await import("./turnstile");
     expect(turnstileState().mode).toBe("unavailable");
@@ -70,6 +79,7 @@ describe("bot protection posture", () => {
 
   it("requires a token once a real secret is configured", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("TURNSTILE_ENABLED", "true");
     vi.stubEnv("TURNSTILE_SECRET_KEY", "0x4AAAAAAAAAJ3_xxxxxxxxxxxxxxxxxxxxx");
     const { turnstileState } = await import("./turnstile");
     expect(turnstileState().mode).toBe("required");

@@ -13,7 +13,7 @@ import { getDb } from "@/db/index";
 import { auditLogs, members, systemSettings, tenants, transactions } from "@/db/schema/index";
 import { and, asc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import { toCents } from "../money";
-import { DEFAULT_SHARE_VALUE_CENTS, resolveShareValueCents, sharesToCents } from "../shares";
+import { DEFAULT_SHARE_VALUE_CENTS, resolveShareValueCents } from "../shares";
 import { ConflictError, NotFoundError, ValidationError } from "../utils/errors";
 import { logAudit } from "../utils/audit";
 import {
@@ -31,6 +31,7 @@ import {
   normalizeGovernanceRules,
   parsePeriodKey,
   resolveDepositDeadline,
+  resolveRequiredMonthlyCents,
   toPeriodKey,
   type DepositCompliance,
   type GovernanceRules,
@@ -106,26 +107,6 @@ export async function getGovernanceRules(tenantId: string): Promise<GovernanceRu
   }
 
   return { rules, shareValueCents, usedDefaults, problem };
-}
-
-/**
- * Monthly obligation for a member, in cents.
- *
- * An explicit `monthlyDepositTarget` always wins. Otherwise the requirement is
- * share value × shares, floored at one share so a member recorded with 0 shares
- * still carries an obligation instead of silently passing every month.
- */
-export function resolveRequiredMonthlyCents(
-  member: { shares?: number | null; monthlyDepositTarget?: string | number | null },
-  shareValueCents: number,
-): number {
-  const target = member.monthlyDepositTarget;
-  if (target !== null && target !== undefined && target !== "") {
-    const cents = toCents(target);
-    if (cents > 0) return cents;
-  }
-  const shares = Number(member.shares ?? 0);
-  return sharesToCents(Math.max(1, Number.isFinite(shares) ? Math.trunc(shares) : 1), shareValueCents);
 }
 
 export interface MemberStatusSnapshot {
@@ -829,4 +810,4 @@ export async function sweepAllGovernanceTenants(
 }
 
 /** Deadline for a period, re-exported so route handlers need one import. */
-export { resolveDepositDeadline, DEPOSIT_COMPLIANCE, MEMBER_STATUS };
+export { resolveDepositDeadline, resolveRequiredMonthlyCents, DEPOSIT_COMPLIANCE, MEMBER_STATUS };

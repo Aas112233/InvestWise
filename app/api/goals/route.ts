@@ -126,6 +126,8 @@ export async function POST(request: NextRequest) {
       resourceType: 'Goal',
       resourceId: created?.id,
       details: { title, targetAmount },
+      // Create flow: after-only — `created` is the INSERT's .returning().
+      after: created,
     });
 
     return NextResponse.json({

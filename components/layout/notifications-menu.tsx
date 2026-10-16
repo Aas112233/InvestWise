@@ -337,7 +337,7 @@ export function NotificationsMenu() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-96 max-w-[calc(100vw-3rem)] overflow-hidden rounded-xl border border-border/80 bg-popover shadow-xl z-50 animate-in fade-in-50 zoom-in-95">
+        <div className="absolute right-0 top-full mt-1.5 w-96 max-w-[calc(100vw-3rem)] overflow-hidden rounded-xl border border-border/80 dark:border-white/10 bg-popover shadow-xl z-50 animate-in fade-in-50 zoom-in-95">
           <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2.5">
             <div className="flex items-center gap-1.5">
               <Bell className="h-3.5 w-3.5 text-primary" />

@@ -24,14 +24,14 @@ const MAX_GROSS_CENTS = 100_000_000 * 100;
 /** Percent is carried in 1e-2 units (10.00% -> 1000), so the reserve split is integer-only. */
 const PERCENT_SCALE = 10_000; // grossCents * pctCents / PERCENT_SCALE
 
-export interface DividendMemberSeed {
+interface DividendMemberSeed {
   id: string;
   memberId: string;
   name: string;
   shares: number;
 }
 
-export interface DividendPayout {
+interface DividendPayout {
   id: string;
   memberId: string;
   name: string;
@@ -43,7 +43,7 @@ export interface DividendPayout {
   ratePerShare: string;
 }
 
-export interface DividendPlan {
+interface DividendPlan {
   grossCents: number;
   grossAmount: string;
   /** decimal(15,2) string, e.g. "10.00". */
@@ -114,7 +114,7 @@ export function computeDividendPlan(input: {
   const totalActiveShares = eligible.reduce((sum, m) => sum + m.shares, 0);
 
   if (totalActiveShares <= 0) {
-    throw new AppError('No active members with shares found. Dividend cannot be distributed.', 400, 'NO_ELIGIBLE_MEMBERS');
+    throw new AppError('No active members with shares found, so the dividend cannot be distributed. Add active members with shares in the Members screen first.', 400, 'NO_ELIGIBLE_MEMBERS');
   }
 
   // A 100% reserve leaves nothing to split; splitDividendByShares rejects a
@@ -163,7 +163,7 @@ export function computeDividendPlan(input: {
   };
 }
 
-export interface DividendRunContext {
+interface DividendRunContext {
   plan: DividendPlan;
   distributableFund: typeof funds.$inferSelect;
   reserveFund: typeof funds.$inferSelect;

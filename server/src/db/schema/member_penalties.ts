@@ -4,20 +4,22 @@ import { meetings } from './meetings';
 import { transactions } from './transactions';
 import { funds } from './funds';
 import { users } from './users';
+import { tenants } from './tenants';
 
 export const memberPenalties = pgTable('member_penalties', {
   id: uuid('id').defaultRandom().primaryKey(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
   memberId: uuid('member_id').references(() => members.id).notNull(),
   meetingId: uuid('meeting_id').references(() => meetings.id),
-  tier: integer('tier').notNull(), // 1, 2, 3, 4
+  tier: integer('tier').notNull(),
   title: varchar('title', { length: 255 }).notNull(),
-  type: varchar('type', { length: 50 }).notNull(), // VERBAL_WARNING, FUND_DEDUCTION, SUSPENSION
+  type: varchar('type', { length: 50 }).notNull(),
   deductionAmount: decimal('deduction_amount', { precision: 15, scale: 2 }).default('0'),
   isPercentage: boolean('is_percentage').default(false),
   calculatedDeduction: decimal('calculated_deduction', { precision: 15, scale: 2 }).default('0'),
   transactionId: uuid('transaction_id').references(() => transactions.id),
   fundId: uuid('fund_id').references(() => funds.id),
-  status: varchar('status', { length: 50 }).default('ACTIVE').notNull(), // ACTIVE, WAIVED, RESOLVED
+  status: varchar('status', { length: 50 }).default('ACTIVE').notNull(),
   reason: text('reason').notNull(),
   issuedBy: uuid('issued_by').references(() => users.id),
   issuedAt: timestamp('issued_at', { withTimezone: true }).defaultNow(),
@@ -27,6 +29,7 @@ export const memberPenalties = pgTable('member_penalties', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  index('idx_penalties_tenant').on(table.tenantId),
   index('idx_penalties_member_status').on(table.memberId, table.status),
   index('idx_penalties_tier').on(table.tier),
   index('idx_penalties_meeting').on(table.meetingId),

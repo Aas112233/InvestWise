@@ -255,6 +255,11 @@ export function UsersListView() {
           <div className="min-w-0">
             <p className="font-medium text-slate-800 dark:text-slate-100 truncate">{u.name}</p>
             <p className="text-[11px] text-slate-400 truncate max-w-[220px]">{u.email}</p>
+            {(u.memberName || u.memberCode) && (
+              <p className="text-[10px] uppercase tracking-wider text-slate-400 truncate max-w-[220px]">
+                {u.memberCode ? `${u.memberName ?? ""} · ${u.memberCode}` : (u.memberName ?? "")}
+              </p>
+            )}
           </div>
         </div>
       ),

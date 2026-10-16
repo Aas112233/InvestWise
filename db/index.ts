@@ -148,26 +148,4 @@ export async function checkDbHealth(): Promise<boolean> {
   }
 }
 
-export async function setAppContext(userId: string | null, role: string | null): Promise<void> {
-  if (!sql) return;
-  try {
-    const targetUserId = userId || '';
-    const targetRole = role || 'Member';
-    await sql`SELECT set_config('app.user_id', ${targetUserId}, true), set_config('app.role', ${targetRole}, true)`;
-  } catch (error) {
-    console.error('Failed to set RLS app context:', error);
-  }
-}
-
-export async function resetAppContext(): Promise<void> {
-  if (!sql) return;
-  try {
-    await sql`SELECT set_config('app.user_id', '', true), set_config('app.role', '', true)`;
-  } catch (error) {
-    const err = error as { code?: string };
-    if (err.code === 'CONNECTION_ENDED') return;
-    console.error('Failed to reset RLS app context:', error);
-  }
-}
-
 export { schema };

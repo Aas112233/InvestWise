@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { ROLES } from '@/lib/roles';
 
 const USER_STATUSES = ['active', 'inactive', 'suspended'] as const;
-export type UserStatus = (typeof USER_STATUSES)[number];
 
 export const userUpdateSchema = z
   .object({

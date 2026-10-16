@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, MoreVertical, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2, Undo2, Users, XCircle } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Eye, MoreVertical, Pencil, Plus, Printer, RefreshCw, Search, ShieldCheck, Trash2, Undo2, Users, XCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AppDropdown } from "@/components/ui/app-dropdown";
@@ -14,15 +14,16 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { TopSheet } from "@/components/ui/top-sheet";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { openPrintTab, releasePrintWindow, reservePrintWindow } from "@/lib/documents";
 import { hasScreenPermission } from "@/lib/permissions";
 import { isSuperAdminRole, normalizeRole } from "@/lib/roles";
-import { formatDatePattern, formatMoney } from "@/lib/formatters";
+import { formatDateOnly, formatDatePattern, formatMoney } from "@/lib/formatters";
+import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
 import { useLocale } from "@/lib/i18n";
 import {
   depositStatusTone,
   monthKeyOf,
   monthRange,
-  recentYears,
   useDepositsList,
   useDepositsMonthlyTotal,
   useFundOptions,
@@ -108,6 +109,7 @@ function DepositActionsMenu({
 
   const items = [
     { label: t("deposits.actions.view"), icon: <Eye size={13} />, run: onView, danger: false, show: true },
+    { label: t("deposits.actions.print", { defaultValue: "Print Receipt" }), icon: <Printer size={13} />, run: () => openPrintTab("deposit", row.id), danger: false, show: true },
     { label: t("deposits.actions.edit"), icon: <Pencil size={13} />, run: onEdit, danger: false, show: canEdit },
     { label: t("deposits.actions.verify"), icon: <ShieldCheck size={13} />, run: onVerify, danger: false, show: canVerify && pending },
     { label: t("deposits.actions.reject"), icon: <XCircle size={13} />, run: onReject, danger: false, show: canVerify && pending },
@@ -170,10 +172,14 @@ function DepositActionsMenu({
 }
 
 /**
- * Member-facing scope for the same directory. When present the screen renders
- * with the deposits layout but is locked to one member: no bulk action, no
- * verify/reject/delete, and the member filter shows (or resolves to) that
- * member only.
+ * Member self-scope for the Request Deposit screen. When present the screen
+ * renders with the deposits layout but is locked to one member: no
+ * edit/revert/delete, the member filter shows (or resolves to) that member
+ * only, and verify/reject stay hidden (plain members cannot review). The bulk
+ * action IS available here — it submits batch deposit REQUESTS (PENDING slips
+ * for officer approval) scoped to the signed-in member, not direct deposits.
+ * Officers (DEPOSITS READ) pass NO scope and get the open request inbox:
+ * every member's requests, with verify/reject on pending rows.
  */
 export interface DepositsMemberScope {
   /** Member uuid; null while it is still being resolved (filter stays open). */
@@ -182,20 +188,31 @@ export interface DepositsMemberScope {
 }
 
 // Deposits management desk: server-filtered directory with verify/reject
-// review flow (PENDING → Completed/REJECTED), edit via the finance service
-// (atomic fund/member reversal), revert Completed → PENDING with reversal,
-// and soft-delete for non-Completed only. Rendered member-scoped by the
-// Request Deposit screen so both screens share one UI.
+// review flow (PENDING → Completed/REJECTED) for direct (non-request) pending
+// deposits, edit via the finance service (atomic fund/member reversal), revert
+// Completed → PENDING with reversal, and soft-delete for non-Completed only.
+// PENDING deposit REQUESTS are excluded from this desk (excludePendingRequests)
+// — they live on the Request Deposit screen. The Request Deposit screen
+// reuses this component with requestScreen: members self-scoped, officers as
+// the request inbox, so both screens share one UI.
 export function DepositsListView({
   onAdd,
   onBulk,
   onEdit,
   memberScope,
+  requestScreen = false,
 }: {
   onAdd: () => void;
   onBulk?: () => void;
   onEdit?: (row: DepositRow) => void;
   memberScope?: DepositsMemberScope;
+  /**
+   * Renders the Request Deposit screen (submit + track/review requests).
+   * Officers (DEPOSITS READ) get an inbox of ALL requests; members stay
+   * scoped to their own. The desk (default) hides PENDING deposit requests —
+   * they only exist on this screen.
+   */
+  requestScreen?: boolean;
 }) {
   const { t } = useLocale();
   const { user } = useAuth();
@@ -224,7 +241,7 @@ export function DepositsListView({
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const range = month.fiscalYear && month.month ? monthRange(`${month.fiscalYear}-${month.month}`) : null;
+  const range = month.month ? monthRange(month.month) : null;
 
   const scopedMemberId = memberScope?.id ?? null;
   const selfOnly = !!memberScope;
@@ -234,13 +251,20 @@ export function DepositsListView({
   const filterMemberId = selfOnly ? scopedMemberId ?? memberId : memberId;
 
   const canWrite = hasScreenPermission(user, "DEPOSITS", "WRITE");
-  // Member-facing screen: submitting a slip is REQUEST_DEPOSIT write, and the
-  // directory stays read-only (no verify/reject/delete, AGENTS.md §6).
-  const canAct = selfOnly ? hasScreenPermission(user, "REQUEST_DEPOSIT", "WRITE") : canWrite;
+  // Submit-a-request permission (member-facing action), separate from the
+  // desk's DEPOSITS WRITE. On the request screen the add/bulk buttons need
+  // this; review (verify/reject) stays gated on DEPOSITS WRITE, which plain
+  // members do not hold, so nobody can approve their own request (§6).
+  const canRequest = hasScreenPermission(user, "REQUEST_DEPOSIT", "WRITE");
+  const canAct = requestScreen ? canRequest : canWrite;
+  const canVerify = canWrite;
   const canEdit = !selfOnly && canWrite;
-  const canRevert = !selfOnly && canWrite;
+  // Revert/delete are desk-only operations on settled deposits — never on the
+  // request screen, whose rows are requests (pending ones get rejected, not
+  // deleted; completed ones are reviewed on the desk).
+  const canRevert = !selfOnly && !requestScreen && canWrite;
   const canDelete =
-    !selfOnly && (isSuperAdminRole(user?.role) || normalizeRole(user?.role) === "Admin");
+    !selfOnly && !requestScreen && (isSuperAdminRole(user?.role) || normalizeRole(user?.role) === "Admin");
   // Status is review-flow info — Admin/Manager-only per user spec (2026-10-04;
   // corrected same day: Manager, not Member): Member/Auditor render the
   // directory without the Status column. Fail-closed while the user hydrates.
@@ -254,8 +278,9 @@ export function DepositsListView({
 
   // Month filter matches the month a deposit is FOR (the Month column's
   // value), not the collected date — back-entered deposits appear under the
-  // month they were selected for.
-  const pickedMonthKey = month.fiscalYear && month.month ? `${month.fiscalYear}-${month.month}` : null;
+  // month they were selected for. The picker's month value is already the
+  // absolute YYYY-MM of the chosen fiscal month, so it goes on the wire as-is.
+  const pickedMonthKey = month.month;
 
   const list = useDepositsList({
     page,
@@ -267,6 +292,12 @@ export function DepositsListView({
     startDate: range?.start ?? null,
     endDate: range?.end ?? null,
     monthKey: pickedMonthKey,
+    // The desk hides PENDING deposit REQUESTS — they live on the Request
+    // Deposit screen's inbox, where they are submitted and reviewed. The
+    // request screen passes requestScreen and sees everything.
+    excludePendingRequests: !requestScreen,
+    sortBy,
+    sortOrder,
   });
 
   // Monthly collection badge: server-side SUM aggregate (one row) instead of
@@ -307,8 +338,14 @@ export function DepositsListView({
       invalidate();
       toast.success(t(vars.decision === "approve" ? "deposits.verifiedToast" : "deposits.rejectedToast"));
       closeConfirm();
+      // Deposit is now settled — open its printable receipt. The tab was
+      // reserved at click time (see onConfirm) so popup blockers allow it.
+      if (vars.decision === "approve") openPrintTab("deposit", vars.id);
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : t("deposits.loadFailed")),
+    onError: (err) => {
+      releasePrintWindow();
+      toast.error(err instanceof ApiError ? err.message : t("deposits.loadFailed"));
+    },
   });
 
   const deleteMutation = useMutation({
@@ -333,35 +370,10 @@ export function DepositsListView({
     onError: (err) => toast.error(err instanceof ApiError ? err.message : t("deposits.loadFailed")),
   });
 
-  // The list API exposes no server sort; headers sort the loaded page
-  // client-side (documented fallback, never silently unordered).
-  const rows = useMemo(() => {
-    const data = [...(list.data?.data ?? [])];
-    const dir = sortOrder === "asc" ? 1 : -1;
-    const val = (r: DepositRow): string | number => {
-      switch (sortBy) {
-        case "amount":
-          return Number(r.amount) || 0;
-        case "memberName":
-          return (r.memberName || "").toLowerCase();
-        case "fundName":
-          return (r.fundName || "").toLowerCase();
-        case "status":
-          return (r.status || "").toLowerCase();
-        case "referenceNumber":
-          return (r.referenceNumber || "").toLowerCase();
-        default:
-          return new Date(r.date).getTime() || 0;
-      }
-    };
-    data.sort((a, b) => {
-      const va = val(a);
-      const vb = val(b);
-      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
-      return String(va).localeCompare(String(vb)) * dir;
-    });
-    return data;
-  }, [list.data, sortBy, sortOrder]);
+  // Ordering is the server's job: the desk paginates a filtered set that can be
+  // thousands of rows, so sorting only the loaded page reorders 20 of them and
+  // looks like a dead header (AGENTS.md §2).
+  const rows = list.data?.data ?? [];
 
   const onSort = (field: string) => {
     if (sortBy === field) setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
@@ -369,6 +381,8 @@ export function DepositsListView({
       setSortBy(field);
       setSortOrder("asc");
     }
+    // A new order is a new result set — never stay deep in the old one.
+    setPage(1);
   };
 
   const statusLabel = (s: string | null | undefined): string => {
@@ -383,7 +397,7 @@ export function DepositsListView({
       key: "date",
       header: t("deposits.columns.date"),
       sortable: true,
-      render: (r) => <span className="font-mono text-[11px] whitespace-nowrap">{formatDatePattern(r.date, dateFormat)}</span>,
+      render: (r) => <span className="font-mono text-[11px] whitespace-nowrap">{formatDateOnly(r.date, dateFormat)}</span>,
     },
     {
       key: "referenceNumber",
@@ -444,7 +458,7 @@ export function DepositsListView({
       render: (r) => (
         <DepositActionsMenu
           row={r}
-          canVerify={canWrite && !selfOnly}
+          canVerify={canVerify}
           canEdit={canEdit && !!onEdit}
           canDelete={canDelete}
           canRevert={canRevert}
@@ -488,21 +502,24 @@ export function DepositsListView({
     { value: "Completed", label: t("deposits.statusVerified") },
     { value: "REJECTED", label: t("deposits.statusRejected") },
   ];
-  const years = recentYears(5);
-  const monthOptions = MONTH_SHORT.map((s, i) => ({
-    value: String(i + 1).padStart(2, "0"),
-    label: t(`common.months.${s}`),
-  }));
+  // Period filter options come from the tenant's fiscal calendar (§8), so the
+  // desk filters by the same FY periods the forms record against.
+  const { yearOptions, monthsFor } = useFiscalPeriodOptions();
+  const monthOptions = monthsFor(month.fiscalYear);
 
   const busy = reviewMutation.isPending || deleteMutation.isPending || revertMutation.isPending;
   const needsReason = confirm?.kind === "reject" || confirm?.kind === "delete" || confirm?.kind === "revert";
+  // Request-screen vocabulary (titles, button labels, empty state) applies to
+  // the member-scoped view AND to the officer inbox — both render the request
+  // screen, only the row scope differs.
+  const isRequestView = requestScreen || selfOnly;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
-            {selfOnly ? t("requestDeposit.title") : t("deposits.title")}
+            {isRequestView ? t("requestDeposit.title") : t("deposits.title")}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {t("deposits.monthlyCollection")}:{" "}
@@ -517,13 +534,13 @@ export function DepositsListView({
           </Button>
           {canAct && (
             <>
-              {!selfOnly && onBulk && (
+              {onBulk && (
                 <Button variant="outline" size="sm" icon={<Users size={13} />} onClick={onBulk}>
-                  {t("deposits.bulkDeposit")}
+                  {isRequestView ? t("requestDeposit.bulkRequest") : t("deposits.bulkDeposit")}
                 </Button>
               )}
               <Button variant="primary" size="sm" icon={<Plus size={14} />} onClick={onAdd}>
-                {selfOnly ? t("requestDeposit.title") : t("deposits.addDeposit")}
+                {isRequestView ? t("requestDeposit.title") : t("deposits.addDeposit")}
               </Button>
             </>
           )}
@@ -574,7 +591,7 @@ export function DepositsListView({
       </div>
 
       <ERPFiscalMonthPicker
-        fiscalYears={years}
+        fiscalYears={yearOptions}
         months={monthOptions}
         value={month}
         onChange={(v) => {
@@ -603,14 +620,14 @@ export function DepositsListView({
         emptyMessage={
           list.isError
             ? t("deposits.loadFailed")
-            : selfOnly
+            : isRequestView
               ? t("requestDeposit.emptyHistory")
               : t("common.noData")
         }
         emptyAction={
           canAct && !list.isError ? (
             <Button variant="outline" size="sm" icon={<Plus size={13} />} onClick={onAdd}>
-              {selfOnly ? t("requestDeposit.title") : t("deposits.addDeposit")}
+              {isRequestView ? t("requestDeposit.title") : t("deposits.addDeposit")}
             </Button>
           ) : undefined
         }
@@ -625,7 +642,7 @@ export function DepositsListView({
         {receipt && (
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-xs">
             {[
-              [t("deposits.modal.collectedDate"), formatDatePattern(receipt.date, dateFormat, true)],
+              [t("deposits.modal.collectedDate"), formatDateOnly(receipt.date, dateFormat)],
               [t("deposits.modal.submittedDate"), receipt.submittedDate ? formatDatePattern(receipt.submittedDate, dateFormat, true) : "—"],
               [t("deposits.columns.member"), `${receipt.memberName || "—"}${receipt.memberIdStr ? ` (${receipt.memberIdStr})` : ""}`],
               [t("deposits.columns.fund"), receipt.fundName || "—"],
@@ -714,6 +731,7 @@ export function DepositsListView({
         onConfirm={() => {
           if (!confirm) return;
           if (confirm.kind === "verify") {
+            reservePrintWindow(); // pre-open now, while this click gesture is live
             reviewMutation.mutate({ id: confirm.row.id, decision: "approve" });
             return;
           }

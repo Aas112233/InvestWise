@@ -1,8 +1,10 @@
 import { pgTable, uuid, varchar, jsonb, timestamp, index } from 'drizzle-orm/pg-core';
 import { users } from './users';
+import { tenants } from './tenants';
 
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').defaultRandom().primaryKey(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
   userId: uuid('user_id').references(() => users.id),
   userName: varchar('user_name', { length: 255 }),
   action: varchar('action', { length: 100 }).notNull(),
@@ -15,10 +17,9 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  index('idx_audit_logs_tenant_created').on(table.tenantId, table.createdAt.desc()),
   index('idx_audit_logs_action_resource_created').on(table.action, table.resourceType, table.createdAt.desc()),
   index('idx_audit_logs_created_at').on(table.createdAt.desc()),
   index('idx_audit_logs_user_id').on(table.userId, table.createdAt.desc()),
   index('idx_audit_logs_resource').on(table.resourceType, table.resourceId),
 ]);
-
-export type AuditLog = typeof auditLogs.$inferSelect;

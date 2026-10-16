@@ -6,14 +6,20 @@ import { toast } from "sonner";
 import { AppDropdown } from "@/components/ui/app-dropdown";
 import { Button } from "@/components/ui/button";
 import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/components/ui/erp-form-layout";
+import { ERPFiscalMonthPicker } from "@/components/ui/erp-fiscal-month-picker";
 import { TopSheet } from "@/components/ui/top-sheet";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
 import { useLocale } from "@/lib/i18n";
 import { useTenantShareValue, useTenantPaymentMethods } from "@/lib/use-tenant-settings";
 import { PAYMENT_TYPE_LABEL_KEY, type PaymentType } from "@/lib/payment-methods";
 import { DepositsListView } from "./deposits-list-view";
-import { buildDepositMonthOptions, buildDepositYearOptions, useFundOptions, useMemberOptions } from "./shared";
+import { BulkDepositRequestModal } from "./bulk-deposit-request-modal";
+import { useFundOptions, useMemberOptions } from "./shared";
+import { DEPOSIT_FUND_TYPE } from "@/lib/deposit-fund";
+import { hasScreenPermission } from "@/lib/permissions";
 
 const AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
 
@@ -23,7 +29,12 @@ const inputCls =
 // Member-facing deposit slip desk. Shares the deposits management layout
 // (DepositsListView: header, filter bar, fiscal month picker, sortable
 // paginated table, receipt sheet) and opens the slip form in a TopSheet, the
-// same way "Add Deposit" does. Scope is the signed-in member's own requests.
+// same way "Add Deposit" does.
+// Two audiences, one screen: a plain member (REQUEST_DEPOSIT write only) is
+// scoped to their own requests — submit and track; an officer (DEPOSITS READ,
+// the same audience as the deposits desk) sees the request INBOX — every
+// member's requests, with verify/reject on pending rows. Pending requests are
+// hidden from the desk table, so this screen is where they live end to end.
 // TRX id + proof note travel in `notes` because the request contract
 // (POST /api/deposits/request) carries no dedicated proof fields.
 export function DepositRequestView() {
@@ -32,20 +43,23 @@ export function DepositRequestView() {
   const queryClient = useQueryClient();
 
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [fundId, setFundId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<string | null>(null);
   const [trxId, setTrxId] = useState("");
   const [proofNote, setProofNote] = useState("");
-  // Deposit month/year: the month the payment is FOR — survives approval so
+  // Deposit period: the fiscal month the payment is FOR — survives approval so
   // the deposit lands in the claimed month, not the approval month.
+  // depositMonth is the absolute YYYY-MM the API takes; depositFiscalYear is
+  // the picker's parent selection (fiscal start year).
   const [depositMonth, setDepositMonth] = useState("");
-  const [depositYear, setDepositYear] = useState("");
+  const [depositFiscalYear, setDepositFiscalYear] = useState("");
   const [touched, setTouched] = useState(false);
 
   const membersQuery = useMemberOptions();
-  const fundsQuery = useFundOptions();
+  const fundsQuery = useFundOptions(DEPOSIT_FUND_TYPE);
   const tenantShareValue = useTenantShareValue();
 
   // Scope the directory to the signed-in user's own member record (matched by
@@ -60,6 +74,12 @@ export function DepositRequestView() {
 
   const effectiveMemberId = selfMember?.id ?? memberId ?? null;
   const scopeMember = selfMember ?? (membersQuery.data ?? []).find((m) => m.id === memberId) ?? null;
+
+  // Officer (DEPOSITS READ — the deposits-desk audience) sees the request
+  // inbox: all members' requests, review actions included. A plain member
+  // stays scoped to their own record (member privacy — a member must never
+  // see another member's requests).
+  const officer = hasScreenPermission(user, "DEPOSITS", "READ");
 
   // Amount autofill (same contract as the deposit form): fires only when the
   // member identity actually changes — including the moment the signed-in
@@ -97,14 +117,14 @@ export function DepositRequestView() {
       setTrxId("");
       setProofNote("");
       setDepositMonth("");
-      setDepositYear("");
+      setDepositFiscalYear("");
       setTouched(false);
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : t("requestDeposit.loadFailed")),
   });
 
   const amountValid = AMOUNT_RE.test(amount.trim()) && parseFloat(amount) > 0;
-  const monthValid = /^\d{4}-(0[1-9]|1[0-2])$/.test(`${depositYear}-${depositMonth}`);
+  const monthValid = /^\d{4}-(0[1-9]|1[0-2])$/.test(depositMonth);
   const formValid =
     !!effectiveMemberId && !!fundId && amountValid && !!method && trxId.trim().length > 0 && monthValid;
 
@@ -119,7 +139,7 @@ export function DepositRequestView() {
       amount: amount.trim(),
       depositMethod: method,
       notes: parts.join(" | "),
-      depositMonth: `${depositYear}-${depositMonth}`,
+      depositMonth,
     });
   };
 
@@ -144,14 +164,26 @@ export function DepositRequestView() {
       : `${m.name} · ${typeLabel}`;
     return { value: m.name, label };
   });
-  const monthOptions = buildDepositMonthOptions(t);
-  const yearOptions = buildDepositYearOptions();
+  // Posting form: only the fiscal year the ledger is open for is offered, plus
+  // any year already selected so the field never renders blank.
+  const { yearOptionsIncluding, monthsFor } = useFiscalPeriodOptions();
+  const yearOptions = yearOptionsIncluding(depositFiscalYear || null);
+  const monthOptions = monthsFor(depositFiscalYear || null);
 
   return (
     <>
       <DepositsListView
         onAdd={() => setSheetOpen(true)}
-        memberScope={{ id: effectiveMemberId, name: scopeMember?.name }}
+        onBulk={() => setBulkOpen(true)}
+        requestScreen
+        // Officers get the open inbox (no member lock); members stay scoped
+        // to their own requests.
+        memberScope={officer ? undefined : { id: effectiveMemberId, name: scopeMember?.name }}
+      />
+      <BulkDepositRequestModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        selfMemberId={effectiveMemberId}
       />
 
       <TopSheet
@@ -184,7 +216,7 @@ export function DepositRequestView() {
             </ERPFormGrid>
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("requestDeposit.amount")} required error={touched && !amountValid ? t("deposits.modal.amount") : undefined}>
-                <input
+                <NumericInput
                   type="text"
                   inputMode="decimal"
                   placeholder="0.00"
@@ -202,24 +234,21 @@ export function DepositRequestView() {
                 />
               </ERPFormField>
             </ERPFormGrid>
-            <ERPFormGrid columns={2}>
-              <ERPFormField label={t("deposits.modal.depositMonth")} required error={touched && !monthValid ? t("deposits.modal.selectMonth") : undefined}>
-                <AppDropdown
-                  options={monthOptions}
-                  value={depositMonth || null}
-                  onChange={(v) => setDepositMonth(v ?? "")}
-                  placeholder={t("deposits.modal.selectMonth")}
-                />
-              </ERPFormField>
-              <ERPFormField label={t("deposits.modal.depositYear")} required error={touched && !monthValid ? t("deposits.modal.selectYear") : undefined}>
-                <AppDropdown
-                  options={yearOptions}
-                  value={depositYear || null}
-                  onChange={(v) => setDepositYear(v ?? "")}
-                  placeholder={t("deposits.modal.selectYear")}
-                />
-              </ERPFormField>
-            </ERPFormGrid>
+            <ERPFiscalMonthPicker
+              fiscalYears={yearOptions}
+              months={monthOptions}
+              required
+              monthLabel={t("deposits.modal.depositMonth")}
+              error={touched && !monthValid ? t("deposits.modal.selectMonth") : undefined}
+              value={{
+                fiscalYear: depositFiscalYear || null,
+                month: depositMonth || null,
+              }}
+              onChange={(v) => {
+                setDepositFiscalYear(v.fiscalYear ?? "");
+                setDepositMonth(v.month ?? "");
+              }}
+            />
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("requestDeposit.trxId")} required error={touched && !trxId.trim() ? t("requestDeposit.trxId") : undefined}>
                 <input

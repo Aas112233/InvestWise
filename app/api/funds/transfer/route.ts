@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (sourceFundId === targetFundId) {
-      throw new AppError('Source and destination funds cannot be the same', 400, 'SAME_FUND');
+      throw new AppError('Source and destination funds cannot be the same. Choose two different funds.', 400, 'SAME_FUND');
     }
 
     const result = await finance.transferFunds(

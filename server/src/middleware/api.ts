@@ -33,7 +33,21 @@ export interface SessionUser {
   tenantId: string | null;
 }
 
-export type PermissionLevel = 'READ' | 'WRITE';
+export type PermissionLevel = 'READ' | 'WRITE' | 'MANAGE';
+
+/** Ranked grants: NONE < READ < WRITE < MANAGE (mirror of lib/permissions.ts 1:1). */
+const GRANT_RANK: Record<string, number> = {
+  NONE: 0,
+  READ: 1,
+  WRITE: 2,
+  MANAGE: 3,
+};
+
+function grantSatisfies(granted: string | undefined, required: PermissionLevel): boolean {
+  if (!granted) return false;
+  if (granted === 'NONE') return false;
+  return (GRANT_RANK[granted] ?? -1) >= (GRANT_RANK[required] ?? 99);
+}
 
 /** Screen permission evaluator — role-based mirror of lib/permissions.ts 1:1. */
 export function hasScreenPermission(
@@ -48,29 +62,26 @@ export function hasScreenPermission(
   if (role === 'SuperAdmin' || role === 'Admin') return true;
 
   const explicit = user.permissions?.[screen];
-  if (explicit === 'WRITE') return true;
-  if (explicit === 'READ' && requiredLevel === 'READ') return true;
-  if (explicit === 'NONE') return false;
+  if (explicit !== undefined) {
+    return grantSatisfies(explicit, requiredLevel);
+  }
 
-  if (!explicit) {
-    if (screen === 'MEETINGS' || screen === 'GOVERNANCE') {
-      const parent = user.permissions?.['MEMBERS'];
-      if (parent === 'WRITE') return true;
-      if (parent === 'READ' && requiredLevel === 'READ') return true;
-      if (parent === 'NONE') return false;
-    } else if (screen === 'TRANSACTIONS') {
-      const parent = user.permissions?.['DEPOSITS'];
-      if (parent === 'WRITE') return true;
-      if (parent === 'READ' && requiredLevel === 'READ') return true;
-      if (parent === 'NONE') return false;
-    }
+  if (screen === 'MEETINGS' || screen === 'GOVERNANCE') {
+    const parent = user.permissions?.['MEMBERS'];
+    if (parent === 'MANAGE') return true;
+    if (parent === 'WRITE') return requiredLevel !== 'MANAGE';
+    if (parent === 'READ' && requiredLevel === 'READ') return true;
+    if (parent === 'NONE') return false;
+  } else if (screen === 'TRANSACTIONS') {
+    const parent = user.permissions?.['DEPOSITS'];
+    if (parent === 'MANAGE') return true;
+    if (parent === 'WRITE') return requiredLevel !== 'MANAGE';
+    if (parent === 'READ' && requiredLevel === 'READ') return true;
+    if (parent === 'NONE') return false;
   }
 
   const baseline = roleBaselineGrant(role, screen);
-  if (baseline === 'WRITE') return true;
-  if (baseline === 'READ') return requiredLevel === 'READ';
-
-  return false;
+  return grantSatisfies(baseline, requiredLevel);
 }
 
 export function hasAnyScreenPermission(
@@ -127,11 +138,31 @@ export async function readJsonObject(request: Request): Promise<Record<string, u
 }
 
 /** Validate a request body against a Zod schema; field errors per §11 format. */
-export async function validateBody<T>(request: Request, schema: ZodType<T>): Promise<T> {
+export async function validateBody<T>(
+  request: Request,
+  schema: ZodType<T>,
+  options?: { maxBytes?: number; requireJsonContentType?: boolean },
+): Promise<T> {
+  if (options?.requireJsonContentType) {
+    const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
+    if (contentType !== 'application/json') {
+      throw new AppError('Content-Type must be application/json', 415, 'UNSUPPORTED_MEDIA_TYPE');
+    }
+  }
+
   let raw: unknown;
   try {
-    raw = await request.json();
-  } catch {
+    if (options?.maxBytes) {
+      const text = await request.text();
+      if (new TextEncoder().encode(text).length > options.maxBytes) {
+        throw new AppError('Request body is too large', 413, 'PAYLOAD_TOO_LARGE');
+      }
+      raw = JSON.parse(text);
+    } else {
+      raw = await request.json();
+    }
+  } catch (error) {
+    if (error instanceof AppError) throw error;
     throw new AppError('Request body must be valid JSON', 400, 'INVALID_JSON');
   }
   const result = schema.safeParse(raw);
@@ -291,7 +322,7 @@ export async function requirePermission(
   const user = await requireSession();
   if (!hasScreenPermission(user, screen, level)) {
     throw new AppError(
-      `${level === 'WRITE' ? 'Write' : 'Read'} permission required for: ${screen}`,
+      `${level === 'WRITE' ? 'Write' : level === 'MANAGE' ? 'Manage' : 'Read'} permission required for: ${screen}`,
       403,
       'FORBIDDEN',
     );
@@ -307,7 +338,7 @@ export async function requireAnyPermission(
   const user = await requireSession();
   if (!hasAnyScreenPermission(user, screens, level)) {
     throw new AppError(
-      `${level === 'WRITE' ? 'Write' : 'Read'} permission required for: ${screens.join(' or ')}`,
+      `${level === 'WRITE' ? 'Write' : level === 'MANAGE' ? 'Manage' : 'Read'} permission required for: ${screens.join(' or ')}`,
       403,
       'FORBIDDEN',
     );
@@ -379,11 +410,6 @@ export function formatPaginatedResponse<T>(
   };
 }
 
-/** Tenant scope for every business query — users carry tenantId. */
-export function tenantScope(user: SessionUser): string | null {
-  return user.tenantId;
-}
-
 /**
  * Fail-closed tenant resolution for server-handler business logic.
  * Platform operators (SuperAdmin role / env allowlist) bypass tenant scope
@@ -392,7 +418,7 @@ export function tenantScope(user: SessionUser): string | null {
  */
 export function requireTenant(user: SessionUser): string {
   if ((isSuperAdminRole(user.role) || isPlatformOwnerEmail(user.email)) && !user.tenantId) {
-    throw new AppError('Platform operators must use /api/admin endpoints', 403, 'PLATFORM_USE_ADMIN_API');
+    throw new AppError('Platform administration is done in the admin console, not from tenant screens.', 403, 'PLATFORM_USE_ADMIN_API');
   }
   if (!user.tenantId) {
     throw new AppError('Tenant context required', 403, 'TENANT_REQUIRED');

@@ -248,17 +248,15 @@ try {
     title: `Smoke Test Project ${Date.now().toString().slice(-4)}`,
     category: 'Technology',
     description: 'Automated test project',
-    initialInvestment: 25000,
     budget: 50000,
     expectedRoi: 15,
-    totalShares: 100,
     status: 'In Progress',
     health: 'Stable',
-    startDate: new Date().toISOString(),
-    involvedMembers: TEST_MEMBER_ID ? [{
-      memberId: TEST_MEMBER_ID,
-      sharesInvested: 50,
-    }] : [],
+    startDate: new Date().toISOString().slice(0, 10),
+    // Project capital is deposit-backed: it comes from shareholders' invested
+    // capital, not a free-form initial investment. Planning-only project here
+    // (no shareholders) starts the fund at 0.
+    shareholders: [],
   });
   const ok = status === 201 || status === 200;
   if (ok) TEST_PROJECT_ID = data.id || data._id;

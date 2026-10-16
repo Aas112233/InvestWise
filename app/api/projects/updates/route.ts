@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     );
 
     const db = getDb();
-    const conditions = [eq(projectUpdates.tenantId, tenantId)];
+    const conditions = [eq(projectUpdates.tenantId, tenantId), eq(projectUpdates.isDeleted, false)];
     if (projectId) {
       conditions.push(eq(projectUpdates.projectId, projectId));
     }
@@ -47,6 +47,10 @@ export async function GET(request: NextRequest) {
           date: projectUpdates.date,
           balanceBefore: projectUpdates.balanceBefore,
           balanceAfter: projectUpdates.balanceAfter,
+          // Ledger link — the Spending table's print action opens the receipt
+          // on this transaction (null for rows posted before migration 0017
+          // if the backfill couldn't match one).
+          transactionId: projectUpdates.transactionId,
           createdAt: projectUpdates.createdAt,
         })
         .from(projectUpdates)

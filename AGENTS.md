@@ -1,8 +1,10 @@
 # InvestWise — Enterprise Investment Management (Multi-Tenant SaaS)
 
-> Runs on Next.js 16 App Router. The Express-era module tree under `server/src/` is imported
-> directly by the API routes (`app/api/**` → `server/src/modules/**/handlers.ts`) — it is live
-> code, not a reference. Keep its behaviour; don't redesign it mid-flight.
+> Runs on Next.js 16 App Router. Parts of the Express-era module tree under `server/src/` are
+> imported directly by the API routes — live: `modules/finance/**`, `modules/members/handlers.ts`,
+> `modules/funds/**`, `middleware/api.ts`, `lib/**`, `shared/errors.ts`, `db/schema/**`
+> (dead legacy services were removed in the 2026-10-16 dead-code audit — see `dead-code-audit.md`).
+> Keep live behaviour; don't redesign it mid-flight.
 
 ## Stack (target)
 
@@ -61,6 +63,13 @@ npm run i18n:validate # 4-locale key parity check on messages/*.json
   picker `[10, 20, 50, 100]` + prev/next.
 - Client state tracks `page`/`pageSize`/`search`/`sortBy`/`sortOrder` and passes them into
   the query key AND the API params.
+- **Default sort convention:** every list opens **newest-first** (`desc`) on the entity's
+  primary time field — `createdAt` for entities, `date` for finance (transactions/deposits/
+  expenses), `deletedAt` for the deleted-transaction ledger. Do NOT unify this to one field
+  or to the first visible column: the time field is the business-meaningful "latest".
+  `ERPDataTable` shows a header arrow on the active column; when the sorted field is not a
+  rendered column (e.g. members' `createdAt`), it falls back to a "Sorted by …" indicator
+  strip so the ordering is never silent. Keep that field visible where practical.
 
 ### 3. Button Hierarchy & Interactive States
 
@@ -131,10 +140,26 @@ npm run i18n:validate # 4-locale key parity check on messages/*.json
 - `decimal(15,2)` everywhere; no negative contra lines; `SUM(debits) === SUM(credits)`
   on journaled flows; overpayments route to advance/wallet, never silent extra receipts.
 - **Share-value lock:** once transactions exist, `shareValueBdt` is immutable
-  (`isShareValueLocked`, `LockedError`) — see `settings/service.ts`.
+  (`isShareValueLocked`, `LockedError`) — see `lib/utils/errors.ts`.
 - **Soft delete:** transactions use `isDeleted` + `deletedBy`/`deletionReason`, never hard delete.
 - **Idempotency:** bulk deposits, dividend runs, and transfers must be retry-safe
   (unique `referenceNumber` / request keys, 60s timeouts on long runs).
+- **Returns distribution:** `distribute-returns` settles a Profit leg and/or a
+  Loss leg (`Both` settles both in one atomic run — profit first, then loss).
+  Loss debits are capped at each member's recorded equity (multi-pass
+  reallocation, final clamp); the linked fund is debited the full requested
+  amount of each leg — including the loss leg even when shareholders absorbed
+  less (existing mirror behavior, preserved). One shared `PRJ-RET-…` idempotency
+  reference sequence covers every leg's payout rows.
+- **Settle & close ("Distribute Complete Project"):** a `settleProject: true`
+  run computes the leg server-side — the ENTIRE remaining project balance
+  (the updates-route overdraft guard keeps it ≥ 0, so it is always a profit
+  payout; zero balance = no-op close) — then sets `status='Completed'`,
+  `completionDate`, and `is_locked=true` in the same transaction.
+  `is_locked` is ONE-WAY (0018): no code path clears it. Every project write
+  door rejects locked projects with 423 `LockedError` — project PUT/DELETE,
+  `POST /projects/[id]/updates`, `POST /projects/[id]/distribute-returns`, plus
+  transaction soft-delete and restore for rows scoped to a locked project.
 
 ### 13. Ponytail Engineering Discipline
 

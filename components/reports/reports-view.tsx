@@ -6,11 +6,12 @@ import {
   Eye,
   FileText,
 } from "lucide-react";
-import { AppDropdown, Button, DropdownOption, ERPDatePicker, ERPFormField, ERPFormGrid, ERPFormSection } from "@/components/ui";
+import { AppDropdown, Button, DropdownOption, ERPDatePicker, ERPFiscalMonthPicker, ERPFormField, ERPFormGrid, ERPFormSection } from "@/components/ui";
 import { Project, Member } from "@/types";
 import { useLocale } from "@/lib/i18n";
 import { useTenantSettings } from "@/lib/use-tenant-settings";
-import { fiscalStartYearForDate, resolveFiscalBounds, resolveFiscalQuarterBounds } from "@/lib/fiscal-periods";
+import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
+import { resolveFiscalQuarterBounds } from "@/lib/fiscal-periods";
 import {
   REPORT_CATEGORIES,
   reportsForCategory,
@@ -51,7 +52,6 @@ interface ReportsViewProps {
   }) => void;
 }
 
-const MONTH_KEYS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const;
 const QUARTERS = ["Q1", "Q2", "Q3", "Q4"] as const;
 
 export function ReportsView({
@@ -68,9 +68,10 @@ export function ReportsView({
   const [format, setFormat] = useState<ReportFormat>("xlsx");
   const [periodType, setPeriodType] = useState<ReportPeriodType>("Monthly");
 
-  // Monthly selections are calendar-based; quarterly/yearly selections use fiscal periods.
-  const [calendarMonthIdx, setCalendarMonthIdx] = useState(String(new Date().getMonth() + 1));
-  const [calendarYear, setCalendarYear] = useState(String(new Date().getFullYear()));
+  // Every period is fiscal (§8): Monthly picks a month of the tenant's fiscal
+  // year, Quarterly/Yearly pick within the same fiscal year arrays.
+  const [monthlyFiscalYear, setMonthlyFiscalYear] = useState<string | null>(null);
+  const [monthlyMonth, setMonthlyMonth] = useState<string | null>(null);
   const [fiscalYear, setFiscalYear] = useState<string | null>(null);
   const [fiscalQuarter, setFiscalQuarter] = useState<string>("Q1");
   const [startDate, setStartDate] = useState<string | null>(null);
@@ -86,24 +87,18 @@ export function ReportsView({
 
   const { data: tenantSettings } = useTenantSettings();
   const fiscalStartMonth = tenantSettings?.financial?.fiscalYearStart || "July";
-  const fiscalEndMonth = tenantSettings?.financial?.fiscalYearEnd || "June";
-  const currentCalendarYear = new Date().getFullYear();
-  const currentFiscalStartYear = fiscalStartYearForDate(new Date(), fiscalStartMonth);
-  const selectedFiscalYear = fiscalYear ?? String(currentFiscalStartYear);
-  const fiscalYearOptions: DropdownOption[] = Array.from({ length: 11 }, (_, index) => currentFiscalStartYear + index - 5)
-    .filter((year) => year >= 1900 && year <= 9998)
-    .map((year) => {
-      let label = String(year);
-      try {
-        label = resolveFiscalBounds(year, fiscalStartMonth, fiscalEndMonth).label;
-      } catch {
-        // The settings screen prevents invalid new configuration values.
-      }
-      return { value: String(year), label };
-    });
-  const calendarYearOptions: DropdownOption[] = Array.from({ length: 11 }, (_, index) => currentCalendarYear + index - 5)
-    .filter((year) => year >= 1900 && year <= 9998)
-    .map((year) => ({ value: String(year), label: String(year) }));
+  // One fiscal option source for every period control, shared with Analysis,
+  // the deposit desk and the fiscal-period screen.
+  const { yearOptionsIncluding, monthsFor, defaultFiscalYear, defaultMonthKey } = useFiscalPeriodOptions();
+  const selectedFiscalYear = fiscalYear ?? defaultFiscalYear;
+  // Reports is a read screen, so it opens on the period actually open for
+  // posting rather than an empty filter; entry forms stay empty (§15).
+  const monthlyFiscal = monthlyFiscalYear ?? defaultFiscalYear;
+  const monthlyKey = monthlyMonth ?? defaultMonthKey(monthlyFiscal);
+  const monthlyMonthOptions = monthsFor(monthlyFiscal);
+  // Every created year, marked (Open)/(Closed) — closed history is reportable.
+  const monthlyYearOptions = yearOptionsIncluding(monthlyFiscal);
+  const selectedYearOptions = yearOptionsIncluding(selectedFiscalYear);
   const quarterOptions: DropdownOption[] = QUARTERS.map((quarter) => {
     try {
       const bounds = resolveFiscalQuarterBounds(Number(selectedFiscalYear), quarter, fiscalStartMonth);
@@ -120,11 +115,6 @@ export function ReportsView({
     () => categoryReports.find((r) => r.slug === reportSlug) ?? categoryReports[0],
     [categoryReports, reportSlug],
   );
-
-  const monthOptions: DropdownOption[] = MONTH_KEYS.map((key, idx) => ({
-    value: String(idx + 1),
-    label: t(`common.months.${key}`),
-  }));
 
   const projectOptions: DropdownOption[] = projects.map((p) => ({
     value: p.id,
@@ -179,7 +169,9 @@ export function ReportsView({
   const selectionPayload = () => ({
     reportType: definition!.slug,
     periodType,
-    fiscalMonth: periodType === "Monthly" ? `${calendarYear}-${calendarMonthIdx.padStart(2, "0")}` : undefined,
+    // Absolute YYYY-MM of the fiscal month the user picked — the name and the
+    // period now agree.
+    fiscalMonth: periodType === "Monthly" ? monthlyKey : undefined,
     fiscalQuarter: periodType === "Quarterly" ? fiscalQuarter : undefined,
     fiscalYear: periodType === "Quarterly" || periodType === "Yearly" ? selectedFiscalYear : undefined,
     startDate: periodType === "Custom" ? startDate ?? undefined : undefined,
@@ -261,7 +253,7 @@ export function ReportsView({
                 className={`p-3 text-left border rounded-md transition-all text-xs ${
                   definition?.slug === report.slug
                     ? "border-cyan-600 bg-cyan-50/50 dark:bg-cyan-950/30 text-cyan-900 dark:text-cyan-200 font-semibold ring-1 ring-cyan-500"
-                    : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                    : "border-slate-200 dark:border-input hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
                 }`}
               >
                 <FileText className="w-4 h-4 mb-2 text-cyan-600 dark:text-cyan-400" />
@@ -291,24 +283,15 @@ export function ReportsView({
             </ERPFormField>
 
             {periodType === "Monthly" && (
-              <>
-                <ERPFormField label={t("reports.month", { defaultValue: "Calendar Month" })}>
-                  <AppDropdown
-                    options={monthOptions}
-                    value={calendarMonthIdx}
-                    onChange={(val) => setCalendarMonthIdx(val || String(new Date().getMonth() + 1))}
-                    clearable={false}
-                  />
-                </ERPFormField>
-                <ERPFormField label={t("reports.calendarYear", { defaultValue: "Calendar Year" })}>
-                  <AppDropdown
-                    options={calendarYearOptions}
-                    value={calendarYear}
-                    onChange={(val) => setCalendarYear(val || String(currentCalendarYear))}
-                    clearable={false}
-                  />
-                </ERPFormField>
-              </>
+              <ERPFiscalMonthPicker
+                fiscalYears={monthlyYearOptions}
+                months={monthlyMonthOptions}
+                value={{ fiscalYear: monthlyFiscal, month: monthlyKey }}
+                onChange={(v) => {
+                  setMonthlyFiscalYear(v.fiscalYear ?? defaultFiscalYear);
+                  setMonthlyMonth(v.month);
+                }}
+              />
             )}
 
             {periodType === "Quarterly" && (
@@ -323,7 +306,7 @@ export function ReportsView({
                 </ERPFormField>
                 <ERPFormField label={t("reports.year", { defaultValue: "Fiscal Year" })}>
                   <AppDropdown
-                    options={fiscalYearOptions}
+                    options={selectedYearOptions}
                     value={selectedFiscalYear}
                     onChange={setFiscalYear}
                     clearable={false}
@@ -335,7 +318,7 @@ export function ReportsView({
             {periodType === "Yearly" && (
               <ERPFormField label={t("reports.year", { defaultValue: "Fiscal Year" })}>
                 <AppDropdown
-                  options={fiscalYearOptions}
+                  options={selectedYearOptions}
                   value={selectedFiscalYear}
                   onChange={setFiscalYear}
                   clearable={false}
@@ -419,7 +402,7 @@ export function ReportsView({
         </ERPFormSection>
 
         {/* View / Generate / Download Trigger */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2 flex-wrap">
+        <div className="pt-4 border-t border-slate-100 dark:border-border flex justify-end gap-2 flex-wrap">
           {onViewReport && (
             <Button
               variant="outline"

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, decimal, boolean, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, decimal, boolean, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { tenants } from './tenants';
 import { members } from './members';
@@ -29,11 +29,16 @@ export const transactions = pgTable('transactions', {
   memberId: uuid('member_id').references(() => members.id),
   projectId: uuid('project_id').references(() => projects.id),
   fundId: uuid('fund_id').references(() => funds.id),
+  // Project Investment legs only: the deposit fund the capital is drawn FROM.
+  // Without it the project fund is credited while the deposit fund keeps the
+  // same cash, and the treasury double-counts it. Applied by migration 0015.
+  sourceFundId: uuid('source_fund_id').references(() => funds.id),
   handlingOfficer: varchar('handling_officer', { length: 255 }),
   depositMethod: varchar('deposit_method', { length: 50 }),
   // Deposit month (YYYY-MM): the month a deposit is FOR, selected explicitly
   // in the deposit form — can differ from the collected date on back-entry.
-  // Applied live via boot DDL (root instrumentation.ts).
+  // Survives revert→re-approve cycles and feeds member lastDepositMonth.
+  // Applied live via instrumentation boot DDL (transferGroupId pattern).
   depositMonth: varchar('deposit_month', { length: 7 }),
   authorizedBy: uuid('authorized_by').references(() => users.id),
   balanceBefore: decimal('balance_before', { precision: 15, scale: 2 }),
@@ -69,16 +74,26 @@ export const transactions = pgTable('transactions', {
   index('idx_trans_member_fund_type_date').on(
     table.memberId, table.fundId, table.type, table.date,
   ),
-  // Covers the 6-month trend query in analytics: WHERE date >= ? AND status IN (...)
   index('idx_trans_date_status').on(
     table.date.desc(), table.status, table.isDeleted,
   ),
-  // Tenant-scoped idempotency/dup-check lookups (referenceNumber) in the
-  // deposits/expenses/dividends POST routes previously seq-scanned. Partial:
-  // every dup-check query filters out soft-deleted rows.
-  index('idx_trans_tenant_reference').on(
+  // Tenant-scoped idempotency guard (referenceNumber): the deposits/expenses/
+  // dividends POST routes dup-check with a SELECT-then-INSERT pair, which
+  // races under concurrent submits — this partial UNIQUE index is the
+  // database-level backstop so a race cannot double-credit a fund. Mirrors
+  // uq_trans_tenant_reference in db/migrations/0009_ledger_integrity.sql,
+  // which also re-keys pre-existing duplicates (-DUP- suffix) before creating
+  // the index. Partial: soft-deleted rows never take part in dup-checks.
+  uniqueIndex('uq_trans_tenant_reference').on(
     table.tenantId, table.referenceNumber,
-  ).where(sql`is_deleted = false`),
+  ).where(sql`is_deleted = false AND reference_number is not null`),
+  // Deposit month view: GET /api/deposits?depositMonth=YYYY-MM filters on
+  // COALESCE(deposit_month, to_char(date …)) — a function expression no index
+  // can serve, so it full-scans the tenant ledger. This composite lets the
+  // planner scan by (tenant, month) instead when deposit_month is populated.
+  index('idx_trans_tenant_deposit_month').on(
+    table.tenantId, table.depositMonth, table.date.desc(),
+  ),
   // Ledger search box (GET /api/transactions ?search=): contains-match over
   // reference #, description, and the string form of the row id. Requires the
   // pg_trgm extension (CREATE EXTENSION IF NOT EXISTS pg_trgm — applied live
@@ -87,5 +102,3 @@ export const transactions = pgTable('transactions', {
   index('idx_trans_desc_trgm').using('gin', sql`${table.description} gin_trgm_ops`),
   index('idx_trans_id_text_trgm').using('gin', sql`(${table.id}::text) gin_trgm_ops`),
 ]);
-
-export type Transaction = typeof transactions.$inferSelect;

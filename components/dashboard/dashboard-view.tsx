@@ -17,6 +17,7 @@ import {
   Activity,
   Coins,
   TrendingUp,
+  HandCoins,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -33,7 +34,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { useLocale } from "@/lib/i18n";
-import { formatMoney, formatCompactNumber } from "@/lib/formatters";
+import { formatMoney, formatCompactNumber, formatDateOnly } from "@/lib/formatters";
 import { ERPMetricCard, Button, CardGridSkeleton, Skeleton } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { AnalyticsStats, Project, Member, Transaction } from "@/types";
@@ -104,6 +105,7 @@ export function DashboardView({
   const totalDeposits = stats?.totalDeposits ?? 0;
   const depositCount = stats?.depositCount ?? 0;
   const totalExpenses = stats?.totalExpenses ?? 0;
+  const totalIncome = stats?.totalIncome ?? 0;
   const dividends = stats?.totalDividendsDistributed ?? 0;
   const netReserves = stats?.netReserveBalance ?? 0;
   const totalMembers = stats?.totalMembers ?? members.length;
@@ -196,22 +198,22 @@ export function DashboardView({
         <CardGridSkeleton count={4} />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-7 rounded-xl border border-border/80 bg-card p-5 min-h-[300px]">
+          <div className="lg:col-span-7 rounded-xl bg-card p-5 min-h-[300px]">
             <Skeleton className="h-5 w-40 rounded mb-4" />
             <Skeleton className="h-56 w-full rounded-xl" />
           </div>
-          <div className="lg:col-span-5 rounded-xl border border-border/80 bg-card p-5 min-h-[300px]">
+          <div className="lg:col-span-5 rounded-xl bg-card p-5 min-h-[300px]">
             <Skeleton className="h-5 w-32 rounded mb-4" />
             <Skeleton className="h-56 w-full rounded-xl" />
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-8 rounded-xl border border-border/80 bg-card p-5 min-h-[260px]">
+          <div className="lg:col-span-8 rounded-xl bg-card p-5 min-h-[260px]">
             <Skeleton className="h-5 w-44 rounded mb-4" />
             <Skeleton className="h-40 w-full rounded-xl" />
           </div>
-          <div className="lg:col-span-4 rounded-xl border border-border/80 bg-card p-5 min-h-[260px]">
+          <div className="lg:col-span-4 rounded-xl bg-card p-5 min-h-[260px]">
             <Skeleton className="h-5 w-28 rounded mb-4" />
             <Skeleton className="h-40 w-full rounded-xl" />
           </div>
@@ -281,7 +283,7 @@ export function DashboardView({
       </div>
 
       {/* ── KPI Row 2: supporting financial & membership figures ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <ERPMetricCard
           label={t("dashboard.totalAssets", { defaultValue: "Total Assets" })}
           value={formatMoney(totalAssets)}
@@ -318,6 +320,20 @@ export function DashboardView({
           }
         />
         <ERPMetricCard
+          label={t("dashboard.income", { defaultValue: "Income" })}
+          value={formatMoney(totalIncome)}
+          icon={HandCoins}
+          tone="emerald"
+          helperText={`${
+            totalIncome - totalExpenses >= 0
+              ? t("dashboard.surplus", { defaultValue: "Surplus" })
+              : t("dashboard.deficit", { defaultValue: "Deficit" })
+          }: ${formatMoney(Math.abs(totalIncome - totalExpenses))}`}
+          footer={
+            <FooterLink label={t("dashboard.fullLedger", { defaultValue: "Full Ledger" })} onClick={() => onNavigate("/transactions")} />
+          }
+        />
+        <ERPMetricCard
           label={t("dashboard.expenses", { defaultValue: "Expenses" })}
           value={formatMoney(totalExpenses)}
           icon={Receipt}
@@ -332,7 +348,7 @@ export function DashboardView({
       {/* ── Insights: Monthly deposit rate + Funds health ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Deposit submission rate by month */}
-        <div className="lg:col-span-7 rounded-xl border border-border/80 bg-card p-5 shadow-2xs flex flex-col">
+        <div className="lg:col-span-7 rounded-xl bg-card p-5 shadow-2xs flex flex-col">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-muted-foreground" />
@@ -450,7 +466,7 @@ export function DashboardView({
         </div>
 
         {/* Funds health indicator */}
-        <div className="lg:col-span-5 rounded-xl border border-border/80 bg-card p-5 shadow-2xs flex flex-col">
+        <div className="lg:col-span-5 rounded-xl bg-card p-5 shadow-2xs flex flex-col">
           <div className="mb-4 flex items-center gap-2">
             <Landmark className="h-4 w-4 text-muted-foreground" />
             <div>
@@ -543,7 +559,7 @@ export function DashboardView({
       {/* ── Ongoing project finance + Sector allocation ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Ongoing project income vs expenses */}
-        <div className="lg:col-span-8 rounded-xl border border-border/80 bg-card p-5 shadow-2xs flex flex-col">
+        <div className="lg:col-span-8 rounded-xl bg-card p-5 shadow-2xs flex flex-col">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-muted-foreground" />
@@ -639,7 +655,7 @@ export function DashboardView({
         </div>
 
         {/* Sector Allocation donut */}
-        <div className="lg:col-span-4 rounded-xl border border-border/80 bg-card p-5 shadow-2xs flex flex-col">
+        <div className="lg:col-span-4 rounded-xl bg-card p-5 shadow-2xs flex flex-col">
           <div className="mb-3 flex items-center gap-2">
             <PieIcon className="h-4 w-4 text-muted-foreground" />
             <div>
@@ -719,7 +735,7 @@ export function DashboardView({
       {/* ── Recent Transactions + Quick Links ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Recent transactions */}
-        <div className="lg:col-span-8 rounded-xl border border-border/80 bg-card shadow-2xs flex flex-col">
+        <div className="lg:col-span-8 rounded-xl bg-card shadow-2xs flex flex-col">
           <div className="flex items-center justify-between border-b border-border/60 p-4 px-5">
             <div className="flex items-center gap-2">
               <Receipt className="h-4 w-4 text-muted-foreground" />
@@ -768,7 +784,7 @@ export function DashboardView({
                     return (
                       <tr key={txn.id} className="transition-colors hover:bg-muted/30">
                         <td className="px-3 py-2 text-muted-foreground">
-                          {new Date(txn.date).toLocaleDateString("en-GB")}
+                          {formatDateOnly(txn.date)}
                         </td>
                         <td className="px-3 py-2 font-medium text-foreground">
                           {txn.referenceNumber || txn.id.slice(0, 8)}
@@ -804,7 +820,7 @@ export function DashboardView({
         </div>
 
         {/* Right: Quick links */}
-        <div className="lg:col-span-4 rounded-xl border border-border/80 bg-card p-5 shadow-2xs flex flex-col">
+        <div className="lg:col-span-4 rounded-xl bg-card p-5 shadow-2xs flex flex-col">
           <div className="flex items-center gap-2 border-b border-border/60 pb-3">
             <Layers className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold text-foreground">

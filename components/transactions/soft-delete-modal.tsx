@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import { AlertTriangle, Trash2, X } from "lucide-react";
+import { AlertTriangle, Trash2 } from "lucide-react";
 import { TopSheet, Button } from "@/components/ui";
-import { formatMoney } from "@/lib/formatters";
+import { useFormatMoney } from "@/lib/use-tenant-settings";
 import { useLocale } from "@/lib/i18n";
+import { translateLedgerDescription } from "@/lib/ledger-description";
+import { getTransactionTypeLabel } from "./shared";
 
 interface SoftDeleteModalProps {
   isOpen: boolean;
@@ -28,6 +30,7 @@ export function SoftDeleteModal({
   isDeleting,
 }: SoftDeleteModalProps) {
   const { t } = useLocale();
+  const formatMoney = useFormatMoney();
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -44,38 +47,48 @@ export function SoftDeleteModal({
     setReason("");
   };
 
+  const typeLabel = getTransactionTypeLabel(transaction.type, t);
+
   return (
     <TopSheet
       isOpen={isOpen}
       onClose={onClose}
       title={t("transactions.softDeleteTitle", { defaultValue: "Soft Delete Transaction" })}
-      description={`Reference: ${transaction.referenceNumber || transaction.id}`}
+      description={t("transactions.voucherReference", {
+        ref: transaction.referenceNumber || transaction.id,
+        defaultValue: `Reference: ${transaction.referenceNumber || transaction.id}`,
+      })}
     >
       <form method="post" onSubmit={handleSubmit} className="space-y-4">
-        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded flex items-start gap-2.5">
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-start gap-2.5">
           <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="text-xs text-amber-800 dark:text-amber-300">
             <span className="font-semibold block mb-0.5">
-              Financial Compliance Audit Warning (Rule §12)
+              {t("transactions.auditWarningTitle", { defaultValue: "Financial Compliance Audit Warning (Rule §12)" })}
             </span>
-            Transactions are never permanently expunged. This record will be marked as soft-deleted, excluded from ledger totals, and stamped with your user ID and audit reason.
+            {t("transactions.auditWarningText", {
+              defaultValue:
+                "Transactions are never permanently expunged. This record will be marked as soft-deleted, excluded from ledger totals, and stamped with your user ID and audit reason.",
+            })}
           </div>
         </div>
 
         <div className="p-3 bg-muted/40 rounded-xl border border-border/80 space-y-1.5 text-xs">
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Type</span>
-            <span className="font-semibold text-foreground">{transaction.type}</span>
+            <span className="text-muted-foreground">{t("transactions.type", { defaultValue: "Type" })}</span>
+            <span className="font-semibold text-foreground">{typeLabel}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Amount</span>
+            <span className="text-muted-foreground">{t("transactions.amount", { defaultValue: "Amount" })}</span>
             <span className="font-bold font-mono text-destructive">
               {formatMoney(Number(transaction.amount))}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Description</span>
-            <span className="text-foreground truncate max-w-[200px]">{transaction.description}</span>
+            <span className="text-muted-foreground">{t("transactions.description", { defaultValue: "Description" })}</span>
+            <span className="text-foreground truncate max-w-[200px]">
+              {translateLedgerDescription(transaction.description, t) || transaction.description}
+            </span>
           </div>
         </div>
 

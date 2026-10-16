@@ -47,6 +47,7 @@ import {
   ERPFormLayout,
   ERPFormSection,
 } from "@/components/ui/erp-form-layout";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { cn } from "@/lib/utils";
 
 interface Tenant {
@@ -551,7 +552,7 @@ export default function AdminTenantsPage() {
                     required
                     error={errors.maxUsers ? t("admin.tenants.maxUsersInvalid", { defaultValue: "Enter a whole number between 1 and 100000." }) : undefined}
                   >
-                    <input
+                    <NumericInput
                       type="text"
                       inputMode="numeric"
                       autoComplete="off"
@@ -661,7 +662,7 @@ export default function AdminTenantsPage() {
                     hint={t("auth.signup.shareValueHint", { defaultValue: "Value of one share in the base currency." })}
                     error={errors.shareValue ? t("auth.signup.invalidAmount", { defaultValue: "Enter a valid amount" }) : undefined}
                   >
-                    <input
+                    <NumericInput
                       type="text"
                       inputMode="decimal"
                       autoComplete="off"

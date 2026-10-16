@@ -18,7 +18,7 @@
 | Deposits (incl. Request) | `Deposits.tsx`, `RequestDeposit.tsx` | `/api/finance/deposits*` | `/deposits`, `/deposits/request` |
 | Transactions ledger | `Transactions.tsx`, `ProjectTransactionMaster.tsx` | `/api/finance/transactions*` | `/transactions` |
 | Expenses / Earnings | `Expenses.tsx` | `/api/finance/expenses`, `/earnings` | `/expenses`, `/earnings` |
-| Dividends | `DividendManagement.tsx` | `/api/finance/dividends` | `/dividends` |
+| Dividends | `DividendManagement.tsx` | `/api/dividends/distribute` | `/dividends` |
 | Funds + reconcile/transfer | `FundsManagement.tsx` | `/api/funds`, `/api/finance/transfer`, `/funds/:id/reconcile` | `/funds` |
 | Projects + updates | `ProjectManagement.tsx` | `/api/projects`, `/:id/updates` | `/projects`, `/projects/[id]` |
 | Meetings + attendance | `MeetingsManagement.tsx`, `MeetingPerformanceHub.tsx` | `/api/meetings`, `/api/governance/*` | `/meetings` |
@@ -49,7 +49,7 @@ Cancel/X on dirty form confirms first.
 2. Server checks fund balance floor, writes transaction, updates
    `project.totalExpenses/totalEarnings` + `currentFundBalance`.
 
-**Dividend run (`POST /api/finance/dividends`, 60s timeout):**
+**Dividend run (`POST /api/dividends/distribute`, 60s timeout):**
 1. Pick scope (global/project) + total amount → preview shares-weighted split → Confirm.
 2. Server distributes by `shares`, one receipt line per member, retry-safe (run key).
 

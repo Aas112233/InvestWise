@@ -1,6 +1,7 @@
 export { DepositsListView } from "./deposits-list-view";
 export { DepositModal } from "./deposit-modal";
 export { BulkDepositModal } from "./bulk-deposit-modal";
+export { BulkDepositRequestModal } from "./bulk-deposit-request-modal";
 export { DepositRequestView } from "./deposit-request-view";
 export {
   useDepositsList,
@@ -13,6 +14,5 @@ export {
   centsToAmount,
   monthKeyOf,
   monthRange,
-  recentYears,
 } from "./shared";
 export type { DepositRow, MemberOption, FundOption, DepositsPage } from "./shared";

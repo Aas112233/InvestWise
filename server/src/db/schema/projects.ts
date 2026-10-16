@@ -1,8 +1,8 @@
-import { pgTable, uuid, varchar, text, integer, decimal, date, timestamp, index, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, integer, decimal, date, timestamp, index, uniqueIndex, primaryKey, boolean } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { tenants } from './tenants';
 import { members } from './members';
-
+import { funds } from './funds';
 export const projects = pgTable('projects', {
   id: uuid('id').defaultRandom().primaryKey(),
   tenantId: uuid('tenant_id').references(() => tenants.id),
@@ -20,8 +20,10 @@ export const projects = pgTable('projects', {
   totalEarnings: decimal('total_earnings', { precision: 15, scale: 2 }).default('0'),
   totalExpenses: decimal('total_expenses', { precision: 15, scale: 2 }).default('0'),
   projectFundHandler: varchar('project_fund_handler', { length: 255 }),
-  linkedFundId: uuid('linked_fund_id'),
+  linkedFundId: uuid('linked_fund_id').references(() => funds.id, { onDelete: 'set null' }),
   currentFundBalance: decimal('current_fund_balance', { precision: 15, scale: 2 }).default('0'),
+  /** Settled & closed: set true by a "Distribute Complete Project" run. One-way — no code path clears it. */
+  isLocked: boolean('is_locked').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
@@ -35,6 +37,7 @@ export const projects = pgTable('projects', {
 
 export const projectUpdates = pgTable('project_updates', {
   id: uuid('id').defaultRandom().primaryKey(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   type: varchar('type', { length: 50 }).notNull(),
   amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
@@ -42,9 +45,14 @@ export const projectUpdates = pgTable('project_updates', {
   date: timestamp('date', { withTimezone: true }).defaultNow(),
   balanceBefore: decimal('balance_before', { precision: 15, scale: 2 }),
   balanceAfter: decimal('balance_after', { precision: 15, scale: 2 }),
+  isDeleted: boolean('is_deleted').notNull().default(false),
+  /** Ledger row this posting created — the printable update receipt is keyed on it. 1:1. */
+  transactionId: uuid('transaction_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => [
+  index('idx_project_updates_tenant').on(table.tenantId),
   index('idx_project_updates_project').on(table.projectId, table.date.desc()),
+  uniqueIndex('idx_project_updates_transaction').on(table.transactionId),
 ]);
 
 export const projectMembers = pgTable('project_members', {
@@ -56,6 +64,3 @@ export const projectMembers = pgTable('project_members', {
   primaryKey({ columns: [table.projectId, table.memberId] }),
   index('idx_project_members_member').on(table.memberId),
 ]);
-
-export type Project = typeof projects.$inferSelect;
-export type ProjectUpdate = typeof projectUpdates.$inferSelect;

@@ -1,8 +1,6 @@
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import { AuthError } from '../shared/errors';
-
-const ACCESS_TOKEN_EXPIRY = '15m';
-const REFRESH_TOKEN_EXPIRY = '7d';
 
 export interface TokenPayload {
   id: string;
@@ -21,28 +19,15 @@ function getSecret(type: 'access' | 'refresh'): string {
   if (type === 'refresh') {
     const explicit = process.env.JWT_REFRESH_SECRET;
     if (explicit && explicit.length >= 16) return explicit;
-    return jwt.sign({ salt: 'investwise_refresh_secret_salt_v2' }, base);
+    // Same derivation as the live root stack (lib/utils/jwt.ts). The two
+    // copies previously derived DIFFERENT refresh secrets (this one used
+    // jwt.sign with a salt payload, the root uses an HMAC), so a token minted
+    // by one stack would not verify in the other — audit finding F-9. The
+    // derivation matters even though no live caller currently reaches the
+    // refresh branch here (session.ts verifies access tokens only).
+    return crypto.createHmac('sha256', base).update('investwise_refresh_secret_salt_v2').digest('hex');
   }
   return base;
-}
-
-export function generateAccessToken(userId: string, sessionId?: string): string {
-  return jwt.sign({ id: userId, type: 'access', ...(sessionId ? { sessionId } : {}) } satisfies TokenPayload, getSecret('access'), {
-    expiresIn: ACCESS_TOKEN_EXPIRY,
-  });
-}
-
-export function generateRefreshToken(userId: string, sessionId?: string): string {
-  return jwt.sign({ id: userId, type: 'refresh', ...(sessionId ? { sessionId } : {}) } satisfies TokenPayload, getSecret('refresh'), {
-    expiresIn: REFRESH_TOKEN_EXPIRY,
-  });
-}
-
-export function generateTokenPair(userId: string, sessionId?: string): { accessToken: string; refreshToken: string } {
-  return {
-    accessToken: generateAccessToken(userId, sessionId),
-    refreshToken: generateRefreshToken(userId, sessionId),
-  };
 }
 
 export function verifyToken(token: string, type: 'access' | 'refresh'): TokenPayload {

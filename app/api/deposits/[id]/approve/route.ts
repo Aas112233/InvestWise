@@ -8,7 +8,9 @@ import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, LockedError, readJsonBody } from '@/lib/utils/errors';
 import { toCents, fromCents } from '@/lib/money';
+import { isSuperAdminRole, normalizeRole } from '@/lib/roles';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
+import { findDepositMonthOccupant, depositMonthConflictMessage } from '@/lib/deposit-month-limit';
 import crypto from 'node:crypto';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
@@ -53,12 +55,20 @@ export async function POST(
       throw new ValidationError('Transaction is not a deposit');
     }
 
-    // Segregation of duties: the requester can never approve their own
-    // deposit request. The full row is selected above, so createdBy is
-    // present; the guard only skips genuinely NULL (legacy pre-createdBy)
-    // rows — it never fires for a different approver.
-    if (deposit.createdBy && deposit.createdBy === user.id) {
-      throw new ValidationError("[Field 'createdBy', Code: SELF_APPROVAL] You cannot approve your own deposit request.");
+    // Segregation of duties: a non-admin requester can never approve their
+    // own deposit request. Admins and platform operators are exempt — the
+    // tenant admin is the fund officer in single-officer organizations, and
+    // the direct deposit path (finance.approveDeposit via PUT
+    // /api/finance/deposits/[id]) has always allowed self-approval for any
+    // DEPOSITS-WRITE user, so guarding only the request path would just push
+    // admins through the other door. Staff approvers (Manager/Member with
+    // granted DEPOSITS write) stay guarded. The full row is selected above,
+    // so createdBy is present; the guard only skips genuinely NULL (legacy
+    // pre-createdBy) rows — it never fires for a different approver.
+    const isAdminApprover =
+      isSuperAdminRole(user.role) || normalizeRole(user.role) === 'Admin';
+    if (!isAdminApprover && deposit.createdBy && deposit.createdBy === user.id) {
+      throw new ValidationError("[Field 'createdBy', Code: SELF_APPROVAL] You cannot approve your own deposit request. Ask another officer with Deposits write access to approve it.");
     }
 
     const body = await readJsonBody(request);
@@ -66,7 +76,7 @@ export async function POST(
     // Share numbers are one-time setup (member creation). Approvals never
     // change them — a non-zero payload is rejected, not silently applied.
     if (Number(body.shares ?? 0) !== 0) {
-      throw new ValidationError('Share numbers are locked after member creation and cannot be changed by deposits');
+      throw new ValidationError('Share numbers are locked after member creation and cannot be changed by deposits. Adjust shares by editing the member in the Members screen.');
     }
 
     // Fund and member lookups are independent (both keyed off the already
@@ -149,6 +159,22 @@ export async function POST(
       if (!lockedFund) throw new NotFoundError('Fund');
       if (!lockedMember) throw new NotFoundError('Member');
 
+      // §12 one-deposit-per-month: the final gate. Approval credits settled
+      // money, so the member's month must be free of any OTHER occupant —
+      // the request being approved is excluded, but a settled deposit or a
+      // second pending request for the same month (legacy duplicates) blocks
+      // the approval. A reverted deposit re-approves cleanly: it excludes
+      // itself and a reverted direct row never occupies its month.
+      const monthOccupant = await findDepositMonthOccupant(tx, {
+        tenantId: scopedTenantId,
+        memberId: sourceMemberId,
+        depositMonthKey,
+        excludeId: id,
+      });
+      if (monthOccupant) {
+        throw new ValidationError(depositMonthConflictMessage(depositMonthKey, monthOccupant));
+      }
+
       const fundBalanceCents = toCents(lockedFund.balance ?? '0');
       const memberContributedCents = toCents(lockedMember.totalContributed ?? '0');
       const newFundBalanceCents = fundBalanceCents + amountCents;
@@ -207,6 +233,18 @@ export async function POST(
         fundName: fund.name,
         amount: formattedAmount,
         referenceNumber: deposit.referenceNumber,
+      },
+      // Zero extra queries: `deposit` is the row this handler already fetched
+      // (§6 tenant lookup); the after-state comes from the transaction's
+      // computed balances (its return value) plus the row's own
+      // balanceBefore, recorded when the request was made.
+      before: deposit,
+      after: {
+        status: 'Completed',
+        balanceBefore: deposit.balanceBefore,
+        balanceAfter: newFundBalance,
+        memberTotalContributed: newMemberContributed,
+        authorizedBy: user.id,
       },
     });
 

@@ -53,7 +53,7 @@ export function CardSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "p-4 rounded-xl border border-border/80 bg-card shadow-sm flex-1 min-w-[180px] space-y-3",
+        "p-4 rounded-xl bg-card shadow-sm flex-1 min-w-[180px] space-y-3",
         className,
       )}
     >
@@ -88,7 +88,7 @@ export function CardGridSkeleton({ count = 5 }: { count?: number }) {
 
 export function TableRowSkeleton({ columns = 6 }: { columns?: number }) {
   return (
-    <tr className="border-b border-slate-200 dark:border-slate-800">
+    <tr className="border-b border-slate-200 dark:border-border">
       {Array.from({ length: columns }).map((_, i) => (
         <td key={i} className="px-4 py-3.5">
           {i === 0 ? (
@@ -114,69 +114,5 @@ export function TableRowSkeleton({ columns = 6 }: { columns?: number }) {
         </td>
       ))}
     </tr>
-  );
-}
-
-// Loading twin for ERPDataTable (replaces TableSkeleton).
-export function TableSkeleton({
-  rows = 6,
-  columns = 6,
-  showHeader = true,
-  className,
-}: {
-  rows?: number;
-  columns?: number;
-  showHeader?: boolean;
-  className?: string;
-}) {
-  const { t } = useLocale();
-  return (
-    <div
-      role="status"
-      aria-busy="true"
-      className={cn(
-        "w-full bg-card rounded-xl border border-border/80 shadow-sm overflow-hidden",
-        className,
-      )}
-    >
-      <span className="sr-only">{t("common.loading")}</span>
-      {showHeader && (
-        <div className="px-4 py-3.5 border-b border-border/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-muted/30">
-          <div className="flex items-center gap-2 w-full sm:w-72">
-            <Skeleton width="100%" height="2.25rem" borderRadius="0.5rem" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Skeleton width="5rem" height="2rem" borderRadius="0.375rem" />
-            <Skeleton width="6rem" height="2rem" borderRadius="0.375rem" />
-          </div>
-        </div>
-      )}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-              {Array.from({ length: columns }).map((_, i) => (
-                <th key={i} className="px-4 py-3">
-                  <Skeleton width="60%" height="0.75rem" borderRadius="0.25rem" />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {Array.from({ length: rows }).map((_, i) => (
-              <TableRowSkeleton key={i} columns={columns} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-        <Skeleton width="12rem" height="0.875rem" borderRadius="0.25rem" />
-        <div className="flex items-center gap-2">
-          <Skeleton width="2rem" height="2rem" borderRadius="0.375rem" />
-          <Skeleton width="2rem" height="2rem" borderRadius="0.375rem" />
-          <Skeleton width="2rem" height="2rem" borderRadius="0.375rem" />
-        </div>
-      </div>
-    </div>
   );
 }

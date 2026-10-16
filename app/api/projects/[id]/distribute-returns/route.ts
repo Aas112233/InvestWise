@@ -3,7 +3,7 @@ import { getDb } from '@/db/index';
 import { projects, projectMembers, members, funds, transactions } from '@/db/schema/index';
 import { eq, and, inArray, or, like, sql } from 'drizzle-orm';
 import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
+import { LockedError, NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { projectReturnDistributionSchema } from '@/lib/utils/validation';
 import { requireProjectContext, zodMessage } from '../../_helpers';
 import {
@@ -39,22 +39,42 @@ export async function POST(
         { status: 400 },
       );
     }
-    const { type, description } = parsed.data;
+    const { type, description, settleProject } = parsed.data;
+    // Settle & close: the legs are computed server-side from the project's
+    // locked balance — client amounts don't exist for this run shape.
+    const isSettle = settleProject === true;
     let distributionAmountCents: number;
-    try {
-      // Project postings outscale member-level deposits (see updates route) —
-      // ceiling 999,999,999.99 instead of the 10M member-transaction default.
-      distributionAmountCents = parsePositiveAmount(parsed.data.amount, { field: 'amount', maxCents: 99_999_999_999 });
-    } catch (err) {
-      throw new ValidationError(err instanceof Error ? err.message : 'Invalid amount');
+    if (isSettle) {
+      distributionAmountCents = 0; // replaced by the locked balance inside the transaction
+    } else {
+      try {
+        // Project postings outscale member-level deposits (see updates route) —
+        // ceiling 999,999,999.99 instead of the 10M member-transaction default.
+        distributionAmountCents = parsePositiveAmount(parsed.data.amount as number, { field: 'amount', maxCents: 99_999_999_999 });
+      } catch (err) {
+        throw new ValidationError(err instanceof Error ? err.message : 'Invalid amount');
+      }
+    }
+    // "Both": the loss leg (schema guarantees it is present and > 0).
+    let lossAmountCents: number | null = null;
+    if (type === 'Both') {
+      try {
+        lossAmountCents = parsePositiveAmount(parsed.data.lossAmount as number, { field: 'lossAmount', maxCents: 99_999_999_999 });
+      } catch (err) {
+        throw new ValidationError(err instanceof Error ? err.message : 'Invalid loss amount');
+      }
     }
 
-    // Fund recipients are Profit-only (schema already rejects Loss). Parse each
-    // percent to integer basis points, reject duplicates, and cap the total at
-    // 100% before any DB work. Shareholders take the remaining percentage.
+    // Fund recipients are a profit-leg feature (schema rejects them for Loss;
+    // for Both they apply to the profit leg). Parse each percent to integer
+    // basis points, reject duplicates, and cap the total at 100% before any
+    // DB work. Shareholders take the remaining percentage.
     let fundPlan: Array<{ fundId: string; bp: number }> | null = null;
     const fundPercentBp = new Map<string, number>();
-    if (type === 'Profit' && parsed.data.fundAllocations && parsed.data.fundAllocations.length > 0) {
+    // Fund recipients apply to the profit leg: every custom Profit/Both run,
+    // and every settle run (the settle leg IS the profit leg).
+    const fundsAllowed = isSettle || type !== 'Loss';
+    if (fundsAllowed && parsed.data.fundAllocations && parsed.data.fundAllocations.length > 0) {
       const seen = new Set<string>();
       for (const fa of parsed.data.fundAllocations) {
         if (seen.has(fa.fundId)) {
@@ -95,6 +115,13 @@ export async function POST(
         .limit(1);
 
       if (!project) throw new NotFoundError('Project');
+
+      // Settled & closed projects are immutable records — no further runs.
+      if (project.isLocked) {
+        throw new LockedError(
+          'This project is completed and permanently locked — its returns can no longer be distributed.',
+        );
+      }
 
       // #74 (same rule, second door): a distribution without a fund pays members
       // from money that exists nowhere. The equity write-back below still raises
@@ -189,196 +216,300 @@ export async function POST(
       for (const m of lockedMembers) {
         equityAtLock.set(m.id, toCents(m.equity ?? '0'));
       }
-      const remainingEquity = new Map(equityAtLock);
 
       const currentBalanceCents = toCents(project.currentFundBalance || '0');
-
-      // ---- Split the amount: funds first (by percent), shareholders get the
-      //      remaining percentage pro-rata by shares. Both splits are exact
-      //      integer-cent, so funds + members === distribution to the cent.
-      let fundPayoutCents = new Map<string, number>();
-      let fundsTotalCents = 0;
-      if (type === 'Profit' && fundPlan && fundPlan.length > 0) {
-        let split: Array<{ id: string; bp: number; payoutCents: number }>;
-        try {
-          split = splitByPercent(
-            distributionAmountCents,
-            fundPlan.map((f) => ({ id: f.fundId, bp: f.bp })),
-          );
-        } catch (err) {
-          throw new ValidationError(
-            err instanceof Error ? err.message : 'Cannot split distribution across funds',
-          );
-        }
-        fundsTotalCents = split.reduce((s, p) => s + p.payoutCents, 0);
-        for (const p of split) {
-          if (p.payoutCents > 0) fundPayoutCents.set(p.id, p.payoutCents);
-        }
-      }
-      const membersTotalCents = distributionAmountCents - fundsTotalCents;
-
-      // Sufficiency: the linked fund (source) must absorb the FULL amount at its
-      // locked balance — the old GREATEST(0, ...) clamp silently absorbed any
-      // shortfall; that drift is now a hard, unmasked failure.
-      if (type === 'Profit' && linkedFundBalanceCents < distributionAmountCents) {
-        throw new ValidationError(
-          `Insufficient linked fund balance for profit payout (Available: ${fromCents(linkedFundBalanceCents)}, Required: ${fromCents(distributionAmountCents)})`,
-        );
-      }
-      if (type === 'Profit' && currentBalanceCents < distributionAmountCents) {
-        throw new ValidationError(
-          `Insufficient project fund balance for profit payout (Available: ${fromCents(currentBalanceCents)}, Required: ${fromCents(distributionAmountCents)})`,
-        );
-      }
 
       const now = new Date();
       await assertFiscalPeriodOpen(tx, tenantId, now);
 
-      // ---- Member split of the remaining percentage.
-      let requestedCents = new Map<string, number>();
-      let appliedCents = new Map<string, number>();
-      if (membersTotalCents > 0) {
-        if (shareholders.length === 0) {
-          throw new ValidationError(
-            'No active shareholders found to receive the member portion of this distribution',
-          );
-        }
-        try {
-          const memberSplit = splitDividendByShares(
-            membersTotalCents,
-            shareholders.map((s) => ({ id: s.memberId, shares: Number(s.sharesInvested || 0) })),
-          );
-          requestedCents = new Map(memberSplit.map((s) => [s.id, s.payoutCents]));
-          appliedCents = new Map(requestedCents);
-        } catch (err) {
-          throw new ValidationError(
-            err instanceof Error
-              ? `Cannot split the member portion across shareholders: ${err.message}`
-              : 'Cannot split distribution across shareholders',
-          );
-        }
-      }
+      // ---- Legs. "Both" settles two legs in one atomic run: the profit leg
+      //      first (credits shareholder equity, may pay funds), then the loss
+      //      leg (debits equity — its absorption cap therefore includes the
+      //      profit just credited). Single-leg runs are a one-element loop, so
+      //      their behavior is unchanged.
+      //      Settle & close: the ENTIRE remaining balance is the profit leg —
+      //      the updates-route overdraft guard keeps it >= 0, so a settle never
+      //      needs a loss leg (the project's losses already depleted this
+      //      balance). A zero balance is a no-op close.
+      const customType: 'Profit' | 'Loss' | 'Both' = isSettle
+        ? 'Profit'
+        : (type as 'Profit' | 'Loss' | 'Both');
+      const profitLegCents = isSettle ? Math.max(0, currentBalanceCents) : distributionAmountCents;
+      const lossLegCents = isSettle
+        ? 0
+        : customType === 'Both'
+          ? (lossAmountCents as number)
+          : customType === 'Loss'
+            ? distributionAmountCents
+            : 0;
+      const legTypes: Array<'Profit' | 'Loss'> = isSettle
+        ? profitLegCents > 0
+          ? ['Profit']
+          : []
+        : customType === 'Both'
+          ? ['Profit', 'Loss']
+          : [customType];
 
-      // 4. Loss: a debit can never exceed the member's recorded equity. Clamp
-      //    each over-cap debit and re-allocate the shortfall to shareholders
-      //    with remaining equity. Every pass fully consumes at least one
-      //    member's equity, so the loop is bounded; the final clamp after the
-      //    loop guarantees the invariant unconditionally. (Profit pays out; it
-      //    is never clamped against equity.)
-      if (type === 'Loss') {
-        for (let pass = 0; pass < shareholders.length; pass++) {
-          const overCap = shareholders.filter(
-            (s) => (appliedCents.get(s.memberId) ?? 0) > (remainingEquity.get(s.memberId) ?? 0),
-          );
-          if (overCap.length === 0) break;
-          let shortfall = 0;
-          for (const sh of overCap) {
-            const cap = remainingEquity.get(sh.memberId) ?? 0;
-            shortfall += (appliedCents.get(sh.memberId) ?? 0) - cap;
-            appliedCents.set(sh.memberId, cap);
-            remainingEquity.set(sh.memberId, 0); // equity fully consumed
-          }
-          const candidates = shareholders.filter(
-            (s) => Number(s.sharesInvested || 0) > 0 && (remainingEquity.get(s.memberId) ?? 0) > 0,
-          );
-          if (candidates.length === 0) break; // equity exhausted; record actual debits only
-          const candidateShares = candidates.reduce((acc, s) => acc + Number(s.sharesInvested || 0), 0);
-          let reallocated = 0;
-          for (let i = 0; i < candidates.length; i++) {
-            const c = candidates[i];
-            if (!c) continue;
-            const add = i === candidates.length - 1
-              ? shortfall - reallocated
-              : Math.floor((shortfall * Number(c.sharesInvested || 0)) / candidateShares);
-            reallocated += add;
-            appliedCents.set(c.memberId, (appliedCents.get(c.memberId) ?? 0) + add);
-          }
-        }
-        // Applied debits can never exceed the equity recorded at lock time.
-        for (const sh of shareholders) {
-          const cap = equityAtLock.get(sh.memberId) ?? 0;
-          if ((appliedCents.get(sh.memberId) ?? 0) > cap) {
-            appliedCents.set(sh.memberId, cap);
-          }
-        }
-      }
+      let runningBalanceCents = currentBalanceCents;
+      // Running member equity: the loss leg's absorption cap is computed from
+      // this, so in a Both run it includes the profit credits just applied.
+      const equityRunning = new Map(equityAtLock);
 
-      // 5. Ledger: per-fund Dividend rows + per-shareholder equity rows.
-      //    Both writes are grouped: N recipients cost 2 round-trips, not 2N.
-      //    Reference numbers share one sequence (fund rows first, then member
-      //    rows) so the idempotency dup-check (refBase-%) covers every leg.
-      let appliedTotalCents = 0;
+      let refSeq = 0;
+      const nextRef = () => `${refBase}-${(String(++refSeq)).padStart(2, '0')}`;
+
+      const fundDeltaCents = new Map<string, number>();
+      const fundPayoutFinal = new Map<string, number>();
+      let fundsTotalCents = 0;
+      let memberAppliedTotalCents = 0;
+      let lossAppliedTotalCents = 0;
+      const membersWithPayout = new Set<string>();
       const distributionsList: Array<{
         memberId: string;
         memberName: string;
         shares: number;
         requestedAmount: string;
         appliedAmount: string;
+        type: 'Profit' | 'Loss';
       }> = [];
-
-      const recipients = shareholders
-        .map((sh) => {
-          const applied = appliedCents.get(sh.memberId) ?? 0;
-          const beforeCents = equityAtLock.get(sh.memberId) ?? 0;
-          return {
-            sh,
-            applied,
-            beforeCents,
-            afterCents: type === 'Profit' ? beforeCents + applied : beforeCents - applied,
-          };
-        })
-        .filter((r) => r.applied > 0);
-
-      // §12 loss mirror: the equity shareholders surrender must be written down
-      // through the project fund, the linked fund and the project's expense
-      // books by the same cents. Pre-validate sufficiency at the locked
-      // balances BEFORE any ledger write.
-      const lossTotalCents = type === 'Loss'
-        ? recipients.reduce((acc, r) => acc + r.applied, 0)
-        : 0;
-      if (lossTotalCents > 0) {
-        if (currentBalanceCents < lossTotalCents) {
-          throw new ValidationError(
-            `Insufficient project fund balance to absorb the loss (Available: ${fromCents(currentBalanceCents)}, Required: ${fromCents(lossTotalCents)})`,
-          );
-        }
-        if (linkedFundBalanceCents < lossTotalCents) {
-          throw new ValidationError(
-            `Insufficient linked fund balance to absorb the loss (Available: ${fromCents(linkedFundBalanceCents)}, Required: ${fromCents(lossTotalCents)})`,
-          );
-        }
-      }
-
-      let refSeq = 0;
-      const nextRef = () => `${refBase}-${(String(++refSeq)).padStart(2, '0')}`;
-
-      // Per-fund Dividend ledger rows (Profit only), sorted by fund id.
       const fundLedgerRows: Array<typeof transactions.$inferInsert> = [];
-      for (const [fid, payout] of [...fundPayoutCents.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
-        const fund = fundById.get(fid);
-        if (!fund) continue;
-        const balBefore = toCents(fund.balance || '0');
-        fundLedgerRows.push({
-          tenantId,
-          type: 'Dividend',
-          amount: fromCents(payout),
-          description: `Project profit return to ${fund.name} (${project.title}): ${description.trim()}`,
-          category: 'Profit Distribution',
-          referenceNumber: nextRef(),
-          date: now,
-          submittedDate: now,
-          status: 'Completed',
-          memberId: null,
-          projectId: id,
-          fundId: fid,
-          handlingOfficer: user.name,
-          balanceBefore: fromCents(balBefore),
-          balanceAfter: fromCents(balBefore + payout),
-          createdBy: user.id,
-        });
+      const memberLedgerRows: Array<typeof transactions.$inferInsert> = [];
+
+      for (const legType of legTypes) {
+        const isProfit = legType === 'Profit';
+        const requestedCents = isProfit ? profitLegCents : lossLegCents;
+
+        // 4. Split the amount: funds first (profit leg only, by percent),
+        //    shareholders get the remaining percentage pro-rata by shares.
+        //    Both splits are exact integer-cent, so funds + members ===
+        //    distribution to the cent.
+        let fundPayoutCents = new Map<string, number>();
+        let legFundsCents = 0;
+        if (isProfit && fundPlan && fundPlan.length > 0) {
+          let split: Array<{ id: string; bp: number; payoutCents: number }>;
+          try {
+            split = splitByPercent(
+              requestedCents,
+              fundPlan.map((f) => ({ id: f.fundId, bp: f.bp })),
+            );
+          } catch (err) {
+            throw new ValidationError(
+              err instanceof Error ? err.message : 'Cannot split distribution across funds',
+            );
+          }
+          legFundsCents = split.reduce((s, p) => s + p.payoutCents, 0);
+          for (const p of split) {
+            if (p.payoutCents > 0) fundPayoutCents.set(p.id, p.payoutCents);
+          }
+        }
+        const membersTotalCents = requestedCents - legFundsCents;
+
+        // Sufficiency: the linked fund (source) must absorb the FULL amount at
+        // its locked balance — the old GREATEST(0, ...) clamp silently
+        // absorbed any shortfall; that drift is now a hard, unmasked failure.
+        if (isProfit) {
+          if (linkedFundBalanceCents < requestedCents) {
+            throw new ValidationError(
+              `Insufficient linked fund balance for profit payout (Available: ${fromCents(linkedFundBalanceCents)}, Required: ${fromCents(requestedCents)})`,
+            );
+          }
+          if (runningBalanceCents < requestedCents) {
+            throw new ValidationError(
+              `Insufficient project fund balance for profit payout (Available: ${fromCents(runningBalanceCents)}, Required: ${fromCents(requestedCents)})`,
+            );
+          }
+        }
+
+        // Member split of the remaining percentage.
+        let requestedMap = new Map<string, number>();
+        let appliedMap = new Map<string, number>();
+        if (membersTotalCents > 0) {
+          if (shareholders.length === 0) {
+            throw new ValidationError(
+              'No active shareholders found to receive the member portion of this distribution',
+            );
+          }
+          try {
+            const memberSplit = splitDividendByShares(
+              membersTotalCents,
+              shareholders.map((s) => ({ id: s.memberId, shares: Number(s.sharesInvested || 0) })),
+            );
+            requestedMap = new Map(memberSplit.map((s) => [s.id, s.payoutCents]));
+            appliedMap = new Map(requestedMap);
+          } catch (err) {
+            throw new ValidationError(
+              err instanceof Error
+                ? `Cannot split the member portion across shareholders: ${err.message}`
+                : 'Cannot split distribution across shareholders',
+            );
+          }
+        }
+
+        // Loss: a debit can never exceed the member's recorded equity. Clamp
+        // each over-cap debit and re-allocate the shortfall to shareholders
+        // with remaining equity. Every pass fully consumes at least one
+        // member's equity, so the loop is bounded; the final clamp after the
+        // loop guarantees the invariant unconditionally. (Profit pays out; it
+        // is never clamped against equity.) The cap is the RUNNING equity, so
+        // in a Both run it includes the profit just credited.
+        if (!isProfit) {
+          const remainingEquity = new Map(equityRunning);
+          for (let pass = 0; pass < shareholders.length; pass++) {
+            const overCap = shareholders.filter(
+              (s) => (appliedMap.get(s.memberId) ?? 0) > (remainingEquity.get(s.memberId) ?? 0),
+            );
+            if (overCap.length === 0) break;
+            let shortfall = 0;
+            for (const sh of overCap) {
+              const cap = remainingEquity.get(sh.memberId) ?? 0;
+              shortfall += (appliedMap.get(sh.memberId) ?? 0) - cap;
+              appliedMap.set(sh.memberId, cap);
+              remainingEquity.set(sh.memberId, 0); // equity fully consumed
+            }
+            const candidates = shareholders.filter(
+              (s) => Number(s.sharesInvested || 0) > 0 && (remainingEquity.get(s.memberId) ?? 0) > 0,
+            );
+            if (candidates.length === 0) break; // equity exhausted; record actual debits only
+            const candidateShares = candidates.reduce((acc, s) => acc + Number(s.sharesInvested || 0), 0);
+            let reallocated = 0;
+            for (let i = 0; i < candidates.length; i++) {
+              const c = candidates[i];
+              if (!c) continue;
+              const add = i === candidates.length - 1
+                ? shortfall - reallocated
+                : Math.floor((shortfall * Number(c.sharesInvested || 0)) / candidateShares);
+              reallocated += add;
+              appliedMap.set(c.memberId, (appliedMap.get(c.memberId) ?? 0) + add);
+            }
+          }
+          // Applied debits can never exceed the equity available at this leg.
+          for (const sh of shareholders) {
+            const cap = equityRunning.get(sh.memberId) ?? 0;
+            if ((appliedMap.get(sh.memberId) ?? 0) > cap) {
+              appliedMap.set(sh.memberId, cap);
+            }
+          }
+        }
+
+        const recipients = shareholders
+          .map((sh) => {
+            const applied = appliedMap.get(sh.memberId) ?? 0;
+            const beforeCents = equityRunning.get(sh.memberId) ?? 0;
+            return {
+              sh,
+              applied,
+              beforeCents,
+              afterCents: isProfit ? beforeCents + applied : beforeCents - applied,
+            };
+          })
+          .filter((r) => r.applied > 0);
+
+        // §12 loss mirror: the equity shareholders surrender must be written
+        // down through the project fund, the linked fund and the project's
+        // expense books by the same cents. Pre-validate sufficiency at the
+        // running balances BEFORE any ledger write. In a Both run the linked
+        // fund must already cover the profit leg's full draw PLUS this loss.
+        const legLossCents = isProfit ? 0 : recipients.reduce((acc, r) => acc + r.applied, 0);
+        if (legLossCents > 0) {
+          if (runningBalanceCents < legLossCents) {
+            throw new ValidationError(
+              `Insufficient project fund balance to absorb the loss (Available: ${fromCents(runningBalanceCents)}, Required: ${fromCents(legLossCents)})`,
+            );
+          }
+          const linkedRequired = (type === 'Both' ? distributionAmountCents : 0) + legLossCents;
+          if (linkedFundBalanceCents < linkedRequired) {
+            throw new ValidationError(
+              `Insufficient linked fund balance to absorb the loss (Available: ${fromCents(linkedFundBalanceCents)}, Required: ${fromCents(linkedRequired)})`,
+            );
+          }
+        }
+
+        // 5. Ledger: per-fund Dividend rows (profit leg) + per-shareholder
+        //    equity rows. Reference numbers share one sequence (fund rows
+        //    first, then member rows, leg by leg) so the idempotency
+        //    dup-check (refBase-%) covers every leg.
+        for (const [fid, payout] of [...fundPayoutCents.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+          const fund = fundById.get(fid);
+          if (!fund) continue;
+          const balBefore = toCents(fund.balance || '0');
+          fundLedgerRows.push({
+            tenantId,
+            type: 'Dividend',
+            amount: fromCents(payout),
+            description: `Project profit return to ${fund.name} (${project.title}): ${description.trim()}`,
+            category: 'Profit Distribution',
+            referenceNumber: nextRef(),
+            date: now,
+            submittedDate: now,
+            status: 'Completed',
+            memberId: null,
+            projectId: id,
+            fundId: fid,
+            handlingOfficer: user.name,
+            balanceBefore: fromCents(balBefore),
+            balanceAfter: fromCents(balBefore + payout),
+            createdBy: user.id,
+          });
+        }
+
+        for (const r of recipients) {
+          memberLedgerRows.push({
+            tenantId,
+            type: isProfit ? 'Dividend' : 'Expense',
+            amount: fromCents(r.applied),
+            description: isProfit
+              ? `Project profit return (${project.title}): ${description.trim()}`
+              : `Project loss absorption (${project.title}): ${description.trim()}`,
+            category: isProfit ? 'Profit Distribution' : 'Loss Allocation',
+            referenceNumber: nextRef(),
+            date: now,
+            submittedDate: now,
+            status: 'Completed',
+            memberId: r.sh.memberId,
+            projectId: id,
+            fundId: project.linkedFundId ?? null,
+            handlingOfficer: user.name,
+            balanceBefore: fromCents(r.beforeCents),
+            balanceAfter: fromCents(r.afterCents),
+            createdBy: user.id,
+          });
+          memberAppliedTotalCents += r.applied;
+          if (!isProfit) lossAppliedTotalCents += r.applied;
+          membersWithPayout.add(r.sh.memberId);
+          distributionsList.push({
+            memberId: r.sh.memberId,
+            memberName: r.sh.memberName,
+            shares: Number(r.sh.sharesInvested || 0),
+            requestedAmount: fromCents(requestedMap.get(r.sh.memberId) ?? 0),
+            appliedAmount: fromCents(r.applied),
+            type: legType,
+          });
+        }
+
+        // Apply the leg to the running state.
+        if (isProfit) {
+          runningBalanceCents -= requestedCents;
+          fundsTotalCents += legFundsCents;
+          for (const [fid, payout] of fundPayoutCents) fundPayoutFinal.set(fid, payout);
+        } else {
+          runningBalanceCents -= legLossCents;
+        }
+        for (const r of recipients) equityRunning.set(r.sh.memberId, r.afterCents);
+        // The linked fund is debited the full requested leg amount (profit: the
+        // payout source; loss: existing mirror behavior — the fund carries the
+        // requested loss even if shareholders absorbed less). Recipient funds
+        // are credited their share.
+        fundDeltaCents.set(project.linkedFundId!, (fundDeltaCents.get(project.linkedFundId!) ?? 0) - requestedCents);
+        for (const [fid, payout] of fundPayoutCents) {
+          fundDeltaCents.set(fid, (fundDeltaCents.get(fid) ?? 0) + payout);
+        }
       }
 
-      if (recipients.length > 0) {
+      // 6. Write-backs (grouped — N recipients cost a few round-trips, not N).
+      const finalRecipients = shareholders
+        .map((sh) => ({ sh, finalCents: equityRunning.get(sh.memberId) ?? 0 }))
+        .filter((r) => r.finalCents !== (equityAtLock.get(r.sh.memberId) ?? 0));
+      if (finalRecipients.length > 0) {
         // Grouped equity write-back under the row locks held above — the §6
         // tenant predicate stays in the WHERE.
         await tx.execute(sql`
@@ -386,60 +517,22 @@ export async function POST(
           SET total_contributed = v.balance::numeric,
               updated_at = ${now.toISOString()}::timestamptz
           FROM (VALUES ${sql.join(
-            recipients.map((r) => sql`(${r.sh.memberId}::uuid, ${fromCents(r.afterCents)}::numeric)`),
-            sql`, `,
+            finalRecipients.map((r) => sql`(${r.sh.memberId}::uuid, ${fromCents(r.finalCents)}::numeric)`),
+            sql`, `
           )}) AS v(id, balance)
           WHERE m.id = v.id AND m.tenant_id = ${tenantId}
         `);
       }
 
-      const memberLedgerRows: Array<typeof transactions.$inferInsert> = recipients.map((r) => ({
-        tenantId,
-        type: type === 'Profit' ? 'Dividend' : 'Expense',
-        amount: fromCents(r.applied),
-        description: type === 'Profit'
-          ? `Project profit return (${project.title}): ${description.trim()}`
-          : `Project loss absorption (${project.title}): ${description.trim()}`,
-        category: type === 'Profit' ? 'Profit Distribution' : 'Loss Allocation',
-        referenceNumber: nextRef(),
-        date: now,
-        submittedDate: now,
-        status: 'Completed',
-        memberId: r.sh.memberId,
-        projectId: id,
-        fundId: project.linkedFundId ?? null,
-        handlingOfficer: user.name,
-        balanceBefore: fromCents(r.beforeCents),
-        balanceAfter: fromCents(r.afterCents),
-        createdBy: user.id,
-      }));
-
       if (fundLedgerRows.length > 0 || memberLedgerRows.length > 0) {
         await tx.insert(transactions).values([...fundLedgerRows, ...memberLedgerRows]);
       }
 
-      for (const r of recipients) {
-        appliedTotalCents += r.applied;
-        distributionsList.push({
-          memberId: r.sh.memberId,
-          memberName: r.sh.memberName,
-          shares: Number(r.sh.sharesInvested || 0),
-          requestedAmount: fromCents(requestedCents.get(r.sh.memberId) ?? 0),
-          appliedAmount: fromCents(r.applied),
-        });
-      }
-
-      // 6. Fund books. The linked fund is the SOURCE: it is debited the full
-      //    distribution; each recipient fund is credited its share. If the
-      //    linked fund is also a recipient its net delta is (-full + share).
-      //    Applied as one grouped UPDATE with relative deltas (row locks held,
-      //    so f.balance + delta is exact with no clamping).
-      const fundDeltaCents = new Map<string, number>();
-      const linkedId = project.linkedFundId!;
-      fundDeltaCents.set(linkedId, (fundDeltaCents.get(linkedId) ?? 0) - distributionAmountCents);
-      for (const [fid, payout] of fundPayoutCents) {
-        fundDeltaCents.set(fid, (fundDeltaCents.get(fid) ?? 0) + payout);
-      }
+      // Fund books. The linked fund is the SOURCE: it is debited the full
+      // distribution; each recipient fund is credited its share. If the linked
+      // fund is also a recipient its net delta is (-full + share). Applied as
+      // one grouped UPDATE with relative deltas (row locks held, so
+      // f.balance + delta is exact with no clamping).
       if (fundDeltaCents.size > 0) {
         await tx.execute(sql`
           UPDATE ${funds} AS f
@@ -449,30 +542,33 @@ export async function POST(
             [...fundDeltaCents.entries()].map(
               ([k, v]) => sql`(${k}::uuid, ${fromCents(v)}::numeric(15,2))`,
             ),
-            sql`, `,
+            sql`, `
           )}) AS v(id, delta)
           WHERE f.id = v.id AND f.tenant_id = ${tenantId}
         `);
       }
 
       // Project books. Profit pays out of the project fund; Loss mirrors it.
-      if (type === 'Profit') {
-        const newBalanceStr = fromCents(currentBalanceCents - distributionAmountCents);
+      // (A Loss run that absorbed nothing leaves the project row untouched.)
+      // Settle & close: after the payout the books are zero — the same write
+      // flips status to Completed and sets the permanent lock. is_locked is
+      // one-way: no code path ever clears it.
+      if (customType === 'Profit' || customType === 'Both' || lossAppliedTotalCents > 0) {
+        const projectSet: Record<string, unknown> = {
+          currentFundBalance: fromCents(runningBalanceCents),
+          updatedAt: now,
+        };
+        if (lossAppliedTotalCents > 0) {
+          projectSet.totalExpenses = fromCents(toCents(project.totalExpenses || '0') + lossAppliedTotalCents);
+        }
+        if (isSettle) {
+          projectSet.status = 'Completed';
+          projectSet.completionDate = now.toISOString().slice(0, 10);
+          projectSet.isLocked = true;
+        }
         await tx
           .update(projects)
-          .set({
-            currentFundBalance: newBalanceStr,
-            updatedAt: now,
-          })
-          .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)));
-      } else if (lossTotalCents > 0) {
-        await tx
-          .update(projects)
-          .set({
-            currentFundBalance: fromCents(currentBalanceCents - lossTotalCents),
-            totalExpenses: fromCents(toCents(project.totalExpenses || '0') + lossTotalCents),
-            updatedAt: now,
-          })
+          .set(projectSet)
           .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)));
       }
 
@@ -481,7 +577,7 @@ export async function POST(
         fundName: string;
         percent: string;
         amount: string;
-      }> = [...fundPayoutCents.entries()]
+      }> = [...fundPayoutFinal.entries()]
         .sort((a, b) => (a[0] < b[0] ? -1 : 1))
         .map(([fid, payout]) => ({
           fundId: fid,
@@ -491,28 +587,53 @@ export async function POST(
         }));
 
       return {
-        type,
-        requestedAmount: fromCents(distributionAmountCents),
-        totalDistributed: fromCents(appliedTotalCents + fundsTotalCents),
-        totalToMembers: fromCents(appliedTotalCents),
+        type: customType,
+        requestedAmount: fromCents(profitLegCents + (customType === 'Both' ? lossLegCents : 0)),
+        totalDistributed: fromCents(memberAppliedTotalCents + fundsTotalCents),
+        totalToMembers: fromCents(memberAppliedTotalCents),
         totalToFunds: fromCents(fundsTotalCents),
-        shareholderCount: distributionsList.length,
+        ...(customType === 'Both'
+          ? {
+              profitAmount: fromCents(profitLegCents),
+              lossRequested: fromCents(lossLegCents),
+              lossAllocated: fromCents(lossAppliedTotalCents),
+            }
+          : {}),
+        ...(isSettle ? { settled: true, locked: true } : {}),
+        shareholderCount: membersWithPayout.size,
         fundCount: fundDistributionsList.length,
         distributions: distributionsList,
         fundDistributions: fundDistributionsList,
       };
     });
 
-    const appliedTotalCents = toCents(distributionResult.totalToMembers);
-    const fundsTotalCents = toCents(distributionResult.totalToFunds);
-    const shortfallCents = distributionAmountCents - (appliedTotalCents + fundsTotalCents);
     const fundNote =
       distributionResult.fundCount > 0
         ? ` and ${distributionResult.fundCount} fund${distributionResult.fundCount > 1 ? 's' : ''}`
         : '';
-    const message = type === 'Loss' && shortfallCents > 0
-      ? `Project loss distribution applied ${distributionResult.totalDistributed} of ${distributionResult.requestedAmount} requested; some shareholders had insufficient equity to absorb their share`
-      : `Project ${type.toLowerCase()} distribution executed successfully across ${distributionResult.shareholderCount} shareholder${distributionResult.shareholderCount === 1 ? '' : 's'}${fundNote}`;
+    let message: string;
+    if (isSettle) {
+      message =
+        toCents(distributionResult.requestedAmount) > 0
+          ? `Project settled: ${distributionResult.requestedAmount} (the entire remaining balance) distributed across ${distributionResult.shareholderCount} shareholder${distributionResult.shareholderCount === 1 ? '' : 's'}${fundNote}. The project is now marked Completed and permanently locked.`
+          : 'Project settled: no remaining balance to distribute. The project is now marked Completed and permanently locked.';
+    } else if (type === 'Both') {
+      const lossRequestedStr = fromCents(lossAmountCents as number);
+      const lossAllocatedStr = distributionResult.lossAllocated ?? '0.00';
+      const lossShortfallCents = (lossAmountCents as number) - toCents(lossAllocatedStr);
+      message =
+        lossShortfallCents > 0
+          ? `Project returns distribution executed: ${distributionResult.profitAmount} profit and ${lossAllocatedStr} of ${lossRequestedStr} loss applied; some shareholders had insufficient equity to absorb their loss share`
+          : `Project returns distribution executed: ${distributionResult.profitAmount} profit and ${lossRequestedStr} loss across ${distributionResult.shareholderCount} shareholder${distributionResult.shareholderCount === 1 ? '' : 's'}${fundNote}`;
+    } else {
+      const appliedTotalCents = toCents(distributionResult.totalToMembers);
+      const fundsTotalCentsResp = toCents(distributionResult.totalToFunds);
+      const shortfallCents = distributionAmountCents - (appliedTotalCents + fundsTotalCentsResp);
+      message =
+        type === 'Loss' && shortfallCents > 0
+          ? `Project loss distribution applied ${distributionResult.totalDistributed} of ${distributionResult.requestedAmount} requested; some shareholders had insufficient equity to absorb their share`
+           : `Project ${distributionResult.type.toLowerCase()} distribution executed successfully across ${distributionResult.shareholderCount} shareholder${distributionResult.shareholderCount === 1 ? '' : 's'}${fundNote}`;
+    }
 
     await logAudit({
       user: { id: user.id, name: user.name },
@@ -522,10 +643,17 @@ export async function POST(
       resourceId: id,
       details: {
         type,
+        ...(isSettle ? { settled: true, locked: true } : {}),
         amount: distributionResult.totalDistributed,
         requestedAmount: distributionResult.requestedAmount,
         totalToMembers: distributionResult.totalToMembers,
         totalToFunds: distributionResult.totalToFunds,
+        ...(type === 'Both'
+          ? {
+              lossRequested: distributionResult.lossRequested,
+              lossAllocated: distributionResult.lossAllocated,
+            }
+          : {}),
         shareholderCount: distributionResult.shareholderCount,
         fundCount: distributionResult.fundCount,
       },

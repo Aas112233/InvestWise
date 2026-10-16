@@ -26,7 +26,6 @@ import { memberPenalties, members, meetingAttendees, meetings, transactions } fr
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { toCents } from "../money";
 import { NotFoundError } from "../utils/errors";
-import { logAudit } from "../utils/audit";
 import { addMonthsToPeriodKey, resolveDepositDeadline, toPeriodKey, type GovernanceRules } from "./status-rules";
 import { getGovernanceRules, resolveRequiredMonthlyCents } from "./status-service";
 
@@ -318,42 +317,4 @@ export async function recalculateAllMembersPerformance(
   }
 
   return { updatedCount: updated.size };
-}
-
-/** Admin-initiated manual score override, always audit-logged. */
-export async function manuallyAdjustMemberScore(
-  tenantId: string,
-  memberId: string,
-  newScore: number,
-  reason: string,
-  actor: { id?: string; name?: string },
-): Promise<{ memberId: string; performanceScore: number; grade: string }> {
-  const db = getDb();
-  const clamped = Math.max(0, Math.min(100, Math.round(newScore * 100) / 100));
-
-  const [member] = await db
-    .select({ name: members.name, performanceScore: members.performanceScore })
-    .from(members)
-    .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId)))
-    .limit(1);
-
-  if (!member) throw new NotFoundError("Member");
-
-  const previousScore = Number(member.performanceScore ?? 100);
-
-  await db
-    .update(members)
-    .set({ performanceScore: clamped.toFixed(2), updatedAt: new Date() })
-    .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId)));
-
-  await logAudit({
-    user: actor,
-    tenantId,
-    action: "MANUAL_SCORE_ADJUSTMENT",
-    resourceType: "Member",
-    resourceId: memberId,
-    details: { memberName: member.name, previousScore, newScore: clamped, reason },
-  });
-
-  return { memberId, performanceScore: clamped, grade: resolveGrade(clamped) };
 }

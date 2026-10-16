@@ -25,13 +25,14 @@ export const transactions = pgTable('transactions', {
   // money-movement date — drives ledger ordering, monthly totals,
   // member lastDepositMonth. Allows past dates for back-entry.
   date: timestamp('date', { withTimezone: true }).defaultNow(),
-  // Submission date: when this deposit was recorded in the app. May differ
-  // from collected date (e.g. collected 5th, entered 7th). Defaults to now,
-  // settable for back-entry.
   status: varchar('status', { length: 50 }).default('Completed'),
   memberId: uuid('member_id').references(() => members.id),
   projectId: uuid('project_id').references(() => projects.id),
   fundId: uuid('fund_id').references(() => funds.id),
+  // Project Investment legs only: the deposit fund the capital is drawn FROM.
+  // Without it the project fund is credited while the deposit fund keeps the
+  // same cash, and the treasury double-counts it. Applied by migration 0015.
+  sourceFundId: uuid('source_fund_id').references(() => funds.id),
   handlingOfficer: varchar('handling_officer', { length: 255 }),
   depositMethod: varchar('deposit_method', { length: 50 }),
   // Deposit month (YYYY-MM): the month a deposit is FOR, selected explicitly
@@ -48,6 +49,9 @@ export const transactions = pgTable('transactions', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   deletedBy: uuid('deleted_by').references(() => users.id),
   deletionReason: text('deletion_reason'),
+  // Submission date: when this deposit was recorded in the app. May differ
+  // from collected date (e.g. collected 5th, entered 7th). Defaults to now,
+  // settable for back-entry.
   submittedDate: timestamp('submitted_date', { withTimezone: true }).defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),

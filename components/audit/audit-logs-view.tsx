@@ -60,6 +60,55 @@ function renderDetails(details: unknown): string {
   }
 }
 
+/** Fields of a before/after snapshot that are pure bookkeeping, not changes. */
+const SNAPSHOT_NOISE = new Set([
+  "id",
+  "tenantId",
+  "createdAt",
+  "updatedAt",
+]);
+
+interface SnapshotDiffRow {
+  field: string;
+  before: string;
+  after: string;
+  changed: boolean;
+}
+
+/**
+ * Field-level before → after diff computed from the audit entry's snapshots.
+ * Bookkeeping fields (ids, timestamps) are dropped; rows where the value
+ * actually changed are flagged. Returns null when there is nothing to diff.
+ */
+function buildSnapshotDiff(details: unknown): SnapshotDiffRow[] | null {
+  if (!details || typeof details !== "object") return null;
+  const { before, after } = details as { before?: unknown; after?: unknown };
+  if (!before || typeof before !== "object" || !after || typeof after !== "object") return null;
+  const beforeObj = before as Record<string, unknown>;
+  const afterObj = after as Record<string, unknown>;
+  const fields = Array.from(
+    new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]),
+  ).filter((f) => !SNAPSHOT_NOISE.has(f));
+  const rows = fields.map((field) => {
+    const b = formatSnapshotValue(beforeObj[field]);
+    const a = formatSnapshotValue(afterObj[field]);
+    return { field, before: b, after: a, changed: b !== a };
+  });
+  return rows.length > 0 ? rows : null;
+}
+
+function formatSnapshotValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
 // System audit log explorer. Server-driven search/filter/sort/pagination
 // over GET /api/audit with the hierarchical ["audit", params] key (Rule §7);
 // filter vocabularies come from GET /api/audit/metadata.
@@ -134,6 +183,15 @@ export function AuditLogsView() {
 
   const rows = query.data?.data ?? [];
   const total = query.data?.meta.total ?? 0;
+
+  const snapshotDiff = inspected ? buildSnapshotDiff(inspected.details) : null;
+  // Details keys other than the before/after snapshots (e.g. field lists,
+  // manual change maps) — shown alongside the diff when present.
+  const otherDetails = (() => {
+    if (!inspected?.details || typeof inspected.details !== "object") return null;
+    const { before: _b, after: _a, ...rest } = inspected.details as Record<string, unknown>;
+    return Object.keys(rest).length > 0 ? rest : null;
+  })();
 
   const columns: ERPColumn<AuditLog>[] = [
     {
@@ -331,8 +389,43 @@ export function AuditLogsView() {
             </div>
             <div className="sm:col-span-2">
               <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("audit.columns.details")}</dt>
-              <dd className="mt-1 p-3 rounded-xl border border-border/80 bg-muted/40 font-mono text-[11px] whitespace-pre-wrap break-words text-foreground">
-                {renderDetails(inspected.details) || t("audit.detailsEmpty")}
+              <dd className="mt-1 space-y-2">
+                {snapshotDiff ? (
+                  <>
+                    <div className="rounded-xl border border-border/80 overflow-hidden">
+                      <table className="w-full text-[11px]">
+                        <thead>
+                          <tr className="bg-muted/50 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
+                            <th className="px-3 py-1.5 text-left">{t("audit.diff.field")}</th>
+                            <th className="px-3 py-1.5 text-left">{t("audit.diff.before")}</th>
+                            <th className="px-3 py-1.5 text-left">{t("audit.diff.after")}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {snapshotDiff.map((row) => (
+                            <tr key={row.field} className={row.changed ? "bg-amber-500/5" : undefined}>
+                              <td className="px-3 py-1.5 font-mono text-muted-foreground align-top">{row.field}</td>
+                              <td className="px-3 py-1.5 font-mono text-rose-600 dark:text-rose-400 break-all align-top">{row.before}</td>
+                              <td className="px-3 py-1.5 font-mono text-emerald-600 dark:text-emerald-400 break-all align-top">{row.after}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {snapshotDiff.every((r) => !r.changed) && (
+                      <p className="text-[11px] text-muted-foreground">{t("audit.diff.noChanges")}</p>
+                    )}
+                  </>
+                ) : (
+                  <div className="p-3 rounded-xl border border-border/80 bg-muted/40 font-mono text-[11px] whitespace-pre-wrap break-words text-foreground">
+                    {renderDetails(inspected.details) || t("audit.detailsEmpty")}
+                  </div>
+                )}
+                {otherDetails && (
+                  <div className="p-3 rounded-xl border border-border/80 bg-muted/40 font-mono text-[11px] whitespace-pre-wrap break-words text-foreground">
+                    {renderDetails(otherDetails)}
+                  </div>
+                )}
               </dd>
             </div>
             {inspected.userAgent && (

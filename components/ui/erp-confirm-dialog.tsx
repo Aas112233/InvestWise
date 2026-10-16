@@ -78,7 +78,7 @@ export function ERPConfirmDialog({
         aria-modal="true"
         aria-labelledby="erp-confirm-title"
         aria-describedby="erp-confirm-description"
-        className="relative z-[111] w-full max-w-md bg-card text-card-foreground rounded-2xl border border-border/80 shadow-2xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150"
+        className="relative z-[111] w-full max-w-md bg-card text-card-foreground rounded-2xl border border-border/80 dark:border-white/10 shadow-2xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150"
       >
         <div className="px-6 pt-6 pb-4 flex items-start gap-3.5 bg-card">
           <div

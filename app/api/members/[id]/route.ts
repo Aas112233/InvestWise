@@ -118,7 +118,9 @@ export async function PUT(
     const idMatch = UUID_RE.test(id) ? or(eq(members.id, id), eq(members.memberId, id)) : eq(members.memberId, id);
     const scope = tenantScope(user.tenantId, user);
     const [existing] = await db
-      .select({ id: members.id })
+      // Full row (not an id projection): the same single query doubles as the
+      // audit before-snapshot — no extra round trip.
+      .select()
       .from(members)
       .where(and(idMatch, scope, eq(members.isDeleted, false)))
       .limit(1);
@@ -205,6 +207,10 @@ export async function PUT(
       resourceType: 'Member',
       resourceId: existing.id,
       details: { fields: d.shares !== undefined ? [...Object.keys(patch), 'shares'] : Object.keys(patch) },
+      // Zero extra queries: `existing` was fetched for the uniqueness guards
+      // above; `updated` is the UPDATE's .returning() row.
+      before: existing,
+      after: updated,
     });
 
     return NextResponse.json({ success: true, data: updated, message: 'Member updated successfully.' });
@@ -309,6 +315,9 @@ export async function DELETE(
       resourceType: 'Member',
       resourceId: existing.id,
       details: { name: existing.name, reason },
+      // Soft delete: snapshot the row as it stood before the tombstone flags.
+      before: existing,
+      after: { isDeleted: true, deletedBy: user.id, deletionReason: reason },
     });
 
     return NextResponse.json({

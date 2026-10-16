@@ -7,6 +7,7 @@ import { AnalysisView } from "@/components/analysis";
 import { apiClient } from "@/lib/api-client";
 import { AnalysisData, Member } from "@/types";
 import { useTenantSettings } from "@/lib/use-tenant-settings";
+import { useFiscalPeriodYears } from "@/lib/fiscal-period-options";
 import { fiscalStartYearForDate } from "@/lib/fiscal-periods";
 
 export default function AnalysisPage() {
@@ -16,7 +17,10 @@ export default function AnalysisPage() {
   const fiscalStartMonth = tenantSettings?.financial?.fiscalYearStart || "July";
   const fiscalEndMonth = tenantSettings?.financial?.fiscalYearEnd || "June";
   const currentFiscalStartYear = fiscalStartYearForDate(new Date(), fiscalStartMonth);
-  const activeFiscalYear = selectedFiscalYear ?? currentFiscalStartYear;
+  // Analysis is a read screen, so it opens on the year actually open for
+  // posting rather than the date-derived one; the picker marks the same year.
+  const { openFiscalYear } = useFiscalPeriodYears();
+  const activeFiscalYear = selectedFiscalYear ?? Number(openFiscalYear ?? currentFiscalStartYear);
 
   // TanStack Query v5 - Hierarchical noun-first keys (AGENTS.md §7)
   const {

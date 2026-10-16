@@ -162,7 +162,7 @@ export function AppModal({
         aria-labelledby="app-modal-title"
         aria-describedby={description ? "app-modal-description" : undefined}
         className={cn(
-          "relative z-50 w-full my-auto sm:my-4 rounded-xl border border-border/80 bg-card p-6 shadow-xl shadow-black/10 overflow-hidden",
+          "relative z-50 w-full my-auto sm:my-4 rounded-xl border border-border/80 dark:border-white/10 bg-card p-6 shadow-xl shadow-black/10 overflow-hidden",
           "transition-all",
           isVisible
             ? "duration-300 ease-out opacity-100 scale-100 translate-y-0"

@@ -3,6 +3,7 @@ import { getDb } from '@/db/index';
 import { sessions } from '@/db/schema/index';
 import { eq, and } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
+import { logAudit } from '@/lib/utils/audit';
 import { AuthError, NotFoundError } from '@/lib/utils/errors';
 
 export async function DELETE(
@@ -41,6 +42,16 @@ export async function DELETE(
     if (!updated) {
       throw new NotFoundError('Session');
     }
+
+    // Session revocation is a security event — it belongs in the audit trail.
+    await logAudit({
+      user: { id: authUser.id, name: authUser.name },
+      tenantId: authUser.tenantId ?? null,
+      action: 'SESSION_REVOKE',
+      resourceType: 'Session',
+      resourceId: updated.id,
+      details: { revokedSessionId: sessionId, selfService: true },
+    });
 
     return NextResponse.json({
       success: true,

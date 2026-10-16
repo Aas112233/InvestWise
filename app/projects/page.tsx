@@ -11,9 +11,11 @@ import {
   DistributeReturnsModal,
 } from "@/components/projects";
 import { apiClient } from "@/lib/api-client";
+import { openPrintTab, releasePrintWindow, reservePrintWindow } from "@/lib/documents";
 import { Project, Member, ProjectUpdateRecord } from "@/types";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/i18n";
+import { translateLedgerDescription } from "@/lib/ledger-description";
 import { useTenantShareValue, useTenantCurrency } from "@/lib/use-tenant-settings";
 import {
   Briefcase,
@@ -29,6 +31,7 @@ import {
   PieChart,
   Landmark,
   User,
+  Printer,
 } from "lucide-react";
 import {
   Button,
@@ -39,11 +42,13 @@ import {
   DropdownOption,
   StatusBadge,
 } from "@/components/ui";
-import { formatMoney, formatDate } from "@/lib/formatters";
+import { formatMoney, formatDateOnly } from "@/lib/formatters";
+import { intlLocaleFor, projectTxLabel } from "../../components/projects/project-labels";
 import { usePermissions } from "@/lib/use-permissions";
 
 export default function ProjectsPage() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
   const { can } = usePermissions();
   const canWrite = can("PROJECT_MANAGEMENT", "WRITE");
   const queryClient = useQueryClient();
@@ -106,7 +111,7 @@ export default function ProjectsPage() {
   });
 
   // Funds list
-  const { data: funds = [] } = useQuery<Array<{ id: string; name: string; balance: number }>>({
+  const { data: funds = [] } = useQuery<Array<{ id: string; name: string; balance: number; type: string; minimumBalance: number }>>({
     queryKey: ["funds"],
     queryFn: async () => {
       const list = await loadListOrToast("/funds");
@@ -114,6 +119,8 @@ export default function ProjectsPage() {
         id: f.id,
         name: f.name,
         balance: Number(f.balance || 0),
+        type: String(f.type || 'OTHER'),
+        minimumBalance: Number(f.minimumBalance || 0),
       }));
     },
   });
@@ -221,6 +228,9 @@ export default function ProjectsPage() {
           body: JSON.stringify(payload.data),
         });
       }
+      // Pre-open the charter tab while this submit's user gesture is live,
+      // so popup blockers don't eat the window.open on success.
+      reservePrintWindow();
       return await apiClient("/projects", {
         method: "POST",
         body: JSON.stringify(payload.data),
@@ -238,8 +248,14 @@ export default function ProjectsPage() {
       );
       setIsCreateOpen(false);
       setEditingProject(null);
+      // New project → open its printable charter (the edit path has no document).
+      if (!variables.id) {
+        if (_res && _res.id) openPrintTab("project", String(_res.id));
+        else releasePrintWindow();
+      }
     },
     onError: (err: any) => {
+      releasePrintWindow();
       toast.error(
         err?.message ||
           t("common.errors.failedToCreateProject", { defaultValue: "Failed to save project" }),
@@ -255,6 +271,8 @@ export default function ProjectsPage() {
       projectId: string;
       updateData: { type: "Earning" | "Expense"; amount: number; description: string; referenceNumber: string; date: string; handledByMemberId: string | null };
     }) => {
+      // Pre-open the receipt tab while this submit's user gesture is live.
+      reservePrintWindow();
       return await apiClient(`/projects/${projectId}/updates`, {
         method: "POST",
         body: JSON.stringify({
@@ -267,16 +285,20 @@ export default function ProjectsPage() {
         }),
       });
     },
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["funds"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      toast.success(t("projects.updatePosted", { defaultValue: "Project disbursement recorded" }));
+      toast.success(t("projects.updatePosted", { defaultValue: "Project spending recorded" }));
       setIsUpdateOpen(false);
       setProjectForUpdate(null);
+      // Open the printable receipt for the ledger row this posting created.
+      if (res && res.transactionId) openPrintTab("project-update", String(res.transactionId));
+      else releasePrintWindow();
     },
     onError: (err: any) => {
-      toast.error(err?.message || t("common.errors.failedToPostDisbursement", { defaultValue: "Failed to post disbursement" }));
+      releasePrintWindow();
+      toast.error(err?.message || t("common.errors.failedToPostDisbursement", { defaultValue: "Failed to post spending" }));
     },
   });
 
@@ -287,8 +309,13 @@ export default function ProjectsPage() {
     }: {
       projectId: string;
       payload: {
-        type: "Profit" | "Loss";
-        amount: number;
+        /** Omitted on settle runs — the server computes the legs. */
+        type?: "Profit" | "Loss" | "Both";
+        amount?: number;
+        /** 'Both' only: the loss leg, settled after the profit leg. */
+        lossAmount?: number;
+        /** Settle & close: pay the entire remaining balance, mark Completed, lock permanently. */
+        settleProject?: boolean;
         description: string;
         referenceNumber: string;
         fundAllocations?: Array<{ fundId: string; percent: number }>;
@@ -320,9 +347,14 @@ export default function ProjectsPage() {
         method: "DELETE",
       });
     },
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      toast.success(t("projects.deletedSuccess", { defaultValue: "Project deleted" }));
+      // Deleting returns shareholder capital to member deposits and debits the
+      // project fund, so the money views must refresh too.
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+      queryClient.invalidateQueries({ queryKey: ["funds"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      toast.success(res?.message || t("projects.deletedSuccess", { defaultValue: "Project deleted" }));
     },
     onError: (err: any) => {
       toast.error(err?.message || t("common.errors.failedToDeleteProject", { defaultValue: "Failed to delete project" }));
@@ -356,7 +388,7 @@ export default function ProjectsPage() {
       sortable: true,
       render: (u) => (
         <span className="text-xs font-mono text-muted-foreground">
-          {formatDate(u.date, true)}
+          {formatDateOnly(u.date)}
         </span>
       ),
     },
@@ -394,7 +426,7 @@ export default function ProjectsPage() {
           }`}
         >
           {u.type === "Earning" ? "+" : "-"}
-          {formatMoney(u.amount)}
+          {fm(u.amount)}
         </span>
       ),
     },
@@ -413,9 +445,25 @@ export default function ProjectsPage() {
       align: "right",
       render: (u) => (
         <span className="font-mono text-xs text-muted-foreground">
-          {u.balanceAfter !== undefined ? formatMoney(u.balanceAfter) : "-"}
+          {u.balanceAfter !== undefined ? fm(u.balanceAfter) : "-"}
         </span>
       ),
+    },
+    {
+      key: "actions",
+      header: t("common.actions", { defaultValue: "ACTIONS" }),
+      align: "right",
+      render: (u) =>
+        u.transactionId ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Printer size={13} />}
+            onClick={() => openPrintTab("project-update", u.transactionId)}
+          >
+            {t("documents.print", { defaultValue: "Print" })}
+          </Button>
+        ) : null,
     },
   ];
 
@@ -427,7 +475,7 @@ export default function ProjectsPage() {
       sortable: true,
       render: (tx) => (
         <span className="text-xs font-mono text-muted-foreground">
-          {formatDate(tx.date, true)}
+          {formatDateOnly(tx.date)}
         </span>
       ),
     },
@@ -473,7 +521,7 @@ export default function ProjectsPage() {
       header: t("finance.description", { defaultValue: "DESCRIPTION" }),
       render: (tx) => (
         <div>
-          <span className="text-xs text-foreground block">{tx.description}</span>
+          <span className="text-xs text-foreground block">{translateLedgerDescription(tx.description, t)}</span>
           {tx.memberName && (
             <span className="text-[10px] text-muted-foreground block">
               Member: {tx.memberName} {tx.memberCode ? `(${tx.memberCode})` : ""}
@@ -498,7 +546,7 @@ export default function ProjectsPage() {
             }`}
           >
             {isPositive ? "+" : "-"}
-            {formatMoney(tx.amount)}
+            {fm(tx.amount)}
           </span>
         );
       },
@@ -522,7 +570,7 @@ export default function ProjectsPage() {
       sortable: true,
       render: (tx) => (
         <span className="text-xs font-mono text-muted-foreground">
-          {formatDate(tx.date, true)}
+          {formatDateOnly(tx.date)}
         </span>
       ),
     },
@@ -549,7 +597,7 @@ export default function ProjectsPage() {
             }`}
           >
             {isProfit ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownLeft className="w-3 h-3" />}
-            {tx.category || tx.type}
+            {projectTxLabel(t, tx.category, tx.type)}
           </span>
         );
       },
@@ -605,7 +653,7 @@ export default function ProjectsPage() {
             }`}
           >
             {isProfit ? "+" : "-"}
-            {formatMoney(tx.amount)}
+            {fm(tx.amount)}
           </span>
         );
       },
@@ -705,7 +753,8 @@ export default function ProjectsPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        {/* Top Header */}
+        {/* Top Header — actions live in each tab's own toolbar (single source),
+            not duplicated here. */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">
@@ -716,36 +765,6 @@ export default function ProjectsPage() {
                 defaultValue: "Manage commercial projects, track shareholder equity, post updates, and view transactions.",
               })}
             </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {canWrite && mainTab === "updates" && (
-              <Button
-                variant="primary"
-                size="sm"
-                icon={Plus}
-                onClick={() => {
-                  setProjectForUpdate(null);
-                  setIsUpdateOpen(true);
-                }}
-              >
-                {t("projects.addUpdate", { defaultValue: "Post Disbursement / Earning" })}
-              </Button>
-            )}
-
-            {canWrite && mainTab === "projects" && (
-              <Button
-                variant="primary"
-                size="sm"
-                icon={Plus}
-                onClick={() => {
-                  setEditingProject(null);
-                  setIsCreateOpen(true);
-                }}
-              >
-                {t("projects.launchVenture", { defaultValue: "Create Project" })}
-              </Button>
-            )}
           </div>
         </div>
 
@@ -823,8 +842,17 @@ export default function ProjectsPage() {
               setIsCreateOpen(true);
             }}
             onSelectProject={(p) => setSelectedProjectId(p.id)}
-            onOpenEdit={(p) => {
-              setEditingProject(p);
+            onOpenEdit={async (p) => {
+              // List rows carry no involvedMembers/fund/capitalLocked, so the
+              // editor would open half-empty. Fetch the full project first,
+              // exactly like the distribute flow does.
+              try {
+                const res = await apiClient<{ data: Project } | Project>(`/projects/${p.id}`);
+                setEditingProject(((res as any)?.data || res) as Project);
+              } catch (err: any) {
+                toast.error(err?.message || t("projects.loadFailed", { defaultValue: "Failed to load project data" }));
+                return;
+              }
               setIsCreateOpen(true);
             }}
             onOpenAddUpdate={(p) => {
@@ -866,7 +894,7 @@ export default function ProjectsPage() {
                     setIsUpdateOpen(true);
                   }}
                 >
-                  {t("projects.addUpdate", { defaultValue: "Post Disbursement / Earning" })}
+                  {t("projects.addUpdate", { defaultValue: "Post Spending / Earning" })}
                 </Button>
               )}
             </div>
@@ -875,7 +903,7 @@ export default function ProjectsPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-                  {t("projects.disbursementsLedger", { defaultValue: "Project Updates & Disbursements History" })}
+                  {t("projects.disbursementsLedger", { defaultValue: "Project Updates & Spending History" })}
                 </h2>
                 <span className="text-xs text-muted-foreground font-mono">
                   {updatesTotal} {t("common.entries", { defaultValue: "records" })}
@@ -893,7 +921,7 @@ export default function ProjectsPage() {
                   setUpdatesPageSize(size);
                   setUpdatesPage(1);
                 }}
-                emptyMessage={t("projects.noUpdatesRecorded", { defaultValue: "No disbursement or earning records for this selection." })}
+                emptyMessage={t("projects.noUpdatesRecorded", { defaultValue: "No spending or earning records for this selection." })}
               />
             </div>
           </div>
@@ -922,7 +950,7 @@ export default function ProjectsPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-                  {t("projects.timeline.title", { defaultValue: "Project Lifecycle & Financial Timelines" })}
+                  {t("projects.timelineTitle", { defaultValue: "Project Lifecycle & Financial Timeline" })}
                 </h2>
                 <span className="text-xs text-muted-foreground font-mono">
                   {timelineTotal} {t("common.entries", { defaultValue: "events" })}
@@ -940,7 +968,7 @@ export default function ProjectsPage() {
                   setTimelinePageSize(size);
                   setTimelinePage(1);
                 }}
-                emptyMessage={t("projects.timeline.empty", { defaultValue: "No transactions or ledger events recorded for this selection." })}
+                emptyMessage={t("projects.timelineEmpty", { defaultValue: "No transactions or ledger events recorded for this project yet." })}
               />
             </div>
           </div>

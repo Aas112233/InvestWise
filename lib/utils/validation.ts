@@ -15,13 +15,22 @@ export const PROJECT_HEALTHS = ['Stable', 'At Risk', 'Critical'] as const;
 export const projectShareholderSchema = z.object({
   memberId: z.string().uuid('Invalid member ID'),
   shares: z.coerce.number().int().min(1, 'Shares must be at least 1'),
+  // Fund the invested capital is drawn FROM. Optional so legacy clients still
+  // parse; the create route requires it whenever a shareholder is present,
+  // because capital with no source fund is money created from nowhere (§12).
+  sourceFundId: z.string().uuid('Invalid source fund ID').nullable().optional(),
 });
 
 export const projectCreateSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').max(255),
   category: z.string().trim().min(1, 'Category is required').max(255),
   description: z.string().trim().max(10000).default(''),
-  budget: z.coerce.number().min(0, 'Budget cannot be negative'),
+  // Normalized to 2dp here so route-side money math (toCents) never rejects an
+  // over-precise planning figure with a 500.
+  budget: z.coerce
+    .number()
+    .min(0, 'Budget cannot be negative')
+    .transform((v) => Math.round(v * 100) / 100),
   initialInvestment: z.coerce.number().min(0).default(0),
   expectedRoi: z.coerce.number().min(0).max(100, 'Expected ROI must be 0-100').default(0),
   status: z.enum(PROJECT_STATUSES).default('In Progress'),
@@ -59,12 +68,21 @@ export const disbursementSchema = z.object({
 
 export const projectReturnDistributionSchema = z
   .object({
-    type: z.enum(['Profit', 'Loss']),
-    amount: z.coerce.number().positive('Distribution amount must be greater than zero'),
+    // Settle & close: the server computes the legs from the project's locked
+    // balance (the ENTIRE remaining balance) and, after posting, marks the
+    // project Completed and permanently locks it (is_locked). Client-supplied
+    // type/amount are ignored on a settle run.
+    settleProject: z.boolean().optional(),
+    type: z.enum(['Profit', 'Loss', 'Both']).optional(),
+    // Profit leg (the full loss amount when type === 'Loss'). Required > 0
+    // for custom runs; omitted on settle runs.
+    amount: z.coerce.number().min(0, 'Distribution amount must be greater than zero').optional(),
+    // 'Both' only: the loss leg, settled after the profit leg in one atomic run.
+    lossAmount: z.coerce.number().positive('Loss amount must be greater than zero').optional(),
     description: z.string().trim().min(1, 'Description is required').max(500),
     // §12 idempotency: see disbursementSchema.referenceNumber.
     referenceNumber: z.string().trim().min(1).max(255).optional(),
-    // Optional fund recipients (Profit only): each fund gets `percent` of the
+    // Optional fund recipients (profit leg): each fund gets `percent` of the
     // distribution; shareholders pro-rata split the remaining percentage.
     // Percent is at most 2dp; duplicates and sums > 100% are rejected
     // server-side with exact integer basis-point math.
@@ -78,39 +96,22 @@ export const projectReturnDistributionSchema = z
       .max(50, 'At most 50 funds can receive a distribution')
       .optional(),
   })
+  .refine((d) => d.settleProject || d.type !== undefined, {
+    message: 'Distribution type is required',
+    path: ['type'],
+  })
+  .refine((d) => d.settleProject || (d.amount ?? 0) > 0, {
+    message: 'Distribution amount must be greater than zero',
+    path: ['amount'],
+  })
   .refine((d) => !(d.type === 'Loss' && (d.fundAllocations?.length ?? 0) > 0), {
     message: 'Fund allocations are only allowed for Profit distributions',
     path: ['fundAllocations'],
+  })
+  .refine((d) => d.type !== 'Both' || (d.lossAmount ?? 0) > 0, {
+    message: 'Both requires a lossAmount (the loss leg)',
+    path: ['lossAmount'],
   });
-
-export const registerSchema = z.object({
-  // users.name is varchar(255); without a cap an over-long value reaches the
-  // INSERT and fails as Postgres 22001 (a 500) instead of a field error.
-  name: z.string().min(2).max(255),
-  email: z.string().email().transform(e => e.toLowerCase().trim()),
-  password: z.string().min(8).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+\-=[\]{}|;:,.<>/~`])/, 'Must include uppercase, lowercase, digit, and special character'),
-  role: z.enum(['Admin', 'Administrator', 'Manager', 'Audit', 'Investor', 'Associate Member', 'Member']).default('Member'),
-  memberId: z.string().optional(),
-  permissions: z.record(z.string(), z.string()).optional(),
-});
-
-export const updateUserSchema = z.object({
-  name: z.string().min(2).max(255).optional(),
-  email: z.string().email().transform(e => e.toLowerCase().trim()).optional(),
-  role: z.enum(['Admin', 'Administrator', 'Manager', 'Audit', 'Investor', 'Associate Member', 'Member']).optional(),
-  status: z.enum(['active', 'inactive', 'suspended']).optional(),
-  permissions: z.record(z.string(), z.string()).optional(),
-  memberId: z.string().optional(),
-});
-
-export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1),
-  newPassword: z.string().min(8).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+\-=[\]{}|;:,.<>/~`])/, 'Must include uppercase, lowercase, digit, and special character'),
-});
-
-export const adminPasswordResetSchema = z.object({
-  password: z.string().min(8).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_+\-=[\]{}|;:,.<>/~`])/, 'Must include uppercase, lowercase, digit, and special character'),
-});
 
 const fiscalMonthName = z.enum([
   'January', 'February', 'March', 'April', 'May', 'June',

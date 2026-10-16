@@ -103,13 +103,18 @@
   --accent-foreground: oklch(0.95 0.01 190);
   --destructive: oklch(0.68 0.21 25);
   --destructive-foreground: oklch(0.98 0.01 20);
-  --border: oklch(0.31 0.022 260);
-  --input: oklch(0.33 0.026 255);
+  /* Hairline borders sit just above the card surface (0.205): modern minimal
+  dark UIs separate with elevation + faint lines, not bright outlines.
+  NOTE (tailwind v3): opacity modifiers on var()-based colors are no-ops, so
+  border-border/50../60../80 all render at full token strength — keep this
+  token soft instead of relying on per-class opacity. */
+  --border: oklch(0.235 0.016 260);
+  --input: oklch(0.25 0.018 255);
   --ring: oklch(0.72 0.135 185);
 
   --sidebar: oklch(0.185 0.022 258);
   --sidebar-foreground: oklch(0.93 0.01 250);
-  --sidebar-border: oklch(0.3 0.02 250);
+  --sidebar-border: oklch(0.235 0.016 250);
   --sidebar-accent: oklch(0.27 0.045 190);
   --sidebar-primary: oklch(0.72 0.135 185);
   --sidebar-primary-foreground: oklch(0.18 0.03 200);
@@ -122,34 +127,36 @@
   --chart-4: oklch(0.78 0.14 90);
   --chart-5: oklch(0.72 0.14 20);
 
-  /* Semantic status colors (dark mode) — lifted text for AA contrast on ink surfaces */
+  /* Semantic status colors (dark mode) — lifted text for AA contrast on ink surfaces.
+  Borders stay muted (just above their tinted bg) so pills read as soft tints,
+  not outlined chips. */
   --status-success-bg: oklch(0.26 0.07 150);
   --status-success-text: oklch(0.8 0.16 150);
-  --status-success-border: oklch(0.45 0.12 150);
+  --status-success-border: oklch(0.38 0.1 150);
   --status-warning-bg: oklch(0.28 0.07 85);
   --status-warning-text: oklch(0.85 0.13 85);
-  --status-warning-border: oklch(0.5 0.11 85);
+  --status-warning-border: oklch(0.42 0.09 85);
   --status-error-bg: oklch(0.28 0.09 30);
   --status-error-text: oklch(0.8 0.17 30);
-  --status-error-border: oklch(0.5 0.16 30);
+  --status-error-border: oklch(0.42 0.13 30);
   --status-info-bg: oklch(0.27 0.07 225);
   --status-info-text: oklch(0.8 0.13 220);
-  --status-info-border: oklch(0.47 0.11 220);
+  --status-info-border: oklch(0.4 0.09 220);
   --status-neutral-bg: oklch(0.26 0.02 250);
   --status-neutral-text: oklch(0.78 0.02 250);
-  --status-neutral-border: oklch(0.36 0.02 250);
+  --status-neutral-border: oklch(0.31 0.018 250);
   --status-emerald-bg: oklch(0.26 0.07 150);
   --status-emerald-text: oklch(0.8 0.16 150);
-  --status-emerald-border: oklch(0.45 0.12 150);
+  --status-emerald-border: oklch(0.38 0.1 150);
   --status-amber-bg: oklch(0.28 0.07 85);
   --status-amber-text: oklch(0.85 0.13 85);
-  --status-amber-border: oklch(0.5 0.11 85);
+  --status-amber-border: oklch(0.42 0.09 85);
   --status-orange-bg: oklch(0.28 0.09 45);
   --status-orange-text: oklch(0.82 0.16 45);
-  --status-orange-border: oklch(0.52 0.14 45);
+  --status-orange-border: oklch(0.43 0.11 45);
   --status-purple-bg: oklch(0.29 0.07 300);
   --status-purple-text: oklch(0.8 0.13 300);
-  --status-purple-border: oklch(0.5 0.11 300);
+  --status-purple-border: oklch(0.42 0.09 300);
 
   /* Metric breakdown category colors (dark mode) */
   --metric-emerald: oklch(0.75 0.16 150);

@@ -1,12 +1,17 @@
 // Validates the 4-locale rule: messages/{en,ur,hi,bn}.json must share an
-// identical key shape, and every `{placeholder}` must match across locales.
+// identical key shape, every `{placeholder}` must match across locales, and
+// every literal t("key") used in the UI must exist in en. Without the last
+// check a screen can call t() on a missing key, silently render its English
+// defaultValue, and still pass parity — which is how the whole meetings
+// module shipped English-only.
 // Run: node scripts/validate-i18n.mjs (also wired as npm run i18n:validate)
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LOCALES = ["en", "ur", "hi", "bn"];
+const UI_ROOTS = ["app", "components", "lib", "client"];
 
 function flatten(obj, prefix = "", out = new Map()) {
   if (obj !== null && typeof obj === "object" && !Array.isArray(obj)) {
@@ -56,6 +61,30 @@ for (const locale of LOCALES) {
     const a = placeholders(enValue).join(",");
     const b = placeholders(other).join(",");
     if (a !== b) fail(`placeholder mismatch at "${key}": en={${a}} ${locale}={${b}}`);
+  }
+}
+
+function sourceFiles(abs, acc = []) {
+  if (!existsSync(abs)) return acc;
+  for (const entry of readdirSync(abs, { withFileTypes: true })) {
+    const child = join(abs, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== "node_modules") sourceFiles(child, acc);
+    } else if (/\.tsx?$/.test(entry.name) && !entry.name.includes(".test.")) {
+      acc.push(child);
+    }
+  }
+  return acc;
+}
+
+// Dynamic keys (t(`a.${x}`) / t(prefix + k)) are skipped on purpose: they
+// always pass a defaultValue fallback and cannot be resolved statically.
+const enKeys = new Set(en.keys());
+for (const file of UI_ROOTS.flatMap((dir) => sourceFiles(join(root, dir)))) {
+  const rel = file.slice(root.length + 1).split(sep).join("/");
+  const src = readFileSync(file, "utf8");
+  for (const m of src.matchAll(/\bt\(\s*["']([a-zA-Z][\w.]*)["']/g)) {
+    if (!enKeys.has(m[1])) fail(`t("${m[1]}") in ${rel} has no entry in en.json`);
   }
 }
 

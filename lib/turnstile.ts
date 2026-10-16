@@ -25,6 +25,11 @@ export type TurnstileState =
 
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Temporary kill switch. Robot verification is disabled by default; set
+// TURNSTILE_ENABLED=true (server) and NEXT_PUBLIC_TURNSTILE_ENABLED=true
+// (client) to turn enforcement and the widget back on.
+const turnstileEnabled = process.env.TURNSTILE_ENABLED === 'true';
+
 /**
  * Bot-protection posture for public, unauthenticated write endpoints.
  *
@@ -34,6 +39,10 @@ const isProduction = process.env.NODE_ENV === 'production';
  * and rotating an IP header costs an attacker nothing.
  */
 export function turnstileState(): TurnstileState {
+  if (!turnstileEnabled) {
+    return { mode: 'skipped', reason: 'bot protection disabled (TURNSTILE_ENABLED is not true)' };
+  }
+
   const secret = process.env.TURNSTILE_SECRET_KEY;
 
   if (!secret) {

@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, funds, members, systemSettings } from '@/db/schema/index';
 import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-methods';
-import { eq, and, desc, sql, gte, lte, ilike, inArray } from 'drizzle-orm';
+import { DEPOSIT_FUND_REQUIRED_MESSAGE, isDepositFund } from '@/lib/deposit-fund';
+import { findDepositMonthOccupant, depositMonthConflictMessage } from '@/lib/deposit-month-limit';
+import { eq, and, asc, desc, sql, gte, lte, ilike, inArray } from 'drizzle-orm';
+import { SETTLED_DEPOSIT_STATUSES } from '@/lib/ledger-selectors';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, LockedError, readJsonBody } from '@/lib/utils/errors';
 import { toCents, fromCents } from '@/lib/money';
+import { endOfRangeUtc } from '@/lib/formatters';
 
 /** Single-deposit ceiling = the shared money-module maximum (10,000,000). */
 const MAX_AMOUNT_CENTS = 10_000_000 * 100;
@@ -49,15 +53,20 @@ export async function GET(request: NextRequest) {
     // raw collected-date range.
     const depositMonthParam = searchParams.get('depositMonth');
     const search = searchParams.get('search');
+    // Header sort runs here, not in the browser: the desk paginates, so a
+    // client-side sort only ever reorders the 20 loaded rows of a 1,500-row
+    // filter set and looks like nothing happened (AGENTS.md §2).
+    const sortBy = searchParams.get('sortBy') || 'date';
+    const sortOrder = searchParams.get('sortOrder') === 'asc' ? 'asc' : 'desc';
 
     // The "Collected this month" header is a MONEY figure, so it must never be
     // computed from the same unfiltered predicate as the audit table below it.
-    // The table legitimately lists PENDING/REJECTED rows (an officer reviews
-    // them there), but summing those into "collected" made the header disagree
-    // with the fund balance on the same screen — and with the Dashboard, the
-    // Analysis page and the Transactions KPI, each of which had its own
-    // predicate and its own answer (report issues 27 / 47). Callers that want
-    // the money total pass `settledOnly=true`; the row list does not.
+    // The table legitimately lists non-settled rows (an officer reviews direct
+    // pending deposits there), but summing those into "collected" made the
+    // header disagree with the fund balance on the same screen — and with the
+    // Dashboard, the Analysis page and the Transactions KPI, each of which had
+    // its own predicate and its own answer (report issues 27 / 47). Callers
+    // that want the money total pass `settledOnly=true`; the row list does not.
     const settledOnly = searchParams.get('settledOnly') === 'true';
 
     const db = getDb();
@@ -80,7 +89,29 @@ export async function GET(request: NextRequest) {
       conditions.push(sql`${transactions.fundId} = ${fundId}`);
     }
     if (status && status !== 'All') {
-      conditions.push(sql`${transactions.status} = ${status}`);
+      // 'Completed' is the desk's one "verified money" option, but settled
+      // deposits are recorded as either 'Completed' or 'Success' — the shared
+      // settled set (lib/ledger-selectors.ts). Matching only the literal value
+      // dropped every 'Success' row from the filter while the unfiltered table
+      // still listed them.
+      const settled = status === 'Completed' || status === 'Success';
+      conditions.push(
+        settled
+          ? inArray(transactions.status, [...SETTLED_DEPOSIT_STATUSES])
+          : sql`${transactions.status} = ${status}`,
+      );
+    }
+    // Pending deposit REQUESTS (category 'Deposit Request', status 'PENDING')
+    // belong to the Request Deposit screen's inbox, not the management desk
+    // table — the desk lists settled/rejected deposits and direct (non-request)
+    // pending deposits such as reverted ones. Completed requests stay on BOTH
+    // screens: once approved they are real, settled money and part of the
+    // ledger. The Request Deposit screen passes no flag and sees everything.
+    // NULL-safe: a NULL status/category row is never a pending request.
+    if (searchParams.get('excludePendingRequests') === 'true' && !(status && status !== 'All')) {
+      conditions.push(
+        sql`NOT (COALESCE(${transactions.status}, '') = 'PENDING' AND COALESCE(${transactions.category}, '') = 'Deposit Request')`,
+      );
     }
     if (depositMonthParam) {
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(depositMonthParam)) {
@@ -94,11 +125,35 @@ export async function GET(request: NextRequest) {
         conditions.push(gte(transactions.date, new Date(startDate)));
       }
       if (endDate) {
-        conditions.push(lte(transactions.date, new Date(endDate)));
+        // Date-only end is inclusive of the whole day (see endOfRangeUtc).
+        conditions.push(lte(transactions.date, endOfRangeUtc(endDate)));
       }
     }
     if (search) {
-      conditions.push(sql`(${transactions.description} ILIKE ${'%' + search + '%'} OR ${transactions.referenceNumber} ILIKE ${'%' + search + '%'})`);
+      const term = search.trim();
+      if (term) {
+        // The desk renders Member, Member ID, Reference and Notes columns, so
+        // search covers all four — matching only reference/description returned
+        // zero rows for a member's name, which reads as a broken filter.
+        // Same shape as the transactions list (see app/api/transactions/route.ts).
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (UUID_RE.test(term)) {
+          conditions.push(sql`${transactions.id} = ${term}`);
+        } else {
+          const like = `%${term}%`;
+          conditions.push(sql`(
+            ${transactions.referenceNumber} ILIKE ${like}
+            OR ${transactions.description} ILIKE ${like}
+            OR ${transactions.id}::text ILIKE ${like}
+            OR EXISTS (
+              SELECT 1 FROM ${members}
+              WHERE ${members.id} = ${transactions.memberId}
+                AND ${members.tenantId} = ${scopedTenantId}
+                AND (${members.name} ILIKE ${like} OR ${members.memberId} ILIKE ${like})
+            )
+          )`);
+        }
+      }
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -126,6 +181,21 @@ export async function GET(request: NextRequest) {
         data: { total: agg?.total ?? '0', count: agg?.count ?? 0 },
       });
     }
+
+    // Deterministic newest-first by default; an explicit header sort wins, and
+    // the createdAt/id tail keeps paging stable so a page never repeats or
+    // skips a row when the primary key ties.
+    const SORT_COLUMNS: Record<string, unknown> = {
+      date: transactions.date,
+      createdAt: transactions.createdAt,
+      amount: transactions.amount,
+      status: transactions.status,
+      referenceNumber: transactions.referenceNumber,
+      memberName: members.name,
+      fundName: funds.name,
+    };
+    const sortColumn = (SORT_COLUMNS[sortBy] as typeof transactions.date) ?? transactions.date;
+    const direction = sortOrder === 'asc' ? asc : desc;
 
     // Single round trip: page rows (with joins) + exact filtered count, plus
     // the SUM for the current filter set so the header never needs a 2nd call.
@@ -168,8 +238,7 @@ export async function GET(request: NextRequest) {
         .leftJoin(members, and(eq(transactions.memberId, members.id), eq(members.tenantId, scopedTenantId)))
         .leftJoin(funds, and(eq(transactions.fundId, funds.id), eq(funds.tenantId, scopedTenantId)))
         .where(whereClause)
-        // Deterministic newest-first (same rationale as the transactions list).
-        .orderBy(desc(transactions.date), desc(transactions.createdAt), desc(transactions.id))
+        .orderBy(direction(sortColumn), desc(transactions.createdAt), desc(transactions.id))
         .limit(limit)
         .offset(skip),
     ]);
@@ -229,7 +298,7 @@ export async function POST(request: NextRequest) {
     // Share numbers are one-time setup (member creation). Deposits never
     // change them — a non-zero payload is rejected, not silently applied.
     if (Number(body.shares ?? 0) !== 0) {
-      throw new ValidationError('Share numbers are locked after member creation and cannot be changed by deposits');
+      throw new ValidationError('Share numbers are locked after member creation and cannot be changed by deposits. Adjust shares by editing the member in the Members screen.');
     }
 
     // Validate required fields
@@ -299,11 +368,12 @@ export async function POST(request: NextRequest) {
     // Reference/member/fund lookups are independent of each other (all keyed
     // off the request payload) — batch them into one round-trip group instead
     // of three sequential ones. Error checks below preserve the original
-    // precedence (duplicate ref → missing member → missing fund). The
-    // duplicate-ref check here is only a fast-path defense: the authoritative
-    // guard is the in-transaction re-check + ON CONFLICT handling below,
-    // because two concurrent posts can both pass an outside-the-tx check.
-    const [existingDeposit, [member], [fund], [pmSettings]] = await Promise.all([
+    // precedence (duplicate ref → missing member → missing fund → month
+    // already taken). The duplicate-ref check here is only a fast-path
+    // defense: the authoritative guard is the in-transaction re-check + ON
+    // CONFLICT handling below, because two concurrent posts can both pass an
+    // outside-the-tx check.
+    const [existingDeposit, [member], [fund], [pmSettings], monthOccupant] = await Promise.all([
       // Duplicate reference number check (idempotency, tenant-scoped: a
       // global check leaks existence of other tenants' refs + lets one tenant
       // squat another's idempotency key).
@@ -337,6 +407,17 @@ export async function POST(request: NextRequest) {
         .from(systemSettings)
         .where(eq(systemSettings.tenantId, scopedTenantId))
         .limit(1),
+      // One deposit per member per month (§12): the month this deposit is FOR
+      // must be free for this member (settled deposit or pending request
+      // occupies it; reverted/rejected rows do not). Fast-path only — the
+      // authoritative re-check runs inside the transaction below, where the
+      // member row is locked, so two concurrent posts for the same member and
+      // month can never both book it.
+      findDepositMonthOccupant(db, {
+        tenantId: scopedTenantId,
+        memberId,
+        depositMonthKey,
+      }),
     ]);
 
     if (existingDeposit.length > 0) {
@@ -349,6 +430,19 @@ export async function POST(request: NextRequest) {
 
     if (!fund) {
       throw new NotFoundError('Fund');
+    }
+
+    // One deposit per member per month (§12). The member has already
+    // deposited (or has a pending request) for the month this entry is FOR —
+    // posting a second one would double-count their contribution and the
+    // fund balance. Free the month first: reject/approve the pending request
+    // or revert the settled deposit.
+    if (monthOccupant) {
+      throw new ValidationError(depositMonthConflictMessage(depositMonthKey, monthOccupant));
+    }
+
+    if (!isDepositFund(fund)) {
+      throw new ValidationError(DEPOSIT_FUND_REQUIRED_MESSAGE);
     }
 
     // depositMethod must be a method this tenant configured (Settings →
@@ -368,7 +462,7 @@ export async function POST(request: NextRequest) {
     // and balance writes are atomic SQL arithmetic — a concurrent deposit,
     // transfer, or expense can never lose an update. The outer unlocked read
     // only serves the existence checks above. All math in integer cents (§12).
-    const { newFundBalance, newMemberContributed } = await db.transaction(async (tx) => {
+    const { transactionId, newFundBalance, newMemberContributed } = await db.transaction(async (tx) => {
       await assertFiscalPeriodOpen(tx, scopedTenantId, depositDate);
       const [lockedFund] = await tx
         .select()
@@ -402,6 +496,21 @@ export async function POST(request: NextRequest) {
         .limit(1);
       if (dupRef) {
         throw new ValidationError("[Field 'referenceNumber', Code: DUPLICATE] Transaction with this reference number already exists");
+      }
+
+      // §12 one-deposit-per-month: authoritative re-check inside the tx. The
+      // member row is locked FOR UPDATE above, so concurrent posts for the
+      // same member serialize here and a month can never be double-booked
+      // (the outer fast-path can race). A reverted direct deposit
+      // (category 'Deposit' + PENDING) does not occupy its month, so the
+      // revert→re-approve cycle keeps working.
+      const monthOccupant = await findDepositMonthOccupant(tx, {
+        tenantId: scopedTenantId,
+        memberId,
+        depositMonthKey,
+      });
+      if (monthOccupant) {
+        throw new ValidationError(depositMonthConflictMessage(depositMonthKey, monthOccupant));
       }
 
       const fundBalanceCents = toCents(lockedFund.balance ?? '0');
@@ -470,6 +579,11 @@ export async function POST(request: NextRequest) {
       }
 
       return {
+        // The created row's id is what the printable receipt tab needs
+        // (/print/deposit/<id> → GET /transactions/<id>). The client opens
+        // that tab only after this response lands, so the window never
+        // appears for a request the server refused.
+        transactionId: inserted.id,
         newFundBalance: fromCents(newFundBalanceCents),
         newMemberContributed: fromCents(newMemberContributedCents),
       };
@@ -498,6 +612,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
+        id: transactionId,
         referenceNumber: refNumber,
         member: { id: member.id, name: member.name, newTotalContributed: newMemberContributed, shares: member.shares },
         fund: { id: fund.id, name: fund.name, newBalance: newFundBalance },

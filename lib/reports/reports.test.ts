@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { inflateSync } from "node:zlib";
 import {
   getReportDefinition,
   reportsForCategory,
@@ -171,6 +172,30 @@ describe("buildCsv", () => {
 });
 
 describe("document builders (smoke)", () => {
+  /** Raw PDF bytes with every FlateDecode content stream inflated to text. */
+  const extractPdfText = (bytes: Buffer): string => {
+    const raw = bytes.toString("latin1");
+    const parts: string[] = [raw];
+    const re = /stream\r?\n([\s\S]*?)endstream/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(raw)) !== null) {
+      try {
+        const inflated = inflateSync(Buffer.from(m[1] ?? "", "latin1")).toString("latin1");
+        // pdfkit writes text as hex TJ arrays ([<436f…> 0] TJ) — decode the
+        // runs so literal assertions work. Subset-font glyph IDs decode to
+        // arbitrary bytes, which is harmless for toContain checks.
+        parts.push(
+          inflated.replace(/<([0-9a-fA-F]+)>/g, (_run, hex: string) =>
+            Buffer.from(hex, "hex").toString("latin1"),
+          ),
+        );
+      } catch {
+        // Non-Flate stream (e.g. font program) — the raw bytes already cover it.
+      }
+    }
+    return parts.join("\n");
+  };
+
   const baseDoc = (locale: ReportDocument["locale"]): ReportDocument => ({
     slug: "comprehensive-ledger",
     title: locale === "bn" ? "সাধারণ লেজার" : "General Ledger",
@@ -324,6 +349,88 @@ describe("document builders (smoke)", () => {
     const en = await buildPdfBytes(baseDoc("en"));
     // English stays on the built-in Type1 Helvetica (no TrueType subset).
     expect(en.toString("latin1")).not.toContain("/FontFile2");
+  });
+
+  it("falls back per-run: Bangla data under an English UI still embeds Hind Siliguri", async () => {
+    // Tenant data (member names, letterhead) routinely carries Bengali script
+    // while the operator works in English. Keying the font on the locale alone
+    // sent those runs through Helvetica/WinAnsi and printed Latin mojibake.
+    const { buildPdfBytes } = await import("./pdf");
+    const doc = baseDoc("en");
+    // Bangla name + shaping probes, built from codepoints so the source stays
+    // ASCII-only: RAFIQ-BN = Rafiq, DESC-BN = ki (matra reorder) + kka
+    // (conjunct ligature).
+    const RAFIQ_BN = String.fromCodePoint(0x09b0, 0x09ab, 0x09bf, 0x0995);
+    const DESC_BN = String.fromCodePoint(0x0995, 0x09bf, 0x0020, 0x0995, 0x09cd, 0x0995);
+    doc.rows = [
+      { date: "2026-10-01T00:00:00.000Z", member: RAFIQ_BN, description: DESC_BN, debit: "0.00", credit: "1500.00" },
+      { date: "2026-10-02T00:00:00.000Z", member: "Karim", description: "Expense", debit: "500.00", credit: "0.00" },
+    ];
+    const bytes = await buildPdfBytes(doc);
+    const raw = bytes.toString("latin1");
+    expect(raw).toContain("/FontFile2");
+    expect(raw).toContain("HindSiliguri");
+    // Pure-Latin runs stay on Helvetica — no wholesale font swap.
+    expect(raw).toContain("/Helvetica");
+  });
+
+  it("keeps continuation pages on the same size/layout as page 1 (landscape)", async () => {
+    // >7 columns triggers A4 landscape, but addPage() without size/layout
+    // fell back to US-Letter portrait — the wide table overflowed every page
+    // after the first and landscape-coordinate rects overshot the edge.
+    const { buildPdfBytes } = await import("./pdf");
+    const doc = baseDoc("en");
+    doc.columns = [
+      { key: "date", label: "Date", type: "date" },
+      { key: "member", label: "Member", type: "text" },
+      { key: "description", label: "Description", type: "text" },
+      { key: "fund", label: "Fund", type: "text" },
+      { key: "project", label: "Project", type: "text" },
+      { key: "reference", label: "Reference", type: "text" },
+      { key: "debit", label: "Debit (BDT)", type: "money", total: true },
+      { key: "credit", label: "Credit (BDT)", type: "money", total: true },
+    ];
+    doc.rows = Array.from({ length: 40 }, (_, r) => ({
+      date: "2026-10-01T00:00:00.000Z",
+      member: `Member ${r + 1}`,
+      description: `Deposit ${r + 1}`,
+      fund: "General Fund",
+      project: "Project Alpha",
+      reference: `REF-${r + 1}`,
+      debit: "0.00",
+      credit: "100.00",
+    }));
+    const raw = (await buildPdfBytes(doc)).toString("latin1");
+    const boxes = [...raw.matchAll(/\/MediaBox\s*\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]/g)].map(
+      (m) => `${m[3]}x${m[4]}`,
+    );
+    expect(boxes.length).toBeGreaterThan(1);
+    // Every page identical…
+    expect(new Set(boxes).size).toBe(1);
+    // …and landscape (A4-L is ~841.89 wide).
+    const width = Number(boxes[0]?.split("x")[0] ?? 0);
+    expect(width).toBeGreaterThan(800);
+  });
+
+  it("emits exactly one page for a short report — footers must not append blank pages", async () => {
+    // pdfkit auto-adds a page when text() starts past the bottom margin; the
+    // footer zone sits there, so every footer line used to append a blank page
+    // (a 1-row export came out as 3 pages with the footers smeared across).
+    const { buildPdfBytes } = await import("./pdf");
+    for (const locale of ["en", "bn"] as const) {
+      const bytes = await buildPdfBytes(baseDoc(locale));
+      const raw = bytes.toString("latin1");
+      const pages = raw.match(/\/Type\s*\/Page[^s]/g) ?? [];
+      expect(pages).toHaveLength(1);
+      // Both footer halves land on that single page. Content streams are
+      // Flate-compressed, so inflate before searching (Helvetica runs stay
+      // literal text once inflated).
+      if (locale === "en") {
+        const text = extractPdfText(bytes);
+        expect(text).toContain("Confidential");
+        expect(text).toContain("1 / 1");
+      }
+    }
   });
 
   it("exports a date-only cell (no fractional time serial) — issue #59", async () => {

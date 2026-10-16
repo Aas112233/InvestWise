@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/components/ui/erp-form-layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TopSheet } from "@/components/ui/top-sheet";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
 import { MEMBER_ROLES, memberRoleLabel } from "@/lib/member-roles";
@@ -239,7 +240,7 @@ export function MemberFormModal({
             {!isEdit ? (
               <ERPFormGrid columns={2}>
                 <ERPFormField label={t("members.form.shares")} required error={errors.shares?.message ? t(errors.shares.message) : undefined}>
-                  <input type="number" min={1} step={1} {...register("shares", { valueAsNumber: true })} className={inputCls} />
+                  <NumericInput type="number" min={1} step={1} {...register("shares", { valueAsNumber: true })} className={inputCls} />
                 </ERPFormField>
                 <ERPFormField label={t("members.form.nid")}>
                   <input type="text" {...register("nidOrPassport")} className={inputCls} />
@@ -257,7 +258,7 @@ export function MemberFormModal({
                   })}
                   error={errors.shares?.message ? t(errors.shares.message) : undefined}
                 >
-                  <input type="number" min={1} step={1} {...register("shares", { valueAsNumber: true })} className={inputCls} />
+                  <NumericInput type="number" min={1} step={1} {...register("shares", { valueAsNumber: true })} className={inputCls} />
                 </ERPFormField>
               </ERPFormGrid>
             )}

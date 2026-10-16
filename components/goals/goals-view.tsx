@@ -28,7 +28,7 @@ import {
   StatusTone,
   ERPConfirmDialog,
 } from "@/components/ui";
-import { formatMoney, formatDate } from "@/lib/formatters";
+import { formatMoney, formatDateOnly } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
 
 interface GoalsViewProps {
@@ -83,6 +83,22 @@ export function GoalsView({
     return map;
   }, [projects]);
 
+  // Type labels are translated per locale; fall back to the raw value for
+  // unknown/legacy types so nothing renders blank.
+  const typeLabel = (type: string) => {
+    const key =
+      type === "Savings"
+        ? "goals.form.types.savings"
+        : type === "Investment"
+          ? "goals.form.types.investment"
+          : type === "Emergency"
+            ? "goals.form.types.emergency"
+            : type === "Other"
+              ? "goals.form.types.other"
+              : null;
+    return key ? t(key, { defaultValue: type }) : type;
+  };
+
   const filteredGoals = useMemo(() => {
     return goals.filter((g) => {
       const matchSearch =
@@ -121,12 +137,12 @@ export function GoalsView({
               {g.title}
             </span>
             <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-              <span>{g.type}</span>
+              <span>{typeLabel(g.type)}</span>
               {linkedTitle && (
                 <>
                   <span>•</span>
                   <span className="truncate max-w-[180px] text-slate-400">
-                    Project: {linkedTitle}
+                    {t("goals.linkedProjectLabel", { defaultValue: "Project" })}: {linkedTitle}
                   </span>
                 </>
               )}
@@ -173,7 +189,11 @@ export function GoalsView({
           <div className="w-36 space-y-1">
             <div className="flex justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400">
               <span>{pct}%</span>
-              <span>{pct >= 100 ? "Complete" : `${100 - pct}% left`}</span>
+              <span>
+                {pct >= 100
+                  ? t("goals.progressComplete", { defaultValue: "Complete" })
+                  : t("goals.progressRemaining", { defaultValue: "{pct}% left", pct: 100 - pct })}
+              </span>
             </div>
             <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
@@ -204,7 +224,7 @@ export function GoalsView({
       header: t("goals.columns.deadline", { defaultValue: "DEADLINE" }),
       render: (g) => (
         <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-          {g.deadline ? formatDate(g.deadline) : "No deadline"}
+          {g.deadline ? formatDateOnly(g.deadline) : t("goals.noDeadline", { defaultValue: "No deadline" })}
         </span>
       ),
     },
@@ -298,9 +318,9 @@ export function GoalsView({
             <AppDropdown
               options={[
                 { value: "ALL", label: t("common.allStatuses", { defaultValue: "All Statuses" }) },
-                { value: "In Progress", label: t("goals.status.inProgress", { defaultValue: "In Progress" }) },
-                { value: "Achieved", label: t("goals.status.achieved", { defaultValue: "Achieved" }) },
-                { value: "Cancelled", label: t("goals.status.cancelled", { defaultValue: "Cancelled" }) },
+                { value: "In Progress", label: t("goals.form.statuses.inProgress", { defaultValue: "In Progress" }) },
+                { value: "Achieved", label: t("goals.form.statuses.achieved", { defaultValue: "Achieved" }) },
+                { value: "Cancelled", label: t("goals.form.statuses.cancelled", { defaultValue: "Cancelled" }) },
               ]}
               value={selectedStatus}
               onChange={(val) => setSelectedStatus(val || "ALL")}
@@ -312,9 +332,10 @@ export function GoalsView({
             <AppDropdown
               options={[
                 { value: "ALL", label: t("goals.allTypes", { defaultValue: "All Types" }) },
-                { value: "Savings", label: t("goals.type.savings", { defaultValue: "Savings" }) },
-                { value: "Investment", label: t("goals.type.investment", { defaultValue: "Investment" }) },
-                { value: "Other", label: t("goals.type.other", { defaultValue: "Other" }) },
+                { value: "Savings", label: t("goals.form.types.savings", { defaultValue: "Savings" }) },
+                { value: "Investment", label: t("goals.form.types.investment", { defaultValue: "Investment" }) },
+                { value: "Emergency", label: t("goals.form.types.emergency", { defaultValue: "Emergency" }) },
+                { value: "Other", label: t("goals.form.types.other", { defaultValue: "Other" }) },
               ]}
               value={selectedType}
               onChange={(val) => setSelectedType(val || "ALL")}

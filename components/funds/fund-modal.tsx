@@ -10,6 +10,7 @@ import { AppDropdown } from "@/components/ui/app-dropdown";
 import { Button } from "@/components/ui/button";
 import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/components/ui/erp-form-layout";
 import { TopSheet } from "@/components/ui/top-sheet";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
 import { fundTypeLabelKey, type FundRow } from "./shared";
@@ -150,11 +151,11 @@ export function FundModal({
             </ERPFormField>
             <ERPFormGrid columns={isEdit ? 3 : 2}>
               <ERPFormField label={t("funds.modal.minBalance")} hint={t("funds.modal.minBalanceNote")}>
-                <input type="text" inputMode="decimal" placeholder="0.00" {...register("minimumBalance")} className={`${inputCls} font-mono`} />
+                <NumericInput type="text" inputMode="decimal" placeholder="0.00" {...register("minimumBalance")} className={`${inputCls} font-mono`} />
               </ERPFormField>
               {!isEdit && (
                 <ERPFormField label={t("funds.modal.initialBalance")} hint={t("funds.modal.initialNote")}>
-                  <input type="text" inputMode="decimal" placeholder="0.00" {...register("initialBalance")} className={`${inputCls} font-mono`} />
+                  <NumericInput type="text" inputMode="decimal" placeholder="0.00" {...register("initialBalance")} className={`${inputCls} font-mono`} />
                 </ERPFormField>
               )}
               {isEdit && (
