@@ -165,13 +165,6 @@ private/
 docs/R2_CONFIGURATION.md
 docs/*_CONFIGURATION.md
 
-# Credential scanning patterns (gitattributes)
-*.md filter=secret-scan
-*.json filter=secret-scan
-*.js filter=secret-scan
-*.ts filter=secret-scan
-*.tsx filter=secret-scan
-
 # =====================================
 # Database
 # =====================================
