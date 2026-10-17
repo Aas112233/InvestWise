@@ -296,11 +296,18 @@ export interface AnalysisData {
     roi: number;
     totalDividends: number;
     activeProjects: number;
-    collectionEfficiency: number;
+    /** null = no slot was due to be evaluated (future FY / no monthly members). */
+    collectionEfficiency: number | null;
+    /** Full roster size, so the view can say "Top 15 of N" when truncated. */
+    totalShareholders?: number;
   };
   monthlyTrends: Array<{
     month: string;
     monthKey: string;
+    /** Absolute calendar month of the slot ('YYYY-MM') — server-authoritative. */
+    monthSlot?: string;
+    /** Calendar year the slot falls in — server-authoritative. */
+    calYear?: number;
     inflow: number;
     outflow: number;
     net: number;
@@ -322,7 +329,8 @@ export interface AnalysisData {
     name: string;
     avatar?: string;
     months: Record<string, "PAID" | "PENDING" | "MISSED">;
-    punctualityScore: number;
+    /** null = nothing was due to be evaluated for this member in this FY. */
+    punctualityScore: number | null;
   }>;
   leaderboard: Array<{
     rank: number;
@@ -334,6 +342,19 @@ export interface AnalysisData {
     totalContributed: number;
     equitySharePercent: number;
   }>;
+  /** Server-derived FY label ("2025-26") — the client must not re-derive it. */
+  fiscalYearLabel?: string;
+  /**
+   * Which scope the response covers. When `memberScoped`, the cash-flow chart,
+   * the regularity matrix, "Total Capital Invested" and "Total Dividends" are
+   * member-scoped while the treasury / net-return / ROI KPIs and the sector,
+   * risk and leaderboard tabs remain tenant-wide — the view must badge those
+   * so a tenant-wide figure is never misread as the member's.
+   */
+  scope?: {
+    memberScoped: boolean;
+    memberName: string | null;
+  };
 }
 
 export interface Transaction {

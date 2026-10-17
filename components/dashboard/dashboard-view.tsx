@@ -128,9 +128,13 @@ export function DashboardView({
   // ── Chart data derived from server aggregates (no client-side fabrication) ──
 
   // Capital allocation by sector: sum committed budget per project category.
+  // Cancelled projects are excluded — their budget was never deployable
+  // capital, so counting it overstated the allocation. (The Analysis API
+  // applies the same exclusion so both screens agree.)
   const sectorData = useMemo(() => {
     const map = new Map<string, number>();
     for (const p of projects) {
+      if (p.status === "Cancelled") continue;
       const cat = (p.category || "Uncategorized").trim();
       map.set(cat, (map.get(cat) || 0) + (Number(p.budget) || 0));
     }

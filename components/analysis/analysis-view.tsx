@@ -56,6 +56,14 @@ interface AnalysisViewProps {
   onYearChange: (year: number) => void;
   onMemberChange: (memberId: string) => void;
   onRefresh: () => void;
+  /** Analysis request failed (non-2xx / network). Rendered as an error state —
+   * never as a false "no data" screen. */
+  error?: string | null;
+  onRetry?: () => void;
+  /** Member-list request failed (the shareholder filter would otherwise
+   * silently degrade to an empty dropdown). */
+  membersError?: string | null;
+  onMembersRetry?: () => void;
 }
 
 const SECTOR_COLORS = [
@@ -68,9 +76,19 @@ const SECTOR_COLORS = [
   "#64748B", // Slate
 ];
 
+/** Badge marking a section that stays tenant-wide in a member-scoped view. */
+function TenantWideChip({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400">
+      {label}
+    </span>
+  );
+}
+
+// projects.health is a 3-value enum (Stable | At Risk | Critical) — the
+// matrix below renders exactly those tiers.
 const HEALTH_COLORS: Record<string, string> = {
   Stable: "text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
-  Good: "text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
   "At Risk": "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
   Critical: "text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800",
 };
@@ -86,25 +104,53 @@ export function AnalysisView({
   onYearChange,
   onMemberChange,
   onRefresh,
+  error = null,
+  onRetry,
+  membersError = null,
+  onMembersRetry,
 }: AnalysisViewProps) {
   const { t, locale } = useLocale();
   const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
   const [activeTab, setActiveTab] = useState<"overview" | "regularity" | "leaderboard">("overview");
 
-  const fiscalYearLabel = resolveFiscalBounds(selectedYear, fiscalStartMonth, fiscalEndMonth).label;
+  // FY label: the SERVER is authoritative (it bucketed the data with its own
+  // settings row). The local re-derivation is only a loading/legacy fallback —
+  // and it must not throw: a legacy settings row with a malformed month name
+  // used to crash the whole screen (top-nav and the fiscal pickers guard the
+  // same case).
+  const fiscalYearLabel = data?.fiscalYearLabel ?? (() => {
+    try {
+      return resolveFiscalBounds(selectedYear, fiscalStartMonth, fiscalEndMonth).label;
+    } catch {
+      return String(selectedYear);
+    }
+  })();
   const fiscalYearDisplay = `${t("layout.fiscalYearAbbrev", { defaultValue: "FY" })} ${fiscalYearLabel}`;
   const fiscalMonths = useMemo(() => fiscalMonthSequence(fiscalStartMonth), [fiscalStartMonth]);
   const monthFormatter = useMemo(
     () => new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" }),
     [locale],
   );
-  // Every created fiscal year, marked (Open)/(Closed) — reporting covers closed
-  // history, so this list is not narrowed to the postable one.
-  const { yearOptionsIncluding, currentFiscalYear } = useFiscalPeriodOptions();
+  // Every CREATED fiscal year, marked (Open)/(Closed): Analysis is a read
+  // screen and closed years hold the history it reports on, so the picker
+  // uses the all-years variant — the postable-only `yearOptionsIncluding`
+  // locked closed history out after the first fiscal close.
+  const { yearOptionsAllIncluding, currentFiscalYear } = useFiscalPeriodOptions();
+
+  // Scope marker from the server: when a member is selected, the chart, the
+  // matrix and the contribution figures are member-scoped while the treasury,
+  // return, sector, risk and leaderboard sections stay tenant-wide.
+  const memberScoped = data?.scope?.memberScoped === true;
+  const scopeMemberName = data?.scope?.memberName ?? "";
+
   const chartMonthlyTrends = useMemo(
     () => data?.monthlyTrends.map((trend, offset) => {
-      const month = fiscalMonths[offset];
-      const date = new Date(Date.UTC(2020, month?.index ?? 0, 1));
+      // Localize from the server's own slot ('YYYY-MM') so the axis can never
+      // disagree with the month the server bucketed; fall back to the local
+      // sequence only when the slot is absent.
+      const slot = trend.monthSlot ? trend.monthSlot.split("-") : null;
+      const monthIndex = slot && Number.isInteger(Number(slot[1])) ? Number(slot[1]) - 1 : (fiscalMonths[offset]?.index ?? 0);
+      const date = new Date(Date.UTC(2020, monthIndex, 1));
       return { ...trend, month: monthFormatter.format(date) };
     }) ?? [],
     [data?.monthlyTrends, fiscalMonths, monthFormatter],
@@ -114,18 +160,33 @@ export function AnalysisView({
   // money belongs to (selectedYear is the fiscal START year, so months before
   // the start month fall in selectedYear + 1). Headers and tooltips name that
   // month, so a January contribution keyed in October still reads January.
+  // Server-derived slots are preferred (same calendar the data was bucketed
+  // with); the local computation remains the loading/legacy fallback.
   const regularityColumns = useMemo(() => {
+    const trends = data?.monthlyTrends;
+    if (trends && trends.length === 12) {
+      return trends.map((tr) => {
+        const slot = tr.monthSlot ? tr.monthSlot.split("-") : null;
+        const monthIndex = slot && Number.isInteger(Number(slot[1])) ? Number(slot[1]) - 1 : null;
+        return {
+          key: tr.monthKey,
+          calYear: tr.calYear ?? selectedYear,
+          depositMonth: tr.monthSlot ?? "",
+          short: monthIndex !== null ? monthFormatter.format(new Date(Date.UTC(2020, monthIndex, 1))) : tr.month,
+        };
+      });
+    }
     const startCalIndex = fiscalMonths[0]?.index ?? 0;
     return fiscalMonths.map((m) => {
       const calYear = m.index >= startCalIndex ? selectedYear : selectedYear + 1;
       return {
-        ...m,
+        key: m.key,
         calYear,
         depositMonth: `${calYear}-${String(m.index + 1).padStart(2, "0")}`,
         short: monthFormatter.format(new Date(Date.UTC(2020, m.index, 1))),
       };
     });
-  }, [fiscalMonths, selectedYear, monthFormatter]);
+  }, [data?.monthlyTrends, fiscalMonths, selectedYear, monthFormatter]);
 
   // Per-month paid/evaluated counts across the roster — the footer's totals row.
   const regularityTotals = useMemo(() => {
@@ -174,10 +235,13 @@ export function AnalysisView({
         <div className="flex flex-wrap items-center gap-2">
           <div className="w-44">
             <AppDropdown
-              options={yearOptionsIncluding(String(selectedYear))}
+              options={yearOptionsAllIncluding(String(selectedYear))}
               value={String(selectedYear)}
               onChange={(val) => onYearChange(parseInt(val || currentFiscalYear, 10))}
               placeholder={t("fiscal.actions.selectYear")}
+              // A fiscal year is always selected on this screen; clearing it
+              // used to silently jump back to the current FY.
+              clearable={false}
             />
           </div>
 
@@ -187,6 +251,10 @@ export function AnalysisView({
               value={selectedMemberId}
               onChange={(val) => onMemberChange(val || "all")}
               placeholder={t("analysis.filterByShareholder", { defaultValue: "Filter by Shareholder" })}
+              // A failed member fetch must not pretend the org has no
+              // shareholders — surface it with a retry instead.
+              error={membersError}
+              onRetry={onMembersRetry}
             />
           </div>
 
@@ -202,8 +270,41 @@ export function AnalysisView({
         </div>
       </div>
 
-      {/* Executive KPIs */}
-      {isLoading ? (
+      {/* Scope banner: when a shareholder is selected, most figures on this
+          screen stay TENANT-WIDE (the treasury is not attributable per member).
+          Say so once, loudly, instead of letting a tenant-wide "Portfolio Net
+          Return" be misread as the selected member's return. */}
+      {memberScoped && !isLoading && (error || data) && (
+        <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+          <Filter className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <p>
+            {t("analysis.memberScopeBanner", {
+              defaultValue:
+                "Shareholder view: {member}. The cash-flow chart, the regularity matrix and the contribution figures are scoped to this shareholder; portfolio value, net return, sector allocation, project health and the leaderboard remain tenant-wide.",
+              member: scopeMemberName,
+            })}
+          </p>
+        </div>
+      )}
+
+      {/* Executive KPIs — a failed load is an ERROR state, never zeros: a
+          "0.00" KPI row reads as "this organisation has no money". */}
+      {!isLoading && error && !data ? (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-destructive/40 bg-card p-10 text-center">
+          <AlertCircle className="h-8 w-8 text-destructive" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              {t("analysis.errorTitle", { defaultValue: "Analysis data could not be loaded" })}
+            </p>
+            {error && <p className="mt-1 text-xs text-muted-foreground">{error}</p>}
+          </div>
+          {onRetry && (
+            <Button variant="outline" size="sm" onClick={onRetry} icon={RefreshCw}>
+              {t("analysis.errorRetry", { defaultValue: "Try again" })}
+            </Button>
+          )}
+        </div>
+      ) : isLoading ? (
         <CardGridSkeleton count={4} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -221,6 +322,7 @@ export function AnalysisView({
             value={fm(metrics?.totalAssetValue ?? 0)}
             icon={Landmark}
             tone="emerald"
+            note={memberScoped ? t("analysis.tenantWideBadge", { defaultValue: "Tenant-wide" }) : undefined}
             helperText={t("analysis.consolidatedPortfolioHelper", {
               defaultValue: "Total treasury: active fund balances (project capital included)",
             })}
@@ -230,11 +332,18 @@ export function AnalysisView({
             value={fm(metrics?.netProfit ?? 0)}
             icon={TrendingUp}
             tone={(metrics?.netProfit ?? 0) >= 0 ? "emerald" : "rose"}
+            note={memberScoped ? t("analysis.tenantWideBadge", { defaultValue: "Tenant-wide" }) : undefined}
             helperText={t("analysis.realizedReturn", { value: metrics?.roi ?? 0 })}
           />
           <ERPMetricCard
             label={t("analysis.collectionEfficiency")}
-            value={`${metrics?.collectionEfficiency ?? 100}%`}
+            // null = nothing was due to be evaluated (future FY / no monthly
+            // schedule members) — render "—", never a fabricated 100%.
+            value={
+              metrics?.collectionEfficiency === null || metrics?.collectionEfficiency === undefined
+                ? "—"
+                : `${metrics.collectionEfficiency}%`
+            }
             icon={ShieldCheck}
             tone="cyan"
             // #15: the caption previously read a hardcoded, un-pluralized
@@ -250,7 +359,10 @@ export function AnalysisView({
         </div>
       )}
 
-      {/* Navigation Tabs */}
+      {/* Navigation Tabs + panels — hidden while the error card is shown, so
+          a failed load never renders the "no data" empty states underneath. */}
+      {!error || data ? (
+      <>
       <div className="border-b border-slate-200 dark:border-border">
         <div className="flex items-center gap-6">
           <button
@@ -391,9 +503,7 @@ export function AnalysisView({
                 {data?.monthlyTrends.slice(0, 6).map((item, index) => (
                   <div key={item.month} className="text-center p-1.5 rounded bg-slate-50 dark:bg-slate-800/50">
                     <span className="text-[10px] font-semibold text-slate-500 uppercase">
-                      {fiscalMonths[index]
-                        ? monthFormatter.format(new Date(Date.UTC(2020, fiscalMonths[index].index, 1)))
-                        : item.month}
+                      {regularityColumns[index]?.short ?? item.month}
                     </span>
                     <p className={cn("text-xs font-bold mt-0.5", item.net >= 0 ? "text-emerald-600" : "text-rose-600")}>
                       {item.net >= 0 ? `+${fm(item.net)}` : fm(item.net)}
@@ -406,11 +516,14 @@ export function AnalysisView({
             {/* Sector Capital Allocation Pie Chart */}
             <div className="bg-card p-5 rounded-xl border border-border/80 shadow-sm flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between gap-2 mb-4">
                   <div>
-                    <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                      {t("analysis.sectorAllocationTitle", { defaultValue: "Capital Allocation by Sector" })}
-                    </h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
+                        {t("analysis.sectorAllocationTitle", { defaultValue: "Capital Allocation by Sector" })}
+                      </h2>
+                      {memberScoped && <TenantWideChip label={t("analysis.tenantWideBadge", { defaultValue: "Tenant-wide" })} />}
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {/* #14: state the measure so the number cannot be read as
                           "spent" or "remaining" when it means committed budget. */}
@@ -488,9 +601,12 @@ export function AnalysisView({
 
           {/* Project Health & Risk Distribution */}
           <div className="bg-card p-5 rounded-xl border border-border/80 shadow-sm">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground mb-1">
-              {t("analysis.healthMatrixTitle", { defaultValue: "Project Portfolio Health Matrix" })}
-            </h2>
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
+                {t("analysis.healthMatrixTitle", { defaultValue: "Project Portfolio Health Matrix" })}
+              </h2>
+              {memberScoped && <TenantWideChip label={t("analysis.tenantWideBadge", { defaultValue: "Tenant-wide" })} />}
+            </div>
             <p className="text-xs text-muted-foreground mb-4">
               {t("analysis.healthMatrixDesc", {
                 defaultValue: "Real-time operational status and capital exposure by project health tier",
@@ -631,18 +747,32 @@ export function AnalysisView({
 
                       <td className="py-3 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
-                          <span
-                            className={cn(
-                              "font-bold font-mono",
-                              item.punctualityScore >= 90
-                                ? "text-emerald-600"
-                                : item.punctualityScore >= 70
-                                  ? "text-amber-600"
-                                  : "text-rose-600",
-                            )}
-                          >
-                            {item.punctualityScore}%
-                          </span>
+                          {item.punctualityScore === null ? (
+                            // No month was due for this member in this FY
+                            // (future year, pre-join months, or a non-monthly
+                            // deposit schedule) — 100% would be a lie.
+                            <span
+                              className="font-bold font-mono text-slate-400"
+                              title={t("analysis.notEvaluated", {
+                                defaultValue: "Not evaluated (no due month yet, or a non-monthly schedule)",
+                              })}
+                            >
+                              —
+                            </span>
+                          ) : (
+                            <span
+                              className={cn(
+                                "font-bold font-mono",
+                                item.punctualityScore >= 90
+                                  ? "text-emerald-600"
+                                  : item.punctualityScore >= 70
+                                    ? "text-amber-600"
+                                    : "text-rose-600",
+                              )}
+                            >
+                              {item.punctualityScore}%
+                            </span>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -704,9 +834,23 @@ export function AnalysisView({
       {activeTab === "leaderboard" && (
         <div className="bg-card rounded-xl border border-border/80 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-border/80">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-              {t("analysis.leaderboardTitle", { defaultValue: "Shareholder Equity & Contribution Rankings" })}
-            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
+                {t("analysis.leaderboardTitle", { defaultValue: "Shareholder Equity & Contribution Rankings" })}
+              </h2>
+              {memberScoped && <TenantWideChip label={t("analysis.tenantWideBadge", { defaultValue: "Tenant-wide" })} />}
+              {/* The table is capped at the top 15 — say so, and by how many. */}
+              {typeof metrics?.totalShareholders === "number" &&
+                metrics.totalShareholders > (data?.leaderboard.length ?? 0) && (
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    {t("analysis.topOf", {
+                      defaultValue: "Showing top {shown} of {total} shareholders",
+                      shown: data?.leaderboard.length ?? 0,
+                      total: metrics.totalShareholders,
+                    })}
+                  </span>
+                )}
+            </div>
             <p className="text-xs text-muted-foreground">
               {t("analysis.leaderboardDesc", {
                 defaultValue: "Ranked by cumulative capital invested and fractional voting equity",
@@ -722,7 +866,14 @@ export function AnalysisView({
                   <th className="py-3 px-4">{t("analysis.shareholder", { defaultValue: "Shareholder" })}</th>
                   <th className="py-3 px-4 text-center">{t("analysis.memberId", { defaultValue: "Member ID" })}</th>
                   <th className="py-3 px-4 text-center">{t("analysis.sharesOwned", { defaultValue: "Shares Owned" })}</th>
-                  <th className="py-3 px-4 text-right">{t("analysis.cumulativeCapital", { defaultValue: "Cumulative Capital" })}</th>
+                    <th
+                      className="py-3 px-4 text-right"
+                      title={t("analysis.cumulativeCapitalHelper", {
+                        defaultValue: "Net of reverts; includes capital received via equity transfers",
+                      })}
+                    >
+                      {t("analysis.cumulativeCapital", { defaultValue: "Cumulative Capital" })}
+                    </th>
                   <th className="py-3 px-4 text-right">{t("analysis.equitySharePercent", { defaultValue: "Equity Share %" })}</th>
                 </tr>
               </thead>
@@ -783,12 +934,14 @@ export function AnalysisView({
                         {t("analysis.noContributorData", { defaultValue: "No contributor data available" })}
                       </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+                 )}
+               </tbody>
+             </table>
+           </div>
+         </div>
+       )}
+       </>
+       ) : null}
+      </div>
+    );
+  }

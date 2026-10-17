@@ -32,6 +32,10 @@ export function inflowSqlPredicate(): SQL {
   return sql`(
     (${transactions.type} = 'Deposit' AND ${transactions.status} IN ('Completed', 'Success'))
     OR ${transactions.type} = 'Earning'
+    -- Legacy/external-investment type: no current write path produces a bare
+    -- 'Investment' row (project creation posts 'Project Investment', which is
+    -- an INTERNAL reallocation and deliberately NOT inflow). Kept so a legacy
+    -- ledger with such rows still reports the money arriving.
     OR ${transactions.type} = 'Investment'
   )`;
 }

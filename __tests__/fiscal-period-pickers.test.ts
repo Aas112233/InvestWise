@@ -40,6 +40,18 @@ const READ_SCREENS = [
   'components/analysis/analysis-view.tsx',
 ];
 
+/**
+ * READ screens that report on HISTORY. A closed fiscal year is exactly the year
+ * these screens exist to cover, so their year picker offers EVERY created year
+ * (Open and Closed) via `yearOptionsAllIncluding` — the postable-only variant
+ * locked closed history out after the first fiscal close (analysis audit M5).
+ * Posting forms must never use this variant.
+ */
+const HISTORY_READ_SCREENS = [
+  'components/reports/reports-view.tsx',
+  'components/analysis/analysis-view.tsx',
+];
+
 /** Screens that ask the user for an accounting period. */
 const PERIOD_SCREENS = [
   ...POSTING_FORMS,
@@ -85,16 +97,38 @@ describe('active fiscal year', () => {
     expect(read('app/analysis/page.tsx')).toContain('useFiscalPeriodYears');
   });
 
-  it('offers only the year open for posting on every picker', () => {
-    for (const path of PERIOD_SCREENS) {
+  it('narrows POSTING pickers to the year open for posting, never more', () => {
+    // A year that is closed (or never created) must not be offerable to a form
+    // whose submit the server would immediately reject. Posting forms use the
+    // OPEN-only variant and must never reach for the all-years one.
+    for (const path of POSTING_FORMS) {
       const source = read(path);
       expect(source, `${path} must use the shared fiscal options`).toContain('useFiscalPeriodOptions');
-      // The old per-screen intent flag is gone: every picker now narrows to
-      // OPEN years at the one source, so none may reintroduce the split.
+      expect(source, `${path} must offer only OPEN years`).toContain('yearOptionsIncluding');
+      expect(source, `${path} must not offer closed years to a posting form`).not.toContain('yearOptionsAllIncluding');
+    }
+    // The single filter that decides what a posting picker may offer.
+    expect(read('lib/fiscal-period-options.ts')).toContain('period.status === "OPEN"');
+  });
+
+  it('offers closed fiscal years to HISTORY read screens (Analysis, Reports)', () => {
+    // Reporting covers closed history: once a year is closed it is precisely
+    // the year these screens most need. The postable-only variant used to
+    // exclude it, contradicting each view's own comment.
+    for (const path of HISTORY_READ_SCREENS) {
+      const source = read(path);
+      expect(source, `${path} must use the shared fiscal options`).toContain('useFiscalPeriodOptions');
+      expect(source, `${path} must offer all created years`).toContain('yearOptionsAllIncluding');
+    }
+    // The all-years selector exists at the one source, distinct from the OPEN filter.
+    expect(read('lib/fiscal-period-options.ts')).toContain('export function selectAllFiscalYears');
+  });
+
+  it('never reintroduces the removed forPosting per-screen intent flag', () => {
+    for (const path of PERIOD_SCREENS) {
+      const source = read(path);
       expect(source, `${path} reintroduced the removed forPosting flag`).not.toContain('forPosting');
     }
-    // The single filter that decides what any picker may offer.
-    expect(read('lib/fiscal-period-options.ts')).toContain('period.status === "OPEN"');
   });
 
   it('reads the period list without needing FISCAL READ', () => {

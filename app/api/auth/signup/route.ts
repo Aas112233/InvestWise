@@ -17,7 +17,7 @@ import {
   FISCAL_MONTHS,
 } from '@/lib/org-setup';
 import { provisionTenant } from '@/lib/tenant-provision';
-import { turnstileState, verifyTurnstileToken } from '@/lib/turnstile';
+import { globalSignupCeiling, turnstileState, verifyTurnstileToken } from '@/lib/turnstile';
 import { AppError, extractDbError } from '@/lib/utils/errors';
 
 // Public signup is unauthenticated and creates real records, so every ceiling
@@ -28,9 +28,10 @@ const IP_WINDOW_SECS = 15 * 60;
 const EMAIL_LIMIT = 3;
 const EMAIL_WINDOW_SECS = 30 * 60;
 // Platform-wide circuit breaker: bounds total damage from rotating source
-// addresses. Spent only AFTER a solved human proof, otherwise 41 empty POSTs
-// per hour would saturate it and deny every honest signup for the price of curl.
-const GLOBAL_LIMIT = 40;
+// addresses. Its limit follows the bot-protection posture (globalSignupCeiling
+// in lib/turnstile.ts): with human proof each admission costs a solved widget
+// so the ceiling stays generous; with the Turnstile kill switch off an
+// admission costs one POST and the ceiling tightens ~4x to do the pricing.
 const GLOBAL_WINDOW_SECS = 60 * 60;
 // When no edge sets a client-address header (local `next start`, some staging
 // setups) every anonymous visitor shares one bucket, so the shared budget has
@@ -129,9 +130,12 @@ function firstBlocked(outcomes: BucketOutcome[]): BucketOutcome | null {
  *   3. hard body-size cap, then strict field validation;
  *   4. per-email counter — the one dimension a scripted client cannot rotate
  *      without owning another address;
- *   5. human proof (Cloudflare Turnstile), fail-closed in production and
- *      allergic to Cloudflare's always-pass test vectors;
- *   6. the platform-wide ceiling, paid only by callers who solved the widget;
+ *   5. human proof (Cloudflare Turnstile) when the kill switch is on —
+ *      fail-closed in production and allergic to Cloudflare's always-pass
+ *      test vectors;
+ *   6. the platform-wide ceiling, whose strictness follows the posture from
+ *      step 5 (globalSignupCeiling): generous when proof prices each
+ *      admission, ~4x tighter when it does not;
  *   7. provisioning, which re-validates policy and clamps every stored field.
  */
 export async function POST(request: NextRequest) {
@@ -295,11 +299,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Paid only by a caller who solved the widget, so draining the platform
-    // ceiling costs a real CAPTCHA per attempt instead of one empty POST.
+    // The ceiling's strictness follows the bot-protection posture: with the
+    // widget on, draining it costs a solved challenge per attempt; with it
+    // off, this counter IS the anti-swarm control, so it runs tighter.
     let global: BucketOutcome;
     try {
-      global = await consumeBucket('signup:global', GLOBAL_LIMIT, GLOBAL_WINDOW_SECS);
+      global = await consumeBucket('signup:global', globalSignupCeiling(captcha.mode), GLOBAL_WINDOW_SECS);
     } catch (error) {
       return counterUnavailable(error);
     }

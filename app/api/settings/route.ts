@@ -6,6 +6,7 @@ import { getAuthContext, type AuthenticatedUser } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { AuthError, ForbiddenError, LockedError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { updateSettingsSchema, UpdateSettingsInput } from '@/lib/utils/validation';
+import { fiscalYearEndForStart } from '@/lib/fiscal-periods';
 import { normalizePaymentMethods } from '@/lib/payment-methods';
 import { logAudit } from '@/lib/utils/audit';
 import { ensureShareValueLocked } from '@/lib/utils/share-value-lock';
@@ -196,7 +197,14 @@ export async function PUT(request: NextRequest) {
     if (data.financial?.fiscalYearStart !== undefined || data.financial?.fiscalYearEnd !== undefined) {
       const nextStart = data.financial.fiscalYearStart ?? currentSettings.fiscalYearStart ?? 'July';
       const nextEnd = data.financial.fiscalYearEnd ?? currentSettings.fiscalYearEnd ?? 'June';
-      if (nextStart === nextEnd) throw new ValidationError('Fiscal year start and end months must differ');
+      // The merged pair must form a FULL 12-month fiscal year: end = the month
+      // before start. A zod superRefine covers the both-present payload case,
+      // but a single-field patch still combines with the STORED month here —
+      // and a short span (Jan→Mar) is what turned Analysis into 12 bars over 3
+      // months of data plus fake MISSED cells for months outside the year.
+      if (fiscalYearEndForStart(nextStart) !== nextEnd) {
+        throw new ValidationError('The fiscal year end month must be the month before the start month (a full 12-month year)');
+      }
       const fiscalConfigChanged =
         nextStart !== (currentSettings.fiscalYearStart || 'July') ||
         nextEnd !== (currentSettings.fiscalYearEnd || 'June');

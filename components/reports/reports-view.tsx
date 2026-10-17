@@ -89,16 +89,18 @@ export function ReportsView({
   const fiscalStartMonth = tenantSettings?.financial?.fiscalYearStart || "July";
   // One fiscal option source for every period control, shared with Analysis,
   // the deposit desk and the fiscal-period screen.
-  const { yearOptionsIncluding, monthsFor, defaultFiscalYear, defaultMonthKey } = useFiscalPeriodOptions();
+  const { yearOptionsAllIncluding, monthsFor, defaultFiscalYear, defaultMonthKey } = useFiscalPeriodOptions();
   const selectedFiscalYear = fiscalYear ?? defaultFiscalYear;
   // Reports is a read screen, so it opens on the period actually open for
   // posting rather than an empty filter; entry forms stay empty (§15).
   const monthlyFiscal = monthlyFiscalYear ?? defaultFiscalYear;
   const monthlyKey = monthlyMonth ?? defaultMonthKey(monthlyFiscal);
   const monthlyMonthOptions = monthsFor(monthlyFiscal);
-  // Every created year, marked (Open)/(Closed) — closed history is reportable.
-  const monthlyYearOptions = yearOptionsIncluding(monthlyFiscal);
-  const selectedYearOptions = yearOptionsIncluding(selectedFiscalYear);
+  // Every created year, marked (Open)/(Closed) — closed history IS reportable.
+  // (The postable-only `yearOptionsIncluding` used to lock closed years out
+  // of the picker, contradicting this comment.)
+  const monthlyYearOptions = yearOptionsAllIncluding(monthlyFiscal);
+  const selectedYearOptions = yearOptionsAllIncluding(selectedFiscalYear);
   const quarterOptions: DropdownOption[] = QUARTERS.map((quarter) => {
     try {
       const bounds = resolveFiscalQuarterBounds(Number(selectedFiscalYear), quarter, fiscalStartMonth);

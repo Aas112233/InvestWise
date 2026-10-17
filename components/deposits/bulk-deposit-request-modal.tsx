@@ -163,6 +163,7 @@ export function BulkDepositRequestModal({
         }),
       });
       queryClient.invalidateQueries({ queryKey: ["deposits"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
       toast.success(t("requestDeposit.bulk.successToast", { count: validRows.length }));
       close();
     } catch (err) {

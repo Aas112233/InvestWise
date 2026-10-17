@@ -76,7 +76,17 @@ export const MODULE_ROUTE_PREFIXES: ReadonlyArray<readonly [string, TenantModule
   ['/api/transactions', 'transactions'],
   ['/api/expenses', 'expenses'],
   ['/api/dividends', 'dividends'],
-  ['/api/analysis', 'analysis'],
+  // The analytics namespace holds two routes with DIFFERENT entitlements:
+  //   /api/analytics/analysis → the licensed `analysis` module (opt-in)
+  //   /api/analytics/stats    → the core Dashboard feed (every authenticated
+  //                             tenant user sees the dashboard, so it stays
+  //                             ungated — map it explicitly only if the
+  //                             dashboard ever becomes licensable).
+  // The prefix must match the real route path: an earlier `/api/analysis`
+  // entry matched nothing (the screen is /analysis, the API is /api/analytics),
+  // so the `analysis` entitlement — off by default for new tenants — was
+  // silently never enforced.
+  ['/api/analytics/analysis', 'analysis'],
   ['/api/reports', 'reports'],
   ['/api/projects', 'projects'],
   ['/api/meetings', 'meetings'],

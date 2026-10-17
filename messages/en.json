@@ -1502,6 +1502,13 @@
     "sharesOwned": "Shares Owned",
     "cumulativeCapital": "Cumulative Capital",
     "equitySharePercent": "Equity Share %",
+    "tenantWideBadge": "Tenant-wide",
+    "memberScopeBanner": "Shareholder view: {member}. The cash-flow chart, the regularity matrix and the contribution figures are scoped to this shareholder; portfolio value, net return, sector allocation, project health and the leaderboard remain tenant-wide.",
+    "topOf": "Showing top {shown} of {total} shareholders",
+    "cumulativeCapitalHelper": "Net of reverts; includes capital received via equity transfers",
+    "errorTitle": "Analysis data could not be loaded",
+    "errorRetry": "Try again",
+    "notEvaluated": "Not evaluated (no due month yet, or a non-monthly schedule)",
     "noContributorData": "No contributor data available",
     "health": {
       "stable": "Stable",

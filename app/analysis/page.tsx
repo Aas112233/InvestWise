@@ -8,17 +8,22 @@ import { apiClient } from "@/lib/api-client";
 import { AnalysisData, Member } from "@/types";
 import { useTenantSettings } from "@/lib/use-tenant-settings";
 import { useFiscalPeriodYears } from "@/lib/fiscal-period-options";
-import { fiscalStartYearForDate } from "@/lib/fiscal-periods";
+import { fiscalStartYearForDate, isFiscalMonthName } from "@/lib/fiscal-periods";
 
 export default function AnalysisPage() {
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number | null>(null);
   const [selectedMemberId, setSelectedMemberId] = useState<string>("all");
   const { data: tenantSettings, isLoading: settingsLoading } = useTenantSettings();
-  const fiscalStartMonth = tenantSettings?.financial?.fiscalYearStart || "July";
-  const fiscalEndMonth = tenantSettings?.financial?.fiscalYearEnd || "June";
+  // Guard a legacy settings row holding a malformed month name: it must
+  // degrade to the platform default, not crash the page's render.
+  const rawStart = tenantSettings?.financial?.fiscalYearStart;
+  const rawEnd = tenantSettings?.financial?.fiscalYearEnd;
+  const fiscalStartMonth = isFiscalMonthName(rawStart) ? rawStart : "July";
+  const fiscalEndMonth = isFiscalMonthName(rawEnd) ? rawEnd : "June";
   const currentFiscalStartYear = fiscalStartYearForDate(new Date(), fiscalStartMonth);
   // Analysis is a read screen, so it opens on the year actually open for
-  // posting rather than the date-derived one; the picker marks the same year.
+  // posting rather than the date-derived one; the picker (all created years,
+  // Open and Closed) marks the same year.
   const { openFiscalYear } = useFiscalPeriodYears();
   const activeFiscalYear = selectedFiscalYear ?? Number(openFiscalYear ?? currentFiscalStartYear);
 
@@ -26,6 +31,8 @@ export default function AnalysisPage() {
   const {
     data: analysisData = null,
     isLoading: analysisLoading,
+    isError: analysisFailed,
+    error: analysisError,
     refetch,
   } = useQuery<AnalysisData>({
     queryKey: ["analytics", "analysis", { year: activeFiscalYear, memberId: selectedMemberId }],
@@ -40,15 +47,18 @@ export default function AnalysisPage() {
     staleTime: 60_000,
   });
 
-  const { data: members = [] } = useQuery<Member[]>({
+  // A failed load must reach the view as an error state (with retry) — never
+  // as a null `data` that renders as a false "no data" screen.
+  const {
+    data: members = [],
+    isError: membersFailed,
+    error: membersError,
+    refetch: refetchMembers,
+  } = useQuery<Member[]>({
     queryKey: ["members"],
     queryFn: async () => {
-      try {
-        const res = await apiClient<{ data: Member[] } | Member[]>("/members");
-        return Array.isArray(res) ? res : res?.data || [];
-      } catch {
-        return [];
-      }
+      const res = await apiClient<{ data: Member[] } | Member[]>("/members");
+      return Array.isArray(res) ? res : res?.data || [];
     },
     staleTime: 120_000,
   });
@@ -66,6 +76,10 @@ export default function AnalysisPage() {
         onYearChange={setSelectedFiscalYear}
         onMemberChange={setSelectedMemberId}
         onRefresh={() => refetch()}
+        error={analysisFailed ? (analysisError as Error)?.message || "Request failed" : null}
+        onRetry={() => refetch()}
+        membersError={membersFailed ? (membersError as Error)?.message || "Request failed" : null}
+        onMembersRetry={() => refetchMembers()}
       />
     </AppShell>
   );

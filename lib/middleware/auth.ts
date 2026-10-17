@@ -160,12 +160,6 @@ const PUBLIC_PATHS = [
   '/api/auth/refresh',
 ];
 
-// Admin-only paths
-const ADMIN_PATHS = [
-  '/api/admin',
-  '/api/settings',
-];
-
 // Maintenance flags, cached 30s (1 DB hit per 30s instead of per request).
 // The CACHE holds the raw flags only — never the verdict — because the verdict
 // depends on the caller's role and a single shared entry would leak a platform

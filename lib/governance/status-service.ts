@@ -273,7 +273,13 @@ export function evaluateMemberFromLegs(
   };
 }
 
-function isMonthlySchedule(depositFrequency: string | null | undefined): boolean {
+/**
+ * True when the member's deposit schedule is the monthly one the governance
+ * sweep (and the Analysis regularity matrix) evaluates against. Any other
+ * schedule — quarterly, semi-annual, ad-hoc — is skipped by the monthly
+ * rules, so a non-monthly member must never accrue monthly MISSED cells.
+ */
+export function isMonthlySchedule(depositFrequency: string | null | undefined): boolean {
   if (!depositFrequency) return true;
   return MONTHLY_FREQUENCIES.has(String(depositFrequency).trim().toLowerCase());
 }

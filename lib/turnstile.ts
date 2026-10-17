@@ -60,6 +60,23 @@ export function turnstileState(): TurnstileState {
   return { mode: 'required' };
 }
 
+/**
+ * Platform-wide signup ceiling for the current bot-protection posture.
+ *
+ * With human proof each admission costs a solved widget, so the ceiling can
+ * stay generous — otherwise 41 empty POSTs per hour would saturate it and
+ * deny every honest signup for the price of curl. With the TURNSTILE kill
+ * switch off, an admission costs one POST and the ceiling must do the
+ * pricing, so it tightens ~4x: every finer-grained counter is header-
+ * spoofable or email-rotatable under a scripted swarm.
+ */
+export const SIGNUP_CEILING_WITH_PROOF = 40;
+export const SIGNUP_CEILING_NO_PROOF = 10;
+
+export function globalSignupCeiling(mode: TurnstileState['mode']): number {
+  return mode === 'required' ? SIGNUP_CEILING_WITH_PROOF : SIGNUP_CEILING_NO_PROOF;
+}
+
 export type TurnstileVerdict = { ok: true } | { ok: false; code: string; message: string };
 
 /**

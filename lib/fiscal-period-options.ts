@@ -24,12 +24,18 @@ import {
  * stored `depositMonth`, report `fiscalMonth` or `lastDepositMonth` ordering
  * changes.
  *
- * Every picker offers only the fiscal years whose `fiscal_periods` row is OPEN.
- * A CLOSED year is never selectable, and neither is a calendar year that was
- * never created: posting rejects both (`assertFiscalPeriodOpen`,
- * lib/fiscal-guard.ts) and reporting must not offer a year the desk cannot act
- * on. While the period list is loading or failed the picker is simply empty —
- * never a guessed calendar window — so a non-open year can never appear.
+ * POSTING pickers (deposit forms, bulk modals) offer only the fiscal years
+ * whose `fiscal_periods` row is OPEN. A CLOSED year is never selectable there,
+ * and neither is a calendar year that was never created: posting rejects both
+ * (`assertFiscalPeriodOpen`, lib/fiscal-guard.ts).
+ *
+ * READ screens (Analysis, Reports) need the opposite rule: closed years hold
+ * the history they exist to report on, so they use `yearOptionsAllIncluding`
+ * — every created year, labelled (Open)/(Closed).
+ *
+ * While the period list is loading or failed a picker is simply empty — never
+ * a guessed calendar window — so a year that does not actually exist can
+ * never appear.
  */
 
 export interface FiscalPeriodOption {
@@ -95,6 +101,20 @@ export function selectFiscalYears(params: {
     .filter((period) => period.status === "OPEN")
     .map((period) => period.year)
     .sort((a, b) => a - b);
+}
+
+/**
+ * Every created fiscal year (any status), oldest first — for READ screens
+ * (Analysis, Reports), where closed history must stay selectable. A year the
+ * desk has closed is precisely the year a report most wants to cover.
+ */
+export function selectAllFiscalYears(params: {
+  periods: FiscalPeriodYear[];
+  pending: boolean;
+  failed: boolean;
+}): number[] {
+  if (params.pending || params.failed) return [];
+  return params.periods.map((period) => period.year).sort((a, b) => a - b);
 }
 
 /**
@@ -222,6 +242,27 @@ export function useFiscalPeriodOptions() {
   );
 
   /**
+   * Read-screen year options: EVERY created fiscal year, labelled (Open)/
+   * (Closed). Posting pickers must keep using `yearOptions` (OPEN only) —
+   * offering a closed year to a deposit form would let the desk select a
+   * period the write path immediately rejects.
+   */
+  const allListableYears = useMemo(
+    () =>
+      selectAllFiscalYears({
+        periods: years,
+        pending,
+        failed,
+      }),
+    [failed, pending, years],
+  );
+
+  const yearOptionsAll = useMemo(
+    () => buildFiscalYearOptions(allListableYears, startMonth, endMonth, t, statusByYear),
+    [allListableYears, startMonth, endMonth, t, statusByYear],
+  );
+
+  /**
    * `yearOptions` plus `selected` when the list does not contain it. Editing a
    * row that lives in a closed or never-created period must still show that
    * period instead of a blank field; the entry is labelled with its real
@@ -232,6 +273,13 @@ export function useFiscalPeriodOptions() {
     (selected: string | null): FiscalPeriodOption[] =>
       withYearOption(yearOptions, selected, startMonth, endMonth, t, statusByYear),
     [endMonth, startMonth, statusByYear, t, yearOptions],
+  );
+
+  /** Read-screen variant: all created years (Open and Closed) + `selected`. */
+  const yearOptionsAllIncluding = useCallback(
+    (selected: string | null): FiscalPeriodOption[] =>
+      withYearOption(yearOptionsAll, selected, startMonth, endMonth, t, statusByYear),
+    [endMonth, startMonth, statusByYear, t, yearOptionsAll],
   );
 
   const monthsFor = useCallback(
@@ -269,6 +317,8 @@ export function useFiscalPeriodOptions() {
     defaultMonthKey,
     yearOptions,
     yearOptionsIncluding,
+    yearOptionsAll,
+    yearOptionsAllIncluding,
     monthsFor,
     fiscalStartYearOf,
   };

@@ -107,6 +107,7 @@ export function DepositRequestView() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deposits"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
       // Localized copy is authoritative; the server `message` is an English
       // duplicate and would defeat ur/hi/bn.
       toast.success(t("requestDeposit.success"));

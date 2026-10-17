@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PAYMENT_TYPES } from '@/lib/payment-methods';
+import { fiscalYearEndForStart } from '@/lib/fiscal-periods';
 
 export const loginSchema = z.object({
   email: z.string().email().transform((e: string) => e.toLowerCase().trim()),
@@ -145,12 +146,20 @@ export const updateSettingsSchema = z.object({
       fiscalYearEnd: fiscalMonthName.optional(),
     })
     .superRefine((financial, ctx) => {
-      if (financial.fiscalYearStart && financial.fiscalYearEnd && financial.fiscalYearStart === financial.fiscalYearEnd) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['fiscalYearEnd'],
-          message: 'Fiscal year start and end months must differ',
-        });
+      if (financial.fiscalYearStart && financial.fiscalYearEnd) {
+        // A fiscal year is always a full 12-month run: the end month must be
+        // exactly 11 months after the start. Only "start === end" was rejected
+        // before, so a 3-month "year" (January→March) was accepted and then
+        // fed every fiscal helper that assumes 12 slots — Analysis bucketed 3
+        // months of data into 12 bars and marked members MISSED for months
+        // outside their fiscal year altogether.
+        if (fiscalYearEndForStart(financial.fiscalYearStart) !== financial.fiscalYearEnd) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['fiscalYearEnd'],
+            message: 'The fiscal year end month must be the month before the start month (a full 12-month year)',
+          });
+        }
       }
     })
     .optional(),

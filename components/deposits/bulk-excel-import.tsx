@@ -202,6 +202,7 @@ export function BulkExcelImport({
         }),
       });
       queryClient.invalidateQueries({ queryKey: ["deposits"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
       toast.success(t("deposits.bulk.successToast", { count: ready.length }));
       setPending(null);
       onSubmitted();

@@ -38,6 +38,26 @@ export function fiscalMonthSequence(startMonth: string): FiscalMonth[] {
   return Array.from({ length: 12 }, (_, offset) => MONTHS[(startIndex + offset) % 12]!);
 }
 
+/** The full English month names, in calendar order — for validating stored values. */
+export const FISCAL_MONTH_NAMES: readonly string[] = MONTHS.map((m) => m.name);
+
+/** True when the value is a full English month name the fiscal helpers accept. */
+export function isFiscalMonthName(value: unknown): value is string {
+  return typeof value === "string" && (FISCAL_MONTH_NAMES as readonly string[]).includes(value);
+}
+
+/**
+ * The end month of a 12-month fiscal year that starts at `startMonth`
+ * (the month before the start, wrapping the calendar). Reading screens and
+ * the settings guard both need "what end month does this start month imply"
+ * to spot rows where a legacy/misconfigured end month would silently shorten
+ * or re-bucket the fiscal year.
+ */
+export function fiscalYearEndForStart(startMonth: string): string {
+  const startIndex = monthIndex(startMonth, "Fiscal year start");
+  return MONTHS[(startIndex + 11) % 12]!.name;
+}
+
 /** Zero-based position of a date's month within its fiscal year, using UTC. */
 export function fiscalMonthOffsetForDate(date: Date, startMonth: string): number {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) throw new Error("Date must be valid");

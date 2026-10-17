@@ -320,6 +320,10 @@ export function DepositsListView({
     queryClient.invalidateQueries({ queryKey: ["deposits"] });
     queryClient.invalidateQueries({ queryKey: ["members"] });
     queryClient.invalidateQueries({ queryKey: ["funds"] });
+    // Analysis is built from these ledger rows — without this, approving /
+    // rejecting / reverting a deposit left its cached chart + regularity
+    // matrix stale for up to staleTime (60s).
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
   };
 
   const closeConfirm = () => {

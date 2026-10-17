@@ -263,6 +263,7 @@ export function DepositModal({
         queryClient.invalidateQueries({ queryKey: ["deposits"] });
         queryClient.invalidateQueries({ queryKey: ["members"] });
         queryClient.invalidateQueries({ queryKey: ["funds"] });
+        queryClient.invalidateQueries({ queryKey: ["analytics"] });
         toast.success(t("deposits.updatedToast"));
       } else {
         // Pre-open the receipt tab while this submit's user gesture is still
@@ -286,6 +287,7 @@ export function DepositModal({
         queryClient.invalidateQueries({ queryKey: ["deposits"] });
         queryClient.invalidateQueries({ queryKey: ["members"] });
         queryClient.invalidateQueries({ queryKey: ["funds"] });
+        queryClient.invalidateQueries({ queryKey: ["analytics"] });
         const memberName = membersQuery.data?.find((m) => m.id === values.memberId)?.name ?? "";
         // Localized copy is authoritative; the server `message` is an English
         // duplicate and would defeat ur/hi/bn.

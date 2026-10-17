@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, withDbRetry } from '@/db/index';
 import { members, projects, funds, transactions, auditLogs, systemSettings } from '@/db/schema/index';
-import { eq, and, sql, desc, gte, inArray } from 'drizzle-orm';
+import { eq, and, or, sql, desc, gte, lte, inArray } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { SETTLED_DEPOSIT_STATUSES } from '@/lib/ledger-selectors';
-import { fiscalMonthSequence, fiscalStartYearForDate } from '@/lib/fiscal-periods';
+import {
+  fiscalMonthSequence,
+  fiscalStartYearForDate,
+  fiscalYearEndForStart,
+  isFiscalMonthName,
+  resolveFiscalBounds,
+} from '@/lib/fiscal-periods';
 import { AnalyticsStats } from '@/types';
 
-/**
- * Window for the deposit series: a rolling 11-month floor. The series is
- * fiscal-year aligned (see `monthlyDeposits` below), so the query window must
- * be wide enough to cover a fiscal year that began up to 11 months ago —
- * otherwise the earliest buckets would silently read as zero.
- */
-const DEPOSITS_WINDOW = sql`date_trunc('month', now()) - interval '11 months'`;
 /** Start of the 3-calendar-month expense window used for the burn-rate (2 full months + current). */
 const EXPENSE_WINDOW = sql`date_trunc('month', now()) - interval '2 months'`;
 /** Start of the CURRENT calendar month — the headline "Monthly Burn" window. */
@@ -38,9 +37,42 @@ export async function GET(request: NextRequest) {
     }
     // §6 fail-closed: dashboard aggregates + recent audit trail — null tenant
     // must 403 instead of summing every tenant's money.
+    //
+    // Intentionally NOT gated on a screen permission: this endpoint feeds the
+    // Dashboard, which is the landing surface for every authenticated tenant
+    // user (there is no DASHBOARD screen in the permission model). The
+    // licensable `analysis` module covers its sibling route
+    // `/api/analytics/analysis` via the tenant-module gate.
     const scopedTenantId = requireTenant(tenantId, user);
 
     const db = getDb();
+
+    // Tenant fiscal calendar — read BEFORE the aggregate batch so the deposit
+    // series window can be computed exactly. A legacy row may hold a malformed
+    // month name; degrade to the platform default (July) instead of 500-ing,
+    // and always derive the end month so a misconfigured short span cannot
+    // shrink the series window while the 12-slot grid claims all twelve.
+    const now = new Date();
+    let fiscalYearStartMonth = 'July';
+    try {
+      const [fiscalSettings] = await db
+        .select({ start: systemSettings.fiscalYearStart })
+        .from(systemSettings)
+        .where(eq(systemSettings.tenantId, scopedTenantId))
+        .limit(1);
+      if (isFiscalMonthName(fiscalSettings?.start)) fiscalYearStartMonth = fiscalSettings.start;
+    } catch {
+      // No settings row → the platform default fiscal year (July–June).
+    }
+    const fiscalYearEndMonth = fiscalYearEndForStart(fiscalYearStartMonth);
+    const fyStartYear = fiscalStartYearForDate(now, fiscalYearStartMonth);
+    const fiscalMonths = fiscalMonthSequence(fiscalYearStartMonth);
+    const startMonthIndex = fiscalMonths[0]?.index ?? 0;
+    const fyBounds = resolveFiscalBounds(fyStartYear, fiscalYearStartMonth, fiscalYearEndMonth);
+    // The 12 'YYYY-MM' slots of the current FY, in fiscal order.
+    // fiscalMonthSequence always returns exactly 12 months, so [0]/[11] exist.
+    const firstSlotKey = fiscalMonthKey(fyStartYear, fiscalMonths[0]!, startMonthIndex);
+    const lastSlotKey = fiscalMonthKey(fyStartYear, fiscalMonths[fiscalMonths.length - 1]!, startMonthIndex);
 
     // Tenant scoped conditions (unconditional — scopedTenantId 403s on null).
     // Members are soft-deleted (members.isDeleted), and every other member
@@ -61,7 +93,15 @@ export async function GET(request: NextRequest) {
       // have" than the fund balance right beside it.
       inArray(transactions.status, SETTLED_DEPOSIT_STATUSES),
     );
-    const dividendCond = and(eq(transactions.type, 'Dividend'), eq(transactions.isDeleted, false), eq(transactions.tenantId, scopedTenantId));
+    // Dividends follow the same settled rule as deposits (mirrors the
+    // canonical outflow predicate): distribute writes 'Completed' today, but
+    // the total must not silently change if a pending state ever lands.
+    const dividendCond = and(
+      eq(transactions.type, 'Dividend'),
+      eq(transactions.isDeleted, false),
+      eq(transactions.tenantId, scopedTenantId),
+      inArray(transactions.status, SETTLED_DEPOSIT_STATUSES),
+    );
     const expenseCond = and(eq(transactions.type, 'Expense'), eq(transactions.isDeleted, false), eq(transactions.tenantId, scopedTenantId));
     // Income is the mirror of the Expenses KPI: the all-time Earning ledger
     // (project revenue booked via the project disbursement flow), not
@@ -138,35 +178,48 @@ export async function GET(request: NextRequest) {
         })
         .from(projects)
         .where(tenantProjectCond),
-      // 12-month deposit series: amount, entry count, distinct submitting members.
-      //
-      // Bucket by the deposit's OWN `deposit_month` (which month this money
-      // covers), not the transaction date it was recorded — matching how
-      // governance/compliance reads `lastDepositMonth`. A January contribution
-      // entered in October belongs in the January slot. Legacy rows without a
-      // deposit_month (or with a malformed one) fall back to the transaction
-      // date so no data is silently dropped.
-      db
-        .select({
-          month: sql<string>`(
-            case
-              when ${transactions.depositMonth} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'
-                then ${transactions.depositMonth}
-              else to_char(${transactions.date}, 'YYYY-MM')
-            end
-          )`,
-          amount: sql<number>`coalesce(sum(${transactions.amount}::numeric), 0)::float`,
-          count: sql<number>`count(*)::int`,
-          submittingMembers: sql<number>`count(distinct ${transactions.memberId})::int`,
-        })
-        .from(transactions)
-        .where(and(
-          depositCond,
-          eq(transactions.status, 'Completed'),
-          gte(transactions.date, DEPOSITS_WINDOW),
-        ))
-        .groupBy(sql`1`)
-        .orderBy(sql`1`),
+       // 12-month deposit series: amount, entry count, distinct submitting members.
+       //
+       // Bucket by the deposit's OWN `deposit_month` (which month this money
+       // covers), not the transaction date it was recorded — matching how
+       // governance/compliance reads `lastDepositMonth`. A January contribution
+       // entered in October belongs in the January slot. Legacy rows without a
+       // deposit_month (or with a malformed one) fall back to the transaction
+       // date so no data is silently dropped.
+       //
+       // The fetch window must admit BOTH bucketing keys (same class of bug as
+       // the analysis route): a rolling 11-month window on the POSTING date
+       // dropped an early-posted deposit whose month slot sits in the current
+       // FY, so that bucket silently read zero.
+       db
+         .select({
+           month: sql<string>`(
+             case
+               when ${transactions.depositMonth} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'
+                 then ${transactions.depositMonth}
+               else to_char(${transactions.date}, 'YYYY-MM')
+             end
+           )`,
+           amount: sql<number>`coalesce(sum(${transactions.amount}::numeric), 0)::float`,
+           count: sql<number>`count(*)::int`,
+           submittingMembers: sql<number>`count(distinct ${transactions.memberId})::int`,
+         })
+         .from(transactions)
+         .where(and(
+           depositCond,
+           or(
+             and(
+               gte(transactions.date, fyBounds.periodStart),
+               lte(transactions.date, fyBounds.periodEnd),
+             ),
+             and(
+               gte(transactions.depositMonth, firstSlotKey),
+               lte(transactions.depositMonth, lastSlotKey),
+             ),
+           )!,
+         ))
+         .groupBy(sql`1`)
+         .orderBy(sql`1`),
       // Ongoing projects: earnings vs expenses (maintained aggregates).
       db
         .select({
@@ -252,33 +305,24 @@ export async function GET(request: NextRequest) {
     // FY-2026-27 chart ran 12/2025 → 10/2026). Submission rate = share of
     // active members who deposited that month.
     const byMonth = new Map((monthlyDepositRows || []).map((r) => [r.month, r]));
-    const now = new Date();
-    let fiscalYearStartMonth = 'July';
-    try {
-      const [fiscalSettings] = await db
-        .select({ start: systemSettings.fiscalYearStart, end: systemSettings.fiscalYearEnd })
-        .from(systemSettings)
-        .where(eq(systemSettings.tenantId, scopedTenantId))
-        .limit(1);
-      fiscalYearStartMonth = fiscalSettings?.start || 'July';
-    } catch {
-      // No settings row → the platform default fiscal year (July–June).
-    }
-    const fyStartYear = fiscalStartYearForDate(now, fiscalYearStartMonth);
-    const fiscalMonths = fiscalMonthSequence(fiscalYearStartMonth);
-    const startMonthIndex = fiscalMonths[0]?.index ?? 0;
     const monthlyDeposits = fiscalMonths.map((fm) => {
       // 'YYYY-MM' key in fiscal order for this slot (handles the year rollover
       // for months that fall after the calendar new year).
       const key = fiscalMonthKey(fyStartYear, fm, startMonthIndex);
       const row = byMonth.get(key);
       const submittingMembers = row?.submittingMembers ?? 0;
+      // Clamp: the numerator counts DISTINCT depositing members (a soft-deleted
+      // member's historical row still counts) while the denominator is live
+      // active members — the two can disagree and the rate must not read 120%.
+      const submissionRate = activeMembers > 0
+        ? Math.min(100, Math.round((submittingMembers / activeMembers) * 1000) / 10)
+        : null;
       return {
         month: key,
         amount: row?.amount ?? 0,
         count: row?.count ?? 0,
         submittingMembers,
-        submissionRate: activeMembers > 0 ? Math.round((submittingMembers / activeMembers) * 1000) / 10 : null,
+        submissionRate,
       };
     });
 

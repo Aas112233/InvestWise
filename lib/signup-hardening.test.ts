@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 import { bucketKey } from "./rate-limit";
 import { getAbuseClientIp } from "./request-meta";
+import { globalSignupCeiling, SIGNUP_CEILING_NO_PROOF, SIGNUP_CEILING_WITH_PROOF } from "./turnstile";
 import { provisionTenant } from "./tenant-provision";
 import { validatePasswordStrength } from "./utils/password";
 import { ValidationError } from "./utils/errors";
@@ -114,6 +115,29 @@ describe("bot protection posture", () => {
       code: "CAPTCHA_UNAVAILABLE",
     });
     fetchSpy.mockRestore();
+  });
+});
+
+describe("platform signup ceiling follows bot-protection posture", () => {
+  // With human proof off, the global counter is the only control a
+  // rotating-IP, rotating-email swarm cannot bypass — so it must be tight
+  // enough that mass tenant minting stops being economical.
+  it("stays generous when human proof prices each admission", () => {
+    expect(globalSignupCeiling("required")).toBe(SIGNUP_CEILING_WITH_PROOF);
+  });
+
+  it("tightens when the kill switch removes human proof", () => {
+    expect(globalSignupCeiling("skipped")).toBe(SIGNUP_CEILING_NO_PROOF);
+  });
+
+  it("never widens the no-proof ceiling above the proof ceiling", () => {
+    expect(SIGNUP_CEILING_NO_PROOF).toBeLessThan(SIGNUP_CEILING_WITH_PROOF);
+  });
+
+  it("treats 'unavailable' as no-proof if it ever reaches a counter", () => {
+    // 'unavailable' already fails closed with 503 before any bucket is spent;
+    // the safe direction is the strict ceiling should the ordering change.
+    expect(globalSignupCeiling("unavailable")).toBe(SIGNUP_CEILING_NO_PROOF);
   });
 });
 
