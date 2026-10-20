@@ -8,11 +8,17 @@ import { getQueryClient } from "./query-client";
 import { AuthProvider } from "./auth-context";
 import { LocaleProvider } from "./i18n";
 
-export function Providers({ children }: { children: ReactNode }) {
+export function Providers({ children, nonce }: { children: ReactNode; nonce?: string }) {
   const queryClient = getQueryClient();
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        enableSystem
+        disableTransitionOnChange
+        nonce={nonce}
+      >
         <LocaleProvider>
           <AuthProvider>
             {children}
@@ -23,3 +29,4 @@ export function Providers({ children }: { children: ReactNode }) {
     </QueryClientProvider>
   );
 }
+
