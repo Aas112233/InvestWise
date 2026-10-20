@@ -27,17 +27,6 @@ const AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
 const inputCls =
   "w-full px-3 py-2 rounded-xl border text-xs bg-card border-border/80 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors";
 
-// Member-facing deposit slip desk. Shares the deposits management layout
-// (DepositsListView: header, filter bar, fiscal month picker, sortable
-// paginated table, receipt sheet) and opens the slip form in a TopSheet, the
-// same way "Add Deposit" does.
-// Two audiences, one screen: a plain member (REQUEST_DEPOSIT write only) is
-// scoped to their own requests — submit and track; an officer (DEPOSITS READ,
-// the same audience as the deposits desk) sees the request INBOX — every
-// member's requests, with verify/reject on pending rows. Pending requests are
-// hidden from the desk table, so this screen is where they live end to end.
-// TRX id + proof note travel in `notes` because the request contract
-// (POST /api/deposits/request) carries no dedicated proof fields.
 export function DepositRequestView() {
   const { t } = useLocale();
   const { user } = useAuth();
@@ -51,10 +40,6 @@ export function DepositRequestView() {
   const [method, setMethod] = useState<string | null>(null);
   const [trxId, setTrxId] = useState("");
   const [proofNote, setProofNote] = useState("");
-  // Deposit period: the fiscal month the payment is FOR — survives approval so
-  // the deposit lands in the claimed month, not the approval month.
-  // depositMonth is the absolute YYYY-MM the API takes; depositFiscalYear is
-  // the picker's parent selection (fiscal start year).
   const [depositMonth, setDepositMonth] = useState("");
   const [depositFiscalYear, setDepositFiscalYear] = useState("");
   const [touched, setTouched] = useState(false);
@@ -63,10 +48,6 @@ export function DepositRequestView() {
   const fundsQuery = useFundOptions(DEPOSIT_FUND_TYPE);
   const tenantShareValue = useTenantShareValue();
 
-  // Scope the directory to the signed-in user's own member record (matched by
-  // email). That is identity, not a pre-selection: every money field below
-  // still starts empty (Rule §15). Falls back to an open member filter until
-  // (or unless) the match resolves.
   const selfMember = useMemo(() => {
     const email = user?.email?.toLowerCase();
     if (!email) return null;
@@ -75,17 +56,8 @@ export function DepositRequestView() {
 
   const effectiveMemberId = selfMember?.id ?? memberId ?? null;
   const scopeMember = selfMember ?? (membersQuery.data ?? []).find((m) => m.id === memberId) ?? null;
-
-  // Officer (DEPOSITS READ — the deposits-desk audience) sees the request
-  // inbox: all members' requests, review actions included. A plain member
-  // stays scoped to their own record (member privacy — a member must never
-  // see another member's requests).
   const officer = hasScreenPermission(user, "DEPOSITS", "READ");
 
-  // Amount autofill (same contract as the deposit form): fires only when the
-  // member identity actually changes — including the moment the signed-in
-  // member's own record resolves — so a background refetch never clobbers a
-  // hand-typed amount. Still editable for partial or extra payments.
   const lastAutofilledMember = useRef("");
   useEffect(() => {
     if (!sheetOpen) return;
@@ -109,8 +81,6 @@ export function DepositRequestView() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deposits"] });
       queryClient.invalidateQueries({ queryKey: ["analytics"] });
-      // Localized copy is authoritative; the server `message` is an English
-      // duplicate and would defeat ur/hi/bn.
       toast.success(t("requestDeposit.success"));
       setSheetOpen(false);
       setFundId(null);
@@ -148,8 +118,16 @@ export function DepositRequestView() {
   const memberOptions = selfMember
     ? [{ value: selfMember.id, label: memberDisplayName(selfMember.name, selfMember.status), caption: selfMember.memberId, disabled: selfMember.status === "suspended" }]
     : (membersQuery.data ?? [])
-        // Suspended members stay visible but disabled (marker explains why).
-        .filter((m) => m.status === "active" || m.status === "suspended")
+        // Inactive (dormant) members may still request a deposit, so they are
+        // selectable; suspended members stay visible but DISABLED with a marker
+        // that explains why (the write path refuses them anyway). Soft-deleted
+        // rows are excluded defensively — the API already filters isDeleted,
+        // and legacy rows tagged in the email must not resurface here.
+        .filter(
+          (m) =>
+            (m.status === "active" || m.status === "inactive" || m.status === "suspended") &&
+            !m.email?.toLowerCase().includes("deleted"),
+        )
         .map((m) => ({
           value: m.id,
           label: memberDisplayName(m.name, m.status),
@@ -157,16 +135,13 @@ export function DepositRequestView() {
           disabled: m.status === "suspended",
         }));
   const fundOptions = (fundsQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
-  // Method picker comes from the tenant's Settings → Governance list (name +
-  // channel type); the stored value is the configured name itself.
+
   const paymentMethods = useTenantPaymentMethods();
   const methodOptions = paymentMethods.map((m) => {
     const typeLabel = t(
       PAYMENT_TYPE_LABEL_KEY[m.type as PaymentType] ?? 'settings.paymentMethods.types.other',
       { defaultValue: m.type },
     );
-    // #71: drop the type qualifier when it merely repeats the method name
-    // ("Cash" / CASH → "Cash", not "Cash · Cash").
     const label = m.name.trim().toLowerCase() === typeLabel.trim().toLowerCase()
       ? m.name
       : `${m.name} · ${typeLabel}`;
@@ -186,8 +161,6 @@ export function DepositRequestView() {
         onAdd={() => setSheetOpen(true)}
         onBulk={() => setBulkOpen(true)}
         requestScreen
-        // Officers get the open inbox (no member lock); members stay scoped
-        // to their own requests.
         memberScope={officer ? undefined : { id: effectiveMemberId, name: scopeMember?.name }}
       />
       <BulkDepositRequestModal
@@ -299,3 +272,4 @@ export function DepositRequestView() {
     </>
   );
 }
+
