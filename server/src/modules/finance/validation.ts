@@ -56,26 +56,60 @@ export const revertDepositSchema = z.object({
   reason: z.string().min(1, 'Reason is required').max(500, 'Reason max 500 characters'),
 });
 
-export const bulkDepositSchema = z.object({
-  fundId: uuidField,
-  requestKey: uuidField.optional(),
-  commonMonth: depositMonthField,
-  cashierName: z.string().trim().min(1).max(255).optional(),
-  depositMethod: z.string().trim().min(1).max(50).optional(),
-  deposits: z
-    .array(
-      z
-        .object({
-          memberId: uuidField,
-          amount: positiveAmount,
-          depositMonth: depositMonthField.optional(),
-          date: isoDateField.optional(),
-        })
-        .strict(),
-    )
-    .min(1, 'At least one deposit is required')
-    .max(500, 'Maximum 500 deposits per batch'),
-}).strict();
+/**
+ * Bulk deposit batch.
+ *
+ * `commonMonth` is the multi-member shape (one month for every row). A
+ * single-member, multi-month collection sends a month PER ROW instead, so the
+ * shared month is optional — but a batch that resolves no month for a row is
+ * rejected here rather than silently posting the row against today's month:
+ * the write path must never guess the accounting period (§8).
+ */
+export const bulkDepositSchema = z
+  .object({
+    fundId: uuidField,
+    requestKey: uuidField.optional(),
+    commonMonth: depositMonthField.optional(),
+    cashierName: z.string().trim().min(1).max(255).optional(),
+    depositMethod: z.string().trim().min(1).max(50).optional(),
+    deposits: z
+      .array(
+        z
+          .object({
+            memberId: uuidField,
+            amount: positiveAmount,
+            depositMonth: depositMonthField.optional(),
+            date: isoDateField.optional(),
+          })
+          .strict(),
+      )
+      .min(1, 'At least one deposit is required')
+      .max(500, 'Maximum 500 deposits per batch'),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.commonMonth) return;
+    value.deposits.forEach((deposit, index) => {
+      if (deposit.depositMonth) return;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['deposits', index, 'depositMonth'],
+        message: 'A deposit month is required — send commonMonth or a depositMonth on every row',
+      });
+    });
+  });
+
+/**
+ * GET /api/finance/deposits/month-status — the per-member deposit month grid
+ * for one fiscal year. Strict: the endpoint answers exactly this question, and
+ * an unknown parameter would otherwise be ignored while looking honoured.
+ */
+export const depositMonthStatusQuerySchema = z
+  .object({
+    memberId: uuidField,
+    fiscalYear: z.string().regex(/^\d{4}$/, 'Fiscal year must be a four-digit year'),
+  })
+  .strict();
 
 export const expenseSchema = z.object({
   amount: positiveAmount,

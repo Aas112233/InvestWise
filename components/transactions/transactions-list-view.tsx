@@ -56,7 +56,7 @@ interface TransactionsListViewProps {
     totalOutflow: number;
     netFlow: number;
   };
-  onViewVoucher: (tx: TransactionRecord) => void;
+  onPrintVoucher: (tx: TransactionRecord) => void;
   onSoftDelete: (tx: TransactionRecord) => void;
   canManage: boolean;
 }
@@ -76,7 +76,7 @@ export function TransactionsListView({
   typeFilter,
   onTypeFilterChange,
   metrics,
-  onViewVoucher,
+  onPrintVoucher,
   onSoftDelete,
   canManage,
 }: TransactionsListViewProps) {
@@ -196,7 +196,7 @@ export function TransactionsListView({
             variant="ghost"
             size="sm"
             icon={Printer}
-            onClick={() => onViewVoucher(row)}
+            onClick={() => onPrintVoucher(row)}
             title={t("transactions.printVoucher", { defaultValue: "Print Voucher" })}
             aria-label={t("transactions.printVoucher", { defaultValue: "Print Voucher" })}
           />

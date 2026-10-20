@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, funds, members, systemSettings } from '@/db/schema/index';
+import { memberDisplayNameSql, assertMemberNotSuspended } from '@/lib/member-display';
 import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-methods';
 import { DEPOSIT_FUND_REQUIRED_MESSAGE, isDepositFund } from '@/lib/deposit-fund';
 import { findDepositMonthOccupant, depositMonthConflictMessage } from '@/lib/deposit-month-limit';
@@ -228,7 +229,7 @@ export async function GET(request: NextRequest) {
           balanceBefore: transactions.balanceBefore,
           balanceAfter: transactions.balanceAfter,
           createdAt: transactions.createdAt,
-          memberName: members.name,
+          memberName: memberDisplayNameSql,
           memberIdStr: members.memberId,
           fundName: funds.name,
         })
@@ -427,6 +428,7 @@ export async function POST(request: NextRequest) {
     if (!member) {
       throw new NotFoundError('Member');
     }
+    assertMemberNotSuspended(member, 'recording a deposit');
 
     if (!fund) {
       throw new NotFoundError('Fund');
@@ -478,6 +480,9 @@ export async function POST(request: NextRequest) {
         .limit(1);
       if (!lockedFund) throw new NotFoundError('Fund');
       if (!lockedMember) throw new NotFoundError('Member');
+      // Suspended gate re-asserted on the LOCKED row: the outer fast-path
+      // read can be stale if the member was suspended between reads.
+      assertMemberNotSuspended(lockedMember, 'recording a deposit');
 
       // §12 idempotency: re-check the reference INSIDE the tx (the outer
       // pre-check races with concurrent posts). Any duplicate found here or by

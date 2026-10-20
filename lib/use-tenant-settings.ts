@@ -93,13 +93,19 @@ export function useTenantSettingsQueryKey(): readonly unknown[] {
 
 /**
  * Single source of truth for tenant settings on the client.
+ *
+ * `enabled` lets a provider that lives above the routes (the header's fiscal
+ * year, lib/providers) stay silent on public pages: an unauthenticated
+ * /api/settings call 401s and drags the api client's session-expiry handling
+ * into /login.
  */
-export function useTenantSettings() {
+export function useTenantSettings(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: useTenantSettingsQueryKey(),
     queryFn: () => apiClient<TenantSettings>("/settings"),
     staleTime: SETTINGS_STALE_MS,
     refetchOnMount: false,
+    enabled: options?.enabled ?? true,
   });
 }
 

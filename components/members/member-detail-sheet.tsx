@@ -9,6 +9,8 @@ import { TopSheet } from "@/components/ui/top-sheet";
 import { apiClient } from "@/lib/api-client";
 import { formatDatePattern, formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
+import { memberStatusReasonKey } from "@/lib/member-status-reason";
 import { useTenantCurrency, useTenantDateFormat } from "@/lib/use-tenant-settings";
 import type { Member } from "@/types";
 
@@ -93,7 +95,7 @@ export function MemberDetailSheet({
     <TopSheet
       open={memberId !== null}
       onClose={onClose}
-      title={member ? member.name : t("members.detail.profile")}
+      title={member ? memberDisplayName(member.name, member.status) : t("members.detail.profile")}
       subtitle={member ? member.memberId : undefined}
       footer={
         member ? (
@@ -130,12 +132,22 @@ export function MemberDetailSheet({
               {initials(member.name)}
             </span>
             <div className="min-w-0">
-              <p className="text-base font-semibold text-slate-900 dark:text-white truncate">{member.name}</p>
+              <p className="text-base font-semibold text-slate-900 dark:text-white truncate">{memberDisplayName(member.name, member.status)}</p>
               <p className="text-xs font-mono text-slate-500">{member.memberId}</p>
-              <div className="mt-1.5">
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
                 <StatusBadge tone={statusTone(member.status)}>
                   {t(`members.statusLabels.${member.status.toLowerCase()}`, { defaultValue: member.status })}
                 </StatusBadge>
+                {(() => {
+                  // WHY the member is inactive — a deposit hold is recoverable
+                  // by depositing; equity transferred out / a manual hold is not.
+                  const reasonKey = memberStatusReasonKey(member.statusReason);
+                  return reasonKey ? (
+                    <span className="text-[10px] uppercase tracking-wider text-slate-400">
+                      {t(reasonKey)}
+                    </span>
+                  ) : null;
+                })()}
               </div>
             </div>
           </div>

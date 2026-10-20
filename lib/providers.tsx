@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { getQueryClient } from "./query-client";
 import { AuthProvider } from "./auth-context";
 import { LocaleProvider } from "./i18n";
+import { FiscalYearProvider } from "./fiscal-year-context";
 
 export function Providers({ children }: { children: ReactNode }) {
   const queryClient = getQueryClient();
@@ -15,8 +16,12 @@ export function Providers({ children }: { children: ReactNode }) {
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
         <LocaleProvider>
           <AuthProvider>
-            {children}
-            <Toaster richColors closeButton position="top-right" />
+            {/* Above the pages, so the header's fiscal-year selection survives
+                navigation: AppShell remounts per route, the selection must not. */}
+            <FiscalYearProvider>
+              {children}
+              <Toaster richColors closeButton position="top-right" />
+            </FiscalYearProvider>
           </AuthProvider>
         </LocaleProvider>
       </ThemeProvider>

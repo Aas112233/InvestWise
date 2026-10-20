@@ -2,6 +2,8 @@
   "documents": {
     "orgFallback": "ইনভেস্টওয়ায়",
     "reference": "রেফারেন্স নম্বর",
+    "recordedOn": "রেকর্ডের তারিখ",
+    "voidStamp": "বাতিলকৃত এন্ট্রি",
     "generatedBy": "ইনভেস্টওয়ায় দ্বারা তৈরিকৃত",
     "receivedBy": "প্রাপ্তকারী",
     "preparedBy": "তৈরি করলেন",
@@ -269,6 +271,8 @@
     "actions": "কার্যক্রম",
     "search": "সদস্য অথবা প্রজেক্ট খুঁজুন...",
     "loading": "লোড হচ্ছে",
+    "selectedCount": "{count} নির্বাচিত",
+"removedOption": "(মুছে ফেলা)",
     "save": "সেভ করুন",
     "cancel": "বাতিল করুন",
     "add": "যোগ করুন",
@@ -422,6 +426,7 @@
     "reports": "রিপোর্ট",
     "settings": "সেটিংস",
     "dividends": "লভ্যাংশ",
+    "payouts": "পরিশোধ",
     "fiscal": "অর্থবছর",
     "meetings": "মিটিং ও পারফরম্যান্স",
     "governance": "প্রশাসন ও পারফরম্যান্স",
@@ -911,6 +916,11 @@
       "inactive": "নিষ্ক্রিয়",
       "suspended": "বরখাস্ত",
       "completed": "সম্পন্ন"
+    },
+    "statusReasons": {
+      "depositNonCompliance": "জমা না হওয়ার কারণে",
+      "equityTransferredOut": "ইকুইটি স্থানান্তরিত",
+      "adminManual": "অ্যাডমিন কর্তৃক"
     },
     "rowMenu": {
       "view": "প্রোফাইল দেখুন",
@@ -1599,6 +1609,7 @@
     "linkedProject": "Target Project",
     "selectProjectPlaceholder": "Select project...",
     "selectMemberPlaceholder": "Select member...",
+    "allMembers": "সকল সদস্য",
     "selectFundPlaceholder": "Select fund...",
     "formatTitle": "3. Output Document Format",
     "downloadButton": "নথি তৈরি ও রপ্তানি করুন",
@@ -1640,6 +1651,7 @@
       "totalProjectExpenses": "প্রকল্পের মোট খরচ",
       "totalDisbursements": "মোট বিনিয়োগ",
       "totalPenalties": "মোট জরিমানা কর্তন",
+      "waivedPenalties": "মওকুফ করা জরিমানা",
       "totalLiquidity": "মোট তহবিল",
       "activeFunds": "সক্রিয় তহবিল",
       "partners": "অংশীদার",
@@ -1647,7 +1659,7 @@
       "sharesHeld": "মালিকানা শেয়ার",
       "totalContributed": "মোট অবদান",
       "rowCount": "লেনদেন",
-      "truncatedNote": "দ্রষ্টব্য: ডেটা সীমা অতিক্রম করায় সময়ের প্রথম ৫,০০০ সারিতে সীমাবদ্ধ করা হয়েছে।",
+      "truncatedNote": "দ্রষ্টব্য: ডেটা সীমা অতিক্রম করায় সময়ের প্রথম {max} সারিতে সীমাবদ্ধ করা হয়েছে।",
       "generatedBy": "প্রস্তুতকারী",
       "total": "মোট",
       "confidential": "গোপনীয় — শুধুমাত্র অভ্যন্তরীণ ও অনুমোদিত অংশীদারদের জন্য।"
@@ -1716,6 +1728,7 @@
     "viewButton": "রিপোর্ট দেখুন",
     "downloadSuccess": "ডকুমেন্ট সফলভাবে ডাউনলোড হয়েছে",
     "generatingNotice": "রিপোর্ট ডকুমেন্ট তৈরি হচ্ছে...",
+    "entityLoadError": "প্রকল্প, সদস্য অথবা তহবিলএর তথ্য লোড করতে ব্যর্থ।",
     "viewer": {
       "back": "রিপোর্টে ফিরে যান",
       "refresh": "রিফ্রেশ",
@@ -1723,7 +1736,11 @@
       "loading": "রিপোর্ট লোড হচ্ছে...",
       "loadError": "রিপোর্ট লোড করতে ব্যর্থ।",
       "empty": "এই সময়ের জন্য কোনো রেকর্ড নেই।",
-      "unknownReport": "অজানা রিপোর্ট ধরন।"
+      "unknownReport": "অজানা রিপোর্ট ধরন।",
+      "rowCount": "{count} সারি"
+    },
+    "errors": {
+      "generateFailed": "রিপোর্ট তৈরি করতে ব্যর্থতা। আবার চেষ্টা করুন।"
     }
   },
   "transactions": {
@@ -1990,6 +2007,37 @@
       "successToast": "{count}টি ডিপোজিট সফলভাবে রেকর্ড হয়েছে।",
       "minOneRow": "সদস্য ও পরিমাণসহ অন্তত একটি সারি যোগ করুন।"
     },
+    "bulkSingle": {
+      "scopeMultiple": "একাধিক সদস্য",
+      "scopeSingle": "একক সদস্য",
+      "subtitleSingle": "একজন সদস্যের কয়েকটি মাসের জমা এক ফান্ডে রেকর্ড করুন।",
+      "member": "সদস্য",
+      "selectMember": "সদস্য নির্বাচন করুন...",
+      "fiscalYear": "আর্থিক বছর",
+      "selectFiscalYear": "বছর নির্বাচন করুন...",
+      "months": "জমার মাস",
+      "monthsHint": "এই সদস্যের জন্য যে মাসগুলোর জমা দেবেন সেগুলো বেছে নিন। যে মাসে ইতিমধ্যে জমা আছে সেগুলো লক করা আছে।",
+      "prefillHint": "নির্বাচিত মাসগুলো শেয়ার × শেয়ার মূল্য ({value}) হিসেবে আগে থেকে বসে। আংশিক জমার জন্য টাকা বদলে নিন।",
+      "loading": "মাস লোড হচ্ছে...",
+      "loadFailed": "জমার মাসগুলো লোড করা যায়নি।",
+      "retry": "আবার চেষ্টা করুন",
+      "available": "খালি আছে",
+      "chosen": "নির্বাচিত",
+      "deposited": "জমা হয়েছে",
+      "pendingRequest": "অপেক্ষমাণ অনুরোধ",
+      "selectAll": "সব খালি মাস নির্বাচন করুন",
+      "clear": "মুছুন",
+      "selected": "{count}টি নির্বাচিত",
+      "total": "মোট",
+      "submit": "{count}টি জমা রেকর্ড করুন",
+      "submitting": "রেকর্ড হচ্ছে...",
+      "successToast": "{member}-এর জন্য {count}টি জমা রেকর্ড হয়েছে।",
+      "selectMemberFirst": "প্রথমে একজন সদস্য ও একটি আর্থিক বছর নির্বাচন করুন।",
+      "minOneMonth": "কমপক্ষে একটি খালি মাস নির্বাচন করে টাকা লিখুন।",
+      "invalidAmount": "প্রতিটি নির্বাচিত মাসের জন্য সঠিক টাকা লিখুন।",
+      "amountFor": "{month}-এর টাকা",
+      "lockedNote": "লক করা মাসে ইতিমধ্যে জমা আছে।"
+    },
     "excel": {
       "modeManual": "ম্যানুয়াল এন্ট্রি",
       "modeExcel": "Excel থেকে ইমপোর্ট",
@@ -2189,6 +2237,7 @@
     "portfolio": "শেয়ার পোর্টফোলিও",
     "sh": "শেয়ার",
     "transferBanner": "উৎস সদস্য থেকে নির্বাচিত প্রাপকদের কাছে সম্পদ স্থানান্তর করা হবে।",
+    "suspendedHolderBlocked": "এই সদস্য স্তগিত — স্তগিত সদস্য থেকে শেয়ার স্থানান্তর করা যাবে না। প্রথমে তাকে পুনঃসক্রিয় করুন।",
     "reallocationPlan": "স্থানান্তর পরিকল্পনা",
     "addTarget": "প্রাপক যোগ করুন",
     "recipientMember": "প্রাপক",
@@ -2678,6 +2727,12 @@
     "exitImpersonation": "ইম্পারসোনেটেশন শেষ করুন",
     "exitImpersonationFailed": "সেশন শেষ করা যায়নি",
     "currentFiscalYear": "বর্তমান অর্থবছর",
+    "fiscalYearSelect": "অর্থবছর",
+    "fiscalYearSelectHint": "অর্থবছর — প্রতিটি স্ক্রিনের প্রতিটি বছর নির্বাচক এই নির্বাচন অনুসরণ করে",
+    "fiscalYearHistorical": "আগের অর্থবছর দেখা হচ্ছে — প্রতিটি বছর নির্বাচক এই নির্বাচন অনুসরণ করে",
+    "fiscalYearFollows": "প্রতিটি স্ক্রিনের প্রতিটি বছর নির্বাচক এই নির্বাচন অনুসরণ করে।",
+    "fiscalYearReset": "FY {year}-এ ফিরে যান",
+    "fiscalYearNone": "এখনো কোনো অর্থবছর তৈরি হয়নি।",
     "fiscalYearAbbrev": "FY",
     "notificationsEmpty": "আপনি সবকিছু দেখে ফেলেছেন",
     "notificationsEmptyHint": "গত ৪৮ ঘণ্টার পরিবর্তনগুলো এখানে দেখা যাবে।",
@@ -3108,6 +3163,112 @@
       "title": "এই পেজটি লোড করা যায়নি",
       "message": "এই স্ক্রিনটি রেন্ডার করতে কিছু ভুল হয়েছে। কিছু সংরক্ষিত বা পরিবর্তিত হয়নি — আবার চেষ্টা করুন, বা অন্য অংশে গিয়ে ফিরে আসুন।",
       "retry": "আবার চেষ্টা করুন"
+    }
+  },
+  "payouts": {
+    "title": "সদস্য পরিশোধ",
+    "subtitle": "বরখাস্ত সদস্যের চূড়ান্ত নিষ্পত্তি, এককালীন বা কিস্তিতে।",
+    "searchPlaceholder": "সদস্যের নাম, আইডি বা কারণ দিয়ে খুঁজুন…",
+    "allStatuses": "সব অবস্থা",
+    "newPlan": "নতুন পরিশোধ পরিকল্পনা",
+    "createTitle": "বরখাস্ত সদস্যের নিষ্পত্তি",
+    "createHint": "পরিশোধ সদস্যের প্রাপ্য অবশিষ্টের সমান (জমা ও লভ্যাংশ, প্রকল্পে বিনিয়োগ বাদ দিয়ে)। কর্মকর্তা নিশ্চিত না করা পর্যন্ত কোনো অর্থ দেওয়া হয় না।",
+    "createButton": "পরিশোধ পরিকল্পনা তৈরি করুন",
+    "created": "পরিশোধ পরিকল্পনা তৈরি হয়েছে",
+    "createFailed": "পরিশোধ পরিকল্পনা তৈরি করা যায়নি",
+    "loadFailed": "পরিশোধের তালিকা দেখা যায়নি।",
+    "actionFailed": "করণ ব্যর্থ হয়েছে",
+    "empty": "এখনো কোনো পরিশোধ পরিকল্পনা নেই।",
+    "open": "খুলুন",
+    "dueNow": "প্রদেয়",
+    "oneTime": "এককালীন",
+    "phased": "{count} কিস্তি, প্রতি {interval} মাস",
+    "phases": "কিস্তি",
+    "phaseLabel": "কিস্তি {sequence}",
+    "paidToast": "কিস্তি পরিশোধ হয়েছে",
+    "topUpToast": "প্রকল্প ফেরত পরিকল্পনায় যুক্ত হয়েছে",
+    "cancelledToast": "পরিশোধ পরিকল্পনা বাতিল হয়েছে",
+    "payNext": "পরবর্তী কিস্তি দিন",
+    "addProjectReturn": "প্রকল্প ফেরত যোগ করুন",
+    "cancelPlan": "পরিকল্পনা বাতিল করুন",
+    "reservedAmount": "এই পরিকল্পনা যত নিষ্পত্তি করবে",
+    "zeroBalanceWarning": "এই সদস্যের প্রাপ্য অবশিষ্ট নেই। প্রকল্পের ভেতরের অর্থ প্রকল্প নিষ্পত্তি হওয়ার পর দেওয়া হয়।",
+    "awaitingSettlement": "এই সদস্য এখনো একটি অনিষ্পত্ত প্রকল্পে মূলধন রাখেন। আগে সেই প্রকল্প নিষ্পত্তি করুন, তারপর ফেরতটি আরেকটি কিস্তি হিসেবে যোগ করুন।",
+    "awaitingShort": "প্রকল্প ফেরত অপেক্ষমাণ",
+    "schedulePreview": "তৈরি সময়সূচি",
+    "scheduleMismatch": "সময়সূচির পূর্বাভাব অবশিষ্টের সঙ্গে মিলছে না।",
+    "noticePeriodHint": "নোটিশের মেয়াদ {days} দিন — সবচেয়ে আগে সম্ভাব্য তারিখ {earliest}।",
+    "detailTitle": "পরিশোধ পরিকল্পনা",
+    "column": {
+      "member": "সদস্য",
+      "total": "মোট নিষ্পত্তি",
+      "paid": "পরিশোধিত",
+      "remaining": "অবশিষ্ট",
+      "schedule": "সময়সূচি",
+      "nextDue": "পরবর্তী প্রদানের তারিখ",
+      "fund": "কোন তহবিল থেকে",
+      "status": "অবস্থা",
+      "reason": "কারণ"
+    },
+    "field": {
+      "member": "বরখাস্ত সদস্য",
+      "memberPlaceholder": "একজন বরখাস্ত সদস্য বাছুন…",
+      "fund": "কোন তহবিল থেকে পরিশোধ",
+      "fundPlaceholder": "একটি জমা তহবিল বাছুন…",
+      "mode": "পরিশোধের ধরন",
+      "modePlaceholder": "পরিশোধের ধরন বাছুন…",
+      "firstDueDate": "প্রথম পরিশোধের তারিখ",
+      "firstDueDatePlaceholder": "তারিখ বাছুন…",
+      "installments": "কিস্তির সংখ্যা",
+      "installmentsOption": "{count} কিস্তি",
+      "installmentsPlaceholder": "সংখ্যা বাছুন…",
+      "interval": "প্রতি",
+      "intervalMonthly": "১ মাস",
+      "intervalOption": "{months} মাস",
+      "intervalPlaceholder": "ব্যবধান বাছুন…",
+      "reason": "সদস্যের নিষ্পত্তি কেন করা হচ্ছে",
+      "reasonPlaceholder": "যেমন সদস্য পদত্যাগ করেছেন; কমিটির সিদ্ধান্ত 12/10/2026 অনুযায়ী পাওনা নিষ্পত্তি"
+    },
+    "kpi": {
+      "openPlans": "চলমান পরিকল্পনা (এই পাতা)",
+      "dueNow": "এখন প্রদেয়",
+      "reserved": "বাকি দেনা",
+      "paid": "পরিশোধিত (এই পাতা)"
+    },
+    "mode": {
+      "oneTime": "এককালীন পরিশোধ",
+      "phased": "কিস্তিতে"
+    },
+    "section": {
+      "member": "সদস্য ও তহবিলের উৎস",
+      "schedule": "পরিশোধের সময়সূচি",
+      "reason": "কারণ"
+    },
+    "detail": {
+      "fund": "কোন তহবিল থেকে",
+      "schedule": "{count} কিস্তি, প্রতি {interval} মাস",
+      "cancelReason": "বাতিল"
+    },
+    "confirm": {
+      "payTitle": "এই পরিশোধ নথিভুক্ত করুন",
+      "payBody": "নিশ্চিত করুন যে কিস্তি {sequence}-র জন্য {amount} সদস্যকে দেওয়া হয়েছে। এতে {fund} কমে যায় এবং এই পাতা থেকে তা ফেরানো যায় না।",
+      "payConfirm": "পরিশোধিত হিসেবে চিহ্নিত করুন",
+      "topUpTitle": "প্রকল্প ফেরত যোগ করুন",
+      "topUpBody": "সদস্যের কাছে এখন যত অবশিষ্ট আছে (নিষ্পত্ত হওয়া প্রকল্প থেকে) তা আরেকটি কিস্তি হিসেবে যুক্ত হবে, তারিখ এখনই। এখনো কোনো অর্থ দেওয়া হয় না।",
+      "cancelTitle": "এই পরিশোধ পরিকল্পনা বাতিল করুন",
+      "cancelBody": "অপরিশোধিত অংশ ({amount}) সদস্যের পাওনায় ফিরে যাবে। যে কিস্তিগুলো দেওয়া হয়েছে সেগুলো খতিয়ানে থাকবে।",
+      "cancelReasonPlaceholder": "বাতিলের কারণ (আবশ্যক)",
+      "cancelReasonRequired": "একটি কারণ আবশ্যক"
+    },
+    "status": {
+      "ACTIVE": "চলমান",
+      "COMPLETED": "সম্পন্ন",
+      "CANCELLED": "বাতিল"
+    },
+    "phaseStatus": {
+      "SCHEDULED": "নির্ধারিত",
+      "PAID": "পরিশোধিত",
+      "CANCELLED": "বাতিল"
     }
   }
 }

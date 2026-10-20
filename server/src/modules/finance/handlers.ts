@@ -14,6 +14,7 @@ import {
 import {
   depositSchema,
   bulkDepositSchema,
+  depositMonthStatusQuerySchema,
   expenseSchema,
   earningSchema,
   transferSchema,
@@ -29,6 +30,86 @@ const BULK_DEPOSIT_MAX_BODY_BYTES = 256 * 1024;
 const BULK_DEPOSIT_USER_LIMIT = 12;
 const BULK_DEPOSIT_TENANT_LIMIT = 60;
 const BULK_DEPOSIT_RATE_WINDOW_SECS = 60;
+
+// The month grid is a read the bulk sheet re-issues only when the desk changes
+// member or financial year, so a normal user stays far below this. The ceiling
+// exists because the endpoint resolves one member per call: unbounded, it is a
+// cheap way to enumerate a tenant's members and their payment history.
+const MONTH_STATUS_USER_LIMIT = 60;
+const MONTH_STATUS_TENANT_LIMIT = 300;
+const MONTH_STATUS_RATE_WINDOW_SECS = 60;
+
+/** A two-dimension abuse budget: per user AND per tenant. */
+interface RateLimitBudget {
+  scope: string;
+  userLimit: number;
+  tenantLimit: number;
+  windowSecs: number;
+  /** Message when the counter store is unreachable (fail CLOSED). */
+  unavailableMessage: string;
+  /** Message when the budget is spent. */
+  limitedMessage: string;
+}
+
+/**
+ * Spend one request from both budgets, or return the response to send instead.
+ *
+ * Both dimensions are checked because either alone is trivially bypassed: a
+ * per-user ceiling lets one tenant's 40 clerks multiply it, and a per-tenant
+ * ceiling lets one clerk starve the desk. A counter failure DENIES — a
+ * throttle that fails open is a log, not a control.
+ */
+async function enforceRateLimit(
+  budget: RateLimitBudget,
+  tenantId: string,
+  userId: string,
+): Promise<Response | null> {
+  let buckets: [BucketOutcome, BucketOutcome];
+  try {
+    buckets = await Promise.all([
+      consumeBucket(
+        bucketKey(`${budget.scope}:user`, `${tenantId}:${userId}`),
+        budget.userLimit,
+        budget.windowSecs,
+      ),
+      consumeBucket(bucketKey(`${budget.scope}:tenant`, tenantId), budget.tenantLimit, budget.windowSecs),
+    ]);
+  } catch {
+    console.error(`[${budget.scope}] rate counter unavailable, denying request`);
+    return Response.json(
+      { success: false, message: budget.unavailableMessage, code: 'RATE_LIMIT_UNAVAILABLE' },
+      { status: 503 },
+    );
+  }
+
+  const blocked = buckets.filter((bucket) => !bucket.ok);
+  if (blocked.length > 0) {
+    const retryAfter = Math.max(...blocked.map((bucket) => bucket.retryAfterSec));
+    return Response.json(
+      { success: false, message: budget.limitedMessage, code: 'RATE_LIMITED' },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+    );
+  }
+  return null;
+}
+
+const BULK_DEPOSIT_BUDGET: RateLimitBudget = {
+  scope: 'bulk-deposit',
+  userLimit: BULK_DEPOSIT_USER_LIMIT,
+  tenantLimit: BULK_DEPOSIT_TENANT_LIMIT,
+  windowSecs: BULK_DEPOSIT_RATE_WINDOW_SECS,
+  unavailableMessage: 'Bulk deposits are temporarily unavailable. Please try again.',
+  limitedMessage: 'Too many bulk deposit attempts. Please try again later.',
+};
+
+const MONTH_STATUS_BUDGET: RateLimitBudget = {
+  scope: 'deposit-month-status',
+  userLimit: MONTH_STATUS_USER_LIMIT,
+  tenantLimit: MONTH_STATUS_TENANT_LIMIT,
+  windowSecs: MONTH_STATUS_RATE_WINDOW_SECS,
+  unavailableMessage: 'Deposit months are temporarily unavailable. Please try again.',
+  limitedMessage: 'Too many requests for deposit months. Please try again later.',
+};
 
 /**
  * Financial API — Next.js App Router route handlers.
@@ -65,36 +146,8 @@ export async function handleBulkAddDeposits(request: NextRequest) {
     const user = await requirePermission('DEPOSITS', 'WRITE');
     const tenantId = requireTenant(user);
 
-    let budgets: [BucketOutcome, BucketOutcome];
-    try {
-      budgets = await Promise.all([
-        consumeBucket(
-          bucketKey('bulk-deposit:user', `${tenantId}:${user.id}`),
-          BULK_DEPOSIT_USER_LIMIT,
-          BULK_DEPOSIT_RATE_WINDOW_SECS,
-        ),
-        consumeBucket(
-          bucketKey('bulk-deposit:tenant', tenantId),
-          BULK_DEPOSIT_TENANT_LIMIT,
-          BULK_DEPOSIT_RATE_WINDOW_SECS,
-        ),
-      ]);
-    } catch {
-      console.error('[BULK_DEPOSIT] rate counter unavailable, denying request');
-      return Response.json(
-        { success: false, message: 'Bulk deposits are temporarily unavailable. Please try again.', code: 'RATE_LIMIT_UNAVAILABLE' },
-        { status: 503 },
-      );
-    }
-
-    const blocked = budgets.filter((budget) => !budget.ok);
-    if (blocked.length > 0) {
-      const retryAfter = Math.max(...blocked.map((budget) => budget.retryAfterSec));
-      return Response.json(
-        { success: false, message: 'Too many bulk deposit attempts. Please try again later.', code: 'RATE_LIMITED' },
-        { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-      );
-    }
+    const limited = await enforceRateLimit(BULK_DEPOSIT_BUDGET, tenantId, user.id);
+    if (limited) return limited;
 
     const body = await validateBody(request, bulkDepositSchema, {
       maxBytes: BULK_DEPOSIT_MAX_BODY_BYTES,
@@ -102,6 +155,30 @@ export async function handleBulkAddDeposits(request: NextRequest) {
     });
     const result = await finance.bulkAddDeposits(body, user as SessionUser);
     return Response.json(result, { status: 201 });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+/**
+ * GET /api/finance/deposits/month-status?memberId=&fiscalYear=
+ *
+ * The month grid behind the single-member bulk collection: which of the
+ * member's fiscal-year months already hold a deposit. Read permission (not
+ * write) so an officer reviewing the desk can open the sheet, while the POST
+ * that follows still demands DEPOSITS WRITE.
+ */
+export async function handleGetMemberDepositMonths(request: NextRequest) {
+  try {
+    const user = await requirePermission('DEPOSITS', 'READ');
+    const tenantId = requireTenant(user);
+
+    const limited = await enforceRateLimit(MONTH_STATUS_BUDGET, tenantId, user.id);
+    if (limited) return limited;
+
+    const query = validateQuery(request, depositMonthStatusQuerySchema);
+    const result = await finance.getMemberDepositMonths(query, user as SessionUser);
+    return Response.json({ success: true, ...result });
   } catch (err) {
     return errorResponse(err);
   }

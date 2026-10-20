@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
 import { DEFAULT_FISCAL_YEAR_END, DEFAULT_FISCAL_YEAR_START } from "@/lib/org-setup";
 import { useTenantSettings } from "@/lib/use-tenant-settings";
+import { useFiscalYear } from "@/lib/fiscal-year-context";
+import { useFiscalPeriodYears, type FiscalPeriodYear } from "@/lib/fiscal-period-years";
 import {
+  fiscalMonthKeys,
   fiscalMonthSequence,
   fiscalStartYearForDate,
   resolveFiscalBounds,
@@ -41,11 +42,6 @@ import {
 export interface FiscalPeriodOption {
   value: string;
   label: string;
-}
-
-export interface FiscalPeriodYear {
-  year: number;
-  status: string | null;
 }
 
 type Translate = (
@@ -138,6 +134,10 @@ export function withYearOption(
 /**
  * The twelve months of one fiscal year, in fiscal order (start month first),
  * each valued with its absolute calendar month.
+ *
+ * The month KEYS come from `fiscalMonthKeys` — the same expansion the server
+ * uses for the per-member deposit month grid — so the picker and the grid can
+ * never label or order the same fiscal year differently.
  */
 export function buildFiscalMonthOptions(
   fiscalStartYear: number,
@@ -145,16 +145,10 @@ export function buildFiscalMonthOptions(
   t: Translate,
 ): FiscalPeriodOption[] {
   const sequence = fiscalMonthSequence(startMonth);
-  const startIndex = sequence[0]?.index ?? 0;
-  return sequence.map((month, offset) => {
-    const absolute = startIndex + offset;
-    const year = fiscalStartYear + Math.floor(absolute / 12);
-    const monthNumber = (absolute % 12) + 1;
-    return {
-      value: `${year}-${String(monthNumber).padStart(2, "0")}`,
-      label: `${t(`common.months.${month.shortKey}`)} ${year}`,
-    };
-  });
+  return fiscalMonthKeys(fiscalStartYear, startMonth).map((value, offset) => ({
+    value,
+    label: `${t(`common.months.${sequence[offset]!.shortKey}`)} ${value.slice(0, 4)}`,
+  }));
 }
 
 /** The fiscal start year an absolute "YYYY-MM" month key belongs to. */
@@ -168,38 +162,11 @@ export function fiscalStartYearOfMonth(monthKey: string, startMonth: string): st
 
 /**
  * The tenant's fiscal years and their posting status, newest first from the
- * API. `/api/fiscal/years` is readable by every member of the tenant (unlike
- * `/api/fiscal/periods`, which gates on FISCAL READ for its ledger totals), and
- * shares the `["fiscalPeriods"]` prefix so starting, closing or reopening a
- * year on the Fiscal screen updates every picker at once.
+ * API. Re-exported from lib/fiscal-period-years so the ~10 call sites that
+ * have always imported it here keep working, while the header's global
+ * fiscal-year context can read the same feed without a circular import.
  */
-export function useFiscalPeriodYears(): {
-  years: FiscalPeriodYear[];
-  openFiscalYear: string | null;
-  pending: boolean;
-  failed: boolean;
-} {
-  const { data, isPending, isError } = useQuery({
-    queryKey: ["fiscalPeriods", "years"],
-    queryFn: async (): Promise<FiscalPeriodYear[]> => {
-      const res = await apiClient<{ data: FiscalPeriodYear[] }>("/fiscal/years");
-      return res.data ?? [];
-    },
-    staleTime: 60_000,
-  });
-
-  const years = data ?? [];
-  // "OPEN" only — the exact predicate fiscal-guard posts under. The deposit
-  // banner's looser OPEN||ACTIVE test would offer years the write rejects.
-  const open = years.find((period) => period.status === "OPEN");
-
-  return {
-    years,
-    openFiscalYear: open ? String(open.year) : null,
-    pending: isPending,
-    failed: isError,
-  };
-}
+export { useFiscalPeriodYears, type FiscalPeriodYear } from "@/lib/fiscal-period-years";
 
 function useFiscalStartMonths(): { startMonth: string; endMonth: string } {
   const { data } = useTenantSettings();
@@ -294,11 +261,29 @@ export function useFiscalPeriodOptions() {
   );
 
   /**
-   * The period a read screen (Reports, Analysis) opens on: the year actually
-   * open for posting, and within it the current month — or that year's first
-   * fiscal month when it doesn't contain today (a year started early or late).
+   * The period a read screen (Reports, Analysis) opens on: the year chosen in
+   * the HEADER's fiscal-year selector, falling back to the year actually open
+   * for posting — and within it the current month, or that year's first fiscal
+   * month when it doesn't contain today (a year started early or late).
+   *
+   * The header is the app-wide default on purpose: the desk sets "the year I am
+   * working in" once, and every screen that would otherwise guess follows it.
    */
-  const defaultFiscalYear = openFiscalYear ?? currentFiscalYear;
+  const { fiscalYear: headerFiscalYear } = useFiscalYear();
+  const defaultFiscalYear = headerFiscalYear ?? openFiscalYear ?? currentFiscalYear;
+
+  /**
+   * The header year, but only when the ledger is still open for posting.
+   *
+   * POSTING forms seed their period from this, not from `defaultFiscalYear`:
+   * offering a closed year would present a period the write immediately rejects
+   * (`assertFiscalPeriodOpen`). A read screen keeps using `defaultFiscalYear`,
+   * because closed history is exactly what it reports on.
+   */
+  const defaultPostableFiscalYear = useMemo(
+    () => (yearOptions.some((option) => option.value === defaultFiscalYear) ? defaultFiscalYear : null),
+    [defaultFiscalYear, yearOptions],
+  );
   const defaultMonthKey = useCallback(
     (fiscalYear: string) =>
       fiscalYear === currentFiscalYear
@@ -313,7 +298,11 @@ export function useFiscalPeriodOptions() {
     endMonth,
     currentFiscalYear,
     openFiscalYear,
+    /** Header selection (null until the tenant's years resolve). */
+    selectedFiscalYear: headerFiscalYear,
     defaultFiscalYear,
+    /** Header year when it is still open for posting — the form seed. */
+    defaultPostableFiscalYear,
     defaultMonthKey,
     yearOptions,
     yearOptionsIncluding,

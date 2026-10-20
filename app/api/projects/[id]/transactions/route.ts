@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, members, funds, users } from '@/db/schema/index';
+import { memberDisplayNameSql } from '@/lib/member-display';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { requireProjectContext } from '../../_helpers';
 
@@ -27,7 +28,7 @@ export async function GET(
         status: transactions.status,
         description: transactions.description,
         memberId: transactions.memberId,
-        memberName: members.name,
+        memberName: memberDisplayNameSql,
         memberCode: members.memberId,
         fundId: transactions.fundId,
         fundName: funds.name,

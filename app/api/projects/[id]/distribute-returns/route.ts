@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { projects, projectMembers, members, funds, transactions } from '@/db/schema/index';
+import { memberDisplayNameSql } from '@/lib/member-display';
 import { eq, and, inArray, or, like, sql } from 'drizzle-orm';
 import { logAudit } from '@/lib/utils/audit';
 import { LockedError, NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
@@ -190,7 +191,7 @@ export async function POST(
       const shareholders = await tx
         .select({
           memberId: projectMembers.memberId,
-          memberName: members.name,
+          memberName: memberDisplayNameSql,
           sharesInvested: projectMembers.sharesInvested,
           ownershipPercentage: projectMembers.ownershipPercentage,
         })

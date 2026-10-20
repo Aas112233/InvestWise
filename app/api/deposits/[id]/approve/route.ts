@@ -11,6 +11,7 @@ import { toCents, fromCents } from '@/lib/money';
 import { isSuperAdminRole, normalizeRole } from '@/lib/roles';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import { findDepositMonthOccupant, depositMonthConflictMessage } from '@/lib/deposit-month-limit';
+import { assertMemberNotSuspended } from '@/lib/member-display';
 import crypto from 'node:crypto';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
@@ -111,6 +112,9 @@ export async function POST(
     if (!member) {
       throw new NotFoundError('Member');
     }
+    // A request created while the member was active can outlive their
+    // suspension — approving must not credit money to a suspended member.
+    assertMemberNotSuspended(member, 'approving a deposit');
 
     const amountCents = toCents(deposit.amount);
     const formattedAmount = fromCents(amountCents);
@@ -158,6 +162,8 @@ export async function POST(
         .limit(1);
       if (!lockedFund) throw new NotFoundError('Fund');
       if (!lockedMember) throw new NotFoundError('Member');
+      // Re-assert on the locked row (race: suspension between outer read and tx).
+      assertMemberNotSuspended(lockedMember, 'approving a deposit');
 
       // §12 one-deposit-per-month: the final gate. Approval credits settled
       // money, so the member's month must be free of any OTHER occupant —

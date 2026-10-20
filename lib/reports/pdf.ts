@@ -173,22 +173,34 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
     });
   };
 
+  // Wrapping draw (letterhead / title / summary). `line()` above serves the
+  // short fixed strings; tenant data (a long company name, a 3-name member
+  // scope) can exceed the page width, and a lineBreak:false run would clip
+  // past the right margin. Returns the y just below the last drawn line.
+  const block = (
+    str: string,
+    y: number,
+    opts: { x?: number; width?: number; size: number; color: string; weight?: "normal" | "bold"; align?: "left" | "right" },
+  ): number => {
+    if (!str) return y;
+    selectFont(opts.weight ?? "normal", str).fontSize(opts.size).fillColor(opts.color);
+    pdf.text(str, opts.x ?? MARGIN, y, { width: opts.width ?? contentWidth, align: opts.align ?? baseAlign });
+    return pdf.y;
+  };
+
   let cursorY = MARGIN;
 
-  // ── Letterhead (first page) ──────────────────────────────────────
-  line(doc.letterhead.name, cursorY, { size: 15, color: DARK });
-  cursorY += 7 * MM;
+  // ── Letterhead (first page) — long names wrap instead of clipping ──
+  cursorY = block(doc.letterhead.name, cursorY, { size: 15, color: DARK }) + 4 * MM;
 
   if (doc.letterhead.tagline) {
-    line(doc.letterhead.tagline, cursorY, { size: 8, color: MUTED });
-    cursorY += 4.5 * MM;
+    cursorY = block(doc.letterhead.tagline, cursorY, { size: 8, color: MUTED }) + 2 * MM;
   }
   const contactLine = [doc.letterhead.address, doc.letterhead.email, doc.letterhead.phone]
     .filter(Boolean)
     .join("  |  ");
   if (contactLine) {
-    line(contactLine, cursorY, { size: 8, color: MUTED });
-    cursorY += 4.5 * MM;
+    cursorY = block(contactLine, cursorY, { size: 8, color: MUTED }) + 2 * MM;
   }
 
   pdf
@@ -200,27 +212,26 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   cursorY += 6 * MM;
 
   // ── Title block ──────────────────────────────────────────────────
-  line(doc.title, cursorY, { size: 12, color: DARK });
-  cursorY += 6.5 * MM;
-  line(doc.periodLine, cursorY, { size: 8.5, color: MUTED });
-  cursorY += 4.5 * MM;
-  line(`${doc.generatedAt}  |  ${doc.generatedByLabel}: ${doc.generatedBy}`, cursorY, {
+  cursorY = block(doc.title, cursorY, { size: 12, color: DARK }) + 3.5 * MM;
+  cursorY = block(doc.periodLine, cursorY, { size: 8.5, color: MUTED }) + 2 * MM;
+  cursorY = block(`${doc.generatedAt}  |  ${doc.generatedByLabel}: ${doc.generatedBy}`, cursorY, {
     size: 8.5,
     color: MUTED,
-  });
-  cursorY += 6 * MM;
+  }) + 3 * MM;
 
-  // ── Summary block (plain label/value rows) ───────────────────────
+  // ── Summary block (label/value rows) ─────────────────────────────
+  // The value column wraps inside its width — a 3-name member scope or a
+  // long project title used to run off the page right.
   if (doc.summary.length > 0) {
     const valueX = MARGIN + 55 * MM;
+    const valueWidth = contentWidth - (valueX - MARGIN);
     for (const entry of doc.summary) {
-      selectFont("normal", entry.label).fontSize(8.5).fillColor(MUTED);
-      pdf.text(entry.label, MARGIN, cursorY, { width: 55 * MM, align: baseAlign, lineBreak: false });
-      selectFont("bold", entry.value).fontSize(8.5).fillColor(DARK);
-      pdf.text(entry.value, valueX, cursorY, { lineBreak: false });
-      cursorY += 4.8 * MM;
+      const rowY = cursorY;
+      block(entry.label, rowY, { width: 55 * MM, size: 8.5, color: MUTED });
+      cursorY = block(entry.value, rowY, { x: valueX, width: valueWidth, size: 8.5, color: DARK, weight: "bold" });
+      cursorY += 2.4 * MM;
     }
-    cursorY += 5 * MM;
+    cursorY += 2.6 * MM;
   }
 
   // ── Main data table ──────────────────────────────────────────────
@@ -231,13 +242,17 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
   const totalKeys = new Set(cols.filter((c) => c.total).map((c) => c.key));
 
   const bodyRows = doc.rows.map((row) => cols.map((c) => renderCell(row[c.key], c.type, doc)));
+  // #103, exporter edition: prefer the data layer's full-set total (the table
+  // is capped at 5,000 rows); fall back to summing the listed rows.
+  const totalOf = (key: string): string =>
+    doc.columnTotals?.[key] ?? sumDecimal(doc.rows.map((r) => r[key] as string | number | null));
+
   const hasTotals = totalKeys.size > 0 && doc.rows.length > 0;
   if (hasTotals) {
     bodyRows.push(
       cols.map((c, i) => {
         if (totalKeys.has(c.key)) {
-          const total = sumDecimal(doc.rows.map((r) => r[c.key] as string | number | null));
-          return formatMoneyNumber(total);
+          return formatMoneyNumber(totalOf(c.key));
         }
         return i === 0 ? doc.totalsLabel : "";
       }),
@@ -260,10 +275,7 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
     let w = widthOf(c.label);
     for (const row of doc.rows) w = Math.max(w, widthOf(renderCell(row[c.key], c.type, doc)));
     if (hasTotals && totalKeys.has(c.key)) {
-      w = Math.max(
-        w,
-        widthOf(formatMoneyNumber(sumDecimal(doc.rows.map((r) => r[c.key] as string | number | null)))),
-      );
+      w = Math.max(w, widthOf(formatMoneyNumber(totalOf(c.key))));
     }
     return Math.min(Math.max(w + PAD_X * 2, COL_MIN_PT), COL_MAX_PT);
   });
@@ -326,11 +338,16 @@ export async function buildPdfBytes(doc: ReportDocument): Promise<Buffer> {
       layout: landscape ? "landscape" : "portrait",
       margins: { top: 18 * MM, bottom: TABLE_BOTTOM, left: MARGIN, right: MARGIN },
     });
-    // Slim running header on continuation pages.
+    // Slim running header on continuation pages. Name and title each get a
+    // half-width box (name keeps its RTL side) so a long one wraps to two
+    // lines instead of clipping or overlapping the other — the table starts
+    // at 18mm ≈ 51pt and two 7pt lines fit above it.
+    const nameX = baseAlign === "right" ? MARGIN + contentWidth * 0.55 : MARGIN;
+    const titleX = baseAlign === "right" ? MARGIN : MARGIN + contentWidth * 0.55;
     selectFont("normal", doc.letterhead.name).fontSize(7).fillColor(MUTED);
-    pdf.text(doc.letterhead.name, MARGIN, 24, { width: contentWidth, align: baseAlign, lineBreak: false });
+    pdf.text(doc.letterhead.name, nameX, 24, { width: contentWidth * 0.45, align: baseAlign });
     selectFont("normal", doc.title).fontSize(7).fillColor(MUTED);
-    pdf.text(doc.title, MARGIN, 24, { width: contentWidth, align: rtl ? "left" : "right", lineBreak: false });
+    pdf.text(doc.title, titleX, 24, { width: contentWidth * 0.45, align: baseAlign === "right" ? "left" : "right" });
     let y = 18 * MM;
     return drawTableHeader(y);
   };

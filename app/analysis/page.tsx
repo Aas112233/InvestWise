@@ -8,6 +8,7 @@ import { apiClient } from "@/lib/api-client";
 import { AnalysisData, Member } from "@/types";
 import { useTenantSettings } from "@/lib/use-tenant-settings";
 import { useFiscalPeriodYears } from "@/lib/fiscal-period-options";
+import { useFiscalYear, useFiscalYearSync } from "@/lib/fiscal-year-context";
 import { fiscalStartYearForDate, isFiscalMonthName } from "@/lib/fiscal-periods";
 
 export default function AnalysisPage() {
@@ -21,11 +22,15 @@ export default function AnalysisPage() {
   const fiscalStartMonth = isFiscalMonthName(rawStart) ? rawStart : "July";
   const fiscalEndMonth = isFiscalMonthName(rawEnd) ? rawEnd : "June";
   const currentFiscalStartYear = fiscalStartYearForDate(new Date(), fiscalStartMonth);
-  // Analysis is a read screen, so it opens on the year actually open for
-  // posting rather than the date-derived one; the picker (all created years,
-  // Open and Closed) marks the same year.
+  // The header's fiscal-year selector is the app-wide period. A local pick wins
+  // only until the header moves: the sync below clears it, so the header always
+  // has the last word (Analysis is a read screen — it follows, it never leads).
+  const { fiscalYear: headerFiscalYear } = useFiscalYear();
+  const clearLocalYear = React.useCallback(() => setSelectedFiscalYear(null), []);
+  useFiscalYearSync(clearLocalYear);
   const { openFiscalYear } = useFiscalPeriodYears();
-  const activeFiscalYear = selectedFiscalYear ?? Number(openFiscalYear ?? currentFiscalStartYear);
+  const activeFiscalYear =
+    selectedFiscalYear ?? Number(headerFiscalYear ?? openFiscalYear ?? currentFiscalStartYear);
 
   // TanStack Query v5 - Hierarchical noun-first keys (AGENTS.md §7)
   const {

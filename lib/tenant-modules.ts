@@ -71,8 +71,13 @@ const REQUIRED_KEYS = TENANT_MODULE_DEFINITIONS.filter((m) => m.required).map((m
 
 /** Route prefix -> module key, for request-time gating. */
 export const MODULE_ROUTE_PREFIXES: ReadonlyArray<readonly [string, TenantModuleKey]> = [
+  // Order matters: the longest/most-specific prefix must come first.
+  // `/api/deposits/request` is its OWN entitlement (requestDeposit) — placed
+  // before the plain `/api/deposits` entry or the shorter prefix would
+  // swallow it and gate requests on the deposits module. (An earlier
+  // `/api/request-deposit` entry matched no route at all and was dead.)
+  ['/api/deposits/request', 'requestDeposit'],
   ['/api/deposits', 'deposits'],
-  ['/api/request-deposit', 'requestDeposit'],
   ['/api/transactions', 'transactions'],
   ['/api/expenses', 'expenses'],
   ['/api/dividends', 'dividends'],

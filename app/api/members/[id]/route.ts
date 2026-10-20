@@ -152,7 +152,14 @@ export async function PUT(
     }
     if (d.phone !== undefined) patch.phone = d.phone;
     if (d.role !== undefined) patch.role = d.role;
-    if (d.status !== undefined) patch.status = d.status;
+    if (d.status !== undefined) {
+      patch.status = d.status;
+      // A status set by hand from the directory is an admin decision, never a
+      // deposit hold. Stamp the reason so the governance sweep leaves an
+      // inactive/suspended member alone, and clear it for active/pending so a
+      // live member never carries a stale cause.
+      patch.statusReason = d.status === 'inactive' || d.status === 'suspended' ? 'ADMIN_MANUAL' : null;
+    }
     if (d.avatar !== undefined) patch.avatar = d.avatar || null;
     // KYC/nominee fields carry the same length-checked coercion as POST
     // /api/members. nomineeNidOrPassport used to be missing here entirely: the

@@ -8,6 +8,7 @@ import { useTenantSettings } from "@/lib/use-tenant-settings";
 import { DepositReceipt } from "@/components/documents/deposit-receipt";
 import { ProjectCharter } from "@/components/documents/project-charter";
 import { ProjectUpdateReceipt } from "@/components/documents/project-update-receipt";
+import { LedgerVoucher } from "@/components/documents/ledger-voucher";
 
 /**
  * Chrome-free printable document window.
@@ -28,6 +29,12 @@ const PRINT_CSS = `
   #doc-sheet { box-shadow: none !important; margin: 0 !important; width: 210mm !important; min-height: auto !important; }
 }
 `;
+
+const PRINT_KINDS = ["deposit", "project", "project-update", "voucher"] as const;
+
+function isValidKind(kind: string): boolean {
+  return (PRINT_KINDS as readonly string[]).includes(kind);
+}
 
 const primaryBtn: React.CSSProperties = {
   border: "1px solid transparent",
@@ -59,10 +66,13 @@ export default function PrintDocumentPage({ params }: { params: Promise<{ kind: 
   const orgTagline = settings?.organization?.companyTagline;
 
   const [data, setData] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // An unknown kind must not fetch and then render no template — that produced
+  // a blank A4 sheet with a live Print button.
+  const [loading, setLoading] = useState(() => isValidKind(kind));
+  const [error, setError] = useState<string | null>(() => (isValidKind(kind) ? null : `Unknown document kind: ${kind}`));
 
   useEffect(() => {
+    if (!isValidKind(kind)) return;
     let active = true;
     setLoading(true);
     setError(null);
@@ -92,7 +102,9 @@ export default function PrintDocumentPage({ params }: { params: Promise<{ kind: 
       ? t("deposits.receiptTitle", { defaultValue: "Deposit Receipt" })
       : kind === "project"
         ? t("documents.projectCharter", { defaultValue: "Project Charter" })
-        : t("documents.projectUpdate", { defaultValue: "Project Update" });
+        : kind === "voucher"
+          ? t("transactions.voucherTitle", { defaultValue: "Financial Voucher" })
+          : t("documents.projectUpdate", { defaultValue: "Project Update" });
 
   useEffect(() => {
     if (typeof document !== "undefined") document.title = `${title} · InvestWise`;
@@ -156,6 +168,7 @@ export default function PrintDocumentPage({ params }: { params: Promise<{ kind: 
           {kind === "deposit" ? <DepositReceipt data={data as any} orgName={orgName} orgTagline={orgTagline} /> : null}
           {kind === "project" ? <ProjectCharter data={data as any} orgName={orgName} orgTagline={orgTagline} /> : null}
           {kind === "project-update" ? <ProjectUpdateReceipt data={data as any} orgName={orgName} orgTagline={orgTagline} /> : null}
+          {kind === "voucher" ? <LedgerVoucher data={data as any} orgName={orgName} orgTagline={orgTagline} /> : null}
         </div>
       )}
 

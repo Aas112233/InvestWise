@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { meetings, meetingAttendees, members, users } from '@/db/schema/index';
+import { memberDisplayNameSql } from '@/lib/member-display';
 import { eq, and } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
@@ -58,7 +59,7 @@ export async function GET(
       .select({
         id: meetingAttendees.id,
         memberId: meetingAttendees.memberId,
-        memberName: members.name,
+        memberName: memberDisplayNameSql,
         memberCode: members.memberId,
         attendanceStatus: meetingAttendees.attendanceStatus,
         depositStatus: meetingAttendees.depositStatus,

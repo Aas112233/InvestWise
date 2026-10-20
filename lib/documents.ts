@@ -1,5 +1,5 @@
 /** Kinds of printable documents the Document module supports. */
-export type DocumentKind = "deposit" | "project" | "project-update";
+export type DocumentKind = "deposit" | "project" | "project-update" | "voucher";
 
 /**
  * Printable-document opener with a popup-blocker-safe pre-open pattern.

@@ -2,6 +2,8 @@ export { ERPDataTable, PAGE_SIZES } from "./erp-data-table";
 export type { ERPColumn, ERPDataTableProps } from "./erp-data-table";
 export { AppDropdown } from "./app-dropdown";
 export type { DropdownOption, AppDropdownProps } from "./app-dropdown";
+export { AppMultiSelect } from "./app-multi-select";
+export type { AppMultiSelectProps } from "./app-multi-select";
 export { ERPMetricCard } from "./erp-metric-card";
 export type { ERPMetricCardProps } from "./erp-metric-card";
 export {

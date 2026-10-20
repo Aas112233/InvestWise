@@ -41,6 +41,7 @@ import { AnalysisData, Member } from "@/types";
 import { formatMoney, intlLocaleFor } from "@/lib/formatters";
 import { projectSectorLabel } from "@/components/projects/project-labels";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 import { fiscalMonthSequence, resolveFiscalBounds } from "@/lib/fiscal-periods";
 import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
 import { cn } from "@/lib/utils";
@@ -220,7 +221,7 @@ export function AnalysisView({
     members.forEach((m) => {
       list.push({
         value: m.id,
-        label: `${m.name} (${m.memberId})`,
+        label: `${memberDisplayName(m.name, m.status)} (${m.memberId})`,
       });
     });
     return list;

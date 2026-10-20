@@ -22,3 +22,4 @@ export { superAdminActionLog, type SuperAdminActionLog } from './super_admin_act
 export { subscriptionPlans, tenantSubscriptions, subscriptionChangeLog, type SubscriptionPlan, type TenantSubscription, type SubscriptionChangeLog } from './subscriptions';
 export { platformSettings, PLATFORM_SETTINGS_ID, type PlatformSetting } from './platform_settings';
 export { rateLimitBuckets, type RateLimitBucket } from './rate_limit_buckets';
+export { memberPayoutPlans, memberPayoutInstallments, PAYOUT_PLAN_STATUS, PAYOUT_INSTALLMENT_STATUS } from './member_payouts';

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, funds, projects, members, users, systemSettings } from '@/db/schema/index';
+import { memberDisplayNameSql, assertMemberNotSuspended } from '@/lib/member-display';
 import { eq, and, desc, sql, gte, lte, ilike } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
@@ -120,7 +121,7 @@ export async function GET(request: NextRequest) {
           createdAt: transactions.createdAt,
           fundName: funds.name,
           projectTitle: projects.title,
-          memberName: members.name,
+          memberName: memberDisplayNameSql,
           approvedByName: users.name,
         })
         .from(transactions)
@@ -277,9 +278,10 @@ export async function POST(request: NextRequest) {
             : sql`false`
         )
         .limit(1),
-      // Expense-by member with tenant isolation (§6).
+      // Expense-by member with tenant isolation (§6). Name+status are pulled
+      // here so the suspended gate below can name the blocked member.
       db
-        .select({ id: members.id })
+        .select({ id: members.id, name: members.name, status: members.status })
         .from(members)
         .where(and(eq(members.id, memberId), eq(members.tenantId, scopedTenantId)))
         .limit(1),
@@ -334,6 +336,7 @@ export async function POST(request: NextRequest) {
     if (!member) {
       throw new ValidationError("[Field 'memberId', Code: cross_tenant] Member does not belong to this tenant");
     }
+    assertMemberNotSuspended(member, 'incurring an expense');
 
     if (approvedBy && !approver) {
       throw new ValidationError("[Field 'approvedBy', Code: cross_tenant] Approver does not belong to this tenant");

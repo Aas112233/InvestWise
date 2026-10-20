@@ -2,6 +2,8 @@
   "documents": {
     "orgFallback": "انویسٹ وائز",
     "reference": "حوالہ نمبر",
+    "recordedOn": "درج کی تاریخ",
+    "voidStamp": "منسوخ شدہ اندراج",
     "generatedBy": "انویسٹ وائز کے ذریعے تیار کردہ",
     "receivedBy": "وصول کنندہ",
     "preparedBy": "تیاری کنندہ",
@@ -269,6 +271,8 @@
     "actions": "اعمال",
     "search": "Search members or projects...",
     "loading": "لوڈ ہو رہا ہے",
+    "selectedCount": "{count} منتخب",
+    "removedOption": "(ہٹایا گیا)",
     "save": "Save",
     "cancel": "منسوخ کریں",
     "add": "Add",
@@ -422,6 +426,7 @@
     "reports": "Reports",
     "settings": "Settings",
     "dividends": "Dividends",
+    "payouts": "ادائیگیاں",
     "fiscal": "مالی سال",
     "meetings": "میٹنگز اور کارکردگی",
     "governance": "گورننس",
@@ -911,6 +916,11 @@
       "inactive": "غیر فعال",
       "suspended": "معطل",
       "completed": "مکمل"
+    },
+    "statusReasons": {
+      "depositNonCompliance": "جمع نہ ہونے کی وجہ سے",
+      "equityTransferredOut": "ایکویٹی منتقل ہو گئی",
+      "adminManual": "ایڈمن کی جانب سے"
     },
     "rowMenu": {
       "view": "پروفائل دیکھیں",
@@ -1599,6 +1609,7 @@
     "linkedProject": "ٹار گٹ پروجیکٹ",
     "selectProjectPlaceholder": "پروجیکٹ منتخب کریں...",
     "selectMemberPlaceholder": "ممبر منتخب کریں...",
+    "allMembers": "تمام اراکین",
     "selectFundPlaceholder": "فنڈ منتخب کریں...",
     "formatTitle": "3. آؤٹ پٹ ڈاکومینٹ فارمیٹ",
     "downloadButton": "دستاویز بنائیں اور ایکسپورٹ کریں",
@@ -1640,6 +1651,7 @@
       "totalProjectExpenses": "منصوبے کے کل اخراجات",
       "totalDisbursements": "کل سرمایہ کاری",
       "totalPenalties": "کل جرمانہ کٹوتی",
+      "waivedPenalties": "معافی یافتہ جرمانے",
       "totalLiquidity": "کل لیکویڈیٹی",
       "activeFunds": "متحرک فنڈز",
       "partners": "شرکاء",
@@ -1647,7 +1659,7 @@
       "sharesHeld": "زیر ملکیت شیئرز",
       "totalContributed": "کل تعاون",
       "rowCount": "لین دین",
-      "truncatedNote": "نوٹ: ڈیٹا حد سے تجاوز کر گیا، مدت کی پہلی ۵,۰۰۰ سطور تک محدود کر دیا گیا۔",
+      "truncatedNote": "نوٹ: ڈیٹا حد سے تجاوز کر گیا، مدت کی پہلی {max} سطور تک محدود کر دیا گیا۔",
       "generatedBy": "تیار کرنے والا",
       "total": "کل",
       "confidential": "محرم — صرف اندرونی اور مجاز شرکاء کے لیے۔"
@@ -1716,6 +1728,7 @@
     "viewButton": "رپورٹ دیکھیں",
     "downloadSuccess": "ڈاکومنٹ کامیابی سے ڈاؤن لوڈ ہو گیا",
     "generatingNotice": "رپورٹ ڈاکومنٹ تیار ہو رہی ہے...",
+    "entityLoadError": "پروجیکٹ، رکن یا فنڈ کی فہرستیں لوڈ نہیں ہو سکیں۔ ان سے منسلک رپورٹس مکمل نہیں ہو سکتیں۔",
     "viewer": {
       "back": "رپورٹس پر واپس جائیں",
       "refresh": "تازہ کریں",
@@ -1723,7 +1736,11 @@
       "loading": "رپورٹ لوڈ ہو رہی ہے...",
       "loadError": "رپورٹ لوڈ کرنے میں ناکامی۔",
       "empty": "اس مدت کے لیے کوئی ریکارڈ نہیں۔",
-      "unknownReport": "نامعلوم رپورٹ قسم۔"
+      "unknownReport": "نامعلوم رپورٹ قسم۔",
+      "rowCount": "{count} قطار"
+    },
+    "errors": {
+      "generateFailed": "رپورٹ بنانے میں ناکامی۔ دوبارہ کوشش کریں۔"
     }
   },
   "transactions": {
@@ -1990,6 +2007,37 @@
       "successToast": "{count} ڈپازٹس کامیابی سے ریکارڈ ہو گئے۔",
       "minOneRow": "ممبر اور رقم کے ساتھ کم از کم ایک قطار شامل کریں۔"
     },
+    "bulkSingle": {
+      "scopeMultiple": "متعدد ممبران",
+      "scopeSingle": "واحد ممبر",
+      "subtitleSingle": "ایک ممبر کے کئی مہینوں کی جمع ایک فنڈ میں درج کریں۔",
+      "member": "ممبر",
+      "selectMember": "ممبر منتخب کریں...",
+      "fiscalYear": "مالی سال",
+      "selectFiscalYear": "سال منتخب کریں...",
+      "months": "جمع کے مہینے",
+      "monthsHint": "اس ممبر کے لیے وہ مہینے منتخب کریں جن کی جمع درج کرنی ہے۔ جن مہینوں میں جمع پہلے سے موجود ہے وہ مقفل ہیں۔",
+      "prefillHint": "منتخب مہینوں میں رقم حصص × حصص کی قیمت ({value}) کے طور پر پہلے سے بھرتی ہے۔ جزوی جمع کے لیے رقم تبدیل کریں۔",
+      "loading": "مہینے لوڈ ہو رہے ہیں...",
+      "loadFailed": "جمع کے مہینے لوڈ نہیں ہو سکے۔",
+      "retry": "دوبارہ کوشش کریں",
+      "available": "دستیاب",
+      "chosen": "منتخب",
+      "deposited": "جمع ہو چکا",
+      "pendingRequest": "زیر التوا درخواست",
+      "selectAll": "تمام دستیاب مہینے منتخب کریں",
+      "clear": "صاف کریں",
+      "selected": "{count} منتخب",
+      "total": "کل",
+      "submit": "{count} جمع درج کریں",
+      "submitting": "درج ہو رہا ہے...",
+      "successToast": "{member} کے لیے {count} جمع درج ہو گئیں۔",
+      "selectMemberFirst": "پہلے ممبر اور مالی سال منتخب کریں۔",
+      "minOneMonth": "کم از کم ایک دستیاب مہینہ منتخب کریں اور رقم لکھیں۔",
+      "invalidAmount": "ہر منتخب مہینے کے لیے درست رقم لکھیں۔",
+      "amountFor": "{month} کی رقم",
+      "lockedNote": "مقفل مہینوں میں جمع پہلے سے موجود ہے۔"
+    },
     "excel": {
       "modeManual": "دستی اندراج",
       "modeExcel": "Excel سے درآمد",
@@ -2189,6 +2237,7 @@
     "portfolio": "Share Portfolio",
     "sh": "SH",
     "transferBanner": "Assets will be transferred from the source member to the selected recipients.",
+    "suspendedHolderBlocked": "یہ رکن معطل ہے — معطل رکن کے پاس سے حصے منتقل نہیں کیے جا سکتے۔ پہلے انہیں بحال کریں۔",
     "reallocationPlan": "Transfer Plan",
     "addTarget": "Add Recipient",
     "recipientMember": "Recipient",
@@ -2613,6 +2662,12 @@
     "exitImpersonation": "روپ دھارنا بند کریں",
     "exitImpersonationFailed": "سیشن ختم نہیں ہو سکا",
     "currentFiscalYear": "موجودہ مالی سال",
+    "fiscalYearSelect": "مالی سال",
+    "fiscalYearSelectHint": "مالی سال — ہر اسکرین کا ہر سال منتخب کنندہ اس انتخاب کی پیروی کرتا ہے",
+    "fiscalYearHistorical": "پچھلا مالی سال دیکھا جا رہا ہے — ہر سال منتخب کنندہ اس انتخاب کی پیروی کرتا ہے",
+    "fiscalYearFollows": "ہر اسکرین کا ہر سال منتخب کنندہ اس انتخاب کی پیروی کرتا ہے۔",
+    "fiscalYearReset": "FY {year} پر واپس جائیں",
+    "fiscalYearNone": "ابھی کوئی مالی سال نہیں بنایا گیا۔",
     "fiscalYearAbbrev": "FY",
     "notificationsEmpty": "آپ سب کچھ دیکھ چکے ہیں",
     "notificationsEmptyHint": "گزشتہ 48 گھنٹوں کی تبدیلیاں یہاں دکھائی دیں گی۔",
@@ -3108,6 +3163,112 @@
       "title": "یہ صفحہ لوڈ نہیں ہو سکا",
       "message": "اس اسکرین پر کچھ غلط ہو گیا۔ کچھ محفوظ یا تبدیل نہیں ہوا — دوبارہ کوشش کریں، یا کسی دوسرے حصے میں جا کر واپس آئیں۔",
       "retry": "دوبارہ کوشش کریں"
+    }
+  },
+  "payouts": {
+    "title": "ارکان کی ادائیگیاں",
+    "subtitle": "معطل ارکان کا حتمی تصفیہ، ایک ساتھ یا قسطوں میں۔",
+    "searchPlaceholder": "رکن کے نام، شناختی نمبر یا وجہ سے تلاش کریں…",
+    "allStatuses": "تمام حالتیں",
+    "newPlan": "نئی ادائیگی کا منصوبہ",
+    "createTitle": "معطل رکن کا تصفیہ",
+    "createHint": "ادائیگی رکن کی دستیاب رقم (جمع اور ڈویڈنڈ، منصوبوں میں لگائی گئی رقم منفی) کے برابر ہوتی ہے۔ افسر کی تصدیق تک کوئی رقم ادا نہیں ہوتی۔",
+    "createButton": "ادائیگی کا منصوبہ بنائیں",
+    "created": "ادائیگی کا منصوبہ بن گیا",
+    "createFailed": "ادائیگی کا منصوبہ نہیں بن سکا",
+    "loadFailed": "ادائیگیاں دکھائی نہیں دیں۔",
+    "actionFailed": "کارروائی ناکام ہوئی",
+    "empty": "ابھی کوئی ادائیگی منصوبہ نہیں۔",
+    "open": "کھولیں",
+    "dueNow": "قابل ادائیگی",
+    "oneTime": "ایک ساتھ",
+    "phased": "{count} اقساط، ہر {interval} ماہ",
+    "phases": "اقساط",
+    "phaseLabel": "قسط {sequence}",
+    "paidToast": "قسط ادا ہو گئی",
+    "topUpToast": "منصوبے کی واپسی شامل ہو گئی",
+    "cancelledToast": "ادائیگی کا منصوبہ منسوخ ہو گیا",
+    "payNext": "اگلی قسط ادا کریں",
+    "addProjectReturn": "منصوبے کی واپسی شامل کریں",
+    "cancelPlan": "منصوبہ منسوخ کریں",
+    "reservedAmount": "رقم جو یہ منصوبہ تصفیہ کرے گا",
+    "zeroBalanceWarning": "اس رکن کے پاس دستیاب رقم نہیں ہے۔ منصوبے میں لگی رقم منصوبے کے تصفیے کے بعد ادا ہوتی ہے۔",
+    "awaitingSettlement": "یہ رکن ابھی ایک غیر تصفیہ شدہ منصوبے میں سرمایہ رکھتا ہے۔ پہلے وہ منصوبہ تصفیہ کریں، پھر اس کی واپسی نئی قسط کے طور پر شامل کریں۔",
+    "awaitingShort": "منصوبے کی واپسی زیر التوا",
+    "schedulePreview": "بننے والا شیڈول",
+    "scheduleMismatch": "شیڈول کا تخمینہ دستیاب رقم سے میل نہیں کھاتا۔",
+    "noticePeriodHint": "اطلاع کا دورانیہ {days} دن ہے — پہلی ممکنہ تاریخ {earliest} ہے۔",
+    "detailTitle": "ادائیگی کا منصوبہ",
+    "column": {
+      "member": "رکن",
+      "total": "کل تصفیہ",
+      "paid": "ادا شدہ",
+      "remaining": "باقی",
+      "schedule": "شیڈول",
+      "nextDue": "اگلی قابل ادائیگی تاریخ",
+      "fund": "کس فنڈ سے",
+      "status": "حالت",
+      "reason": "وجہ"
+    },
+    "field": {
+      "member": "معطل رکن",
+      "memberPlaceholder": "معطل رکن منتخب کریں…",
+      "fund": "کس فنڈ سے ادائیگی",
+      "fundPlaceholder": "ڈپازٹ فنڈ منتخب کریں…",
+      "mode": "ادائیگی کا طریقہ",
+      "modePlaceholder": "ادائیگی کا طریقہ منتخب کریں…",
+      "firstDueDate": "پہلی ادائیگی کی تاریخ",
+      "firstDueDatePlaceholder": "تاریخ منتخب کریں…",
+      "installments": "اقساط کی تعداد",
+      "installmentsOption": "{count} اقساط",
+      "installmentsPlaceholder": "تعداد منتخب کریں…",
+      "interval": "ہر",
+      "intervalMonthly": "1 ماہ",
+      "intervalOption": "{months} ماہ",
+      "intervalPlaceholder": "وقفہ منتخب کریں…",
+      "reason": "رکن کا تصفیہ کیوں کیا جا رہا ہے",
+      "reasonPlaceholder": "مثلاً رکن نے استعفیٰ دیا؛ کمیٹی کے فیصلہ 12/10/2026 کے مطابق رقم تصفیہ ہوئی"
+    },
+    "kpi": {
+      "openPlans": "جاری منصوبے (اس صفحے)",
+      "dueNow": "ابھی قابل ادائیگی",
+      "reserved": "ابھی دینا ہے",
+      "paid": "ادا شدہ (اس صفحے)"
+    },
+    "mode": {
+      "oneTime": "ایک ساتھ ادائیگی",
+      "phased": "قسطوں میں"
+    },
+    "section": {
+      "member": "رکن اور فنڈ کا منبع",
+      "schedule": "ادائیگی کا شیڈول",
+      "reason": "وجہ"
+    },
+    "detail": {
+      "fund": "کس فنڈ سے",
+      "schedule": "{count} اقساط، ہر {interval} ماہ",
+      "cancelReason": "منسوخ"
+    },
+    "confirm": {
+      "payTitle": "یہ ادائیگی درج کریں",
+      "payBody": "تصدیق کریں کہ قسط {sequence} کے لیے {amount} رکن کو دیا گیا۔ اس سے {fund} کم ہو جاتا ہے اور یہ اس صفحے سے واپس نہیں ہو سکتا۔",
+      "payConfirm": "ادا شدہ درج کریں",
+      "topUpTitle": "منصوبے کی واپسی شامل کریں",
+      "topUpBody": "رکن کی موجودہ رقم (تصفیہ شدہ منصوبے سے) ایک اور قسط کے طور پر شامل ہو جائے گی، فی الفور قابل ادائیگی۔ ابھی کوئی رقم ادا نہیں ہوتی۔",
+      "cancelTitle": "یہ ادائیگی منصوبہ منسوخ کریں",
+      "cancelBody": "غیر ادا شدہ رقم ({amount}) رکن کی بیلنس میں واپس آ جائے گی۔ جو اقساط ادا ہو چکی ہیں وہ کھاتے میں رہیں گی۔",
+      "cancelReasonPlaceholder": "منسوخی کی وجہ (لازمی)",
+      "cancelReasonRequired": "وجہ لازمی ہے"
+    },
+    "status": {
+      "ACTIVE": "جاری",
+      "COMPLETED": "مکمل",
+      "CANCELLED": "منسوخ"
+    },
+    "phaseStatus": {
+      "SCHEDULED": "طے شدہ",
+      "PAID": "ادا شدہ",
+      "CANCELLED": "منسوخ"
     }
   }
 }

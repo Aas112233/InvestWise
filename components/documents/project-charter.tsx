@@ -7,11 +7,14 @@ import { DocumentFrame, DocTitle, DocAmount, DocRow, DocField, DocTable, DocSect
 
 export interface ProjectCharterParticipant {
   memberName?: string;
+  memberCode?: string;
   sharesInvested?: number;
   totalInvested?: number;
+  ownershipPercentage?: number | string | null;
 }
 
 export interface ProjectCharterData {
+  id?: string;
   title?: string;
   category?: string;
   description?: string;
@@ -23,6 +26,7 @@ export interface ProjectCharterData {
   startDate?: string;
   completionDate?: string;
   linkedFundName?: string;
+  tenantShareValue?: number | string;
   involvedMembers?: ProjectCharterParticipant[];
 }
 
@@ -54,7 +58,7 @@ export function ProjectCharter({ data, orgName, orgTagline }: { data: ProjectCha
   ];
 
   return (
-    <DocumentFrame orgName={orgName} orgTagline={orgTagline} docType={title} dateLabel={data.startDate ? formatDate(data.startDate) : undefined} signatures={signatures}>
+    <DocumentFrame orgName={orgName} orgTagline={orgTagline} docType={title} reference={data.id} dateLabel={data.startDate ? formatDate(data.startDate) : undefined} signatures={signatures}>
       <DocTitle>{data.title || na}</DocTitle>
       {data.category ? (
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>
@@ -78,8 +82,14 @@ export function ProjectCharter({ data, orgName, orgTagline }: { data: ProjectCha
               t("documents.member", { defaultValue: "Member" }),
               t("documents.shares", { defaultValue: "Shares" }),
               t("documents.invested", { defaultValue: "Invested" }),
+              t("projects.shareholders.ownership", { defaultValue: "Ownership %" }),
             ]}
-            rows={members.map((m) => [m.memberName || na, m.sharesInvested ?? 0, formatMoney(Number(m.totalInvested || 0))])}
+            rows={members.map((m) => [
+              m.memberName ? `${m.memberName}${m.memberCode ? ` (${m.memberCode})` : ""}` : na,
+              m.sharesInvested ?? 0,
+              formatMoney(Number(m.totalInvested || 0)),
+              `${Number(m.ownershipPercentage ?? 0)}%`,
+            ])}
           />
         </>
       ) : null}
@@ -88,6 +98,9 @@ export function ProjectCharter({ data, orgName, orgTagline }: { data: ProjectCha
         <DocRow label={t("documents.startDate", { defaultValue: "Start Date" })} value={data.startDate ? formatDate(data.startDate) : na} />
         <DocRow label={t("documents.completionDate", { defaultValue: "Completion Date" })} value={data.completionDate ? formatDate(data.completionDate) : na} />
         <DocRow label={t("deposits.columns.fund", { defaultValue: "Fund" })} value={data.linkedFundName || na} />
+        {data.tenantShareValue != null ? (
+          <DocRow label={t("projects.shareValue", { defaultValue: "UNIT SHARE VALUE" })} value={formatMoney(Number(data.tenantShareValue))} />
+        ) : null}
         <DocRow label={t("common.status", { defaultValue: "Status" })} value={status} strong />
       </div>
     </DocumentFrame>

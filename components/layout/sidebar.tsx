@@ -19,7 +19,24 @@ interface SidebarProps {
 
 // Exported for AppShell's route-level access gate — one evaluator for "can
 // this user see this screen", shared by the sidebar filter and the 403 screen.
-export function canRead(user: PermissionUser | null | undefined, id: string): boolean {
+export function canRead(
+  user: (PermissionUser & { moduleAccess?: Record<string, boolean> }) | null | undefined,
+  item: { id: string; module?: string },
+): boolean {
+  const id = item.id;
+  // Tenant module entitlement FIRST: an unlicensed module is invisible to the
+  // whole tenant regardless of role/permissions. The server enforces the same
+  // map on every API route (lib/tenant-modules moduleForApiPath), so hiding
+  // the link only saves a 403 — it never over-grants. SuperAdmin bypasses the
+  // module system; a missing moduleAccess (pre-upgrade cached profile) fails
+  // open to the old behavior rather than blanking the sidebar.
+  if (
+    item.module &&
+    !isSuperAdminRole(user?.role) &&
+    user?.moduleAccess?.[item.module] === false
+  ) {
+    return false;
+  }
   // DASHBOARD stays visible as the landing shell; every other item goes
   // through the shared evaluator (role baseline + explicit overrides +
   // parent fallback). Fail-closed: unknown role or NONE grant hides the item.
@@ -106,7 +123,7 @@ export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: e
     const query = searchQuery.toLowerCase().trim();
 
     return NAVIGATION.map((group) => {
-      const allowedItems = group.items.filter((item) => canRead(user as PermissionUser | null, item.id));
+      const allowedItems = group.items.filter((item) => canRead(user, item));
       if (!query) return { ...group, items: allowedItems };
 
       const matchedItems = allowedItems.filter((item) => {

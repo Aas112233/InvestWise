@@ -30,7 +30,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check if user has permission to view audit logs (Admin/Manager)
+    // Audit trail is role-gated (Admin/Manager/SuperAdmin) — the SAME
+    // contract as the sidebar (canRead) and the sibling /metadata +
+    // /notifications routes. AUDIT is deliberately not a permission-matrix
+    // screen, so no explicit override can widen or narrow this.
     const callerRole = normalizeRole(user.role);
     if (callerRole !== 'Admin' && callerRole !== 'Manager' && callerRole !== 'SuperAdmin') {
       throw new ForbiddenError('Admin or Manager access required');

@@ -1,6 +1,7 @@
 export { DepositsListView } from "./deposits-list-view";
 export { DepositModal } from "./deposit-modal";
 export { BulkDepositModal } from "./bulk-deposit-modal";
+export { SingleMemberBulkDeposit } from "./single-member-bulk-deposit";
 export { BulkDepositRequestModal } from "./bulk-deposit-request-modal";
 export { DepositRequestView } from "./deposit-request-view";
 export {

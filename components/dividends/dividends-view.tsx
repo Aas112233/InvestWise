@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { formatMoney, formatDateOnly } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 import { translateLedgerDescription } from "@/lib/ledger-description";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -97,9 +98,9 @@ export function DividendsView() {
 
   // Distinct from the shared ["members", "dropdown"] feed, which requests 500
   // rows for form pickers — two fetchers must not share one key.
-  const { data: membersData } = useQuery<{ data: Array<{ id: string; name: string; memberId: string }> }>({
+  const { data: membersData } = useQuery<{ data: Array<{ id: string; name: string; memberId: string; status?: string }> }>({
     queryKey: ["members", "dividend-filter"],
-    queryFn: () => apiClient<{ data: Array<{ id: string; name: string; memberId: string }> }>("/members", {
+    queryFn: () => apiClient<{ data: Array<{ id: string; name: string; memberId: string; status?: string }> }>("/members", {
       params: { limit: 500 },
     }),
     staleTime: 60_000,
@@ -107,7 +108,7 @@ export function DividendsView() {
 
   const memberOptions: DropdownOption[] = (membersData?.data || []).map((m) => ({
     value: m.id,
-    label: `${m.name} (${m.memberId})`,
+    label: `${memberDisplayName(m.name, m.status)} (${m.memberId})`,
   }));
 
   const records = responseData?.data || [];

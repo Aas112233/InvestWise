@@ -90,9 +90,13 @@ describe('fiscal period pickers', () => {
 
 describe('active fiscal year', () => {
   it('comes from the tenant period rows, not the wall clock', () => {
-    // One query for every picker, served by the tenant-readable endpoint.
-    const options = read('lib/fiscal-period-options.ts');
-    expect(options).toContain('"/fiscal/years"');
+    // One query for every picker AND the header's global fiscal-year selector,
+    // served by the tenant-readable endpoint. It lives in its own module
+    // (lib/fiscal-period-years.ts) so the selector context can read it without
+    // importing the option builders that depend on that context.
+    const years = read('lib/fiscal-period-years.ts');
+    expect(years).toContain('"/fiscal/years"');
+    expect(read('lib/fiscal-period-options.ts')).toContain('useFiscalPeriodYears');
     expect(read('components/reports/reports-view.tsx')).toContain('defaultFiscalYear');
     expect(read('app/analysis/page.tsx')).toContain('useFiscalPeriodYears');
   });
@@ -108,7 +112,7 @@ describe('active fiscal year', () => {
       expect(source, `${path} must not offer closed years to a posting form`).not.toContain('yearOptionsAllIncluding');
     }
     // The single filter that decides what a posting picker may offer.
-    expect(read('lib/fiscal-period-options.ts')).toContain('period.status === "OPEN"');
+    expect(read('lib/fiscal-period-years.ts')).toContain('period.status === "OPEN"');
   });
 
   it('offers closed fiscal years to HISTORY read screens (Analysis, Reports)', () => {

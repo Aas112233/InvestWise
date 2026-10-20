@@ -6,6 +6,7 @@ import { getAuthContext } from "@/lib/middleware/auth";
 import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from "@/lib/permissions";
 import { SETTLED_DEPOSIT_STATUSES } from "@/lib/ledger-selectors";
+import { memberDisplayNameSql } from "@/lib/member-display";
 import { isMonthlySchedule } from "@/lib/governance/status-service";
 import {
   fiscalMonthOffsetForDate,
@@ -173,7 +174,9 @@ export async function GET(request: NextRequest) {
         .select({
           id: members.id,
           memberId: members.memberId,
-          name: members.name,
+          // Display form: a suspended member is marked in their own name
+          // (matrix rows, leaderboard rows and the scope banner).
+          name: memberDisplayNameSql,
           avatar: members.avatar,
           shares: members.shares,
           totalContributed: sql<number>`coalesce(${members.totalContributed}::numeric, 0)::float`,

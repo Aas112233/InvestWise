@@ -1,4 +1,5 @@
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import reactHooks from "eslint-plugin-react-hooks";
 
 /**
  * Flat config (ESLint 9 / @next/eslint-plugin-next 16 default). Replaces the
@@ -21,6 +22,9 @@ export default [
   },
   ...nextCoreWebVitals,
   {
+    // Flat config requires the plugin in the SAME object that names its rules
+    // (the `next` base object scopes its plugin map to its own files globs).
+    plugins: { "react-hooks": reactHooks },
     rules: {
       // ponytail: React Hooks plugin v6 (shipped with eslint-config-next 16)
       // flags 42 pre-existing effect/ref patterns as errors. They are real

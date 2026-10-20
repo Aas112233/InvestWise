@@ -13,7 +13,6 @@ import { OfflineBanner } from "./offline-banner";
 import { TopNav, type TenantOption } from "./top-nav";
 import { cn } from "@/lib/utils";
 import { refreshSessionSingleFlight } from "@/lib/api-client";
-import type { PermissionUser } from "@/lib/permissions";
 import { IDLE_SESSION_LIFETIME_MS } from "@/lib/session-limits";
 
 // Shares api-client's single in-flight rotation instead of issuing a second
@@ -54,8 +53,11 @@ export function AppShell({
   // security boundary.
   const screenItem = navItemForRoute(pathname);
   const deniedScreen = screenItem?.id ?? null;
+  // Screen permission AND tenant module entitlement — same canRead the
+  // sidebar filter uses, so a direct URL to an unlicensed/forbidden screen
+  // shows the AccessDenied shell instead of error toasts.
   const accessDenied =
-    !!user && !!deniedScreen && !canRead(user as PermissionUser | null, deniedScreen);
+    !!user && !!deniedScreen && !!screenItem && !canRead(user, screenItem);
 
   // Browser tab title: the current screen, localized. Root layout's metadata
   // template can't do this because both the nav labels and the active locale
@@ -109,6 +111,9 @@ export function AppShell({
   }, [extendSession, handleSessionExpired]);
 
   return (
+    // The header's fiscal-year selector owns the app-wide accounting year; the
+    // provider itself lives in lib/providers.tsx so the selection survives
+    // navigation (AppShell remounts per route).
     <div className="flex min-h-screen bg-background">
       <Sidebar
         companyName={companyName}

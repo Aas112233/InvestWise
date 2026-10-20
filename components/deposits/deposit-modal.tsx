@@ -14,6 +14,7 @@ import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/comp
 import { TopSheet } from "@/components/ui/top-sheet";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
+import { memberDisplayName } from "@/lib/member-display";
 import { useLocale } from "@/lib/i18n";
 import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
 import { useTenantShareValue, useTenantPaymentMethods } from "@/lib/use-tenant-settings";
@@ -73,7 +74,7 @@ export function DepositModal({
   // period, so its dropdowns follow the tenant's fiscal calendar — and for a
   // posting form, only the year the ledger is open for (lib/fiscal-guard.ts
   // rejects every other one at submit).
-  const { yearOptionsIncluding, monthsFor, fiscalStartYearOf } = useFiscalPeriodOptions();
+  const { yearOptionsIncluding, monthsFor, fiscalStartYearOf, defaultPostableFiscalYear } = useFiscalPeriodOptions();
 
   const membersQuery = useMemberOptions();
   const fundsQuery = useFundOptions(DEPOSIT_FUND_TYPE);
@@ -174,8 +175,16 @@ export function DepositModal({
       });
     }
     return list
-      .filter((m) => m.status === "active" || (isEdit && m.id === initial?.memberId))
-      .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
+      // Pending/inactive stay hidden (not yet members / dormant); suspended
+      // members stay VISIBLE but disabled — the (Suspended) marker explains
+      // why they can't be picked.
+      .filter((m) => m.status === "active" || m.status === "suspended" || (isEdit && m.id === initial?.memberId))
+      .map((m) => ({
+        value: m.id,
+        label: memberDisplayName(m.name, m.status),
+        caption: m.memberId,
+        disabled: m.status === "suspended" && !(isEdit && m.id === initial?.memberId),
+      }));
   }, [membersQuery.data, isEdit, initial]);
   // Funds carry no status filter, but the same guard applies when the options
   // feed fails: fall back to the row's own fund so edit never blanks it.
@@ -203,7 +212,7 @@ export function DepositModal({
       // Show the type qualifier only when it adds information.
       const label = m.name.trim().toLowerCase() === typeLabel.trim().toLowerCase()
         ? m.name
-        : `${m.name} · ${typeLabel}`;
+         : `${m.name} · ${typeLabel}`;
       return { value: m.name, label };
     });
     const saved = initial?.depositMethod;
@@ -212,10 +221,15 @@ export function DepositModal({
     }
     return opts;
   }, [paymentMethods, t, isEdit, initial?.depositMethod]);
+  // Seeded from the header's fiscal year: a new deposit opens on the year the
+  // desk is working in (the month itself stays an explicit choice), and the
+  // officer can still pick another year for this entry. An edited row keeps its
+  // own period, which prefill sets explicitly.
+  const effectiveFiscalYear = depositFiscalYear || defaultPostableFiscalYear || "";
   // Keeps the row's own period visible when editing a deposit that sits in a
   // closed or never-created fiscal year.
-  const yearOptions = yearOptionsIncluding(depositFiscalYear || null);
-  const monthOptions = monthsFor(depositFiscalYear || null);
+  const yearOptions = yearOptionsIncluding(effectiveFiscalYear || null);
+  const monthOptions = monthsFor(effectiveFiscalYear || null);
 
   const close = () => {
     reset({
@@ -288,7 +302,8 @@ export function DepositModal({
         queryClient.invalidateQueries({ queryKey: ["members"] });
         queryClient.invalidateQueries({ queryKey: ["funds"] });
         queryClient.invalidateQueries({ queryKey: ["analytics"] });
-        const memberName = membersQuery.data?.find((m) => m.id === values.memberId)?.name ?? "";
+        const matchedMember = membersQuery.data?.find((m) => m.id === values.memberId);
+        const memberName = memberDisplayName(matchedMember?.name, matchedMember?.status);
         // Localized copy is authoritative; the server `message` is an English
         // duplicate and would defeat ur/hi/bn.
         toast.success(t("deposits.recordedToast", { amount: values.amount.trim(), member: memberName }));
@@ -386,7 +401,7 @@ export function DepositModal({
               months={monthOptions}
               required
               value={{
-                fiscalYear: depositFiscalYear || null,
+                fiscalYear: effectiveFiscalYear || null,
                 month: depositMonth || null,
               }}
               onChange={(v) => {

@@ -28,6 +28,8 @@ import { hasScreenPermission } from "@/lib/permissions";
 import { normalizeRole } from "@/lib/roles";
 import { formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
+import { memberStatusReasonKey } from "@/lib/member-status-reason";
 import { useTenantCurrency } from "@/lib/use-tenant-settings";
 import type { PaginatedResponse } from "@/lib/utils/types";
 import type { Member } from "@/types";
@@ -336,7 +338,7 @@ export function MembersListView() {
       cellClassName: "min-w-[240px]",
       render: (m) => (
         <div>
-          <p className="font-medium text-slate-800 dark:text-slate-100">{m.name}</p>
+          <p className="font-medium text-slate-800 dark:text-slate-100">{memberDisplayName(m.name, m.status)}</p>
           {m.role && <p className="text-[10px] text-slate-400">{memberRoleDisplay(m.role, t)}</p>}
         </div>
       ),
@@ -444,11 +446,24 @@ export function MembersListView() {
       key: "status",
       header: t("members.columns.status"),
       sortable: true,
-      render: (m) => (
-        <StatusBadge tone={statusTone(m.status)}>
-          {t(`members.statusLabels.${m.status.toLowerCase()}`, { defaultValue: m.status })}
-        </StatusBadge>
-      ),
+      render: (m) => {
+        // The reason tells two "Inactive" rows apart: a deposit hold
+        // (recoverable by depositing) versus equity transferred out or a
+        // manual admin hold.
+        const reasonKey = memberStatusReasonKey(m.statusReason);
+        return (
+          <div className="flex flex-col items-start gap-0.5">
+            <StatusBadge tone={statusTone(m.status)}>
+              {t(`members.statusLabels.${m.status.toLowerCase()}`, { defaultValue: m.status })}
+            </StatusBadge>
+            {reasonKey && (
+              <span className="text-[10px] leading-tight text-slate-400 dark:text-slate-500">
+                {t(reasonKey)}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "actions",

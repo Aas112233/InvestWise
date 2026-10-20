@@ -88,6 +88,18 @@ for (const file of UI_ROOTS.flatMap((dir) => sourceFiles(join(root, dir)))) {
   }
 }
 
+// The report catalog and data layer reference i18n keys as plain strings
+// (nameKey/descKey/labelKey, and the S summary map), not literal t() calls —
+// a missing key there would render as a raw path in generated documents.
+for (const rel of ["lib/reports/catalog.ts", "lib/reports/data.ts"]) {
+  const abs = join(root, ...rel.split("/"));
+  if (!existsSync(abs)) continue;
+  const src = readFileSync(abs, "utf8");
+  for (const m of src.matchAll(/["'](reports\.[a-zA-Z][\w.]*)(?=["'])/g)) {
+    if (!enKeys.has(m[1])) fail(`i18n key "${m[1]}" referenced in ${rel} has no entry in en.json`);
+  }
+}
+
 if (errors > 0) {
   console.error(`i18n validation failed with ${errors} error(s).`);
   process.exit(1);

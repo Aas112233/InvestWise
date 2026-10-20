@@ -13,6 +13,22 @@ import type { ReportLocale } from "./catalog";
 
 const DICTS: Record<ReportLocale, unknown> = { en, ur, hi, bn };
 
+// The dictionaries use locale digit sets (۵,۰۰۰ / ५,००० / ৫,০০০) in their
+// numeric text — interpolated values must be converted to match.
+const DIGIT_SETS: Record<ReportLocale, string> = {
+  en: "0123456789",
+  ur: "۰۱۲۳۴۵۶۷۸۹",
+  hi: "०१२३४५६७८९",
+  bn: "০১২৩৪৫৬৭৮৯",
+};
+
+function toLocaleDigits(value: string | number, locale: ReportLocale): string {
+  const s = String(value);
+  if (locale === "en") return s;
+  const set = DIGIT_SETS[locale];
+  return s.replace(/[0-9]/g, (d) => set.charAt(Number(d)) || d);
+}
+
 function lookup(dict: unknown, path: string): unknown {
   let current: unknown = dict;
   for (const key of path.split(".")) {
@@ -26,19 +42,42 @@ function lookup(dict: unknown, path: string): unknown {
 }
 
 export interface ServerT {
-  /** Resolve an i18n path; falls back to the English dictionary, then the path itself. */
-  (path: string): string;
+  /**
+   * Resolve an i18n path; falls back to the English dictionary, then the path
+   * itself. `vars` interpolates `{name}` placeholders (same syntax the client
+   * useLocale t() uses, so a key can serve both sides).
+   */
+  (path: string, vars?: Record<string, string | number>): string;
   locale: ReportLocale;
 }
 
 export function createServerT(locale: ReportLocale): ServerT {
-  const t = (path: string): string => {
-    const value = lookup(DICTS[locale], path) ?? lookup(en, path);
+  const t = (path: string, vars?: Record<string, string | number>): string => {
+    let value: unknown = lookup(DICTS[locale], path) ?? lookup(en, path);
+    if (typeof value === "string" && vars) {
+      let text = value;
+      for (const [k, v] of Object.entries(vars)) {
+        text = text.split(`{${k}}`).join(toLocaleDigits(v, locale));
+      }
+      value = text;
+    }
     return typeof value === "string" ? value : path;
   };
   t.locale = locale;
   return t;
 }
+
+// Date tokens, LONGEST FIRST — a naive `.replace("MM", …)` chain corrupts any
+// pattern that contains "MMM"/"MM" as a substring of a longer token.
+const DATE_TOKENS: Array<[string, (d: Date) => string]> = [
+  ["YYYY", (d) => String(d.getUTCFullYear())],
+  ["DD", (d) => String(d.getUTCDate()).padStart(2, "0")],
+  ["HH", (d) => String(d.getUTCHours()).padStart(2, "0")],
+  ["mm", (d) => String(d.getUTCMinutes()).padStart(2, "0")],
+  ["MM", (d) => String(d.getUTCMonth() + 1).padStart(2, "0")],
+  ["M", (d) => String(d.getUTCMonth() + 1)],
+  ["D", (d) => String(d.getUTCDate())],
+];
 
 /** Format a UTC timestamp against a tenant `DD/MM/YYYY` (+ optional `HH:mm`) pattern (Rule §8). */
 export function formatUtcDate(
@@ -48,17 +87,19 @@ export function formatUtcDate(
   if (value === null || value === undefined || value === "") return "";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const year = String(date.getUTCFullYear());
-  const hours = String(date.getUTCHours()).padStart(2, "0");
-  const minutes = String(date.getUTCMinutes()).padStart(2, "0");
-  return pattern
-    .replace("DD", day)
-    .replace("MM", month)
-    .replace("YYYY", year)
-    .replace("HH", hours)
-    .replace("mm", minutes);
+  let out = "";
+  let i = 0;
+  while (i < pattern.length) {
+    const token = DATE_TOKENS.find(([t]) => pattern.startsWith(t, i));
+    if (token) {
+      out += token[1](date);
+      i += token[0].length;
+    } else {
+      out += pattern.charAt(i);
+      i += 1;
+    }
+  }
+  return out;
 }
 
 /** Localized month name for a `YYYY-MM` key. */
@@ -126,4 +167,36 @@ export function sumDecimal(values: Array<string | number | null | undefined>): s
 export function decimalToCents(value: string | number | null | undefined): number {
   if (value === null || value === undefined || value === "") return 0;
   return toCents(value);
+}
+
+/**
+ * Table totals row for one column (client-safe: the #32 in-app viewer sums
+ * the listed rows this way when the document carries no full-set total for
+ * the column). Money sums through integer cents; number columns sum directly.
+ */
+export function totalForColumn(
+  rows: Record<string, string | number | null>[],
+  key: string,
+  type: string,
+): string {
+  if (type === "money") {
+    let cents = 0;
+    for (const row of rows) {
+      const raw = row[key];
+      if (raw === null || raw === undefined || raw === "") continue;
+      cents += Math.round(Number(raw) * 100);
+    }
+    return (cents / 100).toFixed(2);
+  }
+  if (type === "number") {
+    let sum = 0;
+    for (const row of rows) {
+      const raw = row[key];
+      if (raw === null || raw === undefined || raw === "") continue;
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed)) sum += parsed;
+    }
+    return String(sum);
+  }
+  return "";
 }

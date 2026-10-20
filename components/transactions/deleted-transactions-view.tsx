@@ -16,6 +16,7 @@ import { ERPDatePicker } from "@/components/ui/erp-date-picker";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { formatDateOnly, formatDatePattern } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 import { translateLedgerDescription } from "@/lib/ledger-description";
 import { useFormatMoney, useTenantDateFormat } from "@/lib/use-tenant-settings";
 import { getTransactionTypeLabel } from "./shared";
@@ -29,6 +30,7 @@ interface MemberOptionRow {
   id: string;
   name: string;
   memberId: string;
+  status?: string;
 }
 
 export interface DeletedTransactionRow {
@@ -159,7 +161,7 @@ export function DeletedTransactionsView() {
 
   const memberOptions = (membersQuery.data?.data ?? []).map((m) => ({
     value: m.id,
-    label: `${m.name} · ${m.memberId}`,
+    label: `${memberDisplayName(m.name, m.status)} · ${m.memberId}`,
   }));
 
   const rows = query.data?.data ?? [];

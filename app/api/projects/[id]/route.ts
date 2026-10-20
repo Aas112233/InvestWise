@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { projects, projectUpdates, projectMembers, members, funds, systemSettings, transactions, goals } from '@/db/schema/index';
+import { memberDisplayNameSql } from '@/lib/member-display';
 import { eq, and, desc, ne, sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { logAudit } from '@/lib/utils/audit';
@@ -54,7 +55,7 @@ export async function GET(
       db
         .select({
           memberId: projectMembers.memberId,
-          memberName: members.name,
+          memberName: memberDisplayNameSql,
           memberCode: members.memberId,
           memberPhone: members.phone,
           memberStatus: members.status,

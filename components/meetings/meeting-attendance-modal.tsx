@@ -15,6 +15,7 @@ import {
 import { TopSheet, Button, StatusBadge, ERPConfirmDialog } from "@/components/ui";
 import { Meeting, MeetingAttendee, Member } from "@/types";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 
 interface MeetingAttendanceModalProps {
   isOpen: boolean;
@@ -158,6 +159,10 @@ export function MeetingAttendanceModal({
         <div className="border border-border/80 rounded-lg overflow-hidden divide-y divide-border/60">
           {members.map((member) => {
             const currentStatus = records[member.id]?.attendanceStatus || "ABSENT";
+            // Suspended members are out of the roster — the attendance API
+            // rejects their rows (member_suspended), so the toggles stay
+            // visible but inert, matching the name marker.
+            const suspended = member.status === "suspended";
             return (
               <div
                 key={member.id}
@@ -165,7 +170,7 @@ export function MeetingAttendanceModal({
               >
                 <div className="flex flex-col">
                   <span className="text-xs font-semibold text-foreground">
-                    {member.name}
+                    {memberDisplayName(member.name, member.status)}
                   </span>
                   <span className="text-[11px] font-mono text-muted-foreground">
                     {t("meetings.idShares", {
@@ -180,8 +185,9 @@ export function MeetingAttendanceModal({
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
+                    disabled={suspended}
                     onClick={() => handleStatusChange(member.id, "PRESENT")}
-                    className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                    className={`px-2.5 py-1 text-xs font-medium rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                       currentStatus === "PRESENT"
                         ? "bg-emerald-600 text-white"
                         : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-emerald-50"
@@ -192,8 +198,9 @@ export function MeetingAttendanceModal({
 
                   <button
                     type="button"
+                    disabled={suspended}
                     onClick={() => handleStatusChange(member.id, "EXCUSED")}
-                    className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                    className={`px-2.5 py-1 text-xs font-medium rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                       currentStatus === "EXCUSED"
                         ? "bg-amber-600 text-white"
                         : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-amber-50"
@@ -204,8 +211,9 @@ export function MeetingAttendanceModal({
 
                   <button
                     type="button"
+                    disabled={suspended}
                     onClick={() => handleStatusChange(member.id, "ABSENT")}
-                    className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                    className={`px-2.5 py-1 text-xs font-medium rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                       currentStatus === "ABSENT"
                         ? "bg-rose-600 text-white"
                         : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-rose-50"

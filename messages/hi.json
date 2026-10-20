@@ -2,6 +2,8 @@
   "documents": {
     "orgFallback": "इनवेस्टवैज़",
     "reference": "संदर्भ संख्या",
+    "recordedOn": "अंकित दिनांक",
+    "voidStamp": "अमान्य प्रविष्टि",
     "generatedBy": "इनवेस्टवैज़ द्वारा निर्मित",
     "receivedBy": "प्राप्त करने वाला",
     "preparedBy": "तैयार किये वाला",
@@ -269,6 +271,8 @@
     "actions": "कार्रवाई",
     "search": "Search members or projects...",
     "loading": "लोड हो रहा है",
+    "selectedCount": "{count} चयनित",
+    "removedOption": "(हटाया गया)",
     "save": "Save",
     "cancel": "रद्द करें",
     "add": "Add",
@@ -422,6 +426,7 @@
     "reports": "Reports",
     "settings": "Settings",
     "dividends": "Dividends",
+    "payouts": "भुगतान",
     "fiscal": "वित्तीय वर्ष",
     "meetings": "बैठकें और प्रदर्शन",
     "governance": "प्रशासन",
@@ -911,6 +916,11 @@
       "inactive": "निष्क्रिय",
       "suspended": "निलंबित",
       "completed": "पूर्ण"
+    },
+    "statusReasons": {
+      "depositNonCompliance": "जमा न होने के कारण",
+      "equityTransferredOut": "इक्विटी स्थानांतरित",
+      "adminManual": "एडमिन द्वारा"
     },
     "rowMenu": {
       "view": "प्रोफ़ाइल देखें",
@@ -1599,6 +1609,7 @@
     "linkedProject": "Target Project",
     "selectProjectPlaceholder": "Select project...",
     "selectMemberPlaceholder": "Select member...",
+    "allMembers": "सभी सदस्य",
     "selectFundPlaceholder": "Select fund...",
     "formatTitle": "3. Output Document Format",
     "downloadButton": "दस्तावेज़ बनाएँ और निर्यात करें",
@@ -1640,6 +1651,7 @@
       "totalProjectExpenses": "परियोजना का कुल व्यय",
       "totalDisbursements": "कुल वितरण",
       "totalPenalties": "कुल दंड कटौती",
+      "waivedPenalties": "माफ़ किए गए दंड",
       "totalLiquidity": "कुल तरलता",
       "activeFunds": "सक्रिय निधियाँ",
       "partners": "भागीदार",
@@ -1647,7 +1659,7 @@
       "sharesHeld": "धारित शेयर",
       "totalContributed": "कुल योगदान",
       "rowCount": "लेनदेन",
-      "truncatedNote": "नोट: डेटा सीमा से अधिक होने के कारण अवधि की प्रारंभिक ५,००० पंक्तियों तक सीमित किया गया।",
+      "truncatedNote": "नोट: डेटा सीमा से अधिक होने के कारण अवधि की प्रारंभिक {max} पंक्तियों तक सीमित किया गया।",
       "generatedBy": "निर्माता",
       "total": "कुल",
       "confidential": "गोपनीय — केवल आंतरिक एवं अधिकृत भागीदारों के लिए।"
@@ -1716,6 +1728,7 @@
     "viewButton": "रिपोर्ट देखें",
     "downloadSuccess": "दस्तावेज़ सफलतापूर्वक डाउनलोड हुआ",
     "generatingNotice": "रिपोर्ट दस्तावेज़ तैयार किया जा रहा है...",
+    "entityLoadError": "परियोजन, सदस्य अथवा निधि की सूचियाँ लोड नहीं हो सकीं। इनसे जुड़ी रिपोर्टें अधूरी रह सकती हैं।",
     "viewer": {
       "back": "रिपोर्ट्स पर वापस जाएँ",
       "refresh": "ताज़ा करें",
@@ -1723,7 +1736,11 @@
       "loading": "रिपोर्ट लोड हो रही है...",
       "loadError": "रिपोर्ट लोड करने में विफल।",
       "empty": "इस अवधि के लिए कोई रिकॉर्ड नहीं।",
-      "unknownReport": "अज्ञात रिपोर्ट प्रकार।"
+      "unknownReport": "अज्ञात रिपोर्ट प्रकार।",
+      "rowCount": "{count} पंक्ति"
+    },
+    "errors": {
+      "generateFailed": "रिपोर्ट बनाने में असफलता। फिर से प्रयास करें।"
     }
   },
   "transactions": {
@@ -1990,6 +2007,37 @@
       "successToast": "{count} जमा सफलतापूर्वक दर्ज।",
       "minOneRow": "सदस्य और राशि के साथ कम से कम एक पंक्ति जोड़ें।"
     },
+    "bulkSingle": {
+      "scopeMultiple": "एकाधिक सदस्य",
+      "scopeSingle": "एकल सदस्य",
+      "subtitleSingle": "एक सदस्य के कई महीनों की जमा एक फंड में दर्ज करें।",
+      "member": "सदस्य",
+      "selectMember": "सदस्य चुनें...",
+      "fiscalYear": "वित्तीय वर्ष",
+      "selectFiscalYear": "वर्ष चुनें...",
+      "months": "जमा के महीने",
+      "monthsHint": "इस सदस्य के लिए जिन महीनों की जमा दर्ज करनी है, उन्हें चुनें। जिन महीनों में जमा पहले से है, वे लॉक हैं।",
+      "prefillHint": "चुने गए महीनों में राशि शेयर × शेयर मूल्य ({value}) के रूप में पहले से भरती है। आंशिक जमा के लिए राशि बदलें।",
+      "loading": "महीने लोड हो रहे हैं...",
+      "loadFailed": "जमा के महीने लोड नहीं हो सके।",
+      "retry": "पुनः प्रयास करें",
+      "available": "उपलब्ध",
+      "chosen": "चयनित",
+      "deposited": "जमा हो चुका",
+      "pendingRequest": "लंबित अनुरोध",
+      "selectAll": "सभी उपलब्ध महीने चुनें",
+      "clear": "साफ़ करें",
+      "selected": "{count} चयनित",
+      "total": "कुल",
+      "submit": "{count} जमा दर्ज करें",
+      "submitting": "दर्ज हो रहा है...",
+      "successToast": "{member} के लिए {count} जमा दर्ज हुईं।",
+      "selectMemberFirst": "पहले सदस्य और वित्तीय वर्ष चुनें।",
+      "minOneMonth": "कम से कम एक उपलब्ध महीना चुनें और राशि भरें।",
+      "invalidAmount": "हर चुने गए महीने के लिए मान्य राशि भरें।",
+      "amountFor": "{month} की राशि",
+      "lockedNote": "लॉक किए गए महीनों में जमा पहले से है।"
+    },
     "excel": {
       "modeManual": "मैनुअल एंट्री",
       "modeExcel": "Excel से इम्पोर्ट",
@@ -2189,6 +2237,7 @@
     "portfolio": "Share Portfolio",
     "sh": "SH",
     "transferBanner": "Assets will be transferred from the source member to the selected recipients.",
+    "suspendedHolderBlocked": "यह सदस्य निलंबित है — निलंबित सदस्य से शेयरों का हस्तांतरण नहीं किया जा सकता। पहले उन्हें पुनः सक्रिय करें।",
     "reallocationPlan": "Transfer Plan",
     "addTarget": "Add Recipient",
     "recipientMember": "Recipient",
@@ -2678,6 +2727,12 @@
     "exitImpersonation": "प्रतिरूपण समाप्त करें",
     "exitImpersonationFailed": "सेशन समाप्त नहीं हो सका",
     "currentFiscalYear": "वर्तमान वित्तीय वर्ष",
+    "fiscalYearSelect": "वित्तीय वर्ष",
+    "fiscalYearSelectHint": "वित्तीय वर्ष — हर स्क्रीन का हर वर्ष चयनकर्ता इस चयन का अनुसरण करता है",
+    "fiscalYearHistorical": "पिछला वित्तीय वर्ष देखा जा रहा है — हर वर्ष चयनकर्ता इस चयन का अनुसरण करता है",
+    "fiscalYearFollows": "हर स्क्रीन का हर वर्ष चयनकर्ता इस चयन का अनुसरण करता है।",
+    "fiscalYearReset": "FY {year} पर वापस जाएँ",
+    "fiscalYearNone": "अभी तक कोई वित्तीय वर्ष नहीं बनाया गया।",
     "fiscalYearAbbrev": "FY",
     "notificationsEmpty": "आप पूरी तरह अपडेट हैं",
     "notificationsEmptyHint": "पिछले 48 घंटों के बदलाव यहाँ दिखेंगे।",
@@ -3108,6 +3163,112 @@
       "title": "यह पृष्ठ लोड नहीं हो सका",
       "message": "इस स्क्रीन पर कुछ गलत हो गया। कुछ भी सहेजा या बदला नहीं गया — पुनः प्रयास करें, या किसी अन्य अनुभाग में जाकर वापस आएं।",
       "retry": "पुनः प्रयास करें"
+    }
+  },
+  "payouts": {
+    "title": "सदस्य भुगतान",
+    "subtitle": "निलंबित सदस्यों का अंतिम निपटारा, एक साथ या किस्तों में।",
+    "searchPlaceholder": "सदस्य का नाम, आईडी या कारण से खोजें…",
+    "allStatuses": "सभी स्थितियाँ",
+    "newPlan": "नया भुगतान योजना",
+    "createTitle": "निलंबित सदस्य का निपटारा",
+    "createHint": "भुगतान सदस्य की उपलब्ध शेष के बराबर होता है (जमा और लाभांश, परियोजनाओं में लगा धन घटाकर)। अधिकारी की पुष्टि तक कोई राशि नहीं दी जाती।",
+    "createButton": "भुगतान योजना बनाएँ",
+    "created": "भुगतान योजना बन गई",
+    "createFailed": "भुगतान योजना बनाने में विफल",
+    "loadFailed": "भुगतान सूची नहीं दिख सकी।",
+    "actionFailed": "कार्रवाई विफल रही",
+    "empty": "अभी कोई भुगतान योजना नहीं।",
+    "open": "खोलें",
+    "dueNow": "देय",
+    "oneTime": "एक साथ",
+    "phased": "{count} किस्तें, हर {interval} माह",
+    "phases": "किस्तें",
+    "phaseLabel": "किस्त {sequence}",
+    "paidToast": "किस्त का भुगतान हुआ",
+    "topUpToast": "परियोजना वापसी योजना में जोड़ी गई",
+    "cancelledToast": "भुगतान योजना रद्द हुई",
+    "payNext": "अगली किस्त दें",
+    "addProjectReturn": "परियोजना वापसी जोड़ें",
+    "cancelPlan": "योजना रद्द करें",
+    "reservedAmount": "यह योजना जितना निपटाएगी",
+    "zeroBalanceWarning": "इस सदस्य के पास उपलब्ध शेष नहीं है। परियोजना में लगा धन परियोजना निपटने पर दिया जाता है।",
+    "awaitingSettlement": "यह सदस्य अभी एक अनिपटित परियोजना में मूलधन रखता है। पहले उस परियोजना को निपटाएँ, फिर उसकी वापसी अतिरिक्त किस्त के रूप में जोड़ें।",
+    "awaitingShort": "परियोजना वापसी लंबित",
+    "schedulePreview": "बनने वाली अनुसूची",
+    "scheduleMismatch": "अनुसूची का अनुमान शेष से मेल नहीं खाता।",
+    "noticePeriodHint": "सूचना अवधि {days} दिन है — सबसे पहली संभव तिथि {earliest} है।",
+    "detailTitle": "भुगतान योजना",
+    "column": {
+      "member": "सदस्य",
+      "total": "कुल निपटारा",
+      "paid": "भुगतान हुआ",
+      "remaining": "शेष",
+      "schedule": "अनुसूची",
+      "nextDue": "अगली देय तिथि",
+      "fund": "किस कोष से",
+      "status": "स्थिति",
+      "reason": "कारण"
+    },
+    "field": {
+      "member": "निलंबित सदस्य",
+      "memberPlaceholder": "निलंबित सदस्य चुनें…",
+      "fund": "किस कोष से भुगतान",
+      "fundPlaceholder": "जमा कोष चुनें…",
+      "mode": "भुगतान का प्रकार",
+      "modePlaceholder": "भुगतान का प्रकार चुनें…",
+      "firstDueDate": "प्रथम भुगतान तिथि",
+      "firstDueDatePlaceholder": "तिथि चुनें…",
+      "installments": "किस्तों की संख्या",
+      "installmentsOption": "{count} किस्तें",
+      "installmentsPlaceholder": "संख्या चुनें…",
+      "interval": "हर",
+      "intervalMonthly": "1 माह",
+      "intervalOption": "{months} माह",
+      "intervalPlaceholder": "अंतराल चुनें…",
+      "reason": "सदस्य का निपटारा क्यों",
+      "reasonPlaceholder": "जैसे सदस्य ने पदत्याग किया; समिति निर्णय 12/10/2026 अनुसार राशि निपटी"
+    },
+    "kpi": {
+      "openPlans": "चालू योजनाएँ (इस पृष्ठ)",
+      "dueNow": "अभी देय",
+      "reserved": "अभी देय राशि",
+      "paid": "भुगतान हुआ (इस पृष्ठ)"
+    },
+    "mode": {
+      "oneTime": "एक बार भुगतान",
+      "phased": "किस्तों में"
+    },
+    "section": {
+      "member": "सदस्य और कोष स्रोत",
+      "schedule": "भुगतान अनुसूची",
+      "reason": "कारण"
+    },
+    "detail": {
+      "fund": "किस कोष से",
+      "schedule": "{count} किस्तें, हर {interval} माह",
+      "cancelReason": "रद्द"
+    },
+    "confirm": {
+      "payTitle": "यह भुगतान दर्ज करें",
+      "payBody": "पुष्टि करें कि किस्त {sequence} के लिए {amount} सदस्य को दिया गया। इससे {fund} घटता है और यह इस पृष्ठ से वापस नहीं हो सकता।",
+      "payConfirm": "भुगतान हुआ दर्ज करें",
+      "topUpTitle": "परियोजना वापसी जोड़ें",
+      "topUpBody": "सदस्य के पास जितनी शेष अब है (निपटी परियोजना से) उतनी एक अतिरिक्त किस्त के रूप में तुरंत देय जुड़ जाएगी। अभी कोई भुगतान नहीं होता।",
+      "cancelTitle": "यह भुगतान योजना रद्द करें",
+      "cancelBody": "अभुगतान शेष ({amount}) सदस्य की शेष में लौट आएगी। जो किस्तें दी जा चुकी हैं वे खाते में रहेंगी।",
+      "cancelReasonPlaceholder": "रद्द करने का कारण (आवश्यक)",
+      "cancelReasonRequired": "कारण आवश्यक है"
+    },
+    "status": {
+      "ACTIVE": "चालू",
+      "COMPLETED": "पूर्ण",
+      "CANCELLED": "रद्द"
+    },
+    "phaseStatus": {
+      "SCHEDULED": "निर्धारित",
+      "PAID": "भुगतान हुआ",
+      "CANCELLED": "रद्द"
     }
   }
 }

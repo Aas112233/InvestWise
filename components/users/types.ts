@@ -23,7 +23,7 @@ export const TENANT_ASSIGNABLE_ROLES = ["Admin", "Manager", "Auditor", "Member"]
 // existing localized nav.* keys.
 export const PERMISSION_SCREENS = [
   "DASHBOARD", "MEMBERS", "MEETINGS", "GOVERNANCE", "GOALS", "DEPOSITS", "REQUEST_DEPOSIT",
-  "TRANSACTIONS", "DIVIDENDS", "EXPENSES", "PROJECT_MANAGEMENT",
+  "TRANSACTIONS", "DIVIDENDS", "PAYOUTS", "EXPENSES", "PROJECT_MANAGEMENT",
   "FUNDS_MANAGEMENT", "ANALYSIS", "REPORTS", "SETTINGS",
 ] as const;
 
@@ -37,6 +37,7 @@ export const SCREEN_LABEL_KEY: Record<string, string> = {
   REQUEST_DEPOSIT: "nav.requestDeposit",
   TRANSACTIONS: "nav.transactions",
   DIVIDENDS: "nav.dividends",
+  PAYOUTS: "nav.payouts",
   EXPENSES: "nav.expenses",
   PROJECT_MANAGEMENT: "nav.projectMgmt",
   FUNDS_MANAGEMENT: "nav.fundsMgmt",
@@ -64,6 +65,9 @@ const SENSITIVE_SCREENS: ReadonlySet<string> = new Set([
   "SETTINGS",
   "FUNDS_MANAGEMENT",
   "DIVIDENDS",
+  // Paying a member out is a cash handover, not a report — same sensitivity
+  // class as dividends and fund management.
+  "PAYOUTS",
   "PROJECT_MANAGEMENT",
 ]);
 

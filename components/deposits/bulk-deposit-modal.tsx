@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { FileSpreadsheet, ListChecks, Plus, Trash2 } from "lucide-react";
+import { FileSpreadsheet, ListChecks, Plus, Trash2, User, Users } from "lucide-react";
 import { toast } from "sonner";
 import { AppDropdown } from "@/components/ui/app-dropdown";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,13 @@ import { ERPFiscalMonthPicker, type FiscalMonthValue } from "@/components/ui/erp
 import { TopSheet } from "@/components/ui/top-sheet";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
+import { memberDisplayName } from "@/lib/member-display";
 import { useLocale } from "@/lib/i18n";
 import { formatMoney } from "@/lib/formatters";
 import { fromCents, toCents } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { BulkExcelImport } from "./bulk-excel-import";
+import { SingleMemberBulkDeposit } from "./single-member-bulk-deposit";
 import { centsToAmount, sumCents, useFundOptions, useMemberOptions, useTenantCurrency } from "./shared";
 import { DEPOSIT_FUND_TYPE } from "@/lib/deposit-fund";
 import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
@@ -44,13 +46,26 @@ interface BulkRow {
 
 let rowSeq = 1;
 
-// Batch monthly collection: one common fund + month, per-member amounts.
-// Amounts stay strings (2dp); the running total is summed in integer cents.
+/**
+ * Two collection shapes share this sheet:
+ *
+ *  - "multiple" — one common fund + month, per-member amounts (manual rows or
+ *    an Excel template). This is the original monthly-collection desk.
+ *  - "single"   — one member, one financial year, several months at once. The
+ *    month grid comes from the server, months that already hold a deposit are
+ *    locked, and the chosen months post as one idempotent batch.
+ *
+ * Both submit to the same `POST /api/finance/deposits/bulk` contract; the only
+ * difference is that the single-member shape sends a month PER ROW instead of a
+ * shared `commonMonth`.
+ */
 export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
   const currency = useTenantCurrency();
 
+  const [scope, setScope] = useState<"multiple" | "single">("multiple");
+  const [singleDirty, setSingleDirty] = useState(false);
   const [fundId, setFundId] = useState<string | null>(null);
   const [month, setMonth] = useState<FiscalMonthValue>({ fiscalYear: null, month: null });
   const [method, setMethod] = useState<string | null>(null);
@@ -60,6 +75,10 @@ export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: ()
   const [mode, setMode] = useState<"manual" | "excel">("manual");
   const [excelSelected, setExcelSelected] = useState<Set<string>>(() => new Set());
   const requestRef = useRef<{ fingerprint: string; key: string } | null>(null);
+
+  // Stable identity: the single-member grid reports its dirty state on every
+  // render, and an inline arrow would re-fire that effect in a loop.
+  const handleSingleDirtyChange = useCallback((dirty: boolean) => setSingleDirty(dirty), []);
 
   const membersQuery = useMemberOptions();
   const fundsQuery = useFundOptions(DEPOSIT_FUND_TYPE);
@@ -79,8 +98,14 @@ export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: ()
   const paymentMethods = useTenantPaymentMethods();
 
   const memberOptions = (membersQuery.data ?? [])
-    .filter((m) => m.status === "active")
-    .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
+    // Suspended members stay visible but disabled (marker explains why).
+    .filter((m) => m.status === "active" || m.status === "suspended")
+    .map((m) => ({
+      value: m.id,
+      label: memberDisplayName(m.name, m.status),
+      caption: m.memberId,
+      disabled: m.status === "suspended",
+    }));
   const fundOptions = (fundsQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
   const methodOptions = paymentMethods.map((m) => {
     const typeLabel = t(
@@ -95,8 +120,16 @@ export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: ()
   // Period options come from the tenant fiscal calendar (§8) and, for this
   // posting form, only from the year open for posting; the month value is the
   // absolute YYYY-MM of the chosen fiscal month.
-  const { yearOptionsIncluding, monthsFor } = useFiscalPeriodOptions();
-  const monthOptions = monthsFor(month.fiscalYear);
+  //
+  // The year is seeded from the header's fiscal-year selector (the app-wide
+  // period) while the MONTH stays an explicit choice — a batch must never post
+  // into a month nobody picked.
+  const { yearOptionsIncluding, monthsFor, defaultPostableFiscalYear } = useFiscalPeriodOptions();
+  const effectiveMonth: FiscalMonthValue = {
+    fiscalYear: month.fiscalYear || defaultPostableFiscalYear,
+    month: month.month,
+  };
+  const monthOptions = monthsFor(effectiveMonth.fiscalYear);
 
   const validRows = rows.filter(
     (r) => r.memberId && AMOUNT_RE.test(r.amount.trim()) && parseFloat(r.amount) > 0,
@@ -104,6 +137,8 @@ export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: ()
   const total = centsToAmount(sumCents(validRows.map((r) => r.amount.trim())));
 
   const close = () => {
+    setScope("multiple");
+    setSingleDirty(false);
     setFundId(null);
     setMonth({ fiscalYear: null, month: null });
     setMethod(null);
@@ -161,37 +196,65 @@ export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: ()
       open={open}
       onClose={close}
       title={t("deposits.bulk.title")}
-      subtitle={t("deposits.bulk.subtitle")}
+      subtitle={scope === "single" ? t("deposits.bulkSingle.subtitleSingle") : t("deposits.bulk.subtitle")}
       wide
       // Any populated field counts as unsaved work — the sheet confirms
-      // before discarding it (report issue 7).
+      // before discarding it (report issue 7). The single-member grid owns its
+      // own state and reports it back.
       isDirty={
-        !!fundId ||
-        !!month.month ||
-        !!method ||
-        rows.some((r) => r.memberId || r.amount.trim()) ||
-        excelSelected.size > 0
+        scope === "single"
+          ? singleDirty
+          : !!fundId ||
+            !!month.month ||
+            !!method ||
+            rows.some((r) => r.memberId || r.amount.trim()) ||
+            excelSelected.size > 0
       }
     >
       <ERPFormLayout>
-        <div role="tablist" aria-label={t("deposits.bulk.title")} className="inline-flex rounded-lg border border-border/80 bg-muted/30 p-0.5">
-          {(["manual", "excel"] as const).map((value) => (
+        <div
+          role="tablist"
+          aria-label={t("deposits.bulk.title")}
+          className="inline-flex rounded-lg border border-border/80 bg-muted/30 p-0.5"
+        >
+          {(["multiple", "single"] as const).map((value) => (
             <button
               key={value}
               type="button"
               role="tab"
-              aria-selected={mode === value}
-              onClick={() => setMode(value)}
+              aria-selected={scope === value}
+              onClick={() => setScope(value)}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                mode === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                scope === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {value === "manual" ? <ListChecks size={13} /> : <FileSpreadsheet size={13} />}
-              {t(value === "manual" ? "deposits.excel.modeManual" : "deposits.excel.modeExcel")}
+              {value === "multiple" ? <Users size={13} /> : <User size={13} />}
+              {t(value === "multiple" ? "deposits.bulkSingle.scopeMultiple" : "deposits.bulkSingle.scopeSingle")}
             </button>
           ))}
         </div>
+
+        {scope === "multiple" && (
+          <div role="tablist" aria-label={t("deposits.bulk.title")} className="inline-flex rounded-lg border border-border/80 bg-muted/30 p-0.5">
+            {(["manual", "excel"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={mode === value}
+                onClick={() => setMode(value)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  mode === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {value === "manual" ? <ListChecks size={13} /> : <FileSpreadsheet size={13} />}
+                {t(value === "manual" ? "deposits.excel.modeManual" : "deposits.excel.modeExcel")}
+              </button>
+            ))}
+          </div>
+        )}
 
         <ERPFormSection title={t("deposits.bulk.title")}>
           <ERPFormGrid columns={3}>
@@ -211,7 +274,7 @@ export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: ()
                 placeholder={t("deposits.bulk.selectMethod")}
               />
             </ERPFormField>
-            {mode === "manual" && (
+            {scope === "multiple" && mode === "manual" && (
               <div className="flex items-end pb-0.5">
                 <p className="text-xs text-slate-500">
                   {t("deposits.bulk.runningTotal")}:{" "}
@@ -222,15 +285,28 @@ export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: ()
               </div>
             )}
           </ERPFormGrid>
-          <ERPFiscalMonthPicker
-            fiscalYears={yearOptionsIncluding(month.fiscalYear)}
-            months={monthOptions}
-            value={month}
-            onChange={setMonth}
-          />
+          {/* The single-member shape picks its year inside the month grid (it
+              needs the whole year's occupancy, not one month). */}
+          {scope === "multiple" && (
+            <ERPFiscalMonthPicker
+              fiscalYears={yearOptionsIncluding(effectiveMonth.fiscalYear)}
+              months={monthOptions}
+              value={effectiveMonth}
+              onChange={setMonth}
+            />
+          )}
         </ERPFormSection>
 
-        {mode === "excel" ? (
+        {scope === "single" ? (
+          <SingleMemberBulkDeposit
+            fundId={fundId}
+            method={method}
+            shareValueCents={shareValueCents}
+            onDirtyChange={handleSingleDirtyChange}
+            onCancel={close}
+            onSubmitted={close}
+          />
+        ) : mode === "excel" ? (
           <BulkExcelImport
             fundId={fundId}
             month={month}
@@ -311,16 +387,20 @@ export function BulkDepositModal({ open, onClose }: { open: boolean; onClose: ()
           </ERPFormSection>
         )}
 
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <Button variant="ghost" size="sm" onClick={close} disabled={submitting}>
-            {t("common.cancel")}
-          </Button>
-          {mode === "manual" && (
-            <Button variant="primary" size="sm" onClick={onSubmit} loading={submitting} loadingLabel={t("deposits.bulk.submitting")}>
-              {t("deposits.bulk.submit", { count: validRows.length })}
+        {/* The single-member grid renders its own action row (its totals and
+            counts live there); everything else shares this footer. */}
+        {scope === "multiple" && (
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="ghost" size="sm" onClick={close} disabled={submitting}>
+              {t("common.cancel")}
             </Button>
-          )}
-        </div>
+            {mode === "manual" && (
+              <Button variant="primary" size="sm" onClick={onSubmit} loading={submitting} loadingLabel={t("deposits.bulk.submitting")}>
+                {t("deposits.bulk.submit", { count: validRows.length })}
+              </Button>
+            )}
+          </div>
+        )}
       </ERPFormLayout>
     </TopSheet>
   );

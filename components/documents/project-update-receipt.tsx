@@ -2,11 +2,13 @@
 
 import React from "react";
 import { useLocale } from "@/lib/i18n";
-import { useFormatDateOnly, useFormatMoney } from "@/lib/use-tenant-settings";
+import { useFormatDate, useFormatDateOnly, useFormatMoney } from "@/lib/use-tenant-settings";
 import { translateLedgerDescription } from "@/lib/ledger-description";
-import { DocumentFrame, DocTitle, DocAmount, DocRow, DocField, type DocSignature } from "./document-frame";
+import { getTransactionStatusLabel } from "@/lib/transaction-labels";
+import { DocumentFrame, DocTitle, DocAmount, DocRow, DocField, DocVoidStamp, type DocSignature } from "./document-frame";
 
 export interface ProjectUpdateReceiptData {
+  id?: string;
   referenceNumber?: string;
   date?: string;
   amount?: number | string;
@@ -18,6 +20,9 @@ export interface ProjectUpdateReceiptData {
   handlingOfficer?: string;
   authorizerName?: string;
   description?: string;
+  createdAt?: string;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
 }
 
 /** Project update receipt — opened after a project spending/earning is posted. */
@@ -25,6 +30,7 @@ export function ProjectUpdateReceipt({ data, orgName, orgTagline }: { data: Proj
   const { t } = useLocale();
   const formatMoney = useFormatMoney();
   const formatDate = useFormatDateOnly();
+  const formatDateTime = useFormatDate();
   const na = t("common.na", { defaultValue: "—" });
 
   const title = t("documents.projectUpdate", { defaultValue: "Project Update" });
@@ -36,7 +42,9 @@ export function ProjectUpdateReceipt({ data, orgName, orgTagline }: { data: Proj
       : data.type === "Expense"
         ? t("projects.txLabels.expense", { defaultValue: "Expense" })
         : data.type || na;
-  const status = t("projects.statuses.completed", { defaultValue: "Completed" });
+  // The row's real status, not a literal: a posting can be PENDING or REJECTED,
+  // and a receipt that asserts "Completed" for either is a false document.
+  const status = getTransactionStatusLabel(data.status, t);
 
   const signatures: DocSignature[] = [
     { label: t("documents.receivedBy", { defaultValue: "Received By" }), name: data.memberName },
@@ -49,13 +57,19 @@ export function ProjectUpdateReceipt({ data, orgName, orgTagline }: { data: Proj
       orgName={orgName}
       orgTagline={orgTagline}
       docType={title}
-      reference={data.referenceNumber}
+      reference={data.referenceNumber || data.id}
       dateLabel={data.date ? formatDate(data.date) : undefined}
       signatures={signatures}
     >
+      {data.isDeleted ? (
+        <DocVoidStamp
+          label={t("documents.voidStamp", { defaultValue: "Voided entry" })}
+          dateLabel={data.deletedAt ? formatDateTime(data.deletedAt, true) : undefined}
+        />
+      ) : null}
       <DocTitle>{data.projectName || title}</DocTitle>
       <DocAmount label={t("deposits.columns.amount", { defaultValue: "Amount" })}>
-        {formatMoney(Number(data.amount || 0))}
+        <span style={data.isDeleted ? { textDecoration: "line-through" } : undefined}>{formatMoney(Number(data.amount || 0))}</span>
       </DocAmount>
 
       <DocRow label={t("documents.type", { defaultValue: "Type" })} value={type} strong />
@@ -66,6 +80,9 @@ export function ProjectUpdateReceipt({ data, orgName, orgTagline }: { data: Proj
       <DocRow label={t("documents.project", { defaultValue: "Project" })} value={data.projectName || na} />
       <DocRow label={t("common.status", { defaultValue: "Status" })} value={status} />
       <DocRow label={t("deposits.modal.cashier", { defaultValue: "Handled By" })} value={data.handlingOfficer || na} />
+      {data.createdAt ? (
+        <DocRow label={t("documents.recordedOn", { defaultValue: "Recorded on" })} value={formatDateTime(data.createdAt, true)} />
+      ) : null}
       {data.authorizerName ? (
         <DocRow label={t("expenses.approvedBy", { defaultValue: "Approved By" })} value={data.authorizerName} />
       ) : null}

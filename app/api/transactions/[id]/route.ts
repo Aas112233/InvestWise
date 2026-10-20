@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, members, funds, projects, users, deletedRecords, projectUpdates } from '@/db/schema/index';
+import { memberDisplayNameSql } from '@/lib/member-display';
 import { eq, and, ne, sql, isNull } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { hasScreenPermission } from '@/lib/permissions';
@@ -36,7 +37,7 @@ export async function GET(
         status: transactions.status,
         description: transactions.description,
         memberId: transactions.memberId,
-        memberName: members.name,
+        memberName: memberDisplayNameSql,
         memberCode: members.memberId,
         fundId: transactions.fundId,
         fundName: funds.name,
@@ -44,6 +45,8 @@ export async function GET(
         projectName: projects.title,
         handlingOfficer: transactions.handlingOfficer,
         depositMethod: transactions.depositMethod,
+        balanceAfter: transactions.balanceAfter,
+        transferGroupId: transactions.transferGroupId,
         authorizedBy: transactions.authorizedBy,
         authorizerName: users.name,
         isDeleted: transactions.isDeleted,
@@ -63,9 +66,33 @@ export async function GET(
 
     if (!tx) throw new NotFoundError('Transaction');
 
+    // A fund transfer is posted as two legs sharing transferGroupId. A voucher
+    // for one leg would otherwise show money leaving a fund with no stated
+    // destination (or arriving from nowhere), so name the counterpart leg.
+    let transferCounterpart: { type: string | null; fundName: string | null; referenceNumber: string | null } | null = null;
+    if (tx.transferGroupId) {
+      const [sibling] = await db
+        .select({
+          type: transactions.type,
+          fundName: funds.name,
+          referenceNumber: transactions.referenceNumber,
+        })
+        .from(transactions)
+        .leftJoin(funds, and(eq(transactions.fundId, funds.id), eq(funds.tenantId, tenantId)))
+        .where(
+          and(
+            eq(transactions.transferGroupId, tx.transferGroupId),
+            eq(transactions.tenantId, tenantId),
+            ne(transactions.id, tx.id),
+          ),
+        )
+        .limit(1);
+      if (sibling) transferCounterpart = sibling;
+    }
+
     return NextResponse.json({
       success: true,
-      data: tx,
+      data: { ...tx, transferCounterpart },
     });
   } catch (err: any) {
     console.error('[TRANSACTION GET ERROR]', err);

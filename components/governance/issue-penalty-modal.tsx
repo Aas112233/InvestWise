@@ -5,6 +5,7 @@ import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, App
 import { NumericInput } from "@/components/ui/numeric-input";
 import { Member, MemberPenalty } from "@/types";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 import { useTenantPenaltyRules, useTenantCurrency } from "@/lib/use-tenant-settings";
 
 interface IssuePenaltyModalProps {
@@ -43,7 +44,7 @@ export function IssuePenaltyModal({
 
   const memberOptions: DropdownOption[] = members.map((m) => ({
     value: m.id,
-    label: `${m.name} (${m.memberId})`,
+    label: `${memberDisplayName(m.name, m.status)} (${m.memberId})`,
   }));
 
   const tierOptions: DropdownOption[] = [

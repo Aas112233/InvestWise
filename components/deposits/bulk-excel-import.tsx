@@ -26,6 +26,7 @@ import {
 } from "@/lib/deposit-excel";
 import { formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 import { fromCents } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { DEPOSIT_MONTH_KEYS, useFundOptions, useMemberOptions, useTenantCurrency, type DepositRow } from "./shared";
@@ -281,7 +282,7 @@ export function BulkExcelImport({
                     className="h-3.5 w-3.5 shrink-0 accent-primary"
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium text-foreground">{m.name}</span>
+                    <span className="block truncate font-medium text-foreground">{memberDisplayName(m.name, m.status)}</span>
                     <span className="block text-[11px] text-muted-foreground">
                       {t("deposits.excel.memberCaption", { memberId: m.memberId, shares: m.shares ?? 0 })}
                     </span>

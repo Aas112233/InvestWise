@@ -10,6 +10,7 @@ import { ERPFiscalMonthPicker } from "@/components/ui/erp-fiscal-month-picker";
 import { TopSheet } from "@/components/ui/top-sheet";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
+import { memberDisplayName } from "@/lib/member-display";
 import { useAuth } from "@/lib/auth-context";
 import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
 import { useLocale } from "@/lib/i18n";
@@ -145,10 +146,16 @@ export function DepositRequestView() {
   };
 
   const memberOptions = selfMember
-    ? [{ value: selfMember.id, label: selfMember.name, caption: selfMember.memberId }]
+    ? [{ value: selfMember.id, label: memberDisplayName(selfMember.name, selfMember.status), caption: selfMember.memberId, disabled: selfMember.status === "suspended" }]
     : (membersQuery.data ?? [])
-        .filter((m) => m.status === "active")
-        .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
+        // Suspended members stay visible but disabled (marker explains why).
+        .filter((m) => m.status === "active" || m.status === "suspended")
+        .map((m) => ({
+          value: m.id,
+          label: memberDisplayName(m.name, m.status),
+          caption: m.memberId,
+          disabled: m.status === "suspended",
+        }));
   const fundOptions = (fundsQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
   // Method picker comes from the tenant's Settings → Governance list (name +
   // channel type); the stored value is the configured name itself.
@@ -166,10 +173,12 @@ export function DepositRequestView() {
     return { value: m.name, label };
   });
   // Posting form: only the fiscal year the ledger is open for is offered, plus
-  // any year already selected so the field never renders blank.
-  const { yearOptionsIncluding, monthsFor } = useFiscalPeriodOptions();
-  const yearOptions = yearOptionsIncluding(depositFiscalYear || null);
-  const monthOptions = monthsFor(depositFiscalYear || null);
+  // any year already selected so the field never renders blank. The header's
+  // fiscal-year selection seeds it, so the form opens on the year being worked.
+  const { yearOptionsIncluding, monthsFor, defaultPostableFiscalYear } = useFiscalPeriodOptions();
+  const effectiveFiscalYear = depositFiscalYear || defaultPostableFiscalYear || "";
+  const yearOptions = yearOptionsIncluding(effectiveFiscalYear || null);
+  const monthOptions = monthsFor(effectiveFiscalYear || null);
 
   return (
     <>
@@ -242,7 +251,7 @@ export function DepositRequestView() {
               monthLabel={t("deposits.modal.depositMonth")}
               error={touched && !monthValid ? t("deposits.modal.selectMonth") : undefined}
               value={{
-                fiscalYear: depositFiscalYear || null,
+                fiscalYear: effectiveFiscalYear || null,
                 month: depositMonth || null,
               }}
               onChange={(v) => {

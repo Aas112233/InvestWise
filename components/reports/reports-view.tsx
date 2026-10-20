@@ -1,20 +1,24 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Download,
   Eye,
   FileText,
 } from "lucide-react";
-import { AppDropdown, Button, DropdownOption, ERPDatePicker, ERPFiscalMonthPicker, ERPFormField, ERPFormGrid, ERPFormSection } from "@/components/ui";
+import { AppDropdown, AppMultiSelect, Button, DropdownOption, ERPDatePicker, ERPFiscalMonthPicker, ERPFormField, ERPFormGrid, ERPFormSection } from "@/components/ui";
 import { Project, Member } from "@/types";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 import { useTenantSettings } from "@/lib/use-tenant-settings";
 import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
+import { useFiscalYearSync } from "@/lib/fiscal-year-context";
 import { resolveFiscalQuarterBounds } from "@/lib/fiscal-periods";
 import {
   REPORT_CATEGORIES,
   reportsForCategory,
+  serializeMemberSelection,
+  type MemberSelection,
   type ReportCategory,
   type ReportFormat,
   type ReportPeriodType,
@@ -50,9 +54,22 @@ interface ReportsViewProps {
     memberId?: string;
     fundId?: string;
   }) => void;
+  /** C6 — a localized message when the project/member/fund lists failed to load. */
+  entityLoadError?: string | null;
+  onRetryEntities?: () => void;
 }
 
 const QUARTERS = ["Q1", "Q2", "Q3", "Q4"] as const;
+
+// C13: structural defaultValues — if a category label is ever missing from a
+// locale file, the English name renders instead of the raw key path.
+const CATEGORY_NAME_FALLBACKS: Record<ReportCategory, string> = {
+  ledger: "Ledger",
+  deposits: "Deposits",
+  incomes: "Income",
+  expenses: "Expenses",
+  projects: "Projects",
+};
 
 export function ReportsView({
   projects,
@@ -60,6 +77,8 @@ export function ReportsView({
   funds,
   onGenerateReport,
   onViewReport,
+  entityLoadError,
+  onRetryEntities,
 }: ReportsViewProps) {
   const { t, locale } = useLocale();
 
@@ -78,18 +97,36 @@ export function ReportsView({
   const [endDate, setEndDate] = useState<string | null>(null);
 
   // Cascading entity filters (Rule §5 & §15: start empty with placeholders).
+  // Member scope is one / many / all (target member multi-select).
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [memberSelection, setMemberSelection] = useState<MemberSelection>({ all: false, ids: [] });
   const [selectedFundId, setSelectedFundId] = useState<string | null>(null);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // C11: an error from a previous attempt must not survive the scope change
+  // that fixes it — clear it whenever any input the message could refer to
+  // is touched.
+  useEffect(() => {
+    setErrorMessage(null);
+  }, [reportSlug, activeCategory, selectedProjectId, memberSelection, selectedFundId, periodType, startDate, endDate]);
 
   const { data: tenantSettings } = useTenantSettings();
   const fiscalStartMonth = tenantSettings?.financial?.fiscalYearStart || "July";
   // One fiscal option source for every period control, shared with Analysis,
   // the deposit desk and the fiscal-period screen.
   const { yearOptionsAllIncluding, monthsFor, defaultFiscalYear, defaultMonthKey } = useFiscalPeriodOptions();
+  // The header's fiscal-year selector is the app-wide period. A year picked here
+  // survives until the header moves — then the local picks are cleared and the
+  // report follows the header again (a report stuck on 2025-26 while the header
+  // reads FY 2026-27 is exactly the confusion this removes).
+  const clearLocalPeriod = useCallback(() => {
+    setFiscalYear(null);
+    setMonthlyFiscalYear(null);
+    setMonthlyMonth(null);
+  }, []);
+  useFiscalYearSync(clearLocalPeriod);
   const selectedFiscalYear = fiscalYear ?? defaultFiscalYear;
   // Reports is a read screen, so it opens on the period actually open for
   // posting rather than an empty filter; entry forms stay empty (§15).
@@ -125,8 +162,12 @@ export function ReportsView({
 
   const memberOptions: DropdownOption[] = members.map((m) => ({
     value: m.id,
-    label: `${m.name} (${m.memberId})`,
+    label: `${memberDisplayName(m.name, m.status)} (${m.memberId})`,
   }));
+
+  // "All members" renders every current row checked; the wire value is the
+  // `all` sentinel (no stale id list), so later-added members stay in scope.
+  const allMemberValues = useMemo(() => members.map((m) => m.id), [members]);
 
   const fundOptions: DropdownOption[] = funds.map((f) => ({
     value: f.id,
@@ -140,6 +181,18 @@ export function ReportsView({
   const memberRequired = definition?.requires === "member";
   const fundRequired = definition?.requires === "fund";
 
+  // C12: the action buttons stay disabled while the selection cannot be
+  // valid — the required markers on the fields tell the user what is missing
+  // without waiting for a rejected round-trip.
+  const isSelectionValid = useMemo(() => {
+    if (!definition) return false;
+    if (projectRequired && !selectedProjectId) return false;
+    if (memberRequired && !memberSelection.all && memberSelection.ids.length === 0) return false;
+    if (fundRequired && !selectedFundId) return false;
+    if (periodType === "Custom" && (!startDate || !endDate)) return false;
+    return true;
+  }, [definition, projectRequired, memberRequired, fundRequired, selectedProjectId, memberSelection, selectedFundId, periodType, startDate, endDate]);
+
   // Shared validation for both Generate (download) and View (#32) — the viewer
   // must never be reachable with a scope the exporter would reject.
   const validateSelection = (): boolean => {
@@ -149,7 +202,7 @@ export function ReportsView({
       setErrorMessage(t("reports.validation.selectProject", { defaultValue: "Please select a target project for this report." }));
       return false;
     }
-    if (memberRequired && !selectedMemberId) {
+    if (memberRequired && !memberSelection.all && memberSelection.ids.length === 0) {
       setErrorMessage(t("reports.validation.selectMember", { defaultValue: "Please select a target member for this report." }));
       return false;
     }
@@ -178,9 +231,13 @@ export function ReportsView({
     fiscalYear: periodType === "Quarterly" || periodType === "Yearly" ? selectedFiscalYear : undefined,
     startDate: periodType === "Custom" ? startDate ?? undefined : undefined,
     endDate: periodType === "Custom" ? endDate ?? undefined : undefined,
-    projectId: selectedProjectId || undefined,
-    memberId: selectedMemberId || undefined,
-    fundId: selectedFundId || undefined,
+    // C2: only send scopes this template actually declares — the server now
+    // rejects undeclared scopes with NOT_APPLICABLE, and the viewer/exporter
+    // must agree on the same URL.
+    projectId: needsProject ? selectedProjectId || undefined : undefined,
+    // One id, a comma list, or the "all" sentinel — the server parses all three.
+    memberId: needsMember ? (serializeMemberSelection(memberSelection) ?? undefined) : undefined,
+    fundId: needsFund ? selectedFundId || undefined : undefined,
   });
 
   const handleGenerate = async () => {
@@ -190,7 +247,9 @@ export function ReportsView({
     try {
       await onGenerateReport({ ...selectionPayload(), format });
     } catch (err) {
-      setErrorMessage((err as Error)?.message || "Failed to generate export document.");
+      // C17: server-issued messages (localized 400s) win; the no-message
+      // fallback is a translated string, never a hard-coded one (§9).
+      setErrorMessage((err as Error)?.message || t("reports.errors.generateFailed", { defaultValue: "Failed to generate the report. Please try again." }));
     } finally {
       setIsGenerating(false);
     }
@@ -214,7 +273,7 @@ export function ReportsView({
               const first = reportsForCategory(cat.id)[0];
               if (first) setReportSlug(first.slug);
               setSelectedProjectId(null);
-              setSelectedMemberId(null);
+              setMemberSelection({ all: false, ids: [] });
               setSelectedFundId(null);
             }}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
@@ -223,14 +282,26 @@ export function ReportsView({
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t(cat.nameKey)}
-          </button>
+              {t(cat.nameKey, { defaultValue: CATEGORY_NAME_FALLBACKS[cat.id] })}
+            </button>
         ))}
       </div>
 
       {errorMessage && (
         <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs rounded-lg">
           {errorMessage}
+        </div>
+      )}
+
+      {/* C6: a silently empty dropdown is worse than a loud banner. */}
+      {entityLoadError && (
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs rounded-lg flex items-center justify-between gap-3">
+          <span>{entityLoadError}</span>
+          {onRetryEntities && (
+            <button type="button" onClick={onRetryEntities} className="shrink-0 font-semibold underline">
+              {t("common.retry", { defaultValue: "Retry" })}
+            </button>
+          )}
         </div>
       )}
 
@@ -344,7 +415,7 @@ export function ReportsView({
           {(needsProject || needsMember || needsFund) && (
             <ERPFormGrid cols={3}>
               {needsProject && (
-                <ERPFormField label={t("reports.linkedProject", { defaultValue: "Target Project" })}>
+                <ERPFormField label={t("reports.linkedProject", { defaultValue: "Target Project" })} required={projectRequired}>
                   <AppDropdown
                     options={projectOptions}
                     value={selectedProjectId}
@@ -355,18 +426,33 @@ export function ReportsView({
               )}
 
               {needsMember && (
-                <ERPFormField label={t("reports.selectMember", { defaultValue: "Target Member" })}>
-                  <AppDropdown
-                    options={memberOptions}
-                    value={selectedMemberId}
-                    onChange={(val) => setSelectedMemberId(val)}
+                <ERPFormField label={t("reports.selectMember", { defaultValue: "Target Member" })} required={memberRequired}>
+                    <AppMultiSelect
+                      options={memberOptions}
+                      values={memberSelection.all ? allMemberValues : memberSelection.ids}
+                      onChange={(ids, toggled) => {
+                        // C1: from "All members", toggling one member starts a
+                        // fresh single selection — handing the user the whole
+                        // id list (minus one) would be unmanageable.
+                        if (memberSelection.all && toggled) {
+                          setMemberSelection({ all: false, ids: [toggled.value] });
+                          return;
+                        }
+                        setMemberSelection({ all: false, ids });
+                      }}
                     placeholder={t("reports.selectMemberPlaceholder", { defaultValue: "Select member..." })}
+                    allEntry={{
+                      label: t("reports.allMembers", { defaultValue: "All members" }),
+                      active: memberSelection.all,
+                      onToggle: (active) =>
+                        setMemberSelection(active ? { all: true, ids: [] } : { all: false, ids: [] }),
+                    }}
                   />
                 </ERPFormField>
               )}
 
               {needsFund && (
-                <ERPFormField label={t("reports.selectFund", { defaultValue: "Target Fund" })}>
+                <ERPFormField label={t("reports.selectFund", { defaultValue: "Target Fund" })} required={fundRequired}>
                   <AppDropdown
                     options={fundOptions}
                     value={selectedFundId}
@@ -410,6 +496,7 @@ export function ReportsView({
               variant="outline"
               size="md"
               onClick={handleView}
+              disabled={!isSelectionValid}
               icon={Eye}
             >
               {t("reports.viewButton", { defaultValue: "View Report" })}
@@ -420,6 +507,7 @@ export function ReportsView({
             size="md"
             onClick={handleGenerate}
             loading={isGenerating}
+            disabled={!isSelectionValid}
             icon={Download}
           >
             {t("reports.downloadButton", { defaultValue: "Generate & Export Document" })}

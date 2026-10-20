@@ -41,7 +41,8 @@ export async function register() {
         ALTER TABLE "members"
           ADD COLUMN IF NOT EXISTS "is_deleted" boolean NOT NULL DEFAULT false,
           ADD COLUMN IF NOT EXISTS "deleted_by" uuid,
-          ADD COLUMN IF NOT EXISTS "deletion_reason" varchar(500);
+          ADD COLUMN IF NOT EXISTS "deletion_reason" varchar(500),
+          ADD COLUMN IF NOT EXISTS "status_reason" varchar(50);
       `;
       await sql.unsafe(`
         DO $$

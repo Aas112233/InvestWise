@@ -11,6 +11,7 @@ import { ERPFiscalMonthPicker } from "@/components/ui/erp-fiscal-month-picker";
 import { TopSheet } from "@/components/ui/top-sheet";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
+import { memberDisplayName } from "@/lib/member-display";
 import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
 import { useLocale } from "@/lib/i18n";
 import { formatMoney } from "@/lib/formatters";
@@ -101,8 +102,14 @@ export function BulkDepositRequestModal({
     : null;
 
   const memberOptions = (membersQuery.data ?? [])
-    .filter((m) => m.status === "active")
-    .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
+    // Suspended members stay visible but disabled (marker explains why).
+    .filter((m) => m.status === "active" || m.status === "suspended")
+    .map((m) => ({
+      value: m.id,
+      label: memberDisplayName(m.name, m.status),
+      caption: m.memberId,
+      disabled: m.status === "suspended",
+    }));
   const fundOptions = (fundsQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
   const methodOptions = paymentMethods.map((m) => {
     const typeLabel = t(
@@ -116,10 +123,12 @@ export function BulkDepositRequestModal({
     return { value: m.name, label };
   });
   // Posting form: only the fiscal year the ledger is open for is offered, plus
-  // any year already selected so the field never renders blank.
-  const { yearOptionsIncluding, monthsFor } = useFiscalPeriodOptions();
-  const yearOptions = yearOptionsIncluding(depositFiscalYear || null);
-  const monthOptions = monthsFor(depositFiscalYear || null);
+  // any year already selected so the field never renders blank. Seeded from the
+  // header's fiscal-year selection, so the form opens on the year being worked.
+  const { yearOptionsIncluding, monthsFor, defaultPostableFiscalYear } = useFiscalPeriodOptions();
+  const effectiveFiscalYear = depositFiscalYear || defaultPostableFiscalYear || "";
+  const yearOptions = yearOptionsIncluding(effectiveFiscalYear || null);
+  const monthOptions = monthsFor(effectiveFiscalYear || null);
 
   const rowValid = (r: BulkRequestRow) =>
     !!r.memberId && AMOUNT_RE.test(r.amount.trim()) && parseFloat(r.amount) > 0 && r.trxId.trim().length > 0;
@@ -223,7 +232,7 @@ export function BulkDepositRequestModal({
             monthLabel={t("requestDeposit.bulk.month")}
             error={touched && !monthValid ? t("deposits.modal.selectMonth") : undefined}
             value={{
-              fiscalYear: depositFiscalYear || null,
+              fiscalYear: effectiveFiscalYear || null,
               month: depositMonth || null,
             }}
             onChange={(v) => {

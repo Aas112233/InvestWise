@@ -26,6 +26,16 @@ export interface Member {
   warningCount?: number;
   performanceScore?: number;
   status: "active" | "pending" | "inactive" | "suspended" | string;
+  /**
+   * WHY the member is not active (lib/governance/status-rules.ts
+   * MEMBER_STATUS_REASON): DEPOSIT_NON_COMPLIANCE | EQUITY_TRANSFERRED_OUT |
+   * ADMIN_MANUAL. Null/absent when active.
+   */
+  statusReason?:
+    | "DEPOSIT_NON_COMPLIANCE"
+    | "EQUITY_TRANSFERRED_OUT"
+    | "ADMIN_MANUAL"
+    | null;
   avatar?: string;
   joinDate?: string;
   createdAt?: string;

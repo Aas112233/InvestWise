@@ -677,11 +677,12 @@ await sql.begin(async (tx) => {
 
   // 4) members
   const memberRows = members.map((m, i) => mk(
-    ['id','member_id','name','email','phone','role','shares','total_contributed','status','monthly_deposit_target','deposit_frequency','join_date','last_deposit_month','total_arrears','nid_or_passport','father_name','mother_name','spouse_name','address','nominee_name','nominee_relation','nominee_phone','warning_count','performance_score','user_id','has_user_access','tenant_id','created_at','updated_at'],
+    ['id','member_id','name','email','phone','role','shares','total_contributed','status','status_reason','monthly_deposit_target','deposit_frequency','join_date','last_deposit_month','total_arrears','nid_or_passport','father_name','mother_name','spouse_name','address','nominee_name','nominee_relation','nominee_phone','warning_count','performance_score','user_id','has_user_access','tenant_id','created_at','updated_at'],
     {
       id: memberIds[i], member_id: m.memberId, name: m.name, email: m.email, phone: m.phone,
       role: m.founding ? 'Founding Member' : 'Member', shares: m.shares,
       total_contributed: contributed[i], status: m.status,
+      status_reason: m.status === 'suspended' ? 'ADMIN_MANUAL' : m.status === 'inactive' ? 'DEPOSIT_NON_COMPLIANCE' : null,
       monthly_deposit_target: m.target, deposit_frequency: 'monthly',
       join_date: m.joinDate, last_deposit_month: lastDepositMonth[i],
       total_arrears: (arrearsByMember.get(i) || []).reduce((s, a) => s + a.required, 0),

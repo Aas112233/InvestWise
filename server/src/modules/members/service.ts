@@ -33,6 +33,8 @@ const MEMBER_FIELDS = {
   shares: members.shares,
   totalContributed: members.totalContributed,
   status: members.status,
+  // WHY the member is not active — the directory renders it next to the badge.
+  statusReason: members.statusReason,
   avatar: members.avatar,
   joinDate: members.joinDate,
   totalArrears: members.totalArrears,

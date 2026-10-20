@@ -3,6 +3,7 @@ import type { getDb } from '@/db/index';
 import { funds, members, transactions } from '@/db/schema/index';
 import { toCents, fromCents } from '@/lib/money';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/utils/errors';
+import { assertMemberNotSuspended } from '@/lib/member-display';
 
 type DbTransaction = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
 
@@ -89,7 +90,7 @@ export async function investProjectCapital(
   const shareholderIds = shareholders.map((s) => s.memberId).sort();
   const lockedMembers = shareholderIds.length
     ? await tx
-        .select({ id: members.id, name: members.name, totalContributed: members.totalContributed })
+         .select({ id: members.id, name: members.name, status: members.status, totalContributed: members.totalContributed })
         .from(members)
         .where(and(inArray(members.id, shareholderIds), eq(members.tenantId, tenantId)))
         .orderBy(members.id)
@@ -154,6 +155,9 @@ export async function investProjectCapital(
     if (!member) {
       throw new ValidationError(`Member not found: ${sh.memberId}`);
     }
+    // Suspended members cannot be (re-)invested into a project — the equity
+    // deduction below would move a suspended member's money into the pool.
+    assertMemberNotSuspended(member, 'investing in a project');
 
     const requiredAmountCents = toCents(sh.shares * shareValue);
     totalCents += requiredAmountCents;

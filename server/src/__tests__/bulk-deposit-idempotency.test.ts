@@ -110,9 +110,18 @@ describe('bulk deposit idempotency', () => {
     const service = readFileSync(join(process.cwd(), 'server/src/modules/finance/service.ts'), 'utf8');
     const block = handler.slice(handler.indexOf('export async function handleBulkAddDeposits'));
     expect(block.indexOf("requirePermission('DEPOSITS', 'WRITE')")).toBeLessThan(block.indexOf('validateBody(request'));
-    expect(block.match(/consumeBucket\(/g)).toHaveLength(2);
+    // Both dimensions are still enforced — now in ONE shared budget helper, so
+    // the bulk POST and the month-grid read cannot drift apart (one of them
+    // silently losing a dimension is exactly the regression this guards).
+    const limiter = handler.slice(
+      handler.indexOf('async function enforceRateLimit'),
+      handler.indexOf('export async function handleBulkAddDeposits'),
+    );
+    expect(limiter.match(/consumeBucket\(/g)).toHaveLength(2);
+    expect(limiter).toContain("code: 'RATE_LIMITED'");
+    expect(limiter).toContain('RATE_LIMIT_UNAVAILABLE');
+    expect(block).toContain('enforceRateLimit(BULK_DEPOSIT_BUDGET');
     expect(block).toContain('BULK_DEPOSIT_MAX_BODY_BYTES');
-    expect(block).toContain("code: 'RATE_LIMITED'");
     expect(service.slice(service.indexOf('export async function bulkAddDeposits'))).toContain(
       'isAllowedDepositMethod(data.depositMethod',
     );

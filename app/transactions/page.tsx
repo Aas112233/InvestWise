@@ -7,9 +7,8 @@ import {
   TransactionsListView,
   TransactionRecord,
   SoftDeleteModal,
-  VoucherDrawer,
-  TransactionVoucherData,
 } from "@/components/transactions";
+import { openPrintTab } from "@/lib/documents";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { hasScreenPermission } from "@/lib/permissions";
@@ -40,9 +39,6 @@ export default function TransactionsPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
   const [typeFilter, setTypeFilter] = useState("");
-
-  const [selectedVoucher, setSelectedVoucher] = useState<TransactionVoucherData | null>(null);
-  const [isVoucherOpen, setIsVoucherOpen] = useState(false);
 
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionRecord | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -99,24 +95,11 @@ export default function TransactionsPage() {
     },
   });
 
-  const handleViewVoucher = (tx: TransactionRecord) => {
-    setSelectedVoucher({
-      id: tx.id,
-      referenceNumber: tx.referenceNumber,
-      date: tx.date,
-      type: tx.type,
-      amount: tx.amount,
-      category: tx.category,
-      description: tx.description,
-      memberName: tx.memberName,
-      memberCode: tx.memberCode,
-      fundName: tx.fundName,
-      projectName: tx.projectName,
-      depositMethod: tx.depositMethod,
-      handlingOfficer: tx.handlingOfficer,
-      status: tx.status,
-    });
-    setIsVoucherOpen(true);
+  // The voucher is a printable document, not an in-app panel: opening it in the
+  // shared print tab means the sheet the officer sees is the sheet the printer
+  // produces (A4, no app chrome, no scrim bleeding through the page).
+  const handlePrintVoucher = (tx: TransactionRecord) => {
+    openPrintTab("voucher", tx.id);
   };
 
   const handleOpenSoftDelete = (tx: TransactionRecord) => {
@@ -153,16 +136,9 @@ export default function TransactionsPage() {
           setPage(1);
         }}
         metrics={responseData?.metrics}
-        onViewVoucher={handleViewVoucher}
+        onPrintVoucher={handlePrintVoucher}
         onSoftDelete={handleOpenSoftDelete}
         canManage={canManage}
-      />
-
-      {/* Voucher Drawer */}
-      <VoucherDrawer
-        isOpen={isVoucherOpen}
-        onClose={() => setIsVoucherOpen(false)}
-        voucher={selectedVoucher}
       />
 
       {/* Soft Delete Modal */}

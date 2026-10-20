@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, MoreVertical, Pencil, Plus, Printer, RefreshCw, Search, ShieldCheck, Trash2, Undo2, Users, XCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AppDropdown } from "@/components/ui/app-dropdown";
@@ -19,7 +19,9 @@ import { hasScreenPermission } from "@/lib/permissions";
 import { isSuperAdminRole, normalizeRole } from "@/lib/roles";
 import { formatDateOnly, formatDatePattern, formatMoney } from "@/lib/formatters";
 import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
+import { useFiscalYearSync } from "@/lib/fiscal-year-context";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 import {
   depositStatusTone,
   monthKeyOf,
@@ -493,7 +495,7 @@ export function DepositsListView({
 
   const allMemberOptions = (membersQuery.data ?? []).map((m) => ({
     value: m.id,
-    label: m.name,
+    label: memberDisplayName(m.name, m.status),
     caption: m.memberId,
   }));
   // Locked scope shows only its own member — no hidden directory of everyone.
@@ -508,7 +510,22 @@ export function DepositsListView({
   ];
   // Period filter options come from the tenant's fiscal calendar (§8), so the
   // desk filters by the same FY periods the forms record against.
-  const { yearOptions, monthsFor } = useFiscalPeriodOptions();
+  // A READ screen: the filter offers every created year (Open and Closed),
+  // because the header's fiscal-year selector can point at a closed year and
+  // its history is exactly what the desk filters for. Posting forms stay on the
+  // OPEN-only `yearOptions`.
+  const { yearOptionsAll: yearOptions, monthsFor } = useFiscalPeriodOptions();
+
+  // Header year is the app-wide period: when it moves, this filter follows it
+  // and drops any month picked in the previous year — a filter that kept
+  // pointing at 2025-11 while the header reads FY 2026-27 would silently show
+  // an empty list. The month stays unset, so the filter never narrows on its own.
+  const syncHeaderYear = useCallback((year: string | null) => {
+    setMonth((prev) => (prev.fiscalYear === year ? prev : { fiscalYear: year, month: null }));
+    setPage(1);
+  }, []);
+  useFiscalYearSync(syncHeaderYear);
+
   const monthOptions = monthsFor(month.fiscalYear);
 
   const busy = reviewMutation.isPending || deleteMutation.isPending || revertMutation.isPending;

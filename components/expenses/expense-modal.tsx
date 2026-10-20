@@ -16,6 +16,7 @@ import { NumericInput } from "@/components/ui/numeric-input";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 import { formatMoney, todayLocalIso } from "@/lib/formatters";
 import { Plus, Loader2 } from "lucide-react";
 
@@ -30,6 +31,7 @@ interface MemberOption {
   id: string;
   name: string;
   memberId: string;
+  status?: string;
 }
 
 interface UserOption {
@@ -129,7 +131,9 @@ export function ExpenseModal({ isOpen, onClose, currency = "BDT" }: ExpenseModal
 
   const memberOptions: DropdownOption[] = membersList.map((m) => ({
     value: m.id,
-    label: m.memberId ? `${m.memberId} — ${m.name}` : m.name,
+    label: m.memberId ? `${m.memberId} — ${memberDisplayName(m.name, m.status)}` : memberDisplayName(m.name, m.status),
+    // Suspended members are blocked server-side too (400 member_suspended).
+    disabled: m.status === "suspended",
   }));
 
   const approverOptions: DropdownOption[] = usersList

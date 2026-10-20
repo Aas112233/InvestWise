@@ -122,14 +122,71 @@ export function useDepositsList(params: {
   });
 }
 
+/** One month of a member's fiscal-year deposit grid. */
+export interface MemberDepositMonthCell {
+  /** Absolute calendar month, YYYY-MM. */
+  month: string;
+  /** A settled deposit or a pending request already holds the month. */
+  occupied: boolean;
+  status: string | null;
+  category: string | null;
+  /** Money already recorded for the month (decimal(15,2) string). */
+  amount: string | null;
+  transactionId: string | null;
+  referenceNumber: string | null;
+  /** Held by a pending request — it must be approved/rejected, not reverted. */
+  pendingRequest: boolean;
+}
+
+export interface MemberDepositMonths {
+  member: {
+    id: string;
+    name: string;
+    memberId: string;
+    status: string | null;
+    shares: number;
+    totalContributed: string | null;
+    lastDepositMonth: string | null;
+  };
+  fiscalYear: string;
+  fiscalYearStart: string;
+  months: MemberDepositMonthCell[];
+}
+
+/**
+ * The month grid behind the single-member bulk collection: which months of one
+ * fiscal year already hold a deposit for the member.
+ *
+ * The server expands the fiscal year from the tenant's own calendar and applies
+ * the SAME occupancy rule the bulk POST enforces, so a month this feed reports
+ * as taken is exactly a month the write would refuse. Keyed under the
+ * `["deposits"]` prefix: any deposit mutation invalidates it automatically, and
+ * the grid re-greys the month that was just recorded.
+ *
+ * Not fetched until both a member and a year are chosen — the endpoint answers
+ * one member per call and must never be driven speculatively.
+ */
+export function useMemberDepositMonths(memberId: string | null, fiscalYear: string | null) {
+  return useQuery({
+    queryKey: ["deposits", "month-status", { memberId, fiscalYear }],
+    enabled: Boolean(memberId && fiscalYear),
+    staleTime: 15_000,
+    queryFn: async (): Promise<MemberDepositMonths> => {
+      const res = await apiClient<MemberDepositMonths & { success: boolean }>("/finance/deposits/month-status", {
+        params: { memberId, fiscalYear },
+      });
+      return res;
+    },
+  });
+}
+
 /**
  * Monthly collection total for the deposits header.
  *
  * Previously this fetched pageSize:1000 full deposit rows (with member/fund
  * joins) and summed them in the browser — a heavy round trip for one number.
  * Now it asks the server for a SUM aggregate: one row back.
- */
-export function useDepositsMonthlyTotal(
+ */export function useDepositsMonthlyTotal(
   startDate: string | null,
   endDate: string | null,
   memberId: string | null = null,

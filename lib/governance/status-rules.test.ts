@@ -4,6 +4,7 @@ import {
   DEFAULT_GOVERNANCE_RULES,
   GOVERNANCE_RULE_BOUNDS,
   MEMBER_STATUS,
+  MEMBER_STATUS_REASON,
   GovernanceRuleError,
   addMonthsToPeriodKey,
   allocateDepositsToPeriods,
@@ -401,6 +402,62 @@ describe("evaluateStatusTransition", () => {
     });
     expect(r.currentStatus).toBe(MEMBER_STATUS.ACTIVE);
     expect(r.transition).toBe("AUTO_HOLD");
+  });
+
+  it("auto-restores a deposit-held member (reason owned by the sweep)", () => {
+    const r = evaluateStatusTransition({
+      currentStatus: MEMBER_STATUS.INACTIVE,
+      statusReason: MEMBER_STATUS_REASON.DEPOSIT_NON_COMPLIANCE,
+      monthsWithoutDeposit: 4,
+      hasQualifyingDeposit: true,
+      rules,
+    });
+    expect(r.transition).toBe("AUTO_RESTORE");
+    expect(r.nextStatus).toBe(MEMBER_STATUS.ACTIVE);
+    expect(r.autoApply).toBe(true);
+  });
+
+  it("treats a missing reason as deposit-driven (legacy rows)", () => {
+    const r = evaluateStatusTransition({
+      currentStatus: MEMBER_STATUS.INACTIVE,
+      statusReason: null,
+      monthsWithoutDeposit: 4,
+      hasQualifyingDeposit: true,
+      rules,
+    });
+    expect(r.transition).toBe("AUTO_RESTORE");
+    expect(r.autoApply).toBe(true);
+  });
+
+  it("never auto-restores a member inactive for a non-deposit reason", () => {
+    // Equity transferred out: the member holds nothing, so they have no
+    // outstanding deposit obligation and a naive rule would restore them on
+    // every sweep — silently erasing why they are inactive.
+    const r = evaluateStatusTransition({
+      currentStatus: MEMBER_STATUS.INACTIVE,
+      statusReason: MEMBER_STATUS_REASON.EQUITY_TRANSFERRED_OUT,
+      monthsWithoutDeposit: 0,
+      hasQualifyingDeposit: true,
+      rules,
+    });
+    expect(r.transition).toBe("NONE");
+    expect(r.nextStatus).toBe(MEMBER_STATUS.INACTIVE);
+    expect(r.autoApply).toBe(false);
+    expect(r.suspensionEligible).toBe(false);
+  });
+
+  it("leaves a manually held member for an explicit admin action", () => {
+    const r = evaluateStatusTransition({
+      currentStatus: MEMBER_STATUS.INACTIVE,
+      statusReason: MEMBER_STATUS_REASON.ADMIN_MANUAL,
+      monthsWithoutDeposit: 9,
+      hasQualifyingDeposit: false,
+      rules,
+    });
+    expect(r.transition).toBe("NONE");
+    expect(r.nextStatus).toBe(MEMBER_STATUS.INACTIVE);
+    expect(r.autoApply).toBe(false);
+    expect(r.suspensionEligible).toBe(false);
   });
 });
 

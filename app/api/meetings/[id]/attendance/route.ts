@@ -6,6 +6,7 @@ import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
 import { NotFoundError, ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
+import { isSuspendedStatus } from '@/lib/member-display';
 
 export async function POST(
   request: NextRequest,
@@ -69,15 +70,24 @@ export async function POST(
       // Resolve and lock only members owned by this tenant before linking them
       // to a meeting or changing warning counts. A meeting id alone does not
       // establish ownership of the client-supplied member ids.
-      const memberIds = uniqueItems.map((item) => item.memberId);
-      const ownedMembers = await tx
-        .select({ id: members.id })
-        .from(members)
-        .where(and(inArray(members.id, memberIds), eq(members.tenantId, tenantId)))
-        .for('update');
-      if (ownedMembers.length !== memberIds.length) {
-        throw new NotFoundError('One or more attendees');
-      }
+       const memberIds = uniqueItems.map((item) => item.memberId);
+       const ownedMembers = await tx
+         .select({ id: members.id, name: members.name, status: members.status })
+         .from(members)
+         .where(and(inArray(members.id, memberIds), eq(members.tenantId, tenantId)))
+         .for('update');
+       if (ownedMembers.length !== memberIds.length) {
+         throw new NotFoundError('One or more attendees');
+       }
+       // Suspended members are out of good standing — recording their
+       // attendance (or deposit status) must be blocked, and the error names
+       // every offender so one fix unblocks the whole sheet.
+       const suspended = ownedMembers.filter((m) => isSuspendedStatus(m.status));
+       if (suspended.length > 0) {
+         throw new ValidationError(
+           `[Field 'attendees', Code: member_suspended] ${suspended.map((m) => (m.name ?? m.id).trim()).join(', ')} ${suspended.length === 1 ? 'is' : 'are'} suspended — attendance cannot be recorded for suspended members. Reinstate them first.`,
+         );
+       }
 
       // One multi-row upsert on uq_meeting_member instead of a per-attendee
       // SELECT + UPDATE/INSERT (previously 2 round trips per attendee).

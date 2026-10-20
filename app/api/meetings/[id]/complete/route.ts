@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { meetings, meetingAttendees, members, memberPenalties, systemSettings } from '@/db/schema/index';
+import { memberDisplayNameSql } from '@/lib/member-display';
 import { eq, and, isNotNull } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
@@ -98,7 +99,7 @@ export async function POST(
       const absentees = await tx
         .select({
           memberId: meetingAttendees.memberId,
-          memberName: members.name,
+          memberName: memberDisplayNameSql,
           warningCount: members.warningCount,
         })
         .from(meetingAttendees)

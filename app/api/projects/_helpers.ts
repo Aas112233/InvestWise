@@ -3,7 +3,8 @@ import type { ZodError } from 'zod';
 import { getDb } from '@/db/index';
 import { funds } from '@/db/schema/index';
 import { eq, and } from 'drizzle-orm';
-import { getAuthContext, requireManagerOrAdmin, type AuthenticatedUser } from '@/lib/middleware/auth';
+import { getAuthContext, type AuthenticatedUser } from '@/lib/middleware/auth';
+import { hasScreenPermission } from '@/lib/permissions';
 import { ValidationError, ForbiddenError } from '@/lib/utils/errors';
 
 /**
@@ -21,14 +22,18 @@ export async function requireProjectContext(
   if (!tenantId) {
     return { error: NextResponse.json({ success: false, message: 'Tenant context required' }, { status: 403 }) };
   }
-  // §6/RBAC: writes require Manager/Admin/SuperAdmin (Auditor & Member are read-only).
-  if (write) {
-    try {
-      requireManagerOrAdmin(user);
-    } catch (err) {
-      const status = (err as { statusCode?: number }).statusCode || 403;
-      return { error: NextResponse.json({ success: false, message: (err as Error).message }, { status }) };
-    }
+  // §6/RBAC: the PROJECT_MANAGEMENT screen permission — the SAME evaluator as
+  // the sidebar/AppShell gate and the UI action buttons. A role-only check
+  // (the old requireManagerOrAdmin) ignored explicit per-user overrides, so a
+  // Manager with PROJECT_MANAGEMENT:"NONE" was blocked in the UI yet still
+  // wrote projects over the API.
+  if (!hasScreenPermission(user, 'PROJECT_MANAGEMENT', write ? 'WRITE' : 'READ')) {
+    return {
+      error: NextResponse.json(
+        { success: false, message: `Insufficient permissions: PROJECT_MANAGEMENT ${write ? 'write' : 'read'} required` },
+        { status: 403 },
+      ),
+    };
   }
   return { user, tenantId };
 }

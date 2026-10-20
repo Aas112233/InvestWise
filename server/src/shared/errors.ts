@@ -61,6 +61,22 @@ interface PgError extends Error {
 export function normalizeError(err: unknown): AppError {
   if (err instanceof AppError) return err;
 
+  // Cross-tree app errors: root `lib/utils/errors.ts` classes are a SEPARATE
+  // AppError hierarchy but share the { statusCode, code, message } contract.
+  // Without this branch a root ValidationError (e.g. thrown by the shared
+  // assertMemberNotSuspended helper) would fall into the PG check below —
+  // its string `code` matches no SQLSTATE — and surface as a masked 500
+  // instead of its intended 400. PG driver errors carry no numeric
+  // statusCode, so this never shadows the map below.
+  const appLike = err as { statusCode?: unknown; code?: unknown; message?: unknown } | null;
+  if (appLike && typeof appLike === 'object' && typeof appLike.statusCode === 'number') {
+    return new AppError(
+      typeof appLike.message === 'string' && appLike.message ? appLike.message : 'An unexpected error occurred',
+      appLike.statusCode,
+      typeof appLike.code === 'string' && appLike.code ? appLike.code : 'APP_ERROR',
+    );
+  }
+
   const pgErr = err as PgError;
   if (typeof pgErr?.code === 'string') {
     const mapped = PG_ERROR_MAP[pgErr.code];

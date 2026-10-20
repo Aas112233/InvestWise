@@ -18,6 +18,13 @@ export const members = pgTable('members', {
   shares: integer('shares').default(0).notNull(),
   totalContributed: decimal('total_contributed', { precision: 15, scale: 2 }).default('0'),
   status: varchar('status', { length: 50 }).default('active'),
+  // WHY the member is not active (lib/governance/status-rules.ts
+  // MEMBER_STATUS_REASON): DEPOSIT_NON_COMPLIANCE | EQUITY_TRANSFERRED_OUT |
+  // ADMIN_MANUAL. Null = active, or a legacy row predating this column. Kept
+  // separate from `status` so the coarse lifecycle state is never overloaded
+  // with the cause (two inactive members can be inactive for different
+  // reasons, and the sweep must not auto-restore one it did not hold).
+  statusReason: varchar('status_reason', { length: 50 }),
   avatar: varchar('avatar'),
   lastActive: timestamp('last_active', { withTimezone: true }).defaultNow(),
   monthlyDepositTarget: decimal('monthly_deposit_target', { precision: 15, scale: 2 }).default('0'),

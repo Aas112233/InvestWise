@@ -179,6 +179,32 @@ export function DocField({ label, children }: { label: string; children: React.R
   );
 }
 
+/**
+ * Void banner — a retracted ledger row must never print as a live document.
+ * Monochrome rule: a bordered stamp survives a printer set to no colour.
+ */
+export function DocVoidStamp({ label, dateLabel }: { label: string; dateLabel?: string }) {
+  return (
+    <div
+      style={{
+        border: "1.5px solid #111827",
+        padding: "3.5mm 4mm",
+        marginBottom: "7mm",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "baseline",
+        gap: "8mm",
+        ...KEEP,
+      }}
+    >
+      <span style={{ fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.14em", color: INK, ...WRAP }}>{label}</span>
+      {dateLabel ? (
+        <span style={{ fontSize: 11, color: MUTED, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{dateLabel}</span>
+      ) : null}
+    </div>
+  );
+}
+
 export function DocSectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.09em", color: FAINT, fontWeight: 600, margin: "6mm 0 2mm" }}>

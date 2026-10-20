@@ -174,7 +174,13 @@ export async function buildExcelBuffer(doc: ReportDocument): Promise<Buffer> {
   const totals = new Map<string, string>();
   for (const col of doc.columns) {
     if (col.total) {
-      totals.set(col.key, sumDecimal(doc.rows.map((r) => r[col.key] as string | number | null)));
+      // #103, exporter edition: the data layer's full-set total wins — the
+      // table is capped at 5,000 rows, so re-summing the listed rows would
+      // ship a totals figure that disagrees with the summary strip.
+      totals.set(
+        col.key,
+        doc.columnTotals?.[col.key] ?? sumDecimal(doc.rows.map((r) => r[col.key] as string | number | null)),
+      );
     }
   }
 

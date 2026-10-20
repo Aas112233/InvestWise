@@ -16,6 +16,7 @@ import {
 import { NumericInput } from "@/components/ui/numeric-input";
 import { Plus, Trash2, AlertCircle, Info, Landmark, Layers, Lock } from "lucide-react";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 import { Project, Member } from "@/types";
 import { formatMoney } from "@/lib/formatters";
 import { intlLocaleFor } from "./project-labels";
@@ -136,7 +137,11 @@ export function ProjectFormModal({
     const depositBal = Number(m.totalContributed || 0);
     return {
       value: m.id,
-      label: `${m.name} (${m.memberId}) — Bal: ${fm(depositBal)}`,
+      label: `${memberDisplayName(m.name, m.status)} (${m.memberId}) — Bal: ${fm(depositBal)}`,
+      // Suspended members cannot be assigned to new work; the current manager
+      // of the edited project stays selectable so the field never blanks
+      // (manager persists as the member's name in projectFundHandler).
+      disabled: m.status === "suspended" && m.name !== initialData?.projectFundHandler,
     };
   });
 
@@ -207,7 +212,11 @@ export function ProjectFormModal({
   // an edit has already deducted.
   const shareholderMemberOptions: DropdownOption[] = members.map((m) => ({
     value: m.id,
-    label: `${m.name} (${m.memberId}) — Bal: ${fm(Number(m.totalContributed || 0) + (committedByMember.get(m.id) ?? 0))}`,
+    label: `${memberDisplayName(m.name, m.status)} (${m.memberId}) — Bal: ${fm(Number(m.totalContributed || 0) + (committedByMember.get(m.id) ?? 0))}`,
+    // Suspended members cannot (re-)invest in a project — the server rejects
+    // it; the UI says so up front. An existing allocation on the edited
+    // project stays selectable so its row is never blanked.
+    disabled: m.status === "suspended" && !initialData?.involvedMembers?.some((p) => p.memberId === m.id),
   }));
 
   const handleAddShareholder = () => {

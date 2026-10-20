@@ -13,9 +13,10 @@ import {
   users,
   memberPenalties,
 } from "@/db/schema/index";
-import { aliasedTable, and, asc, count, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
-import { fromCents } from "@/lib/money";
+import { aliasedTable, and, asc, count, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import { fromCents, toCents } from "@/lib/money";
 import { SETTLED_DEPOSIT_STATUSES } from "@/lib/ledger-selectors";
+import { memberDisplayNameSql } from "@/lib/member-display";
 import {
   getReportDefinition,
   REPORT_MAX_ROWS,
@@ -79,6 +80,14 @@ export interface ReportData {
   rows: Record<string, string | number | null>[];
   summary: ReportSummaryEntry[];
   truncated: boolean;
+  /**
+   * Authoritative totals for the `total: true` columns, computed over the
+   * FULL filtered set — the table is capped at REPORT_MAX_ROWS, a totals row
+   * that re-summed the listed rows would silently understate it (#103,
+   * exporter edition). Exporters and the viewer render these, falling back
+   * to summing the rows only when a builder did not provide them.
+   */
+  columnTotals?: Record<string, string>;
 }
 
 export interface ReportDocument {
@@ -99,6 +108,8 @@ export interface ReportDocument {
   rows: Record<string, string | number | null>[];
   /** Localized "Total" label for the table totals row. */
   totalsLabel: string;
+  /** Full-set totals for the `total` columns (see ReportData.columnTotals). */
+  columnTotals?: Record<string, string>;
   truncated: boolean;
   truncatedNote: string;
   footerNote: string;
@@ -150,6 +161,8 @@ interface TxRow {
   depositMonth: string;
   reference: string;
   type: string;
+  /** Member's internal id (null for fund-only rows) — lets builders resolve per-member data. */
+  memberId: string | null;
   member: string;
   memberCode: string;
   fund: string;
@@ -196,10 +209,16 @@ const C = {
   handlingOfficer: { key: "handlingOfficer", labelKey: "reports.columns.handlingOfficer", type: "text" } as ReportColumn,
   authorizedBy: { key: "authorizedBy", labelKey: "reports.columns.authorizedBy", type: "text" } as ReportColumn,
   status: { key: "status", labelKey: "reports.columns.status", type: "text" } as ReportColumn,
+  // Member lifecycle state (active/suspended/…) — deliberately a separate key
+  // from the transaction `status` so it is not run through the transaction
+  // status mapper in buildReportDocument.
+  memberStatus: { key: "memberStatus", labelKey: "reports.columns.status", type: "text" } as ReportColumn,
   expenseName: { key: "expenseName", labelKey: "reports.columns.expenseName", type: "text" } as ReportColumn,
   fundName: { key: "fundName", labelKey: "reports.columns.fundName", type: "text" } as ReportColumn,
   fundType: { key: "fundType", labelKey: "reports.columns.fundType", type: "text" } as ReportColumn,
-  balance: { key: "balance", labelKey: "reports.columns.balance", type: "money", total: true } as ReportColumn,
+  // No totals row: fund balances can sit in different currencies, and a
+  // single grand total would add amounts the currency cannot mix.
+  balance: { key: "balance", labelKey: "reports.columns.balance", type: "money" } as ReportColumn,
   currency: { key: "currency", labelKey: "reports.columns.currency", type: "text" } as ReportColumn,
   custodian: { key: "custodian", labelKey: "reports.columns.custodian", type: "text" } as ReportColumn,
   accountNumber: { key: "accountNumber", labelKey: "reports.columns.accountNumber", type: "text" } as ReportColumn,
@@ -233,7 +252,6 @@ const C = {
 };
 
 const S = {
-  period: "reports.summary.period",
   asOf: "reports.summary.asOf",
   project: "reports.summary.project",
   member: "reports.summary.member",
@@ -252,6 +270,7 @@ const S = {
   totalProjectExpenses: "reports.summary.totalProjectExpenses",
   totalDisbursements: "reports.summary.totalDisbursements",
   totalPenalties: "reports.summary.totalPenalties",
+  waivedPenalties: "reports.summary.waivedPenalties",
   totalLiquidity: "reports.summary.totalLiquidity",
   activeFunds: "reports.summary.activeFunds",
   partners: "reports.summary.partners",
@@ -290,29 +309,46 @@ async function fetchTransactionRows(opts: {
   /** Active report locale — ledger narrations are localized at render time. */
   locale: ReportLocale;
   period?: ResolvedPeriod;
-  memberId?: string | null;
+  /** Selected member ids; empty/absent = no per-member filter (whole book). */
+  memberIds?: string[] | null;
   projectId?: string | null;
   fundId?: string | null;
   types?: string[];
-}): Promise<{ rows: TxRow[]; truncated: boolean; totals: { inflow: string; outflow: string; rowCount: number } }> {
+  /**
+   * Read member-by-member (A's block, then B's block) instead of interleaving
+   * members chronologically — builders set this when the explicit member
+   * scope covers more than one member (see shouldGroupByMember).
+   */
+  groupByMember?: boolean;
+}): Promise<{
+  rows: TxRow[];
+  truncated: boolean;
+  /** Net settled movements before the period, for the running-balance seed. */
+  openingBalance: string;
+  totals: { inflow: string; outflow: string; amount: string; rowCount: number };
+}> {
   const db = getDb();
   const t = createServerT(opts.locale);
   const authorizer = aliasedTable(users, "report_authorizer");
 
-  const conditions = [
+  // Scope (tenant, soft-delete, member/project/fund/type) is shared by the
+  // row query, the full-set totals and the opening-balance aggregate; the
+  // period bounds apply to the rows and totals only.
+  const scopeConditions = [
     eq(transactions.tenantId, opts.tenantId),
     eq(transactions.isDeleted, false),
   ];
-  if (opts.period) {
-    conditions.push(gte(transactions.date, opts.period.start));
-    conditions.push(lte(transactions.date, opts.period.end));
+  if (opts.memberIds && opts.memberIds.length > 0) {
+    scopeConditions.push(inArray(transactions.memberId, opts.memberIds));
   }
-  if (opts.memberId) conditions.push(eq(transactions.memberId, opts.memberId));
-  if (opts.projectId) conditions.push(eq(transactions.projectId, opts.projectId));
-  if (opts.fundId) conditions.push(eq(transactions.fundId, opts.fundId));
+  if (opts.projectId) scopeConditions.push(eq(transactions.projectId, opts.projectId));
+  if (opts.fundId) scopeConditions.push(eq(transactions.fundId, opts.fundId));
   if (opts.types && opts.types.length > 0) {
-    conditions.push(inArray(transactions.type, opts.types));
+    scopeConditions.push(inArray(transactions.type, opts.types));
   }
+  const conditions = opts.period
+    ? [...scopeConditions, gte(transactions.date, opts.period.start), lte(transactions.date, opts.period.end)]
+    : scopeConditions;
 
   const fetched = await db
     .select({
@@ -326,10 +362,10 @@ async function fetchTransactionRows(opts: {
       referenceNumber: transactions.referenceNumber,
       depositMonth: transactions.depositMonth,
       depositMethod: transactions.depositMethod,
-      handlingOfficer: transactions.handlingOfficer,
-      status: transactions.status,
-      balanceAfter: transactions.balanceAfter,
-      memberName: members.name,
+       handlingOfficer: transactions.handlingOfficer,
+       status: transactions.status,
+       memberId: transactions.memberId,
+       memberName: memberDisplayNameSql,
       memberCode: members.memberId,
       fundName: funds.name,
       projectTitle: projects.title,
@@ -341,15 +377,37 @@ async function fetchTransactionRows(opts: {
     .leftJoin(members, and(eq(transactions.memberId, members.id), eq(members.tenantId, opts.tenantId)))
     .leftJoin(funds, and(eq(transactions.fundId, funds.id), eq(funds.tenantId, opts.tenantId)))
     .leftJoin(projects, and(eq(transactions.projectId, projects.id), eq(projects.tenantId, opts.tenantId)))
-    .leftJoin(authorizer, eq(transactions.authorizedBy, authorizer.id))
+     .leftJoin(authorizer, and(eq(transactions.authorizedBy, authorizer.id), eq(authorizer.tenantId, opts.tenantId)))
     .where(and(...conditions))
-    .orderBy(asc(transactions.date), asc(transactions.createdAt), asc(transactions.id))
+    .orderBy(
+      // Date-first order interleaves members' rows (A, B, A, B) when several
+      // members are in scope — group by member instead, chronological order
+      // is kept inside each member's block.
+      ...(opts.groupByMember ? [asc(members.name)] : []),
+      asc(transactions.date),
+      asc(transactions.createdAt),
+      asc(transactions.id),
+    )
     .limit(REPORT_MAX_ROWS + 1);
 
   const truncated = fetched.length > REPORT_MAX_ROWS;
   const raw = truncated ? fetched.slice(0, REPORT_MAX_ROWS) : fetched;
 
-  let cumulativeCents = 0;
+  // Seed the running balance from the money that moved BEFORE the period —
+  // a cumulative built from zero printed the period's NET movement under a
+  // "Running Balance" / "Closing Balance" label.
+  let openingCents = 0;
+  if (opts.period) {
+    const [opening] = await db
+      .select({
+        inflow: sql<string>`${signedSumSql("inflow")}::text`,
+        outflow: sql<string>`${signedSumSql("outflow")}::text`,
+      })
+      .from(transactions)
+      .where(and(...scopeConditions, lt(transactions.date, opts.period.start)));
+    openingCents = decimalToCents(opening?.inflow) - decimalToCents(opening?.outflow);
+  }
+  let cumulativeCents = openingCents;
   const rows: TxRow[] = raw.map((r) => {
     const amountCents = decimalToCents(r.amount);
     // #95: an unsettled row (PENDING request, REJECTED slip) is part of the
@@ -368,6 +426,7 @@ async function fetchTransactionRows(opts: {
       depositMonth: r.depositMonth ?? "",
       reference: r.referenceNumber ?? "",
       type: r.type,
+      memberId: r.memberId,
       member: emptyToBlank(r.memberName),
       memberCode: emptyToBlank(r.memberCode),
       fund: emptyToBlank(r.fundName),
@@ -389,11 +448,14 @@ async function fetchTransactionRows(opts: {
   });
 
   // One aggregate over the FULL filtered set (no joins, no limit): the table
-  // may be capped, the money figures must not be (#103).
+  // may be capped, the money figures must not be (#103). `amount` sums every
+  // listed-type row (including unsettled) — it is the full-set value of the
+  // Amount column, so the exporter totals row can stop re-summing capped rows.
   const [totals] = await db
     .select({
       inflow: sql<string>`${signedSumSql("inflow")}::text`,
       outflow: sql<string>`${signedSumSql("outflow")}::text`,
+      amount: sql<string>`coalesce(sum(${transactions.amount}::numeric), 0)::text`,
       rowCount: count(),
     })
     .from(transactions)
@@ -402,9 +464,11 @@ async function fetchTransactionRows(opts: {
   return {
     rows,
     truncated,
+    openingBalance: fromCents(openingCents),
     totals: {
       inflow: totals?.inflow ?? "0.00",
       outflow: totals?.outflow ?? "0.00",
+      amount: totals?.amount ?? "0.00",
       rowCount: Number(totals?.rowCount ?? 0),
     },
   };
@@ -424,14 +488,32 @@ async function lookupProjectName(tenantId: string, projectId: string): Promise<s
   return row?.title ?? null;
 }
 
+// Directory lookups exclude soft-deleted members (schema contract: the
+// directory/dropdown reads filter isDeleted = false) — a deleted member is
+// NOT a valid report target, so lookupEntityNames rejects the id and the
+// route 400s. Historical ledger rows still resolve names via the unfiltered
+// leftJoin, which is what should happen.
 async function lookupMember(tenantId: string, memberId: string): Promise<{ name: string; code: string; shares: number } | null> {
   const db = getDb();
   const [row] = await db
-    .select({ name: members.name, code: members.memberId, shares: members.shares })
+    .select({ name: memberDisplayNameSql, code: members.memberId, shares: members.shares })
     .from(members)
-    .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId)))
+    .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId), eq(members.isDeleted, false)))
     .limit(1);
   return row ? { name: row.name, code: row.code, shares: row.shares } : null;
+}
+
+/** Batched sibling of lookupMember — one query for a member scope list. */
+async function lookupMembers(
+  tenantId: string,
+  memberIds: string[],
+): Promise<Map<string, { name: string; code: string; shares: number }>> {
+  const db = getDb();
+  const rows = await db
+    .select({ id: members.id, name: memberDisplayNameSql, code: members.memberId, shares: members.shares })
+    .from(members)
+    .where(and(inArray(members.id, memberIds), eq(members.tenantId, tenantId), eq(members.isDeleted, false)));
+  return new Map(rows.map((r) => [r.id, { name: r.name, code: r.code, shares: r.shares }]));
 }
 
 async function lookupFund(tenantId: string, fundId: string): Promise<{ name: string } | null> {
@@ -445,20 +527,36 @@ async function lookupFund(tenantId: string, fundId: string): Promise<{ name: str
 }
 
 /**
- * Resolve scoped entity display names for the document summary. A null
- * result for a provided id means the entity does not belong to the tenant
- * (Rule §6 — the route rejects the request).
+ * Resolve scoped entity display names for the document summary. A missing
+ * name for a provided id means the entity does not belong to the tenant
+ * (Rule §6 — the route rejects the request). The member scope is a list:
+ * the joined line is capped so a 40-member export does not bloat the header.
  */
 export async function lookupEntityNames(
   tenantId: string,
-  ids: { projectId: string | null; memberId: string | null; fundId: string | null },
+  ids: { projectId: string | null; memberIds: string[] | null; fundId: string | null },
 ): Promise<{ projectName?: string; memberName?: string; fundName?: string }> {
   const project = ids.projectId ? await lookupProjectName(tenantId, ids.projectId) : null;
-  const member = ids.memberId ? await lookupMember(tenantId, ids.memberId) : null;
+  let memberName: string | undefined;
+  if (ids.memberIds && ids.memberIds.length > 0) {
+    const found = await lookupMembers(tenantId, ids.memberIds);
+    if (ids.memberIds.some((id) => !found.has(id))) {
+      // Cross-tenant or unknown id — empty marker the route rejects.
+      memberName = "";
+    } else {
+      const names = ids.memberIds.map((id) => {
+        const m = found.get(id)!;
+        return `${m.name} (${m.code})`;
+      });
+      // 3 names is the cap: this line sits in the summary strip, the PDF
+      // header and an Excel merged cell — beyond that it stops reading.
+      memberName = names.length > 3 ? `${names.slice(0, 3).join(", ")} (+${names.length - 3})` : names.join(", ");
+    }
+  }
   const fund = ids.fundId ? await lookupFund(tenantId, ids.fundId) : null;
   return {
     projectName: project ?? undefined,
-    memberName: member ? `${member.name} (${member.code})` : undefined,
+    memberName,
     fundName: fund?.name ?? undefined,
   };
 }
@@ -471,29 +569,44 @@ interface BuildArgs {
   definition: ReportDefinition;
   ctx: ReportRequestContext;
   period: ResolvedPeriod;
-  periodParams: ReportPeriodParams;
   projectId: string | null;
-  memberId: string | null;
+  /** Selected member ids; null = no per-member filter (whole book or "All"). */
+  memberIds: string[] | null;
+  /** The user explicitly scoped members (an id list or the "All" sentinel). */
+  memberScoped: boolean;
   fundId: string | null;
+}
+
+/**
+ * An explicit member scope covering more than one member (2+ ids, or the
+ * "all" sentinel) is read member-by-member; chronological order alone
+ * interleaves members' rows. Single-member and member-unscoped reports
+ * keep the plain chronological order.
+ */
+export function shouldGroupByMember(args: Pick<BuildArgs, "memberIds" | "memberScoped">): boolean {
+  return args.memberScoped && !(args.memberIds && args.memberIds.length === 1);
 }
 
 function entitySummary(args: BuildArgs): ReportSummaryEntry[] {
   const entries: ReportSummaryEntry[] = [];
   if (args.projectId) entries.push({ labelKey: S.project, value: "(project)" });
-  if (args.memberId) entries.push({ labelKey: S.member, value: "(member)" });
+  // Covers one / many / "all" — the value is swapped for the resolved member
+  // line (joined names or the localized "All members") in buildReportDocument.
+  if (args.memberScoped) entries.push({ labelKey: S.member, value: "(member)" });
   if (args.fundId) entries.push({ labelKey: S.fund, value: "(fund)" });
   return entries;
 }
 
 async function buildLedger(args: BuildArgs, types?: string[]): Promise<ReportData> {
-  const { rows, truncated, totals } = await fetchTransactionRows({
+  const { rows, truncated, openingBalance, totals } = await fetchTransactionRows({
     tenantId: args.ctx.tenantId,
     locale: args.ctx.locale,
     period: args.period,
-    memberId: args.memberId,
+    memberIds: args.memberIds,
     projectId: args.projectId,
     fundId: args.fundId,
     types,
+    groupByMember: shouldGroupByMember(args),
   });
 
   const columns: ReportColumn[] = [
@@ -520,12 +633,13 @@ async function buildLedger(args: BuildArgs, types?: string[]): Promise<ReportDat
   // #103: totals and closing balance come from the aggregate over the whole
   // period. Summing the listed rows silently understated a capped statement —
   // `meridian`'s FY2025 ledger has 7,505 rows against a 5,000-row cap, so the
-  // signed "Closing Balance" was missing 2,505 movements. Uncapped reports are
-  // unaffected: this is the same sum the last listed running balance held.
+  // signed "Closing Balance" was missing 2,505 movements. The closing balance
+  // is OPENING + period net: a cumulative built from zero printed the period's
+  // delta under a "balance" label.
   const totalOutflow = totals.outflow;
   const totalInflow = totals.inflow;
   const netCents = decimalToCents(totalInflow) - decimalToCents(totalOutflow);
-  const closing = fromCents(netCents);
+  const closing = fromCents(decimalToCents(openingBalance) + netCents);
 
   return {
     definition: args.definition,
@@ -535,15 +649,18 @@ async function buildLedger(args: BuildArgs, types?: string[]): Promise<ReportDat
       ...entitySummary(args),
       { labelKey: S.totalInflow, value: formatMoneyWithCurrency(totalInflow, args.ctx.currency) },
       { labelKey: S.totalOutflow, value: formatMoneyWithCurrency(totalOutflow, args.ctx.currency) },
-      { labelKey: S.netCashFlow, value: formatMoneyWithCurrency(fromCents(netCents), args.ctx.currency) },
-      { labelKey: S.closingBalance, value: formatMoneyWithCurrency(closing, args.ctx.currency) },
-      { labelKey: S.rowCount, value: String(totals.rowCount) },
-    ],
-    truncated,
-  };
-}
+       { labelKey: S.netCashFlow, value: formatMoneyWithCurrency(fromCents(netCents), args.ctx.currency) },
+       { labelKey: S.closingBalance, value: formatMoneyWithCurrency(closing, args.ctx.currency) },
+       { labelKey: S.rowCount, value: String(totals.rowCount) },
+     ],
+     truncated,
+     // Debit/credit totals = the full-set aggregates (the settled
+     // classification is exactly what the per-row debit/credit columns hold).
+     columnTotals: { debit: totalOutflow, credit: totalInflow },
+   };
+ }
 
-async function buildFundsSummary(args: BuildArgs): Promise<ReportData> {
+ async function buildFundsSummary(args: BuildArgs): Promise<ReportData> {
   const db = getDb();
   const rows = await db
     .select({
@@ -569,28 +686,41 @@ async function buildFundsSummary(args: BuildArgs): Promise<ReportData> {
     status: f.status ?? "",
   }));
 
+  // One liquidity total PER currency — funds can hold different base
+  // currencies, and a single grand total would add BDT to USD.
+  const centsByCurrency = new Map<string, number>();
+  for (const r of data) {
+    centsByCurrency.set(r.currency, (centsByCurrency.get(r.currency) ?? 0) + toCents(r.balance));
+  }
+  const liquidity = [...centsByCurrency.entries()].map(([currency, cents]) => ({
+    labelKey: S.totalLiquidity,
+    value: formatMoneyWithCurrency(fromCents(cents), currency),
+  }));
+
   return {
     definition: args.definition,
     columns: [C.fundName, C.fundType, C.balance, C.currency, C.custodian, C.accountNumber, C.status],
     rows: data,
-    summary: [
-      { labelKey: S.activeFunds, value: String(data.length) },
-      { labelKey: S.totalLiquidity, value: sumDecimal(data.map((r) => r.balance)) },
-    ],
+    summary: [{ labelKey: S.activeFunds, value: String(data.length) }, ...liquidity],
     truncated: false,
   };
 }
 
 async function buildMemberHistory(args: BuildArgs): Promise<ReportData> {
-  const memberId = args.memberId as string;
-  const member = await lookupMember(args.ctx.tenantId, memberId);
+  const memberIds = args.memberIds ?? [];
+  // A single member keeps the personal summary line (name + shares held);
+  // a list or "all" falls back to the joined "(member)" placeholder, which
+  // buildReportDocument resolves via lookupEntityNames.
+  const firstId = memberIds.length === 1 ? memberIds[0] : undefined;
+  const member = firstId ? await lookupMember(args.ctx.tenantId, firstId) : null;
 
   const { rows, truncated, totals } = await fetchTransactionRows({
     tenantId: args.ctx.tenantId,
     locale: args.ctx.locale,
     period: args.period,
-    memberId,
+    memberIds,
     types: ["Deposit"],
+    groupByMember: shouldGroupByMember(args),
   });
 
   const data = rows.map((r) => ({
@@ -605,8 +735,12 @@ async function buildMemberHistory(args: BuildArgs): Promise<ReportData> {
   }));
 
   const summary: ReportSummaryEntry[] = [];
-  if (member) summary.push({ labelKey: S.member, value: `${member.name} (${member.code})` });
-  if (member) summary.push({ labelKey: S.sharesHeld, value: String(member.shares) });
+  if (member) {
+    summary.push({ labelKey: S.member, value: `${member.name} (${member.code})` });
+    summary.push({ labelKey: S.sharesHeld, value: String(member.shares) });
+  } else if (args.memberScoped) {
+    summary.push({ labelKey: S.member, value: "(member)" });
+  }
   // #95's rule, second door: this report listed PENDING requests and REJECTED
   // slips and then summed `amount` over every listed row, so a member's
   // "Total Deposits" was more than the money they had actually paid in.
@@ -619,6 +753,7 @@ async function buildMemberHistory(args: BuildArgs): Promise<ReportData> {
     rows: data,
     summary,
     truncated,
+    columnTotals: { amount: totals.amount },
   };
 }
 
@@ -627,20 +762,25 @@ async function buildMemberContribution(args: BuildArgs): Promise<ReportData> {
     tenantId: args.ctx.tenantId,
     locale: args.ctx.locale,
     period: args.period,
-    memberId: args.memberId,
+    memberIds: args.memberIds,
     types: ["Deposit"],
   });
 
-  const byMember = new Map<string, { code: string; name: string; shares: number; count: number; totalCents: number }>();
+  const byMember = new Map<string, { id: string | null; code: string; name: string; count: number; totalCents: number }>();
   for (const r of rows) {
     // #95's rule: an unsettled request is not a contribution.
     if (!(SETTLED_DEPOSIT_STATUSES as readonly string[]).includes(r.status ?? "")) continue;
     const key = r.memberCode || r.member;
-    const entry = byMember.get(key) ?? { code: r.memberCode, name: r.member, shares: 0, count: 0, totalCents: 0 };
+    const entry = byMember.get(key) ?? { id: r.memberId, code: r.memberCode, name: r.member, count: 0, totalCents: 0 };
     entry.count += 1;
     entry.totalCents += decimalToCents(r.amount);
     byMember.set(key, entry);
   }
+
+  // Share positions come from the members table (batched, tenant-scoped) —
+  // they were hard-coded 0 in the first cut of this report.
+  const idsWithMembers = [...byMember.values()].map((m) => m.id).filter((id): id is string => Boolean(id));
+  const sharesById = idsWithMembers.length > 0 ? await lookupMembers(args.ctx.tenantId, idsWithMembers) : new Map<string, { name: string; code: string; shares: number }>();
 
   const overallCents = [...byMember.values()].reduce((acc, m) => acc + m.totalCents, 0);
   const data = [...byMember.values()]
@@ -650,7 +790,7 @@ async function buildMemberContribution(args: BuildArgs): Promise<ReportData> {
       return {
         memberCode: m.code,
         member: m.name,
-        shares: m.shares,
+        shares: m.id ? (sharesById.get(m.id)?.shares ?? 0) : 0,
         depositsCount: m.count,
         totalDeposited: fromCents(m.totalCents),
         contributionShare: share,
@@ -662,7 +802,7 @@ async function buildMemberContribution(args: BuildArgs): Promise<ReportData> {
     columns: [C.memberCode, C.member, C.shares, C.depositsCount, C.totalDeposited, C.contributionShare],
     rows: data,
     summary: [
-      ...(args.memberId ? [{ labelKey: S.member, value: "(member)" }] : []),
+      ...(args.memberScoped ? [{ labelKey: S.member, value: "(member)" }] : []),
       { labelKey: S.totalContributions, value: fromCents(overallCents) },
       { labelKey: S.partners, value: String(data.length) },
     ],
@@ -672,10 +812,17 @@ async function buildMemberContribution(args: BuildArgs): Promise<ReportData> {
 
 async function buildStakeholderStatement(args: BuildArgs): Promise<ReportData> {
   const db = getDb();
-  const conditions = [eq(members.tenantId, args.ctx.tenantId)];
-  if (args.memberId) conditions.push(eq(members.id, args.memberId));
+  const conditions = [
+    eq(members.tenantId, args.ctx.tenantId),
+    // §7: a stakeholder statement is a DIRECTORY read — soft-deleted members
+    // are no longer stakeholders (historical ledgers still show their rows).
+    eq(members.isDeleted, false),
+  ];
+  if (args.memberIds && args.memberIds.length > 0) conditions.push(inArray(members.id, args.memberIds));
 
-  const rows = await db
+  // limit+1 + flag, like every other capped read — a 5,400-member tenant
+  // used to get a silently short statement with no cap note.
+  const fetched = await db
     .select({
       code: members.memberId,
       name: members.name,
@@ -690,7 +837,10 @@ async function buildStakeholderStatement(args: BuildArgs): Promise<ReportData> {
     .from(members)
     .where(and(...conditions))
     .orderBy(asc(members.name))
-    .limit(REPORT_MAX_ROWS);
+    .limit(REPORT_MAX_ROWS + 1);
+
+  const truncated = fetched.length > REPORT_MAX_ROWS;
+  const rows = truncated ? fetched.slice(0, REPORT_MAX_ROWS) : fetched;
 
   const data = rows.map((m) => ({
     memberCode: m.code ?? "",
@@ -701,31 +851,34 @@ async function buildStakeholderStatement(args: BuildArgs): Promise<ReportData> {
     shares: m.shares,
     totalContributed: m.totalContributed ?? "0.00",
     joinDate: m.joinDate ? new Date(m.joinDate).toISOString() : "",
-    status: m.status ?? "",
+    // Stored as `memberStatus` (not `status`) so buildReportDocument localizes
+    // it via members.statusLabels instead of the transaction status mapper.
+    memberStatus: m.status ?? "",
   }));
 
   return {
     definition: args.definition,
-    columns: [C.memberCode, C.member, C.email, C.phone, C.role, C.shares, C.totalContributed, C.joinDate, C.status],
+    columns: [C.memberCode, C.member, C.email, C.phone, C.role, C.shares, C.totalContributed, C.joinDate, C.memberStatus],
     rows: data,
     summary: [
       { labelKey: S.partners, value: String(data.length) },
       { labelKey: S.totalContributed, value: sumDecimal(data.map((r) => r.totalContributed)) },
     ],
-    truncated: false,
+    truncated,
+    columnTotals: { totalContributed: sumDecimal(data.map((r) => r.totalContributed)) },
   };
 }
 
 async function buildPenaltiesAudit(args: BuildArgs): Promise<ReportData> {
   const db = getDb();
   const conditions = [eq(memberPenalties.tenantId, args.ctx.tenantId)];
-  if (args.memberId) conditions.push(eq(memberPenalties.memberId, args.memberId));
+  if (args.memberIds && args.memberIds.length > 0) conditions.push(inArray(memberPenalties.memberId, args.memberIds));
   conditions.push(gte(memberPenalties.issuedAt, args.period.start));
   conditions.push(lte(memberPenalties.issuedAt, args.period.end));
 
   const rows = await db
     .select({
-      member: members.name,
+      member: memberDisplayNameSql,
       memberCode: members.memberId,
       tier: memberPenalties.tier,
       title: memberPenalties.title,
@@ -740,11 +893,28 @@ async function buildPenaltiesAudit(args: BuildArgs): Promise<ReportData> {
     .from(memberPenalties)
     .leftJoin(members, and(eq(memberPenalties.memberId, members.id), eq(members.tenantId, args.ctx.tenantId)))
     .where(and(...conditions))
-    .orderBy(desc(memberPenalties.issuedAt))
+    .orderBy(
+      // Multi-member scope: member blocks first (newest first inside each),
+      // same readability rule as the ledgers.
+      ...(shouldGroupByMember(args) ? [asc(members.name)] : []),
+      desc(memberPenalties.issuedAt),
+    )
     .limit(REPORT_MAX_ROWS + 1);
 
   const truncated = rows.length > REPORT_MAX_ROWS;
   const capped = truncated ? rows.slice(0, REPORT_MAX_ROWS) : rows;
+
+  // Full-set (uncapped) deduction totals, split by status: a waived penalty
+  // is audited history, not a live deduction — summing it into "Total Penalty
+  // Deductions" overstated the money taken (same class of error as #95 for
+  // unsettled transactions).
+  const [deductionTotals] = await db
+    .select({
+      active: sql<string>`coalesce(sum(case when ${memberPenalties.status} = 'ACTIVE' then ${memberPenalties.calculatedDeduction}::numeric else 0::numeric end), 0)::text`,
+      waived: sql<string>`coalesce(sum(case when ${memberPenalties.status} = 'WAIVED' then ${memberPenalties.calculatedDeduction}::numeric else 0::numeric end), 0)::text`,
+    })
+    .from(memberPenalties)
+    .where(and(...conditions));
 
   const data = capped.map((p) => ({
     issuedAt: p.issuedAt ? new Date(p.issuedAt).toISOString() : "",
@@ -760,11 +930,20 @@ async function buildPenaltiesAudit(args: BuildArgs): Promise<ReportData> {
     waiveReason: p.waiveReason ?? "",
   }));
 
-  const member = args.memberId ? await lookupMember(args.ctx.tenantId, args.memberId) : null;
+  // Single-member scope keeps the resolved name; a list or "all" uses the
+  // joined "(member)" placeholder resolved in buildReportDocument.
+  const penaltyMemberIds = args.memberIds ?? [];
+  const firstId = penaltyMemberIds.length === 1 ? penaltyMemberIds[0] : undefined;
+  const member = firstId ? await lookupMember(args.ctx.tenantId, firstId) : null;
 
   const summary: ReportSummaryEntry[] = [];
   if (member) summary.push({ labelKey: S.member, value: `${member.name} (${member.code})` });
-  summary.push({ labelKey: S.totalPenalties, value: sumDecimal(data.map((r) => r.deduction)) });
+  else if (args.memberScoped) summary.push({ labelKey: S.member, value: "(member)" });
+  summary.push({ labelKey: S.totalPenalties, value: deductionTotals?.active ?? "0.00" });
+  const waivedTotal = deductionTotals?.waived ?? "0.00";
+  if (decimalToCents(waivedTotal) > 0) {
+    summary.push({ labelKey: S.waivedPenalties, value: waivedTotal });
+  }
   summary.push({ labelKey: S.rowCount, value: String(data.length) });
 
   return {
@@ -773,23 +952,35 @@ async function buildPenaltiesAudit(args: BuildArgs): Promise<ReportData> {
     rows: data,
     summary,
     truncated,
+    // The table lists every status; the totals row counts the active deductions.
+    columnTotals: { deduction: deductionTotals?.active ?? "0.00" },
   };
 }
 
-async function buildTypeLedger(args: BuildArgs, types: string[]): Promise<{ rows: TxRow[]; truncated: boolean }> {
-  return fetchTransactionRows({
+/**
+ * Shared fetch for the single-column "amount" reports. Returns the full-set
+ * Amount total (`amountTotal`) so callers can put the uncapped figure in the
+ * summary and the totals row instead of re-summing the capped rows.
+ */
+async function buildTypeLedger(
+  args: BuildArgs,
+  types: string[],
+): Promise<{ rows: TxRow[]; truncated: boolean; amountTotal: string }> {
+  const result = await fetchTransactionRows({
     tenantId: args.ctx.tenantId,
     locale: args.ctx.locale,
     period: args.period,
-    memberId: args.memberId,
+    memberIds: args.memberIds,
     projectId: args.projectId,
     fundId: args.fundId,
     types,
+    groupByMember: shouldGroupByMember(args),
   });
+  return { rows: result.rows, truncated: result.truncated, amountTotal: result.totals.amount };
 }
 
 async function buildRevenueAnalytics(args: BuildArgs): Promise<ReportData> {
-  const { rows, truncated } = await buildTypeLedger(args, ["Deposit", "Earning", "Interest"]);
+  const { rows, truncated, amountTotal } = await buildTypeLedger(args, ["Deposit", "Earning", "Interest"]);
   const data = rows.map((r) => ({
     date: r.dateIso, type: r.type, member: r.member, fund: r.fund,
     project: r.project, amount: r.amount, category: r.category, description: r.description,
@@ -799,15 +990,16 @@ async function buildRevenueAnalytics(args: BuildArgs): Promise<ReportData> {
     columns: [C.date, C.type, C.member, C.fund, C.project, C.amount, C.category, C.description],
     rows: data,
     summary: [
-      { labelKey: S.totalRevenue, value: sumDecimal(data.map((r) => r.amount)) },
+      { labelKey: S.totalRevenue, value: amountTotal },
       { labelKey: S.rowCount, value: String(data.length) },
     ],
     truncated,
+    columnTotals: { amount: amountTotal },
   };
 }
 
 async function buildSimpleTypeReport(args: BuildArgs, types: string[], summaryKey: string): Promise<ReportData> {
-  const { rows, truncated } = await buildTypeLedger(args, types);
+  const { rows, truncated, amountTotal } = await buildTypeLedger(args, types);
   const data = rows.map((r) => ({
     date: r.dateIso, type: r.type, member: r.member, memberCode: r.memberCode, fund: r.fund,
     project: r.project, amount: r.amount, reference: r.reference, category: r.category,
@@ -818,15 +1010,16 @@ async function buildSimpleTypeReport(args: BuildArgs, types: string[], summaryKe
     columns: [C.date, C.type, C.member, C.memberCode, C.fund, C.project, C.amount, C.reference, C.description, C.status],
     rows: data,
     summary: [
-      { labelKey: summaryKey, value: sumDecimal(data.map((r) => r.amount)) },
+      { labelKey: summaryKey, value: amountTotal },
       { labelKey: S.rowCount, value: String(data.length) },
     ],
     truncated,
+    columnTotals: { amount: amountTotal },
   };
 }
 
 async function buildExpenseAudit(args: BuildArgs): Promise<ReportData> {
-  const { rows, truncated } = await buildTypeLedger(args, ["Expense"]);
+  const { rows, truncated, amountTotal } = await buildTypeLedger(args, ["Expense"]);
   const data = rows.map((r) => ({
     date: r.dateIso, expenseName: r.expenseName, category: r.category, member: r.member,
     fund: r.fund, project: r.project, amount: r.amount, handlingOfficer: r.handlingOfficer,
@@ -834,7 +1027,7 @@ async function buildExpenseAudit(args: BuildArgs): Promise<ReportData> {
   }));
   const summary: ReportSummaryEntry[] = [
     ...(args.projectId ? [{ labelKey: S.project, value: "(project)" }] : []),
-    { labelKey: args.projectId ? S.totalProjectExpenses : S.totalExpenses, value: sumDecimal(data.map((r) => r.amount)) },
+    { labelKey: args.projectId ? S.totalProjectExpenses : S.totalExpenses, value: amountTotal },
     { labelKey: S.rowCount, value: String(data.length) },
   ];
   return {
@@ -843,11 +1036,12 @@ async function buildExpenseAudit(args: BuildArgs): Promise<ReportData> {
     rows: data,
     summary,
     truncated,
+    columnTotals: { amount: amountTotal },
   };
 }
 
 async function buildDisbursements(args: BuildArgs): Promise<ReportData> {
-  const { rows, truncated } = await buildTypeLedger(args, ["Project Investment", "Investment"]);
+  const { rows, truncated, amountTotal } = await buildTypeLedger(args, ["Project Investment", "Investment"]);
   const data = rows.map((r) => ({
     date: r.dateIso, reference: r.reference, member: r.member, project: r.project,
     fund: r.fund, amount: r.amount, category: r.category, status: r.status, description: r.description,
@@ -858,10 +1052,11 @@ async function buildDisbursements(args: BuildArgs): Promise<ReportData> {
     rows: data,
     summary: [
       ...(args.projectId ? [{ labelKey: S.project, value: "(project)" }] : []),
-      { labelKey: S.totalDisbursements, value: sumDecimal(data.map((r) => r.amount)) },
+      { labelKey: S.totalDisbursements, value: amountTotal },
       { labelKey: S.rowCount, value: String(data.length) },
     ],
     truncated,
+    columnTotals: { amount: amountTotal },
   };
 }
 
@@ -885,14 +1080,17 @@ async function fetchProjects(args: BuildArgs, orderBy: "title" | "roi") {
     })
     .from(projects)
     .where(eq(projects.tenantId, args.ctx.tenantId));
-  if (orderBy === "roi") {
-    return query.orderBy(desc(projects.expectedRoi)).limit(500);
-  }
-  return query.orderBy(asc(projects.title)).limit(500);
+  // Same cap discipline as every other report read: limit+1, honest flag.
+  const fetched =
+    orderBy === "roi"
+      ? await query.orderBy(desc(projects.expectedRoi)).limit(REPORT_MAX_ROWS + 1)
+      : await query.orderBy(asc(projects.title)).limit(REPORT_MAX_ROWS + 1);
+  const truncated = fetched.length > REPORT_MAX_ROWS;
+  return { rows: truncated ? fetched.slice(0, REPORT_MAX_ROWS) : fetched, truncated };
 }
 
 async function buildProjectPerformance(args: BuildArgs): Promise<ReportData> {
-  const rows = await fetchProjects(args, "title");
+  const { rows, truncated } = await fetchProjects(args, "title");
   const data = rows.map((p) => {
     const earningsCents = decimalToCents(p.totalEarnings);
     const expensesCents = decimalToCents(p.totalExpenses);
@@ -921,7 +1119,7 @@ async function buildProjectPerformance(args: BuildArgs): Promise<ReportData> {
       { labelKey: S.totalEarnings, value: sumDecimal(data.map((r) => r.totalEarnings)) },
       { labelKey: S.totalExpenses, value: sumDecimal(data.map((r) => r.totalExpenses)) },
     ],
-    truncated: false,
+    truncated,
   };
 }
 
@@ -931,7 +1129,7 @@ function formatIso(value: string | Date | null): string {
 }
 
 async function buildRoiAnalysis(args: BuildArgs): Promise<ReportData> {
-  const rows = await fetchProjects(args, "roi");
+  const { rows, truncated } = await fetchProjects(args, "roi");
   const data = rows.map((p) => {
     const earningsCents = decimalToCents(p.totalEarnings);
     const expensesCents = decimalToCents(p.totalExpenses);
@@ -958,12 +1156,12 @@ async function buildRoiAnalysis(args: BuildArgs): Promise<ReportData> {
     columns: [C.projectName, C.category, C.initialInvestment, C.totalEarnings, C.totalExpenses, C.netProfit, C.expectedRoi, C.actualRoi, C.variance, C.status],
     rows: data,
     summary: [{ labelKey: S.projects, value: String(data.length) }],
-    truncated: false,
+    truncated,
   };
 }
 
 async function buildVentureGrowth(args: BuildArgs): Promise<ReportData> {
-  const rows = await fetchProjects(args, "title");
+  const { rows, truncated } = await fetchProjects(args, "title");
   const data = rows.map((p) => {
     const earningsCents = decimalToCents(p.totalEarnings);
     const expensesCents = decimalToCents(p.totalExpenses);
@@ -996,7 +1194,7 @@ async function buildVentureGrowth(args: BuildArgs): Promise<ReportData> {
       { labelKey: S.projects, value: String(data.length) },
       { labelKey: S.totalEarnings, value: sumDecimal(data.map((r) => r.totalEarnings)) },
     ],
-    truncated: false,
+    truncated,
   };
 }
 
@@ -1026,8 +1224,7 @@ export async function fetchReportData(
   slug: string,
   ctx: ReportRequestContext,
   period: ResolvedPeriod,
-  periodParams: ReportPeriodParams,
-  ids: { projectId: string | null; memberId: string | null; fundId: string | null },
+  ids: { projectId: string | null; memberIds: string[] | null; memberScoped: boolean; fundId: string | null },
 ): Promise<ReportData> {
   const definition = getReportDefinition(slug);
   if (!definition) {
@@ -1037,7 +1234,7 @@ export async function fetchReportData(
   if (!builder) {
     throw new Error(`Report type not implemented: ${slug}`);
   }
-  return builder({ definition, ctx, period, periodParams, ...ids });
+  return builder({ definition, ctx, period, ...ids });
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -1098,9 +1295,9 @@ export function buildReportDocument(
     if (/^-?\d+\.\d{2}$/.test(value)) value = formatMoneyWithCurrency(value, ctx.currency);
     return { label: t(entry.labelKey), value };
   });
-  if (data.truncated) {
-    summary.push({ label: t("reports.summary.truncatedNote"), value: "" });
-  }
+  // The truncation note is NOT a summary entry: it renders as the viewer's
+  // amber alert and the file footers' dedicated line — a second (empty-value)
+  // summary row used to print it twice in Excel/PDF.
 
   return {
     slug: definition.slug,
@@ -1136,13 +1333,22 @@ export function buildReportDocument(
       if (typeof out.health === "string" && out.health) out.health = getHealthLabel(out.health, t);
       if (typeof out.penaltyType === "string" && out.penaltyType)
         out.penaltyType = getPenaltyTypeLabel(out.penaltyType, t);
+      // Member lifecycle state (stakeholder statement): the members module's
+      // own status labels, not the transaction status mapper. Unknown values
+      // (a new lifecycle state added later) pass through verbatim.
+      if (typeof out.memberStatus === "string" && out.memberStatus) {
+        const key = `members.statusLabels.${out.memberStatus}`;
+        const translated = t(key);
+        out.memberStatus = translated === key ? out.memberStatus : translated;
+      }
       // Empty completion date = project still running — localized label.
       if (out.completionDate === "") out.completionDate = t("reports.columns.ongoing");
       return out;
     }),
     totalsLabel: t("reports.summary.total"),
+    columnTotals: data.columnTotals,
     truncated: data.truncated,
-    truncatedNote: t("reports.summary.truncatedNote"),
+    truncatedNote: t("reports.summary.truncatedNote", { max: REPORT_MAX_ROWS.toLocaleString("en-US") }),
     footerNote: t("reports.summary.confidential"),
     fileBase: `${definition.slug}_${now.toISOString().slice(0, 10)}`,
   };

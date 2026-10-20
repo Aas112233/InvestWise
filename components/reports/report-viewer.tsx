@@ -15,8 +15,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
 import { apiClient } from "@/lib/api-client";
-import { formatUtcDate } from "@/lib/reports/format";
-import type { ReportFormat, ReportPeriodType } from "@/lib/reports/catalog";
+import { formatMoneyNumber, formatUtcDate, totalForColumn } from "@/lib/reports/format";
+import type { ReportFormat, ReportLocale } from "@/lib/reports/catalog";
 
 export interface ReportDocumentPayload {
   slug: string;
@@ -39,6 +39,9 @@ export interface ReportDocumentPayload {
   columns: Array<{ key: string; label: string; type: string; total?: boolean }>;
   rows: Record<string, string | number | null>[];
   totalsLabel: string;
+  /** Full-set totals for `total` columns — the table is capped, so the
+   *  viewer must not re-sum the listed rows when the server provides these. */
+  columnTotals?: Record<string, string>;
   truncated: boolean;
   truncatedNote: string;
   footerNote: string;
@@ -54,10 +57,19 @@ export interface ReportViewerProps {
   onDownload?: (format: ReportFormat) => Promise<void> | void;
 }
 
+const DOCUMENT_LOCALES: ReportLocale[] = ["en", "ur", "hi", "bn"];
+
 export function ReportViewer({ slug, query, downloadFormats = ["xlsx", "pdf", "csv"], onDownload }: ReportViewerProps) {
   const { t, locale } = useLocale();
 
-  const search = new URLSearchParams({ ...query, format: "json", locale });
+  // C9: the document language is the sender's URL locale when it is one of
+  // the 4 supported report locales — a bookmarked Urdu report must render
+  // Urdu in an English UI (and the download buttons match the view).
+  const docLocale: ReportLocale = DOCUMENT_LOCALES.includes(query.locale as ReportLocale)
+    ? (query.locale as ReportLocale)
+    : (locale as ReportLocale);
+
+  const search = new URLSearchParams({ ...query, format: "json", locale: docLocale });
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery<ReportDocumentPayload>({
     queryKey: ["report-viewer", slug, search.toString()],
     queryFn: async () => {
@@ -214,13 +226,18 @@ export function ReportViewer({ slug, query, downloadFormats = ["xlsx", "pdf", "c
                     {data.columns.map((col) => {
                       const value = row[col.key];
                       const isNumeric = col.type === "money" || col.type === "number";
-                      // Date columns carry ISO on the wire (the exporters format
-                      // them); render them the same way the PDF/Excel do, against
-                      // the tenant pattern (§8) — never a raw 2026-10-09T…Z.
-                      const shown =
-                        col.type === "date"
-                          ? formatUtcDate(String(value), data.dateFormat) || String(value)
-                          : String(value);
+                       // Date columns carry ISO on the wire (the exporters format
+                       // them); render them the same way the PDF/Excel do, against
+                       // the tenant pattern (§8) — never a raw 2026-10-09T…Z.
+                       // C5: money columns carry decimal strings on the wire;
+                       // group them like the exporters do instead of showing
+                       // a raw `1234567.5`.
+                       const shown =
+                         col.type === "date"
+                           ? formatUtcDate(String(value), data.dateFormat) || String(value)
+                           : col.type === "money"
+                             ? formatMoneyNumber(value) || String(value)
+                             : String(value);
                       return (
                         <td
                           key={col.key}
@@ -247,18 +264,25 @@ export function ReportViewer({ slug, query, downloadFormats = ["xlsx", "pdf", "c
             {data.rows.length > 0 && data.columns.some((c) => c.total) && (
               <tfoot>
                 <tr className="bg-slate-100 dark:bg-slate-800 font-bold">
-                  {data.columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={`px-3 py-2 ${col.type === "money" || col.type === "number" ? "text-right tabular-nums" : "text-left"}`}
-                    >
-                      {col.total ? totalForColumn(data.rows, col.key, col.type) : ""}
-                    </td>
-                  ))}
+                  {data.columns.map((col) => {
+                    // C4: the full-set total wins over a re-sum of the (capped)
+                    // listed rows; money totals get grouped like the cells.
+                    const rawTotal = col.total
+                      ? (data.columnTotals?.[col.key] ?? totalForColumn(data.rows, col.key, col.type)) || ""
+                      : "";
+                    return (
+                      <td
+                        key={col.key}
+                        className={`px-3 py-2 ${col.type === "money" || col.type === "number" ? "text-right tabular-nums" : "text-left"}`}
+                      >
+                        {col.total ? (col.type === "money" ? formatMoneyNumber(rawTotal) || rawTotal : rawTotal) : ""}
+                      </td>
+                    );
+                  })}
                 </tr>
                 <tr>
                   <td colSpan={Math.max(data.columns.length, 1)} className="px-3 py-1 text-[10px] text-muted-foreground">
-                    {data.totalsLabel}: {data.rows.length}
+                    {t("reports.viewer.rowCount", { count: data.rows.length, defaultValue: "{count} rows" })}
                   </td>
                 </tr>
               </tfoot>
@@ -274,34 +298,3 @@ export function ReportViewer({ slug, query, downloadFormats = ["xlsx", "pdf", "c
   );
 }
 
-/**
- * Totals row: money columns are summed from the already-formatted strings via
- * integer cents (the document stores decimal strings, never floats), number
- * columns are summed directly. Mirrors the exporter totals row.
- */
-export function totalForColumn(
-  rows: Record<string, string | number | null>[],
-  key: string,
-  type: string,
-): string {
-  if (type === "money") {
-    let cents = 0;
-    for (const row of rows) {
-      const raw = row[key];
-      if (raw === null || raw === undefined || raw === "") continue;
-      cents += Math.round(Number(raw) * 100);
-    }
-    return (cents / 100).toFixed(2);
-  }
-  if (type === "number") {
-    let sum = 0;
-    for (const row of rows) {
-      const raw = row[key];
-      if (raw === null || raw === undefined || raw === "") continue;
-      const parsed = Number(raw);
-      if (Number.isFinite(parsed)) sum += parsed;
-    }
-    return String(sum);
-  }
-  return "";
-}

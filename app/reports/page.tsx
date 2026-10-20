@@ -15,42 +15,44 @@ export default function ReportsPage() {
   const { t, locale } = useLocale();
   const router = useRouter();
 
-  const { data: projects = [] } = useQuery<Project[]>({
+  // C6: entity-list failures must be visible — a silently empty dropdown
+  // makes "required" scope fields look optional. Errors propagate to
+  // react-query state and surface through ReportsView's banner.
+  const projectsQuery = useQuery<Project[]>({
     queryKey: ["projects"],
     queryFn: async () => {
-      try {
-        const res = await apiClient<{ data: Project[] } | Project[]>("/projects");
-        return Array.isArray(res) ? res : res?.data || [];
-      } catch {
-        return [];
-      }
+      const res = await apiClient<{ data: Project[] } | Project[]>("/projects");
+      return Array.isArray(res) ? res : res?.data || [];
     },
   });
 
-  const { data: members = [] } = useQuery<Member[]>({
+  const membersQuery = useQuery<Member[]>({
     queryKey: ["members"],
     queryFn: async () => {
-      try {
-        const res = await apiClient<{ data: Member[] } | Member[]>("/members");
-        return Array.isArray(res) ? res : res?.data || [];
-      } catch {
-        return [];
-      }
+      const res = await apiClient<{ data: Member[] } | Member[]>("/members");
+      return Array.isArray(res) ? res : res?.data || [];
     },
   });
 
-  const { data: funds = [] } = useQuery<Array<{ id: string; name: string }>>({
+  const fundsQuery = useQuery<Array<{ id: string; name: string }>>({
     queryKey: ["funds"],
     queryFn: async () => {
-      try {
-        const res = await apiClient<{ data: any[] } | any[]>("/funds");
-        const list = Array.isArray(res) ? res : res?.data || [];
-        return list.map((f: any) => ({ id: f.id, name: f.name }));
-      } catch {
-        return [];
-      }
+      const res = await apiClient<{ data: any[] } | any[]>("/funds");
+      const list = Array.isArray(res) ? res : res?.data || [];
+      return list.map((f: any) => ({ id: f.id, name: f.name }));
     },
   });
+
+  const entityLoadError =
+    projectsQuery.isError || membersQuery.isError || fundsQuery.isError
+      ? t("reports.entityLoadError", { defaultValue: "Failed to load the project, member, or fund lists. Reports scoped to them may be incomplete." })
+      : null;
+
+  const handleRetryEntities = () => {
+    void projectsQuery.refetch();
+    void membersQuery.refetch();
+    void fundsQuery.refetch();
+  };
 
   const buildQueryParams = (params: {
     format: ReportFormat;
@@ -158,11 +160,13 @@ export default function ReportsPage() {
     <AppShell>
       <div className="space-y-6">
         <ReportsView
-          projects={projects}
-          members={members}
-          funds={funds}
+          projects={projectsQuery.data || []}
+          members={membersQuery.data || []}
+          funds={fundsQuery.data || []}
           onGenerateReport={handleGenerateReport}
           onViewReport={handleViewReport}
+          entityLoadError={entityLoadError}
+          onRetryEntities={handleRetryEntities}
         />
       </div>
     </AppShell>

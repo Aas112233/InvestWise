@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { members, users } from '@/db/schema/index';
+import { memberDisplayNameSql } from '@/lib/member-display';
 import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
@@ -92,7 +93,7 @@ export async function GET(request: NextRequest) {
     const DIRECTORY_SELECT = {
       ...USER_SELECT,
       memberUuid: members.id,
-      memberName: members.name,
+      memberName: memberDisplayNameSql,
       memberCode: members.memberId,
     } as const;
     const { searchParams } = new URL(request.url);

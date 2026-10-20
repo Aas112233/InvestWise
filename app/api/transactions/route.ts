@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, members, funds, projects, users, systemSettings } from '@/db/schema/index';
+import { memberDisplayNameSql } from '@/lib/member-display';
 import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-methods';
-import { eq, and, desc, sql, ilike, gte, lte, count } from 'drizzle-orm';
+import { eq, and, desc, sql, ilike, gte, lte, count, inArray } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { normalizeRole } from '@/lib/roles';
@@ -60,7 +61,15 @@ export async function GET(request: NextRequest) {
     // Unconditional tenant predicate — scopedTenantId already 403s on null.
     conditions.push(sql`${transactions.tenantId} = ${scopedTenantId}`);
     if (type && type !== 'All') {
-      conditions.push(sql`${transactions.type} = ${type}`);
+      // A fund transfer is posted as a paired `Transfer Out` / `Transfer In`
+      // row; the screen's "Fund Transfer" filter value is the aggregate label,
+      // not a stored type, so it must match both legs instead of exact-matching
+      // a type that never exists (it returned an empty ledger).
+      if (type === 'Transfer') {
+        conditions.push(inArray(transactions.type, ['Transfer In', 'Transfer Out']));
+      } else {
+        conditions.push(sql`${transactions.type} = ${type}`);
+      }
     }
     if (fundId) {
       conditions.push(sql`${transactions.fundId} = ${fundId}`);
@@ -158,7 +167,7 @@ export async function GET(request: NextRequest) {
           status: transactions.status,
           description: transactions.description,
           memberId: transactions.memberId,
-          memberName: members.name,
+          memberName: memberDisplayNameSql,
           memberCode: members.memberId,
           fundId: transactions.fundId,
           fundName: funds.name,

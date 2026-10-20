@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { transactions } from '@/db/schema/index';
 import type { getDb } from '@/db/index';
 
@@ -70,6 +70,20 @@ const OCCUPANT_FIELDS = {
 } as const;
 
 /**
+ * Month the deposit is FOR — same expression the deposits list filters on, so
+ * the write rule, the Month column and the per-member month grid can never
+ * disagree. Defined once: three call sites used to spell it out separately.
+ */
+const DEPOSIT_MONTH_KEY_EXPR = sql<string>`COALESCE(${transactions.depositMonth}, to_char(${transactions.date} AT TIME ZONE 'UTC', 'YYYY-MM'))`;
+
+/**
+ * Settled money, or a pending request-style row. A reverted direct deposit
+ * (category 'Deposit' + PENDING) freed its month and must not block; REJECTED
+ * rows are neither settled nor pending.
+ */
+const OCCUPYING_STATUS_CONDITION = sql`(${transactions.status} IN ('Completed', 'Success') OR (lower(COALESCE(${transactions.status}, '')) = 'pending' AND COALESCE(${transactions.category}, '') <> 'Deposit'))`;
+
+/**
  * The shared month-occupancy predicate. Kept as a condition builder (not a
  * query runner) so batch callers can widen it with `inArray` on member ids
  * and every call site composes it inside its own transaction.
@@ -85,13 +99,8 @@ export function depositMonthOccupiedCondition(args: {
     eq(transactions.memberId, args.memberId),
     eq(transactions.type, 'Deposit'),
     eq(transactions.isDeleted, false),
-    // Month the deposit is FOR — same expression the deposits list filters on,
-    // so the write rule and the Month column can never disagree.
-    sql`COALESCE(${transactions.depositMonth}, to_char(${transactions.date} AT TIME ZONE 'UTC', 'YYYY-MM')) = ${args.depositMonthKey}`,
-    // Settled money, or a pending request-style row. A reverted direct
-    // deposit (category 'Deposit' + PENDING) freed its month and must not
-    // block; REJECTED rows are neither settled nor pending.
-    sql`(${transactions.status} IN ('Completed', 'Success') OR (lower(COALESCE(${transactions.status}, '')) = 'pending' AND COALESCE(${transactions.category}, '') <> 'Deposit'))`,
+    sql`${DEPOSIT_MONTH_KEY_EXPR} = ${args.depositMonthKey}`,
+    OCCUPYING_STATUS_CONDITION,
   ];
   if (args.excludeId) {
     conditions.push(sql`${transactions.id} <> ${args.excludeId}`);
@@ -110,8 +119,30 @@ export function depositMonthOccupiedBatchCondition(args: {
     inArray(transactions.memberId, args.memberIds),
     eq(transactions.type, 'Deposit'),
     eq(transactions.isDeleted, false),
-    sql`COALESCE(${transactions.depositMonth}, to_char(${transactions.date} AT TIME ZONE 'UTC', 'YYYY-MM')) = ${args.depositMonthKey}`,
-    sql`(${transactions.status} IN ('Completed', 'Success') OR (lower(COALESCE(${transactions.status}, '')) = 'pending' AND COALESCE(${transactions.category}, '') <> 'Deposit'))`,
+    sql`${DEPOSIT_MONTH_KEY_EXPR} = ${args.depositMonthKey}`,
+    OCCUPYING_STATUS_CONDITION,
+  ) as SQL;
+}
+
+/**
+ * Multi-month variant for ONE member: the same rule widened across a fiscal
+ * year's worth of month keys. The month set is OR-ed as parameterized
+ * equalities (at most twelve) rather than an `IN` over a computed expression,
+ * so the predicate stays indexable and identical on both drizzle copies.
+ */
+export function depositMonthsOccupiedCondition(args: {
+  tenantId: string;
+  memberId: string;
+  depositMonthKeys: string[];
+}): SQL | null {
+  if (args.depositMonthKeys.length === 0) return null;
+  return and(
+    eq(transactions.tenantId, args.tenantId),
+    eq(transactions.memberId, args.memberId),
+    eq(transactions.type, 'Deposit'),
+    eq(transactions.isDeleted, false),
+    OCCUPYING_STATUS_CONDITION,
+    or(...args.depositMonthKeys.map((key) => sql`${DEPOSIT_MONTH_KEY_EXPR} = ${key}`)),
   ) as SQL;
 }
 
@@ -139,6 +170,54 @@ export async function findDepositMonthOccupants(
     .from(transactions)
     .where(depositMonthOccupiedBatchCondition(args))
     .limit(args.memberIds.length);
+}
+
+/** An occupant plus the month it occupies and the money already recorded. */
+export interface DepositMonthOccupancy extends DepositMonthOccupant {
+  /** The YYYY-MM month this row occupies (the stored month, else the date's). */
+  depositMonthKey: string;
+  amount: string | null;
+}
+
+/**
+ * The per-member month grid: which of `depositMonthKeys` already hold a
+ * deposit, keyed by month. Reads through the SAME predicate the write path
+ * enforces, so a month the grid greys out is exactly a month the bulk POST
+ * would reject — the desk never selects a month and then eats a 409.
+ */
+export async function findDepositMonthOccupancyInRange(
+  db: unknown,
+  args: { tenantId: string; memberId: string; depositMonthKeys: string[] },
+): Promise<Map<string, DepositMonthOccupancy>> {
+  const occupancy = new Map<string, DepositMonthOccupancy>();
+  const condition = depositMonthsOccupiedCondition(args);
+  if (!condition) return occupancy;
+
+  const rows = await asQueryable(db)
+    .select({
+      ...OCCUPANT_FIELDS,
+      amount: transactions.amount,
+      depositMonthKey: DEPOSIT_MONTH_KEY_EXPR,
+    })
+    .from(transactions)
+    .where(condition)
+    .limit(args.depositMonthKeys.length);
+
+  for (const row of rows) {
+    // A settled row wins over a pending one for the same month; the write
+    // rule forbids both existing, so this only orders a corrupt legacy state.
+    const existing = occupancy.get(row.depositMonthKey);
+    if (existing && isPendingStatus(existing.status) && !isPendingStatus(row.status)) {
+      occupancy.set(row.depositMonthKey, row);
+      continue;
+    }
+    if (!existing) occupancy.set(row.depositMonthKey, row);
+  }
+  return occupancy;
+}
+
+function isPendingStatus(status: string | null): boolean {
+  return String(status ?? '').toLowerCase() === 'pending';
 }
 
 /**

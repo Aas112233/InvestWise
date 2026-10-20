@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, ArrowLeftRight, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppDropdown, type DropdownOption } from "@/components/ui/app-dropdown";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { NumericInput } from "@/components/ui/numeric-input";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 import { toCents, fromCents } from "@/lib/money";
 import { useTenantCurrency } from "@/lib/use-tenant-settings";
 import type { Member } from "@/types";
@@ -100,7 +101,14 @@ export function ShareDivisionModal({
     () =>
       (recipientsQuery.data?.data ?? [])
         .filter((m) => m.id !== holder?.id)
-        .map((m) => ({ value: m.id, label: `${m.name} (${m.memberId})` })),
+        .map((m) => ({
+          value: m.id,
+          label: `${memberDisplayName(m.name, m.status)} (${m.memberId})`,
+          // The server rejects a suspended recipient (and a suspended holder
+          // must settle via the exit path) — disable up front so the form
+          // can't submit a guaranteed 400.
+          disabled: m.status === "suspended",
+        })),
     [recipientsQuery.data, holder?.id],
   );
 
@@ -139,8 +147,12 @@ export function ShareDivisionModal({
   const memoMissing = !memo.trim();
   const giftUnacknowledged = hasGiftRow && !giftAcknowledged;
   const amountOnlyUnacknowledged = hasAmountOnlyRow && !amountOnlyAcknowledged;
+  // A suspended holder settles through the exit path — the server rejects the
+  // transfer, and the form says so up front instead of submitting a 400.
+  const holderSuspended = holder?.status === "suspended";
 
   const valid =
+    !holderSuspended &&
     rows.length > 0 &&
     rows.every((r) => r.toMemberId) &&
     rowErrors.every((e) => !e) &&
@@ -218,7 +230,7 @@ export function ShareDivisionModal({
                 {t("members.form.name")}
               </p>
               <p className="mt-0.5 font-medium truncate">
-                {holder ? `${holder.name} (${holder.memberId})` : "—"}
+                {holder ? `${memberDisplayName(holder.name, holder.status)} (${holder.memberId})` : "—"}
               </p>
             </div>
             <div>
@@ -239,6 +251,12 @@ export function ShareDivisionModal({
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground mt-2">{t("dividends.transferBanner")}</p>
+          {holderSuspended && (
+            <p className="mt-2 text-[11px] text-destructive flex items-start gap-1.5">
+              <AlertCircle size={12} className="mt-0.5 shrink-0" />
+              {t("dividends.suspendedHolderBlocked", { defaultValue: "This member is suspended — shares cannot be transferred from a suspended member. Reinstate them first." })}
+            </p>
+          )}
         </ERPFormSection>
 
         <ERPFormSection title={t("dividends.reallocationPlan")}>

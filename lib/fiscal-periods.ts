@@ -38,6 +38,29 @@ export function fiscalMonthSequence(startMonth: string): FiscalMonth[] {
   return Array.from({ length: 12 }, (_, offset) => MONTHS[(startIndex + offset) % 12]!);
 }
 
+/**
+ * The twelve absolute `YYYY-MM` keys of one fiscal year, in fiscal order
+ * (the configured start month first) — the wire form every period field takes.
+ *
+ * This is the ONE place the fiscal calendar is expanded into month keys: the
+ * client pickers (`buildFiscalMonthOptions`), the server's per-member deposit
+ * month grid and the write path's duplicate-month rule all derive their months
+ * from it, so a month the desk can see can never disagree with a month the
+ * server will accept.
+ */
+export function fiscalMonthKeys(fiscalStartYear: number, startMonth: string): string[] {
+  if (!Number.isInteger(fiscalStartYear) || fiscalStartYear < 1900 || fiscalStartYear > 9998) {
+    throw new Error('Fiscal start year must be an integer from 1900 to 9998');
+  }
+  const startIndex = monthIndex(startMonth, 'Fiscal year start');
+  return Array.from({ length: 12 }, (_, offset) => {
+    const absolute = startIndex + offset;
+    const year = fiscalStartYear + Math.floor(absolute / 12);
+    const monthNumber = (absolute % 12) + 1;
+    return `${year}-${String(monthNumber).padStart(2, '0')}`;
+  });
+}
+
 /** The full English month names, in calendar order — for validating stored values. */
 export const FISCAL_MONTH_NAMES: readonly string[] = MONTHS.map((m) => m.name);
 

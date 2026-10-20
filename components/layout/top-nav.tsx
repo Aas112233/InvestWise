@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Building2,
@@ -12,6 +12,7 @@ import {
   Loader2,
   LogOut,
   Moon,
+  RotateCcw,
   Shield,
   ShieldAlert,
   Sun,
@@ -22,7 +23,9 @@ import { useAuth } from "@/lib/auth-context";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useTenantSettings, useTenantDateFormat } from "@/lib/use-tenant-settings";
 import { formatDatePattern } from "@/lib/formatters";
-import { fiscalStartYearForDate, resolveFiscalBounds } from "@/lib/fiscal-periods";
+import { resolveFiscalBounds } from "@/lib/fiscal-periods";
+import { buildFiscalYearOptions } from "@/lib/fiscal-period-options";
+import { useFiscalYear } from "@/lib/fiscal-year-context";
 import { LOCALES, useLocale, type Locale } from "@/lib/i18n";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NotificationsMenu } from "./notifications-menu";
@@ -95,6 +98,22 @@ export function TopNav({
   const localeDropdownRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const tenantMenuRef = useRef<HTMLDivElement>(null);
+  const fiscalMenuRef = useRef<HTMLDivElement>(null);
+
+  // Header fiscal-year SELECTOR (app-wide): the desk picks the accounting year
+  // once, and every period picker on every screen opens on it
+  // (lib/fiscal-year-context.tsx). Declared before the click-outside effect
+  // below, which closes its popover.
+  const {
+    fiscalYear,
+    setFiscalYear,
+    reset: resetFiscalYear,
+    years: fiscalYearRows,
+    currentFiscalYear: currentYearKey,
+    isHistorical,
+    ready: fiscalYearsReady,
+  } = useFiscalYear();
+  const [fiscalOpen, setFiscalOpen] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -107,6 +126,9 @@ export function TopNav({
       }
       if (tenantMenuRef.current && !tenantMenuRef.current.contains(target)) {
         setTenantMenuOpen(false);
+      }
+      if (fiscalMenuRef.current && !fiscalMenuRef.current.contains(target)) {
+        setFiscalOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -166,20 +188,41 @@ export function TopNav({
     ? `${t("common.today", { defaultValue: "Today" })} - ${todayLabel}`
     : todayLabel;
 
-  // Current fiscal year, derived from the tenant's configured start/end months
-  // (§ fiscal periods). Defaults match signup/settings so the pill is correct
+  // Fiscal-year labels come from the tenant's configured start/end months (§
+  // fiscal periods). Defaults match signup/settings so the header is correct
   // even before /api/settings resolves. A malformed month name in settings must
-  // not take the whole header down, so the helpers are allowed to throw and
-  // degrade to the start year alone.
+  // not take the whole header down, so the helper degrades to the start year.
   const fiscalStartMonth = tenantSettings?.financial?.fiscalYearStart || "July";
   const fiscalEndMonth = tenantSettings?.financial?.fiscalYearEnd || "June";
-  let currentFiscalYear = "";
-  try {
-    const startYear = fiscalStartYearForDate(new Date(), fiscalStartMonth);
-    currentFiscalYear = resolveFiscalBounds(startYear, fiscalStartMonth, fiscalEndMonth).label;
-  } catch {
-    currentFiscalYear = "";
-  }
+  const fiscalLabelOf = (year: string | null): string => {
+    if (!year) return "";
+    try {
+      return resolveFiscalBounds(Number(year), fiscalStartMonth, fiscalEndMonth).label;
+    } catch {
+      return year;
+    }
+  };
+
+  // Selector options: every year the tenant created, NEWEST first (the year you
+  // most likely want is at the top), labelled "FY 2025-26 (Closed)" by the
+  // shared builder so the header, the period pickers and the Fiscal screen
+  // never disagree about a year's name or state.
+  const statusByYear = useMemo(
+    () => new Map(fiscalYearRows.map((period) => [String(period.year), period.status])),
+    [fiscalYearRows],
+  );
+  const fiscalYearOptions = useMemo(
+    () =>
+      buildFiscalYearOptions(
+        [...fiscalYearRows].sort((a, b) => b.year - a.year).map((period) => period.year),
+        fiscalStartMonth,
+        fiscalEndMonth,
+        t,
+        statusByYear,
+      ),
+    [fiscalYearRows, fiscalStartMonth, fiscalEndMonth, t, statusByYear],
+  );
+  const selectedFiscalLabel = fiscalLabelOf(fiscalYear);
 
   const currentTenant = tenants.find((item) => item.id === tenantId);
   // Header carries the TENANT identity (user spec, 2026-10-04): multi-tenant
@@ -301,16 +344,115 @@ export function TopNav({
           </div>
         )}
 
-        {/* Current fiscal year (tenant start/end months) */}
-        {mounted && currentFiscalYear && (
-          <div
-            className="hidden xl:flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground whitespace-nowrap shrink-0"
-            title={t("layout.currentFiscalYear", { defaultValue: "Current fiscal year" })}
-          >
-            <CalendarRange className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              {t("layout.fiscalYearAbbrev", { defaultValue: "FY" })} {currentFiscalYear}
-            </span>
+        {/* Fiscal year SELECTOR — the app-wide accounting year. Every period
+            picker on every screen follows this value, so it is a control, not
+            a label. A past year is tinted amber: reviewing 2025-26 while the
+            ledger is open in 2026-27 must be obvious, not a subtle label. */}
+        {mounted && (
+          <div className="relative hidden xl:block shrink-0" ref={fiscalMenuRef}>
+            <button
+              type="button"
+              onClick={() => setFiscalOpen((open) => !open)}
+              disabled={!fiscalYearsReady && !fiscalYear}
+              aria-haspopup="listbox"
+              aria-expanded={fiscalOpen}
+              aria-label={t("layout.fiscalYearSelect", { defaultValue: "Fiscal year" })}
+              title={
+                isHistorical
+                  ? t("layout.fiscalYearHistorical", {
+                      defaultValue: "Viewing a past fiscal year — every year picker follows this selection",
+                    })
+                  : t("layout.fiscalYearSelectHint", {
+                      defaultValue: "Fiscal year — every year picker on every screen follows this selection",
+                    })
+              }
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors",
+                isHistorical
+                  ? "border-amber-300/80 bg-amber-50 text-amber-800 hover:bg-amber-100/80 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
+                  : "border-border/60 bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+                fiscalOpen && "ring-1 ring-primary/40",
+              )}
+            >
+              <CalendarRange
+                className={cn(
+                  "h-3.5 w-3.5 shrink-0",
+                  isHistorical ? "text-amber-600 dark:text-amber-300" : "text-primary",
+                )}
+              />
+              <span>
+                {t("layout.fiscalYearAbbrev", { defaultValue: "FY" })}{" "}
+                {selectedFiscalLabel || "…"}
+              </span>
+              <ChevronDown
+                className={cn("h-3.5 w-3.5 shrink-0 transition-transform", fiscalOpen && "rotate-180")}
+              />
+            </button>
+
+            {fiscalOpen && (
+              <div
+                role="listbox"
+                aria-label={t("layout.fiscalYearSelect", { defaultValue: "Fiscal year" })}
+                className="absolute left-0 top-full mt-1.5 w-64 rounded-xl border border-border/80 bg-popover p-1 shadow-xl z-50 animate-in fade-in-50 zoom-in-95 dark:border-white/10"
+              >
+                <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("layout.fiscalYearSelect", { defaultValue: "Fiscal year" })}
+                </div>
+                {fiscalYearOptions.length === 0 ? (
+                  <p className="px-2.5 py-2 text-[11px] text-muted-foreground">
+                    {t("layout.fiscalYearNone", { defaultValue: "No fiscal year has been created yet." })}
+                  </p>
+                ) : (
+                  fiscalYearOptions.map((option) => {
+                    const selected = option.value === fiscalYear;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        onClick={() => {
+                          setFiscalYear(option.value);
+                          setFiscalOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-xs text-popover-foreground transition-colors hover:bg-accent",
+                          selected && "bg-accent font-semibold text-primary",
+                        )}
+                      >
+                        <span className="truncate">{option.label}</span>
+                        {selected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                      </button>
+                    );
+                  })
+                )}
+                <div className="mt-1 border-t border-border/60 pt-1">
+                  <p className="px-2.5 py-1 text-[10px] leading-relaxed text-muted-foreground">
+                    {t("layout.fiscalYearFollows", {
+                      defaultValue: "Every year picker on every screen follows this selection.",
+                    })}
+                  </p>
+                  {isHistorical && currentYearKey && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetFiscalYear();
+                        setFiscalOpen(false);
+                      }}
+                      className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-accent"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        {t("layout.fiscalYearReset", {
+                          defaultValue: "Back to FY {year}",
+                          year: fiscalLabelOf(currentYearKey),
+                        })}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

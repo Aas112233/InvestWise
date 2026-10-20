@@ -87,6 +87,10 @@ export async function POST(request: NextRequest) {
       role,
       shares,
       status,
+      // A member created already inactive is an admin choice; stamp the reason
+      // so the governance sweep does not treat it as a deposit hold. (Create
+      // only accepts active/inactive — suspension is a governance action.)
+      statusReason: status === 'inactive' ? 'ADMIN_MANUAL' : null,
       nidOrPassport: d.nidOrPassport,
       fatherName: d.fatherName,
       address: d.address,

@@ -269,7 +269,11 @@ function parseMonth(param: string | null | undefined, field: string): { y: numbe
 function parseYear(param: string | null | undefined, field: string): number {
   if (!param) throw new ReportParamError(field, "REQUIRED", `${field} is required for this period`);
   if (!YEAR_RE.test(param)) throw new ReportParamError(field, "INVALID_FORMAT", `${field} must be YYYY`);
-  return Number(param);
+  const y = Number(param);
+  // Range-check here, not in the fiscal helpers: `fiscalYear=0000` is a
+  // client fault and must be a 400, not a 500 out of resolveFiscalBounds.
+  if (y < 1900 || y > 9998) throw new ReportParamError(field, "INVALID_DATE", `${field} must be a year between 1900 and 9998`);
+  return y;
 }
 
 function parseIsoDate(param: string | null | undefined, field: string): Date {
@@ -347,3 +351,39 @@ export function resolveReportPeriod(
 
 /** Cap on rows pulled into a single generated document (memory-bounded). */
 export const REPORT_MAX_ROWS = 5000;
+
+// ─────────────────────────────────────────────────────────────────────
+// Member scope wire format (target member: one, many, or all)
+// ─────────────────────────────────────────────────────────────────────
+
+/** Sentinel for the `memberId` query param: every member, no per-member filter. */
+export const MEMBER_ALL = "all";
+
+export interface MemberSelection {
+  /** Explicit "all members" — the report applies no per-member filter. */
+  all: boolean;
+  /** Selected member ids (ignored when `all`). */
+  ids: string[];
+}
+
+/**
+ * The `memberId` report parameter accepts three shapes:
+ * - absent / blank → no explicit member scope (whole-book view)
+ * - `all`          → every member
+ * - `id[,id]...`   → one or many members
+ * Legacy single-id links (including saved report URLs) parse as a one-id list.
+ */
+export function parseMemberSelection(raw: string | null | undefined): MemberSelection {
+  const value = (raw ?? "").trim();
+  if (!value) return { all: false, ids: [] };
+  if (value === MEMBER_ALL) return { all: true, ids: [] };
+  const ids = [...new Set(value.split(",").map((part) => part.trim()).filter(Boolean))];
+  return { all: false, ids };
+}
+
+/** Inverse of {@link parseMemberSelection}; `null` = no member param at all. */
+export function serializeMemberSelection(sel: MemberSelection): string | null {
+  if (sel.all) return MEMBER_ALL;
+  if (sel.ids.length > 0) return sel.ids.join(",");
+  return null;
+}

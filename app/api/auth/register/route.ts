@@ -10,6 +10,7 @@ import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { normalizeRole, isSuperAdminRole } from '@/lib/roles';
 import { isPlatformOwnerEmail } from '@/lib/platform-owner';
+import { assertMemberNotSuspended } from '@/lib/member-display';
 
 const USER_SELECT = {
   id: users.id,
@@ -206,7 +207,7 @@ export async function POST(request: NextRequest) {
       if (memberLookup) {
         const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const [memberRow] = await tx
-          .select({ id: members.id, memberId: members.memberId, name: members.name, userId: members.userId })
+          .select({ id: members.id, memberId: members.memberId, name: members.name, status: members.status, userId: members.userId })
           .from(members)
           .where(
             and(
@@ -219,6 +220,9 @@ export async function POST(request: NextRequest) {
         if (!memberRow) {
           throw new ValidationError(`[Field 'memberUuid', Code: not_found] Linked member not found in this organization`);
         }
+        // Linking a login to a suspended member hands them app access while
+        // they are out of good standing — block until reinstated.
+        assertMemberNotSuspended(memberRow, 'linking a member login');
         if (memberRow.userId) {
           throw new ConflictError(`[Field 'memberUuid', Code: already_linked] ${memberRow.name} is already linked to a login`);
         }

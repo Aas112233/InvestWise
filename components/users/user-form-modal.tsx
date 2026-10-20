@@ -12,6 +12,7 @@ import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/comp
 import { TopSheet } from "@/components/ui/top-sheet";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
+import { memberDisplayName } from "@/lib/member-display";
 import { ACCESS_PRESETS, PERMISSION_SCREENS, SCREEN_LABEL_KEY, TENANT_ASSIGNABLE_ROLES, presetPermissions, type AccessPreset, type TenantUser } from "./types";
 
 // Create/edit user sheet. Permissions matrix edits explicit per-user
@@ -81,7 +82,7 @@ export function UserFormModal({
   const memberQuery = useQuery({
     queryKey: ["members", { linkPicker: true, search: memberSearch }],
     queryFn: () =>
-      apiClient<{ data: Array<{ id: string; memberId: string; name: string; email?: string | null; userId?: string | null }> }>(
+       apiClient<{ data: Array<{ id: string; memberId: string; name: string; email?: string | null; userId?: string | null; status?: string }> }>(
         "/members",
         { params: { limit: 100, search: memberSearch || undefined } },
       ),
@@ -92,9 +93,11 @@ export function UserFormModal({
     const rows = memberQuery.data?.data ?? [];
     return rows.map((m) => ({
       value: m.id,
-      label: `${m.name} (${m.memberId})`,
+      label: `${memberDisplayName(m.name, m.status)} (${m.memberId})`,
       caption: m.email ?? undefined,
-      disabled: Boolean(m.userId),
+      // Linked rows are disabled (one member → one login); suspended members
+      // are too — the register route rejects the link (member_suspended).
+      disabled: Boolean(m.userId) || m.status === "suspended",
     }));
   }, [memberQuery.data]);
 

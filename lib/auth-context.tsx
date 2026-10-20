@@ -22,6 +22,10 @@ export interface AuthUser {
   tenantId?: string;
   memberId?: string | null;
   permissions?: Record<string, string>;
+  // Tenant module entitlements (GET /api/auth/me). UI display gating ONLY —
+  // the API layer enforces the same map server-side on every request, so a
+  // stale or missing field can only over-show a link, never over-grant.
+  moduleAccess?: Record<string, boolean>;
   // Set when a platform admin is viewing this tenant through a support
   // (impersonation) session — drives the yellow header bar.
   impersonatedBy?: string | null;

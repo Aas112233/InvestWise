@@ -36,6 +36,38 @@ export function isMemberStatus(value: unknown): value is MemberStatus {
   );
 }
 
+/**
+ * WHY a member is not active — the machine-readable companion to `status`.
+ *
+ * `status` is the coarse lifecycle state; this records the cause, so two
+ * members who both read Inactive are no longer indistinguishable:
+ *   - DEPOSIT_NON_COMPLIANCE  the governance sweep auto-held them (recoverable
+ *                             by depositing; the sweep owns this state).
+ *   - EQUITY_TRANSFERRED_OUT  they moved all equity + shares away and hold
+ *                             nothing (NOT recoverable by depositing).
+ *   - ADMIN_MANUAL            an admin set the state by hand (suspend, or a
+ *                             manual hold); only an admin reverses it.
+ *
+ * Null means active, or a legacy row written before this column existed.
+ * Keeping the cause OUT of the status value avoids a combinatorial explosion
+ * of states (deposit_inactive, equity_inactive, ...) that still could not
+ * represent a member who is inactive for two reasons at once.
+ */
+export const MEMBER_STATUS_REASON = {
+  DEPOSIT_NON_COMPLIANCE: "DEPOSIT_NON_COMPLIANCE",
+  EQUITY_TRANSFERRED_OUT: "EQUITY_TRANSFERRED_OUT",
+  ADMIN_MANUAL: "ADMIN_MANUAL",
+} as const;
+export type MemberStatusReason = (typeof MEMBER_STATUS_REASON)[keyof typeof MEMBER_STATUS_REASON];
+
+export function isMemberStatusReason(value: unknown): value is MemberStatusReason {
+  return (
+    value === MEMBER_STATUS_REASON.DEPOSIT_NON_COMPLIANCE ||
+    value === MEMBER_STATUS_REASON.EQUITY_TRANSFERRED_OUT ||
+    value === MEMBER_STATUS_REASON.ADMIN_MANUAL
+  );
+}
+
 export const DEPOSIT_COMPLIANCE = {
   ON_TIME: "ON_TIME",
   LATE: "LATE",
@@ -477,6 +509,13 @@ export type StatusTransition =
 
 export interface StatusEvaluationInput {
   currentStatus: MemberStatus | string;
+  /**
+   * Why the member is currently inactive/suspended (null when active, or a
+   * legacy row). The sweep uses it to decide whether it owns the state: a hold
+   * IT created (DEPOSIT_NON_COMPLIANCE / null) is its to restore, but a state
+   * caused by something else must be left for an explicit admin action.
+   */
+  statusReason?: MemberStatusReason | null;
   /** Whole months since the member's last qualifying deposit period. */
   monthsWithoutDeposit: number;
   /** A Completed deposit covering the required amount for the current period. */
@@ -505,11 +544,20 @@ export interface StatusEvaluation {
  * Never automatic: active -> suspended, and suspended -> active. Suspension
  * blocks portal login, so it is always an explicit admin action; the sweep
  * only reports eligibility.
+ *
+ * The sweep only manages the holds IT created. A member inactive for a
+ * non-deposit reason (equity transferred out, manual admin hold) is left
+ * untouched — auto-restoring them on a deposit rule would silently erase the
+ * real reason they are inactive.
  */
 export function evaluateStatusTransition(input: StatusEvaluationInput): StatusEvaluation {
   const { rules } = input;
   const currentStatus = isMemberStatus(input.currentStatus) ? input.currentStatus : MEMBER_STATUS.ACTIVE;
   const months = Math.max(0, Math.trunc(input.monthsWithoutDeposit));
+  // A missing reason is treated as deposit-driven (legacy rows written before
+  // the column existed, and members the sweep itself held).
+  const reasonOwnedBySweep =
+    input.statusReason == null || input.statusReason === MEMBER_STATUS_REASON.DEPOSIT_NON_COMPLIANCE;
 
   const base = {
     currentStatus,
@@ -528,6 +576,17 @@ export function evaluateStatusTransition(input: StatusEvaluationInput): StatusEv
   }
 
   if (currentStatus === MEMBER_STATUS.INACTIVE) {
+    // Not the sweep's state to manage: report it unchanged and take no action.
+    if (!reasonOwnedBySweep) {
+      return {
+        ...base,
+        nextStatus: MEMBER_STATUS.INACTIVE,
+        transition: "NONE",
+        autoApply: false,
+        suspensionEligible: false,
+        reinstateRecommended: false,
+      };
+    }
     if (input.hasQualifyingDeposit) {
       return {
         ...base,

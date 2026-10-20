@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { users } from '@/db/schema/index';
+import { users, tenants } from '@/db/schema/index';
 import { eq } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { AuthError } from '@/lib/utils/errors';
-import { normalizeRole } from '@/lib/roles';
+import { normalizeRole, isSuperAdminRole } from '@/lib/roles';
+import { resolveModuleAccess, TENANT_MODULE_KEYS } from '@/lib/tenant-modules';
 import { verifyToken } from '@/lib/utils/jwt';
 import { COOKIE_NAMES } from '@/lib/utils/cookies';
 
@@ -47,7 +48,7 @@ function toUserResponse(row: Record<string, unknown>) {
 
 export async function GET(request: NextRequest) {
   try {
-    const { user: authUser, error } = await getAuthContext(request);
+    const { user: authUser, tenantId, error } = await getAuthContext(request);
     if (error || !authUser) {
       return error || NextResponse.json(
         { success: false, message: 'Authentication required', code: 'UNAUTHORIZED' },
@@ -81,7 +82,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ...toUserResponse(user), impersonatedBy });
+    // Tenant module entitlements for client-side UI gating (sidebar + the
+    // AppShell 403 gate). Same resolution the API layer uses
+    // (lib/tenant-modules resolveModuleAccess) — the client hides what the
+    // server refuses; it never GRANTS. SuperAdmin bypasses the module system,
+    // so they get a full map.
+    let moduleAccess: Record<string, boolean>;
+    if (tenantId && !isSuperAdminRole(user.role)) {
+      const [tenantRow] = await db
+        .select({ moduleAccess: tenants.moduleAccess })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      moduleAccess = resolveModuleAccess(tenantRow?.moduleAccess);
+    } else {
+      // SuperAdmin bypasses the module system (server-side too) — grant every
+      // key so no default-off module (analysis) hides from their sidebar.
+      moduleAccess = Object.fromEntries(TENANT_MODULE_KEYS.map((k) => [k, true]));
+    }
+
+    return NextResponse.json({ ...toUserResponse(user), impersonatedBy, moduleAccess });
   } catch (error: any) {
     console.error('[GET PROFILE ERROR]', error);
     

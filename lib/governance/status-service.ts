@@ -10,7 +10,7 @@
  */
 
 import { getDb } from "@/db/index";
-import { auditLogs, members, systemSettings, tenants, transactions } from "@/db/schema/index";
+import { auditLogs, memberPayoutPlans, members, systemSettings, tenants, transactions } from "@/db/schema/index";
 import { and, asc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import { toCents } from "../money";
 import { DEFAULT_SHARE_VALUE_CENTS, resolveShareValueCents } from "../shares";
@@ -21,11 +21,13 @@ import {
   DEPOSIT_COMPLIANCE,
   GovernanceRuleError,
   MEMBER_STATUS,
+  MEMBER_STATUS_REASON,
   allocateDepositsToPeriods,
   addMonthsToPeriodKey,
   evaluatePeriodDeposits,
   evaluateStatusTransition,
   hasOutstandingObligation,
+  isMemberStatusReason,
   isValidPeriodKey,
   monthsSincePeriodKey,
   normalizeGovernanceRules,
@@ -36,6 +38,7 @@ import {
   type DepositCompliance,
   type GovernanceRules,
   type MemberStatus,
+  type MemberStatusReason,
   type MonthEvaluation,
   type PeriodRequirement,
   type StatusEvaluation,
@@ -114,6 +117,8 @@ export interface MemberStatusSnapshot {
   memberCode: string;
   name: string;
   status: MemberStatus;
+  /** Why the member is not active (null when active). */
+  statusReason: MemberStatusReason | null;
   shares: number;
   requiredCents: number;
   monthsWithoutDeposit: number;
@@ -136,6 +141,7 @@ interface MemberRow {
   memberId: string;
   name: string;
   status: string | null;
+  statusReason: string | null;
   shares: number;
   monthlyDepositTarget: string | null;
   depositFrequency: string | null;
@@ -149,6 +155,7 @@ function selectMemberColumns() {
     memberId: members.memberId,
     name: members.name,
     status: members.status,
+    statusReason: members.statusReason,
     shares: members.shares,
     monthlyDepositTarget: members.monthlyDepositTarget,
     depositFrequency: members.depositFrequency,
@@ -254,8 +261,13 @@ export function evaluateMemberFromLegs(
   const hasQualifyingDeposit = !hasOutstandingObligation(duePeriods);
 
   const currentStatus = (member.status ?? MEMBER_STATUS.ACTIVE) as MemberStatus;
+  // Carry the stored reason so the sweep can tell a hold it owns apart from a
+  // non-deposit state (equity transferred out, manual admin hold) it must not
+  // auto-restore.
+  const statusReason = isMemberStatusReason(member.statusReason) ? member.statusReason : null;
   const evaluation = evaluateStatusTransition({
     currentStatus,
+    statusReason,
     monthsWithoutDeposit,
     hasQualifyingDeposit,
     rules,
@@ -400,6 +412,7 @@ function toStatusSnapshot(member: MemberRow, result: MemberEvaluation): MemberSt
     memberCode: member.memberId,
     name: member.name,
     status: result.evaluation.currentStatus,
+    statusReason: isMemberStatusReason(member.statusReason) ? member.statusReason : null,
     shares: Number(member.shares ?? 0),
     requiredCents: result.requiredCents,
     monthsWithoutDeposit: result.monthsWithoutDeposit,
@@ -471,6 +484,8 @@ export interface MemberDepositHistory {
     memberCode: string;
     name: string;
     status: MemberStatus;
+    /** Why the member is not active (null when active). */
+    statusReason: MemberStatusReason | null;
     shares: number;
     joinDate: Date | null;
     depositFrequency: string | null;
@@ -527,6 +542,7 @@ export async function getMemberDepositHistory(
       memberCode: member.memberId,
       name: member.name,
       status: result.evaluation.currentStatus,
+      statusReason: isMemberStatusReason(member.statusReason) ? member.statusReason : null,
       shares: Number(member.shares ?? 0),
       joinDate: member.joinDate,
       depositFrequency: member.depositFrequency,
@@ -629,7 +645,16 @@ export async function sweepMemberStatuses(
       // Re-assert both halves of the tenant scope on the write (§6).
       await tx
         .update(members)
-        .set({ status: to, updatedAt: asOf })
+        .set({
+          status: to,
+          // The sweep only ever applies AUTO_HOLD (deposit-driven) or
+          // AUTO_RESTORE, so the reason is deterministic: a hold stamps the
+          // deposit cause, a restore clears it so an active member never
+          // carries a stale reason.
+          statusReason:
+            to === MEMBER_STATUS.INACTIVE ? MEMBER_STATUS_REASON.DEPOSIT_NON_COMPLIANCE : null,
+          updatedAt: asOf,
+        })
         .where(and(eq(members.id, row.id), eq(members.tenantId, tenantId)));
 
       changes.push({
@@ -714,7 +739,13 @@ export async function suspendMember(
   const db = getDb();
   await db
     .update(members)
-    .set({ status: MEMBER_STATUS.SUSPENDED, updatedAt: new Date() })
+    .set({
+      status: MEMBER_STATUS.SUSPENDED,
+      // Suspension is always a hand-made admin decision; record why the member
+      // is frozen so the sweep never mistakes it for a deposit hold.
+      statusReason: MEMBER_STATUS_REASON.ADMIN_MANUAL,
+      updatedAt: new Date(),
+    })
     .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId)));
 
   await logAudit({
@@ -745,10 +776,35 @@ export async function reinstateMember(
     throw new ConflictError("Member is already active");
   }
 
+  // An open payout plan has already reserved this member's balance and may have
+  // paid part of it out. Reinstating now would hand back money the settlement
+  // owes while the plan keeps running, so the plan must be cancelled first.
+  const [openPlan] = await getDb()
+    .select({ id: memberPayoutPlans.id, totalAmount: memberPayoutPlans.totalAmount })
+    .from(memberPayoutPlans)
+    .where(
+      and(
+        eq(memberPayoutPlans.tenantId, tenantId),
+        eq(memberPayoutPlans.memberId, memberId),
+        eq(memberPayoutPlans.status, "ACTIVE"),
+      ),
+    )
+    .limit(1);
+  if (openPlan) {
+    throw new ConflictError(
+      "This member has an open payout plan (exit settlement). Cancel the plan before reinstating them.",
+    );
+  }
+
   const db = getDb();
   await db
     .update(members)
-    .set({ status: MEMBER_STATUS.ACTIVE, updatedAt: new Date() })
+    .set({
+      status: MEMBER_STATUS.ACTIVE,
+      // Back to active: no reason to record.
+      statusReason: null,
+      updatedAt: new Date(),
+    })
     .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId)));
 
   await logAudit({
