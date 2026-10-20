@@ -8,12 +8,35 @@ const repoRoot = path.resolve(__dirname, '..');
 const require = createRequire(import.meta.url);
 const postgres = require(path.join(repoRoot, 'node_modules', 'postgres'));
 
+/**
+ * Env loading order: process.env, then .env.local, then .env.
+ *
+ * File values WIN over the shell (unchanged, existing behaviour), which is why
+ * a production run cannot simply `DATABASE_URL=... npm run db:migrate` — the
+ * local URL in .env.local would override it. Pass MIGRATE_ENV_FILE to load one
+ * more file LAST, so its values win:
+ *
+ *   MIGRATE_ENV_FILE=.env.production npm run db:migrate
+ *
+ * Without it, behaviour is exactly as before.
+ */
 function loadEnvFile() {
   const env = { ...process.env };
-  for (const file of ['.env.local', '.env']) {
+  const files = ['.env.local', '.env'];
+  const override = process.env.MIGRATE_ENV_FILE;
+  if (override) files.push(override);
+  for (const file of files) {
     const p = path.join(repoRoot, file);
-    if (!fs.existsSync(p)) continue;
+    if (!fs.existsSync(p)) {
+      if (file === override) {
+        console.error(`MIGRATE_ENV_FILE points at a missing file: ${file}`);
+        process.exit(1);
+      }
+      continue;
+    }
     for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
+      // Ignore comments so a commented rollback URL can never be picked up.
+      if (/^\s*#/.test(line)) continue;
       const m = line.match(/^\s*([A-Za-z_][\w]*)\s*=\s*(.*)\s*$/);
       if (m) env[m[1]] = m[2].replace(/^['"]|['"]$/g, '').trim();
     }
@@ -24,6 +47,17 @@ function loadEnvFile() {
 const env = loadEnvFile();
 if (!env.DATABASE_URL) {
   console.error('DATABASE_URL is not set in .env.local or .env');
+  process.exit(1);
+}
+
+// Print the TARGET (never the password) before writing anything: a migration
+// run against the wrong database is unrecoverable in the ways that matter.
+try {
+  const target = new URL(env.DATABASE_URL);
+  console.log(`Target database: ${target.hostname}${target.pathname} (user ${target.username})`);
+  if (process.env.MIGRATE_ENV_FILE) console.log(`Env file: ${process.env.MIGRATE_ENV_FILE}`);
+} catch {
+  console.error('DATABASE_URL is not a valid URL');
   process.exit(1);
 }
 

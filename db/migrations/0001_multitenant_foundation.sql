@@ -211,7 +211,21 @@ BEGIN
   IF default_tenant IS NULL THEN RETURN; END IF;
   -- Platform operators (access_level 5) keep tenant_id NULL: they bypass
   -- tenant scope and act only through /api/admin.
-  UPDATE "users" SET tenant_id = default_tenant WHERE tenant_id IS NULL AND (access_level IS NULL OR access_level < 5);
+  --
+  -- Guarded on column existence: 0002 DROPS access_level, so re-running this
+  -- file against an already-migrated database (the migration ledger was empty
+  -- on prod, so the whole chain replays) would otherwise abort with
+  -- `column "access_level" does not exist`. PL/pgSQL only plans a statement
+  -- when its branch executes, so the untaken branch is never parsed.
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'access_level'
+  ) THEN
+    UPDATE "users" SET tenant_id = default_tenant WHERE tenant_id IS NULL AND (access_level IS NULL OR access_level < 5);
+  ELSE
+    -- Post-0002 schema: no platform access levels left, every user is scoped.
+    UPDATE "users" SET tenant_id = default_tenant WHERE tenant_id IS NULL;
+  END IF;
   UPDATE "members" SET tenant_id = default_tenant WHERE tenant_id IS NULL;
   UPDATE "funds" SET tenant_id = default_tenant WHERE tenant_id IS NULL;
   UPDATE "projects" SET tenant_id = default_tenant WHERE tenant_id IS NULL;
