@@ -22,7 +22,6 @@ import { monthKeyOf, useFundOptions, useHasOpenFiscalPeriod, useMemberOptions, t
 import { DEPOSIT_FUND_TYPE } from "@/lib/deposit-fund";
 import { openPrintTab, releasePrintWindow, reservePrintWindow } from "@/lib/documents";
 
-// Amount stays a string end-to-end (2dp, no float) to match the API contract.
 const depositSchema = z.object({
   memberId: z.string().min(1),
   fundId: z.string().min(1),
@@ -36,10 +35,6 @@ const depositSchema = z.object({
   notes: z.string().trim().optional(),
   collectedDate: z.string().min(1),
   submittedDate: z.string().nullable().optional(),
-  // Period the deposit is FOR, picked on the tenant's fiscal calendar and
-  // required at submit in both modes; edit mode pre-fills from the saved
-  // deposit month. depositMonth is the absolute YYYY-MM sent on the wire,
-  // depositFiscalYear the picker's parent (fiscal start year).
   depositMonth: z.string().optional(),
   depositFiscalYear: z.string().optional(),
 });
@@ -49,13 +44,6 @@ type DepositForm = z.infer<typeof depositSchema>;
 const inputCls =
   "w-full px-3 py-2 rounded-xl border text-xs bg-card border-border/80 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors";
 
-// Single deposit entry + edit. The deposit month is chosen explicitly
-// (month + year dropdowns) instead of being auto-derived from the collected
-// date — back-entry records the month the deposit is FOR. Collected date
-// (money received) is still required. Submission date (recorded) is
-// optional — server defaults to now, settable for back-entry. All fields
-// start empty (§15 — explicit user choice); the amount autofills from the
-// selected member's shares × tenant share value at the user's request.
 export function DepositModal({
   open,
   onClose,
@@ -69,10 +57,6 @@ export function DepositModal({
   const queryClient = useQueryClient();
   const isEdit = !!initial;
   const tenantShareValue = useTenantShareValue();
-  // Fiscal period options (Rule §8): the deposit month is an accounting
-  // period, so its dropdowns follow the tenant's fiscal calendar — and for a
-  // posting form, only the year the ledger is open for (lib/fiscal-guard.ts
-  // rejects every other one at submit).
   const { yearOptionsIncluding, monthsFor, fiscalStartYearOf } = useFiscalPeriodOptions();
 
   const membersQuery = useMemberOptions();
@@ -101,7 +85,6 @@ export function DepositModal({
     },
   });
 
-  // Edit mode pre-fills from the row; add mode always starts empty.
   useEffect(() => {
     if (open && initial) {
       setValue("memberId", initial.memberId ?? "", { shouldValidate: true });
@@ -141,10 +124,6 @@ export function DepositModal({
   const depositMonth = watch("depositMonth") ?? "";
   const depositFiscalYear = watch("depositFiscalYear") ?? "";
 
-  // Amount autofill (explicit user request, §15-sanctioned): selecting a
-  // member defaults the amount to their shares × tenant share value. Fires
-  // only when the member selection actually changes so a background refetch
-  // never clobbers a hand-typed amount. Still editable for partial payments.
   const lastAutofilledMember = useRef("");
   useEffect(() => {
     if (!open || isEdit) return;
@@ -159,10 +138,6 @@ export function DepositModal({
     }
   }, [open, isEdit, memberId, membersQuery.data, tenantShareValue, setValue]);
 
-  // New deposits are limited to active members, but edit mode must never
-  // hide the RECORDED member: a deposit belonging to a since-deactivated
-  // member (or one whose options row hasn't loaded) would otherwise render
-  // an empty member field that looks like missing data.
   const memberOptions = useMemo(() => {
     const list = [...(membersQuery.data ?? [])];
     if (isEdit && initial?.memberId && !list.some((m) => m.id === initial.memberId)) {
@@ -173,12 +148,13 @@ export function DepositModal({
         status: "active",
       });
     }
-    return list
-      .filter((m) => m.status === "active" || (isEdit && m.id === initial?.memberId))
-      .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
+    const filtered = list.filter((m) => {
+      if (isEdit && m.id === initial?.memberId) return true;
+      return m.status === "active" || m.status === "inactive";
+    });
+    return filtered.map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
   }, [membersQuery.data, isEdit, initial]);
-  // Funds carry no status filter, but the same guard applies when the options
-  // feed fails: fall back to the row's own fund so edit never blanks it.
+
   const fundOptions = useMemo(() => {
     const list = [...(fundsQuery.data ?? [])];
     if (isEdit && initial?.fundId && !list.some((f) => f.id === initial.fundId)) {
@@ -186,10 +162,7 @@ export function DepositModal({
     }
     return list.map((f) => ({ value: f.id, label: f.name }));
   }, [fundsQuery.data, isEdit, initial]);
-  // Method picker from the tenant's configured payment methods (Settings →
-  // Governance). An edited deposit whose stored method is no longer configured
-  // (legacy row, or the org renamed it) is kept as a raw extra option — the
-  // form must never silently blank real history.
+
   const paymentMethods = useTenantPaymentMethods();
   const hasOpenFiscalPeriod = useHasOpenFiscalPeriod();
   const methodOptions = useMemo(() => {
@@ -198,9 +171,6 @@ export function DepositModal({
         PAYMENT_TYPE_LABEL_KEY[m.type as PaymentType] ?? 'settings.paymentMethods.types.other',
         { defaultValue: m.type },
       );
-      // #71: the bilingual pattern `name · type` collapses to a duplicate when
-      // the org names a method after its own type ("Cash" / CASH → "Cash · Cash").
-      // Show the type qualifier only when it adds information.
       const label = m.name.trim().toLowerCase() === typeLabel.trim().toLowerCase()
         ? m.name
         : `${m.name} · ${typeLabel}`;
@@ -212,8 +182,7 @@ export function DepositModal({
     }
     return opts;
   }, [paymentMethods, t, isEdit, initial?.depositMethod]);
-  // Keeps the row's own period visible when editing a deposit that sits in a
-  // closed or never-created fiscal year.
+
   const yearOptions = yearOptionsIncluding(depositFiscalYear || null);
   const monthOptions = monthsFor(depositFiscalYear || null);
 
@@ -235,8 +204,6 @@ export function DepositModal({
   };
 
   const onSubmit = async (values: DepositForm) => {
-    // Fiscal year + month are explicit user choices (§15); the month option is
-    // already the absolute YYYY-MM the server validates and stores.
     if (!values.depositMonth) {
       toast.error(t("deposits.modal.selectMonth"));
       return;
@@ -244,9 +211,6 @@ export function DepositModal({
     const selectedMonth = values.depositMonth;
     try {
       if (isEdit && initial) {
-        // Edit goes through the single finance path (atomic revert + apply
-        // for fund/member/amount changes). Amount crosses as a number per the
-        // finance contract; cents enforcement is server-side.
         await apiClient<{ success: boolean; message?: string }>(`/finance/deposits/${initial.id}`, {
           method: "PUT",
           body: JSON.stringify({
@@ -266,9 +230,6 @@ export function DepositModal({
         queryClient.invalidateQueries({ queryKey: ["analytics"] });
         toast.success(t("deposits.updatedToast"));
       } else {
-        // Pre-open the receipt tab while this submit's user gesture is still
-        // live: the POST's round trip ends the gesture, and a window.open
-        // fired after that is eaten by popup blockers (see lib/documents.ts).
         reservePrintWindow();
         const res = await apiClient<{ success: boolean; message?: string; data?: { id?: string } }>("/deposits", {
           method: "POST",
@@ -289,19 +250,12 @@ export function DepositModal({
         queryClient.invalidateQueries({ queryKey: ["funds"] });
         queryClient.invalidateQueries({ queryKey: ["analytics"] });
         const memberName = membersQuery.data?.find((m) => m.id === values.memberId)?.name ?? "";
-        // Localized copy is authoritative; the server `message` is an English
-        // duplicate and would defeat ur/hi/bn.
         toast.success(t("deposits.recordedToast", { amount: values.amount.trim(), member: memberName }));
-        // The deposit is now recorded — open its printable receipt. Only the
-        // create path produces a new document (edit has none, mirroring the
-        // projects flow); if the server did not return the row id, drop the
-        // reserved blank tab instead of leaving an empty window behind.
         if (res?.data?.id) openPrintTab("deposit", res.data.id);
         else releasePrintWindow();
       }
       close();
     } catch (err) {
-      // A refused/failed create must never leave the pre-opened blank tab.
       releasePrintWindow();
       toast.error(err instanceof ApiError ? err.message : t("deposits.loadFailed"));
     }
@@ -310,16 +264,11 @@ export function DepositModal({
   const title = isEdit ? t("deposits.modal.titleEdit") : t("deposits.modal.titleAdd");
 
   return (
-    // `isDirty` comes straight from react-hook-form: any touched field makes
-    // the sheet confirm before discarding (report issue 7).
     <TopSheet open={open} onClose={close} title={title} isDirty={isDirty}>
       <form method="post" onSubmit={handleSubmit(onSubmit)} noValidate>
         <ERPFormLayout>
           <ERPFormSection title={title}>
             {hasOpenFiscalPeriod.data === false && (
-              // #65 / #0: the write path fails closed with no OPEN fiscal
-              // period. Surface it up front so a fully-filled form never ends
-              // in an unexplained refusal.
               <div
                 role="alert"
                 className="mb-3 rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
@@ -405,15 +354,16 @@ export function DepositModal({
             </ERPFormGrid>
           </ERPFormSection>
           <div className="flex items-center justify-end gap-2 pt-2">
-              <Button variant="ghost" size="sm" type="button" onClick={close} disabled={isSubmitting}>
-                {t("common.cancel")}
-              </Button>
-              <Button variant="primary" size="sm" type="submit" loading={isSubmitting} loadingLabel={t("deposits.modal.submitting")}>
-                {isEdit ? t("deposits.modal.saveChanges") : t("deposits.modal.submit")}
-              </Button>
-            </div>
-          </ERPFormLayout>
+            <Button variant="ghost" size="sm" type="button" onClick={close} disabled={isSubmitting}>
+              {t("common.cancel")}
+            </Button>
+            <Button variant="primary" size="sm" type="submit" loading={isSubmitting} loadingLabel={t("deposits.modal.submitting")}>
+              {isEdit ? t("deposits.modal.saveChanges") : t("deposits.modal.submit")}
+            </Button>
+          </div>
+        </ERPFormLayout>
       </form>
     </TopSheet>
   );
 }
+
