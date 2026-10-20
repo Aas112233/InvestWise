@@ -147,7 +147,7 @@ export function DepositRequestView() {
   const memberOptions = selfMember
     ? [{ value: selfMember.id, label: selfMember.name, caption: selfMember.memberId }]
     : (membersQuery.data ?? [])
-        .filter((m) => m.status === "active")
+        .filter((m) => (m.status === "active" || m.status === "inactive") && !m.email?.toLowerCase().includes("deleted"))
         .map((m) => ({ value: m.id, label: m.name, caption: m.memberId }));
   const fundOptions = (fundsQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
   // Method picker comes from the tenant's Settings → Governance list (name +
