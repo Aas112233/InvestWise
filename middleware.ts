@@ -99,6 +99,7 @@ export async function middleware(request: NextRequest) {
   const forward = () => {
     const response = NextResponse.next({ request: { headers: cleanHeaders } });
     response.headers.set('content-security-policy', csp);
+    response.headers.set('x-nonce', nonce);
     return response;
   };
 
