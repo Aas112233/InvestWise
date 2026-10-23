@@ -208,6 +208,57 @@ export function findEquityViolation(
   return null;
 }
 
+/** The deployment facts needed to check a member's invested money. */
+export interface DeployedFundsSnapshot {
+  id: string;
+  name?: string | null;
+  /** Does the member carry any open (non-deleted) project investment legs? */
+  hasOpenInvestmentLegs: boolean;
+}
+
+/**
+ * A member whose net debit would pull back money that may already be
+ * deployed into a project.
+ */
+export interface DeployedFundsViolation {
+  memberId: string;
+  memberName: string;
+}
+
+/**
+ * Find the first member whose net debit touches money that may already be
+ * deployed into a project.
+ *
+ * The ledger does NOT attribute an investment to the deposit rows that
+ * funded it: an investment debits the member's AGGREGATE equity
+ * (`totalContributed`), and dividend credits can keep that aggregate
+ * positive even when every deposited unit is gone. So once a member
+ * carries an open project investment, ANY net reduction of their settled
+ * deposits could be reclaiming invested money — and the equity guard above
+ * cannot tell the difference.
+ *
+ * The only safe rule is to refuse the reduction outright: refund the
+ * investment (project edit or delete) first, then correct the deposit.
+ * Credits — amount increases and settle transitions — stay allowed.
+ *
+ * Members are inspected in sorted id order so the refusal is deterministic.
+ */
+export function findDeployedFundsViolation(
+  memberDelta: Map<string, number>,
+  members: Map<string, DeployedFundsSnapshot>,
+): DeployedFundsViolation | null {
+  for (const memberId of [...memberDelta.keys()].sort()) {
+    const delta = memberDelta.get(memberId) ?? 0;
+    if (delta >= 0) continue;
+    const member = members.get(memberId);
+    if (!member) continue;
+    if (member.hasOpenInvestmentLegs) {
+      return { memberId, memberName: member.name ?? 'the member' };
+    }
+  }
+  return null;
+}
+
 /**
  * The balance a fund holds ACROSS an edit: the balance before it and the
  * balance after it.

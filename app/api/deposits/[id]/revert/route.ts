@@ -136,12 +136,40 @@ export async function POST(
           `Cannot revert: reversing ${fromCents(txnCents)} would drop ${lockedFund.name} below minimum reserve`,
         );
       }
-      // A deposit is revertible while the member's FREE balance covers it.
-      // `totalContributed` is already net of project investment (the project
-      // create path deducts from it), so: deposits 5,000 + 5,000 with 1,000
-      // invested leaves 9,000 free and either 5,000 deposit may revert. Only a
-      // revert larger than the free balance would un-fund a project (§12). The
-      // member row is locked above, so a concurrent investment cannot race this.
+      // Deployed-funds lock: a member with an open project investment may
+      // not have settled deposits pulled back, and a revert IS such a
+      // pull-back — without this, revert would simply bypass the edit lock.
+      // The ledger does not attribute an investment to the deposit rows that
+      // funded it (an investment debits the member's AGGREGATE equity, which
+      // dividend credits can keep positive even when every deposited unit is
+      // gone), so the free-balance check below cannot tell invested money
+      // from free money. Unwind order is LIFO (§12): refund the investment
+      // (project edit or delete) first, then the deposit may revert. The
+      // member row is locked above, so a concurrent investment cannot slip a
+      // leg in between this check and the commit.
+      if (deposit.memberId) {
+        const [openLeg] = await tx
+          .select({ memberId: transactions.memberId })
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.tenantId, scopedTenantId),
+              eq(transactions.memberId, deposit.memberId),
+              eq(transactions.type, 'Project Investment'),
+              eq(transactions.isDeleted, false),
+            ),
+          )
+          .limit(1);
+        if (openLeg) {
+          throw new ValidationError(
+            `[Field 'amount', Code: DEPLOYED_FUNDS_PREVENTED] Cannot revert: ${lockedMember.name ?? 'this member'} has money invested in a project, so their settled deposits can no longer be reduced. Wind the project investment back first (edit or delete the project), then revert this deposit.`,
+          );
+        }
+      }
+      // Belt and braces beneath the lock: with no open legs the member's
+      // equity is deposits + dividend credits, and the reversal must still
+      // fit within it (dividend credits never fund a withdrawal of deposit
+      // money beyond what remains).
       const memberEquityCents = toCents(lockedMember.totalContributed ?? '0');
       if (memberEquityCents < txnCents) {
         throw new ValidationError(

@@ -42,10 +42,12 @@ import {
 } from '@/lib/deposit-month-limit';
 import {
   computeDepositEditDelta,
+  findDeployedFundsViolation,
   findEquityViolation,
   findFundDeficitViolation,
   fundBalanceAcrossEdit,
   isUnchangedDepositDate,
+  type DeployedFundsSnapshot,
   type FundBalanceSnapshot,
   type MemberEquitySnapshot,
 } from '@/lib/deposit-edit-delta';
@@ -810,6 +812,55 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
       );
     }
 
+    // Guard: a member whose money is deployed into a project may not have
+    // settled deposits reduced. The ledger does not attribute an investment
+    // to the deposit rows that funded it (an investment debits the member's
+    // AGGREGATE equity, which dividend credits can keep positive even when
+    // every deposited unit is gone), so the equity guard above cannot tell
+    // invested money from free money. Any net reduction of a deployed
+    // member's settled deposits is therefore refused: wind the project
+    // investment back first (project edit or delete), then edit the deposit.
+    // Only DEBITS are checked — increases and settle transitions stay
+    // allowed. The member rows are locked above, so a concurrent investment
+    // cannot slip a leg in between this check and the commit.
+    const debitedMemberIds = [...memberDelta.entries()]
+      .filter(([, delta]) => delta < 0)
+      .map(([memberId]) => memberId)
+      .sort();
+    if (debitedMemberIds.length > 0) {
+      const legRows = await tx
+        .select({ memberId: transactions.memberId })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.tenantId, tenantId),
+            inArray(transactions.memberId, debitedMemberIds),
+            eq(transactions.type, 'Project Investment'),
+            eq(transactions.isDeleted, false),
+          ),
+        );
+      const legOwners = new Set<string>();
+      for (const leg of legRows) {
+        if (leg.memberId) legOwners.add(leg.memberId);
+      }
+      const deployedSnapshots = new Map<string, DeployedFundsSnapshot>();
+      for (const memberId of debitedMemberIds) {
+        deployedSnapshots.set(memberId, {
+          id: memberId,
+          name: lockedMembers.get(memberId)?.name,
+          hasOpenInvestmentLegs: legOwners.has(memberId),
+        });
+      }
+      const deployedViolation = findDeployedFundsViolation(memberDelta, deployedSnapshots);
+      if (deployedViolation) {
+        throw new AppError(
+          `Cannot change this deposit: ${deployedViolation.memberName} has money invested in a project, so their settled deposits can no longer be reduced. Wind the project investment back first (edit or delete the project), then edit this deposit.`,
+          400,
+          'DEPLOYED_FUNDS_PREVENTED',
+        );
+      }
+    }
+
     // Collected date stays the ledger date; the selected month (or the
     // existing stored month) is what the deposit is FOR.
     //
@@ -1121,11 +1172,39 @@ export async function revertDeposit(id: string, reason: string, user: SessionUse
       );
     }
 
-    // Revertible while the member's FREE balance covers the deposit:
-    // `totalContributed` is already net of project investment, so 5,000 + 5,000
-    // deposited with 1,000 invested leaves 9,000 free and a 5,000 deposit may
-    // revert. Only a larger reversal would un-fund a project (§12). The member
-    // row is locked above, so a concurrent investment cannot race this check.
+    // Deployed-funds lock: a member with an open project investment may not
+    // have settled deposits pulled back, and a revert IS such a pull-back —
+    // without this, revert would simply bypass the edit lock. Unwind order
+    // is LIFO (§12): refund the investment (project edit or delete) first,
+    // then the deposit may revert. The member row is locked above, so a
+    // concurrent investment cannot slip a leg in between this check and the
+    // commit.
+    if (txn.memberId) {
+      const [openLeg] = await tx
+        .select({ memberId: transactions.memberId })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.tenantId, tenantId),
+            eq(transactions.memberId, txn.memberId),
+            eq(transactions.type, 'Project Investment'),
+            eq(transactions.isDeleted, false),
+          ),
+        )
+        .limit(1);
+      if (openLeg) {
+        throw new AppError(
+          `Cannot revert: ${member.name ?? 'this member'} has money invested in a project, so their settled deposits can no longer be reduced. Wind the project investment back first (edit or delete the project), then revert this deposit.`,
+          400,
+          'DEPLOYED_FUNDS_PREVENTED',
+        );
+      }
+    }
+
+    // Belt and braces beneath the lock: with no open legs the member's
+    // equity is deposits + dividend credits, and the reversal must still
+    // fit within it (dividend credits never fund a withdrawal of deposit
+    // money beyond what remains).
     const memberEquityCents = toCents(member.totalContributed ?? '0');
     if (memberEquityCents < txnCents) {
       throw new AppError(

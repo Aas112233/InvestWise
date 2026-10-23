@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeDepositEditDelta,
+  findDeployedFundsViolation,
   findEquityViolation,
   findFundDeficitViolation,
   fundBalanceAcrossEdit,
   fundFloorCents,
   isUnchangedDepositDate,
+  type DeployedFundsSnapshot,
   type FundBalanceSnapshot,
   type MemberEquitySnapshot,
 } from '@/lib/deposit-edit-delta';
@@ -208,5 +210,66 @@ describe('preserving the stored date', () => {
     expect(isUnchangedDepositDate('2026-12-01', null)).toBe(false);
     expect(isUnchangedDepositDate('2026-12-01', undefined)).toBe(false);
     expect(isUnchangedDepositDate('not-a-date', '2026-12-01')).toBe(false);
+  });
+});
+
+function deployedMember(id: string, hasOpenInvestmentLegs: boolean): DeployedFundsSnapshot {
+  return { id, name: `Member ${id.slice(0, 4)}`, hasOpenInvestmentLegs };
+}
+
+describe('deployed funds lock', () => {
+  it('refuses a debit for a member with open investment legs', () => {
+    const memberDelta = new Map([[MEMBER_A, -400_000]]);
+    const members = new Map([[MEMBER_A, deployedMember(MEMBER_A, true)]]);
+    expect(findDeployedFundsViolation(memberDelta, members)).toEqual({
+      memberId: MEMBER_A,
+      memberName: `Member ${MEMBER_A.slice(0, 4)}`,
+    });
+  });
+
+  it('allows a debit for a member without investment legs', () => {
+    const memberDelta = new Map([[MEMBER_A, -400_000]]);
+    const members = new Map([[MEMBER_A, deployedMember(MEMBER_A, false)]]);
+    expect(findDeployedFundsViolation(memberDelta, members)).toBeNull();
+  });
+
+  it('allows credits even when the member has open legs', () => {
+    const memberDelta = new Map([[MEMBER_A, 300_000]]);
+    const members = new Map([[MEMBER_A, deployedMember(MEMBER_A, true)]]);
+    expect(findDeployedFundsViolation(memberDelta, members)).toBeNull();
+  });
+
+  it('allows a zero delta (neutral edits) even when the member has open legs', () => {
+    const memberDelta = new Map([[MEMBER_A, 0]]);
+    const members = new Map([[MEMBER_A, deployedMember(MEMBER_A, true)]]);
+    expect(findDeployedFundsViolation(memberDelta, members)).toBeNull();
+  });
+
+  it('inspects members in sorted id order for a deterministic refusal', () => {
+    const memberDelta = new Map([
+      [MEMBER_B, -100_000],
+      [MEMBER_A, -200_000],
+    ]);
+    const members = new Map([
+      [MEMBER_A, deployedMember(MEMBER_A, true)],
+      [MEMBER_B, deployedMember(MEMBER_B, true)],
+    ]);
+    expect(findDeployedFundsViolation(memberDelta, members)?.memberId).toBe(MEMBER_B);
+  });
+
+  it('skips members without a snapshot', () => {
+    const memberDelta = new Map([[MEMBER_A, -100_000]]);
+    expect(findDeployedFundsViolation(memberDelta, new Map())).toBeNull();
+  });
+
+  it('blocks the un-settle transition (settled deposit moved to pending)', () => {
+    // Reverting a settled deposit is the largest possible debit: the whole
+    // old contribution leaves the member's claim.
+    const { memberDelta } = computeDepositEditDelta(
+      { wasCompleted: true, oldFundId: FUND_A, oldMemberId: MEMBER_A, oldAmountCents: 500_000 },
+      { isNowCompleted: false, newFundId: FUND_A, newMemberId: MEMBER_A, newAmountCents: 0 },
+    );
+    const members = new Map([[MEMBER_A, deployedMember(MEMBER_A, true)]]);
+    expect(findDeployedFundsViolation(memberDelta, members)?.memberId).toBe(MEMBER_A);
   });
 });
