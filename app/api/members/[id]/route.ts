@@ -79,7 +79,7 @@ export async function GET(
           depositScope,
         ),
       )
-      .orderBy(desc(transactions.date))
+      .orderBy(desc(transactions.createdAt), desc(transactions.date), desc(transactions.id))
       .limit(20);
 
     return NextResponse.json({

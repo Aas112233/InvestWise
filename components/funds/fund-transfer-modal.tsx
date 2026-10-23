@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { ERPFormField, ERPFormGrid, ERPFormLayout, ERPFormSection } from "@/components/ui/erp-form-layout";
 import { TopSheet } from "@/components/ui/top-sheet";
 import { NumericInput } from "@/components/ui/numeric-input";
+import { ERPDatePicker } from "@/components/ui/erp-date-picker";
 import { ApiError, apiClient } from "@/lib/api-client";
-import { formatMoney } from "@/lib/formatters";
+import { formatMoney, todayLocalIso } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
 import { useTenantCurrency } from "@/components/deposits/shared";
 import type { FundRow } from "./shared";
@@ -45,6 +46,7 @@ export function FundTransferModal({
   const [destId, setDestId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
+  const [transferDate, setTransferDate] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,6 +56,7 @@ export function FundTransferModal({
       setDestId(null);
       setAmount("");
       setReason("");
+      setTransferDate(null);
       setTouched(false);
     }
   }, [open, presetSourceId]);
@@ -67,13 +70,17 @@ export function FundTransferModal({
   const available = source ? num(source.balance) - num(source.minimumBalance) : 0;
   const amountValid = AMOUNT_RE.test(amount.trim()) && parseFloat(amount) > 0;
   const sufficient = amountValid && parseFloat(amount) <= available + 1e-9;
-  const ready = !!sourceId && !!destId && amountValid && sufficient;
+  // Back-dating is allowed (back-entry); future-dating is not — balances are
+  // checked against the books as they stand now.
+  const dateInFuture = !!transferDate && transferDate > todayLocalIso();
+  const ready = !!sourceId && !!destId && amountValid && sufficient && !dateInFuture;
 
   const close = () => {
     setSourceId(presetSourceId ?? null);
     setDestId(null);
     setAmount("");
     setReason("");
+    setTransferDate(null);
     setTouched(false);
     onClose();
   };
@@ -96,6 +103,10 @@ export function FundTransferModal({
       toast.error(t("funds.transferModal.insufficientError"));
       return;
     }
+    if (transferDate && transferDate > todayLocalIso()) {
+      toast.error(t("funds.transferModal.dateFutureError"));
+      return;
+    }
     setSubmitting(true);
     try {
       await apiClient("/funds/transfer", {
@@ -108,6 +119,8 @@ export function FundTransferModal({
           // transfer ever landed. Decimal safety is enforced server-side.
           amount: parseFloat(amount.trim()),
           description: reason.trim() || undefined,
+          // Effective transfer day (yyyy-mm-dd); omitted = operation moment.
+          date: transferDate || undefined,
         }),
       });
       queryClient.invalidateQueries({ queryKey: ["funds"] });
@@ -152,6 +165,7 @@ export function FundTransferModal({
               label={t("funds.transferModal.amount")}
               required
               error={touched && !amountValid ? t("funds.transferModal.invalidAmountError") : touched && !sufficient ? t("funds.transferModal.insufficientError") : undefined}
+              hint={source ? `${t("funds.transferModal.available")}: ${formatMoney(Math.max(0, available).toFixed(2), currency)}` : undefined}
             >
               <NumericInput
                 type="text"
@@ -162,10 +176,17 @@ export function FundTransferModal({
                 className={`${inputCls} font-mono`}
               />
             </ERPFormField>
-            <ERPFormField label={t("funds.transferModal.available")}>
-              <p className="px-3 py-2 rounded border border-slate-200 dark:border-border bg-slate-50 dark:bg-slate-800/50 font-mono text-xs">
-                {source ? formatMoney(Math.max(0, available).toFixed(2), currency) : "—"}
-              </p>
+            <ERPFormField
+              label={t("funds.transferModal.transferDate")}
+              hint={t("funds.transferModal.transferDateHint")}
+              error={touched && dateInFuture ? t("funds.transferModal.dateFutureError") : undefined}
+            >
+              <ERPDatePicker
+                value={transferDate}
+                onChange={setTransferDate}
+                max={todayLocalIso()}
+                placeholder={t("erp.datePicker.placeholder")}
+              />
             </ERPFormField>
           </ERPFormGrid>
           <ERPFormField label={t("funds.transferModal.reason")}>

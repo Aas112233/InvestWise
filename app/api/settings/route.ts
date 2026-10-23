@@ -62,6 +62,7 @@ function formatSettingsResponse(settings: any): Record<string, unknown> {
       refreshInterval: settings.refreshInterval || 'Real-time',
       theme: settings.theme || 'Light',
       dateFormat: settings.dateFormat || 'DD/MM/YYYY',
+      timezone: settings.timezone || 'Asia/Dhaka',
       isMaintenanceMode: Boolean(settings.isMaintenanceMode),
     },
   };
@@ -314,6 +315,9 @@ export async function PUT(request: NextRequest) {
       }
       if (data.system.dateFormat !== undefined) {
         updateData.dateFormat = data.system.dateFormat;
+      }
+      if (data.system.timezone !== undefined) {
+        updateData.timezone = data.system.timezone;
       }
       if (data.system.isMaintenanceMode !== undefined) {
         updateData.isMaintenanceMode = data.system.isMaintenanceMode;

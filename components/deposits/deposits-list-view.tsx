@@ -228,6 +228,10 @@ export function DepositsListView({
   const [fundId, setFundId] = useState<string | null>(null);
   const [month, setMonth] = useState<FiscalMonthValue>({ fiscalYear: null, month: null });
   const [status, setStatus] = useState<string | null>(null);
+  // Default newest-first on the COLLECTED date (transactions.date) — the
+  // business-meaningful "latest" for a deposit desk (AGENTS.md §2: finance
+  // lists sort by `date`, not `createdAt`). The Date column renders this same
+  // field, so the ordering and the visible dates always agree.
   const [sortBy, setSortBy] = useState("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [receipt, setReceipt] = useState<DepositRow | null>(null);

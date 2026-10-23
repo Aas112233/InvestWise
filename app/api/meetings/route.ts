@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
         .from(meetings)
         .leftJoin(users, and(eq(meetings.conductedBy, users.id), eq(users.tenantId, tenantId)))
         .where(whereClause)
-        .orderBy(desc(meetings.meetingDate))
+        .orderBy(desc(meetings.createdAt), desc(meetings.meetingDate), desc(meetings.id))
         .limit(limit)
         .offset(skip),
     ]);

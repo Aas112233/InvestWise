@@ -1,16 +1,33 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { useLocale } from "@/lib/i18n";
+import { useFormatDate, useTenantSettings } from "@/lib/use-tenant-settings";
 
 /**
  * Printable-document primitives.
  *
- * Design language: A4, monochrome, hairline rules, a single 5px brand accent,
+ * Design language: A4, monochrome, hairline rules, a single brand accent,
  * tabular figures. No gradients, no colored panels. All layout uses physical mm
  * (exact print fidelity) and logical alignment (start/end) so Urdu mirrors to
  * RTL automatically via the inherited <html dir>.
  */
+
+/**
+ * Stable fingerprint of a sheet, derived from its reference. The value is the
+ * same every time the same document is printed, so it identifies the document;
+ * the issuance timestamp beside it is what distinguishes one printout from the
+ * next. Office staff can match either against the PRINT_DOCUMENT audit entries.
+ */
+function sheetCodeFor(reference: string | undefined): string | undefined {
+  if (!reference) return undefined;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < reference.length; i++) {
+    h ^= reference.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36).toUpperCase().padStart(7, "0").slice(0, 7);
+}
 
 export interface DocSignature {
   label: string;
@@ -45,6 +62,19 @@ interface DocumentFrameProps {
 
 export function DocumentFrame({ orgName, docType, reference, dateLabel, children, signatures, orgTagline }: DocumentFrameProps) {
   const { t } = useLocale();
+  const formatDate = useFormatDate();
+  const org = useTenantSettings().data?.organization;
+  // The sheet must date its own creation: a receipt printed today for a
+  // transaction recorded three years ago was previously indistinguishable from
+  // one printed on the day of payment.
+  const issuedAt = useMemo(() => new Date(), []);
+  const issuedLabel = formatDate(issuedAt, true);
+  const sheetCode = sheetCodeFor(reference);
+  const identity = [
+    org?.companyAddress,
+    org?.companyRegNo ? `${t("documents.regNo", { defaultValue: "Reg" })} ${org.companyRegNo}` : null,
+    [org?.companyPhone, org?.companyEmail].filter(Boolean).join(" · ") || null,
+  ].filter((line): line is string => Boolean(line));
   return (
     <div
       id="doc-sheet"
@@ -70,9 +100,28 @@ export function DocumentFrame({ orgName, docType, reference, dateLabel, children
               {orgName || t("documents.orgFallback", { defaultValue: "InvestWise" })}
             </div>
             <div style={{ marginTop: 3, fontSize: 10.5, color: FAINT, display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ width: 5, height: 5, borderRadius: 9999, background: "var(--primary, #2563eb)", display: "inline-block" }} />
+              {/* Outlined, not filled: a background dot vanishes when the print
+                  dialog has "Background graphics" off, and the sheet must still
+                  look like the issuer's letterhead on a mono printer. */}
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 9999,
+                  border: `1.5px solid ${INK}`,
+                  display: "inline-block",
+                  flexShrink: 0,
+                }}
+              />
               {orgTagline || "InvestWise"}
             </div>
+            {identity.length > 0 ? (
+              <div style={{ marginTop: 4, fontSize: 9.5, color: MUTED, lineHeight: 1.6, ...WRAP }}>
+                {identity.map((line, i) => (
+                  <div key={i}>{line}</div>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div style={{ textAlign: "end", fontSize: 11, color: MUTED, lineHeight: 1.7, minWidth: 0, flex: "0 1 auto", ...WRAP }}>
             <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.09em", color: FAINT, fontWeight: 600, ...WRAP }}>
@@ -83,8 +132,20 @@ export function DocumentFrame({ orgName, docType, reference, dateLabel, children
                 {t("documents.reference", { defaultValue: "Reference" })}:{" "}
                 <span style={{ fontVariantNumeric: "tabular-nums", color: INK }}>{reference}</span>
               </div>
-            ) : null}
+            ) : (
+              <div style={{ color: FAINT }}>{t("documents.noReference", { defaultValue: "No reference assigned" })}</div>
+            )}
             {dateLabel ? <div style={{ fontVariantNumeric: "tabular-nums" }}>{dateLabel}</div> : null}
+            {issuedLabel ? (
+              <div style={{ fontSize: 9.5, color: FAINT, fontVariantNumeric: "tabular-nums" }}>
+                {t("documents.issued", { defaultValue: "Issued" })}: {issuedLabel}
+              </div>
+            ) : null}
+            {sheetCode ? (
+              <div style={{ fontSize: 9.5, color: FAINT, fontVariantNumeric: "tabular-nums" }}>
+                {t("documents.sheetCode", { defaultValue: "Sheet" })}: {sheetCode}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -114,6 +175,7 @@ export function DocumentFrame({ orgName, docType, reference, dateLabel, children
                 </div>
                 <div style={{ fontSize: 9, color: FAINT, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 3 }}>
                   {s.label}
+                  {s.role ? ` · ${s.role}` : ""}
                 </div>
               </div>
             ))}
@@ -137,6 +199,14 @@ export function DocumentFrame({ orgName, docType, reference, dateLabel, children
         {t("documents.generatedBy", { defaultValue: "Generated by InvestWise" })}
         {reference ? ` · ${reference}` : ""}
         {dateLabel ? ` · ${dateLabel}` : ""}
+        {issuedLabel ? ` · ${t("documents.issued", { defaultValue: "Issued" })} ${issuedLabel}` : ""}
+      </div>
+
+      {/* Repeats on every printed page, so a second page still identifies the
+          document it belongs to. Hidden on screen. */}
+      <div className="doc-running">
+        {orgName || "InvestWise"} · {docType}
+        {reference ? ` · ${reference}` : ""}
       </div>
     </div>
   );
@@ -146,7 +216,18 @@ export function DocTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em", color: INK, marginBottom: 6, ...KEEP, ...WRAP }}>{children}</div>;
 }
 
-export function DocAmount({ label, children }: { label?: string; children: React.ReactNode }) {
+export function DocAmount({
+  label,
+  words,
+  wordsLabel,
+  children,
+}: {
+  label?: string;
+  /** Spelled-out figure — the tamper evidence a numeric-only amount lacks. */
+  words?: string | null;
+  wordsLabel?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div style={{ margin: "4mm 0 7mm" }}>
       {label ? (
@@ -157,6 +238,36 @@ export function DocAmount({ label, children }: { label?: string; children: React
       <div style={{ fontSize: 28, fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em", color: INK, lineHeight: 1.2, ...WRAP }}>
         {children}
       </div>
+      {words ? (
+        <div style={{ marginTop: 4, fontSize: 11.5, color: MUTED, lineHeight: 1.5, ...WRAP }}>
+          {wordsLabel ? <span style={{ color: FAINT }}>{wordsLabel}: </span> : null}
+          <span style={{ color: INK, fontStyle: "italic" }}>{words}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Conditional-state banner. An unverified or declined row must not print as a
+ * clean, official document — only voided rows carried a stamp before this.
+ * Bordered rather than filled so it survives "no background graphics".
+ */
+export function DocBanner({ label, detail }: { label: string; detail?: string }) {
+  return (
+    <div
+      style={{
+        border: "1.5px solid #111827",
+        borderLeft: `4px solid #111827`,
+        padding: "3mm 4mm",
+        marginBottom: "6mm",
+        ...KEEP,
+      }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.11em", color: INK, ...WRAP }}>
+        {label}
+      </div>
+      {detail ? <div style={{ marginTop: 2, fontSize: 10.5, color: MUTED, lineHeight: 1.5, ...WRAP }}>{detail}</div> : null}
     </div>
   );
 }
@@ -183,24 +294,24 @@ export function DocField({ label, children }: { label: string; children: React.R
  * Void banner — a retracted ledger row must never print as a live document.
  * Monochrome rule: a bordered stamp survives a printer set to no colour.
  */
-export function DocVoidStamp({ label, dateLabel }: { label: string; dateLabel?: string }) {
+export function DocVoidStamp({ label, dateLabel, detail }: { label: string; dateLabel?: string; detail?: string }) {
   return (
     <div
       style={{
         border: "1.5px solid #111827",
         padding: "3.5mm 4mm",
         marginBottom: "7mm",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "baseline",
-        gap: "8mm",
         ...KEEP,
       }}
     >
-      <span style={{ fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.14em", color: INK, ...WRAP }}>{label}</span>
-      {dateLabel ? (
-        <span style={{ fontSize: 11, color: MUTED, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{dateLabel}</span>
-      ) : null}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8mm" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.14em", color: INK, ...WRAP }}>{label}</span>
+        {dateLabel ? (
+          <span style={{ fontSize: 11, color: MUTED, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{dateLabel}</span>
+        ) : null}
+      </div>
+      {/* A cancelled instrument has to name the person who cancelled it. */}
+      {detail ? <div style={{ marginTop: 2, fontSize: 10.5, color: MUTED, ...WRAP }}>{detail}</div> : null}
     </div>
   );
 }

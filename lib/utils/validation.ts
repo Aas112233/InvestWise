@@ -169,6 +169,20 @@ export const updateSettingsSchema = z.object({
       refreshInterval: z.string().optional(),
       theme: z.enum(['Light', 'Dark', 'System Default']).optional(),
       dateFormat: z.string().optional(),
+      timezone: z
+        .string()
+        .trim()
+        .min(1)
+        .max(60)
+        .refine((v) => {
+          try {
+            new Intl.DateTimeFormat('en-US', { timeZone: v });
+            return true;
+          } catch {
+            return false;
+          }
+        }, 'Not a valid IANA timezone (e.g. Asia/Dhaka)')
+        .optional(),
       isMaintenanceMode: z.boolean().optional(),
     })
     .optional(),

@@ -14,6 +14,8 @@ import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, LockedError, readJsonBody } from '@/lib/utils/errors';
 import { toCents, fromCents } from '@/lib/money';
 import { endOfRangeUtc } from '@/lib/formatters';
+import { dayRangeUtc } from '@/lib/tenant-time';
+import { getTenantTimezone } from '@/lib/tenant-time-db';
 
 /** Single-deposit ceiling = the shared money-module maximum (10,000,000). */
 const MAX_AMOUNT_CENTS = 10_000_000 * 100;
@@ -57,6 +59,9 @@ export async function GET(request: NextRequest) {
     // Header sort runs here, not in the browser: the desk paginates, so a
     // client-side sort only ever reorders the 20 loaded rows of a 1,500-row
     // filter set and looks like nothing happened (AGENTS.md §2).
+    // Default newest-first on the COLLECTED date (transactions.date) — the
+    // Date column renders this field, and finance lists sort by `date` per
+    // AGENTS.md §2 (not the recorded `createdAt`).
     const sortBy = searchParams.get('sortBy') || 'date';
     const sortOrder = searchParams.get('sortOrder') === 'asc' ? 'asc' : 'desc';
 
@@ -114,20 +119,25 @@ export async function GET(request: NextRequest) {
         sql`NOT (COALESCE(${transactions.status}, '') = 'PENDING' AND COALESCE(${transactions.category}, '') = 'Deposit Request')`,
       );
     }
+    // Date bounds and month attribution are TENANT-LOCAL days
+    // (Settings → Timezone), evaluated via lib/tenant-time.
+    const tenantTz = await getTenantTimezone(scopedTenantId);
     if (depositMonthParam) {
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(depositMonthParam)) {
         throw new ValidationError("[Field 'depositMonth', Code: invalid_string] Deposit month filter must be in YYYY-MM format");
       }
       conditions.push(
-        sql`COALESCE(${transactions.depositMonth}, to_char(${transactions.date} AT TIME ZONE 'UTC', 'YYYY-MM')) = ${depositMonthParam}`,
+        // The month a deposit is FOR is a tenant-calendar month: derive the
+        // fallback from the books' zone, not UTC (Settings → Timezone).
+        sql`COALESCE(${transactions.depositMonth}, to_char(${transactions.date} AT TIME ZONE ${tenantTz}, 'YYYY-MM')) = ${depositMonthParam}`,
       );
     } else {
       if (startDate) {
-        conditions.push(gte(transactions.date, new Date(startDate)));
+        conditions.push(gte(transactions.date, dayRangeUtc(startDate, tenantTz).start));
       }
       if (endDate) {
-        // Date-only end is inclusive of the whole day (see endOfRangeUtc).
-        conditions.push(lte(transactions.date, endOfRangeUtc(endDate)));
+        // Date-only end is inclusive of the whole tenant day (dayRangeUtc).
+        conditions.push(lte(transactions.date, dayRangeUtc(endDate, tenantTz).end));
       }
     }
     if (search) {

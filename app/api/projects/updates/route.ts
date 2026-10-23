@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
         .from(projectUpdates)
         .innerJoin(projects, and(eq(projectUpdates.projectId, projects.id), eq(projects.tenantId, tenantId)))
         .where(where)
-        .orderBy(desc(projectUpdates.date))
+        .orderBy(desc(projectUpdates.createdAt), desc(projectUpdates.date), desc(projectUpdates.id))
         .limit(pageSize)
         .offset((page - 1) * pageSize),
       db.select({ total: count() }).from(projectUpdates).where(where),

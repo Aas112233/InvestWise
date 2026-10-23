@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { transactions, members, funds, projects, users, deletedRecords, projectUpdates } from '@/db/schema/index';
+import { transactions, members, funds, projects, users, deletedRecords, projectUpdates, fiscalPeriods } from '@/db/schema/index';
 import { memberDisplayNameSql } from '@/lib/member-display';
-import { eq, and, ne, sql, isNull } from 'drizzle-orm';
+import { eq, and, ne, sql, isNull, gte, lte, aliasedTable } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
-import { hasScreenPermission } from '@/lib/permissions';
+import { hasScreenPermission, hasAnyScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { LockedError, NotFoundError, ValidationError, ForbiddenError } from '@/lib/utils/errors';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import { toCents } from '@/lib/money';
 import { decideReversal, shouldRefundProjectExpenses, shouldRefundProjectEarnings } from '@/lib/transaction-reversal';
+
+// A row carries three user references (authorizer, deleter) and two fund
+// references (receiving fund, source fund), so each extra join needs its own
+// alias or Postgres rejects the query as specifying the same table twice.
+const sourceFunds = aliasedTable(funds, 'source_funds');
+const deletedUsers = aliasedTable(users, 'deleted_users');
 
 export async function GET(
   request: NextRequest,
@@ -36,22 +42,38 @@ export async function GET(
         amount: transactions.amount,
         status: transactions.status,
         description: transactions.description,
+        expenseName: transactions.expenseName,
         memberId: transactions.memberId,
         memberName: memberDisplayNameSql,
         memberCode: members.memberId,
+        memberEmail: members.email,
+        memberUserId: members.userId,
+        // The member's contribution balance after this row — the value the
+        // payout and arrears engines actually measure.
+        memberTotalContributed: members.totalContributed,
         fundId: transactions.fundId,
         fundName: funds.name,
+        // Project Investment legs draw capital FROM a deposit fund; a document
+        // that shows only the credit side is why treasuries double-count.
+        sourceFundId: transactions.sourceFundId,
+        sourceFundName: sourceFunds.name,
         projectId: transactions.projectId,
         projectName: projects.title,
         handlingOfficer: transactions.handlingOfficer,
         depositMethod: transactions.depositMethod,
+        // The month a deposit is FOR. Distinct from the collected date:
+        // back-entry files money under an earlier period.
+        depositMonth: transactions.depositMonth,
+        balanceBefore: transactions.balanceBefore,
         balanceAfter: transactions.balanceAfter,
         transferGroupId: transactions.transferGroupId,
         authorizedBy: transactions.authorizedBy,
         authorizerName: users.name,
         isDeleted: transactions.isDeleted,
         deletedAt: transactions.deletedAt,
+        deletedByName: deletedUsers.name,
         deletionReason: transactions.deletionReason,
+        submittedDate: transactions.submittedDate,
         createdAt: transactions.createdAt,
       })
       .from(transactions)
@@ -59,17 +81,69 @@ export async function GET(
       // inconsistent foreign keys must not expose another tenant's PII.
       .leftJoin(members, and(eq(transactions.memberId, members.id), eq(members.tenantId, tenantId)))
       .leftJoin(funds, and(eq(transactions.fundId, funds.id), eq(funds.tenantId, tenantId)))
+      .leftJoin(
+        sourceFunds,
+        and(eq(transactions.sourceFundId, sourceFunds.id), eq(sourceFunds.tenantId, tenantId)),
+      )
       .leftJoin(projects, and(eq(transactions.projectId, projects.id), eq(projects.tenantId, tenantId)))
       .leftJoin(users, and(eq(transactions.authorizedBy, users.id), eq(users.tenantId, tenantId)))
+      .leftJoin(
+        deletedUsers,
+        and(eq(transactions.deletedBy, deletedUsers.id), eq(deletedUsers.tenantId, tenantId)),
+      )
       .where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId)))
       .limit(1);
 
     if (!tx) throw new NotFoundError('Transaction');
 
-    // A fund transfer is posted as two legs sharing transferGroupId. A voucher
+    // A cancelled document must name the person who cancelled it; a void stamp
+    // with no canceller is not an audit trail.
+    const { memberUserId, memberEmail, deletedByName, ...txFields } = tx;
+
+    // This route previously had no authorisation floor at all: any
+    // authenticated tenant user holding an id could fetch (and therefore print)
+    // another member's receipt. Officers pass on screen-read; a plain Member may
+    // only reach their own rows.
+    const mayReadLedger = hasAnyScreenPermission(user, ['TRANSACTIONS', 'DEPOSITS'], 'READ');
+    const isOwnRow =
+      Boolean(user.id) &&
+      (memberUserId === user.id ||
+        (Boolean(memberEmail) && memberEmail?.toLowerCase() === user.email?.toLowerCase()));
+    if (!mayReadLedger && !isOwnRow) {
+      throw new ForbiddenError('Read permission required for: TRANSACTIONS');
+    }
+
+    // Which fiscal period the entry is filed under, and whether that period is
+    // closed. A receipt issued into a closed period is a restatement and has to
+    // say so on its face.
+    const [fiscalPeriod] = tx.date
+      ? await db
+          .select({
+            year: fiscalPeriods.year,
+            status: fiscalPeriods.status,
+            closedAt: fiscalPeriods.closedAt,
+          })
+          .from(fiscalPeriods)
+          .where(
+            and(
+              eq(fiscalPeriods.tenantId, tenantId),
+              lte(fiscalPeriods.periodStart, tx.date),
+              gte(fiscalPeriods.periodEnd, tx.date),
+            ),
+          )
+          .limit(1)
+      : [];
+
+    // One fund transfer is two legs sharing transferGroupId. A voucher
     // for one leg would otherwise show money leaving a fund with no stated
-    // destination (or arriving from nowhere), so name the counterpart leg.
-    let transferCounterpart: { type: string | null; fundName: string | null; referenceNumber: string | null } | null = null;
+    // destination (or arriving from nowhere), so name the counterpart leg —
+    // and its reference, so the two halves of one transfer tie together on
+    // paper instead of reading as two unrelated movements.
+    let transferCounterpart: {
+      type: string | null;
+      fundName: string | null;
+      referenceNumber: string | null;
+    } | null = null;
     if (tx.transferGroupId) {
       const [sibling] = await db
         .select({
@@ -83,16 +157,36 @@ export async function GET(
           and(
             eq(transactions.transferGroupId, tx.transferGroupId),
             eq(transactions.tenantId, tenantId),
-            ne(transactions.id, tx.id),
+            ne(transactions.id, id),
           ),
         )
         .limit(1);
       if (sibling) transferCounterpart = sibling;
     }
 
+    // Document issuance is itself an auditable act: without it there is no
+    // record that a receipt was ever handed out, and a reprint is
+    // indistinguishable from the original. Only the print view asks for it.
+    if (new URL(request.url).searchParams.get('purpose') === 'print') {
+      await logAudit({
+        user: { id: user.id, name: user.name },
+        tenantId,
+        action: 'PRINT_DOCUMENT',
+        resourceType: 'Transaction',
+        resourceId: id,
+        details: {
+          referenceNumber: tx.referenceNumber ?? null,
+          type: tx.type,
+          amount: tx.amount,
+          status: tx.status,
+          voided: Boolean(tx.isDeleted),
+        },
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      data: { ...tx, transferCounterpart },
+      data: { ...txFields, deletedByName, fiscalPeriod: fiscalPeriod ?? null, transferCounterpart },
     });
   } catch (err: any) {
     console.error('[TRANSACTION GET ERROR]', err);

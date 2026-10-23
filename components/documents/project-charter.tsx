@@ -3,7 +3,19 @@
 import React from "react";
 import { useLocale } from "@/lib/i18n";
 import { useFormatDateOnly, useFormatMoney } from "@/lib/use-tenant-settings";
-import { DocumentFrame, DocTitle, DocAmount, DocRow, DocField, DocTable, DocSectionLabel, type DocSignature } from "./document-frame";
+import { getCategoryLabel } from "@/lib/transaction-labels";
+import { amountInWords } from "@/lib/amount-in-words";
+import {
+  DocumentFrame,
+  DocBanner,
+  DocTitle,
+  DocAmount,
+  DocRow,
+  DocField,
+  DocTable,
+  DocSectionLabel,
+  type DocSignature,
+} from "./document-frame";
 
 export interface ProjectCharterParticipant {
   memberName?: string;
@@ -11,6 +23,8 @@ export interface ProjectCharterParticipant {
   sharesInvested?: number;
   totalInvested?: number;
   ownershipPercentage?: number | string | null;
+  /** The deposit fund this shareholder's capital was actually drawn from. */
+  sourceFundName?: string | null;
 }
 
 export interface ProjectCharterData {
@@ -22,10 +36,17 @@ export interface ProjectCharterData {
   totalCapital?: number | string;
   initialInvestment?: number | string;
   budget?: number | string;
+  expectedRoi?: number | string | null;
+  totalShares?: number;
   status?: string;
   startDate?: string;
   completionDate?: string;
   linkedFundName?: string;
+  /** What is left in the project fund at the time the sheet was printed. */
+  linkedFundBalance?: number | string;
+  projectFundHandler?: string | null;
+  /** One-way flag set by a settle-and-close run — a closed project must not print as if it were live. */
+  isLocked?: boolean;
   tenantShareValue?: number | string;
   involvedMembers?: ProjectCharterParticipant[];
 }
@@ -51,23 +72,42 @@ export function ProjectCharter({ data, orgName, orgTagline }: { data: ProjectCha
       : null;
     return key ? t(key, { defaultValue: data.status || na }) : data.status || na;
   })();
+  const categoryLabel = getCategoryLabel(data.category, t) || data.category;
+  const totalCapital = Number(data.totalCapital ?? data.initialInvestment ?? data.budget ?? 0);
+  const anySourceFunds = members.some((m) => m.sourceFundName);
 
   const signatures: DocSignature[] = [
-    { label: t("documents.preparedBy", { defaultValue: "Prepared By" }) },
+    { label: t("documents.preparedBy", { defaultValue: "Prepared By" }), name: data.projectFundHandler || undefined },
     { label: t("documents.approvedBy", { defaultValue: "Approved By" }) },
   ];
 
   return (
     <DocumentFrame orgName={orgName} orgTagline={orgTagline} docType={title} reference={data.id} dateLabel={data.startDate ? formatDate(data.startDate) : undefined} signatures={signatures}>
+      {/* is_locked is one-way, so a charter reprinted after settlement looked
+          identical to one printed at inception — the moment a stakeholder most
+          needs the difference visible. */}
+      {data.isLocked ? (
+        <DocBanner
+          label={t("documents.lockedBanner", { defaultValue: "Settled and permanently locked" })}
+          detail={data.completionDate
+            ? `${t("documents.completedOn", { defaultValue: "Completed" })}: ${formatDate(data.completionDate)}`
+            : undefined}
+        />
+      ) : null}
+
       <DocTitle>{data.title || na}</DocTitle>
-      {data.category ? (
+      {categoryLabel ? (
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>
-          {t("documents.category", { defaultValue: "Category" })}: {data.category}
+          {t("documents.category", { defaultValue: "Category" })}: {categoryLabel}
         </div>
       ) : null}
 
-      <DocAmount label={t("documents.totalCapital", { defaultValue: "Total Capital" })}>
-        {formatMoney(Number(data.totalCapital ?? data.initialInvestment ?? data.budget ?? 0))}
+      <DocAmount
+        label={t("documents.totalCapital", { defaultValue: "Total Capital" })}
+        words={amountInWords(totalCapital)}
+        wordsLabel={t("documents.amountInWords", { defaultValue: "In words" })}
+      >
+        {formatMoney(totalCapital)}
       </DocAmount>
 
       {data.description ? (
@@ -83,12 +123,14 @@ export function ProjectCharter({ data, orgName, orgTagline }: { data: ProjectCha
               t("documents.shares", { defaultValue: "Shares" }),
               t("documents.invested", { defaultValue: "Invested" }),
               t("projects.shareholders.ownership", { defaultValue: "Ownership %" }),
+              ...(anySourceFunds ? [t("documents.drawnFrom", { defaultValue: "Capital drawn from" })] : []),
             ]}
             rows={members.map((m) => [
               m.memberName ? `${m.memberName}${m.memberCode ? ` (${m.memberCode})` : ""}` : na,
               m.sharesInvested ?? 0,
               formatMoney(Number(m.totalInvested || 0)),
               `${Number(m.ownershipPercentage ?? 0)}%`,
+              ...(anySourceFunds ? [m.sourceFundName || na] : []),
             ])}
           />
         </>
@@ -98,10 +140,25 @@ export function ProjectCharter({ data, orgName, orgTagline }: { data: ProjectCha
         <DocRow label={t("documents.startDate", { defaultValue: "Start Date" })} value={data.startDate ? formatDate(data.startDate) : na} />
         <DocRow label={t("documents.completionDate", { defaultValue: "Completion Date" })} value={data.completionDate ? formatDate(data.completionDate) : na} />
         <DocRow label={t("deposits.columns.fund", { defaultValue: "Fund" })} value={data.linkedFundName || na} />
+        {data.linkedFundBalance != null ? (
+          <DocRow
+            label={t("documents.projectFundBalance", { defaultValue: "Project fund balance" })}
+            value={formatMoney(Number(data.linkedFundBalance))}
+          />
+        ) : null}
+        {data.totalShares ? (
+          <DocRow label={t("documents.totalShares", { defaultValue: "Total shares" })} value={data.totalShares} />
+        ) : null}
+        {data.expectedRoi != null ? (
+          <DocRow label={t("documents.expectedRoi", { defaultValue: "Expected ROI" })} value={`${Number(data.expectedRoi)}%`} />
+        ) : null}
         {data.tenantShareValue != null ? (
           <DocRow label={t("projects.shareValue", { defaultValue: "UNIT SHARE VALUE" })} value={formatMoney(Number(data.tenantShareValue))} />
         ) : null}
         <DocRow label={t("common.status", { defaultValue: "Status" })} value={status} strong />
+        {data.isLocked ? (
+          <DocRow label={t("documents.lockState", { defaultValue: "Record state" })} value={t("documents.locked", { defaultValue: "LOCKED — immutable" })} strong />
+        ) : null}
       </div>
     </DocumentFrame>
   );

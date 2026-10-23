@@ -55,6 +55,7 @@ export interface TenantSettings {
     refreshInterval?: string;
     theme?: string;
     dateFormat?: string;
+    timezone?: string;
     isMaintenanceMode?: boolean;
     locale?: string;
   };
@@ -119,6 +120,12 @@ export function useTenantCurrency(): string {
 export function useTenantDateFormat(): string {
   const { data } = useTenantSettings();
   return data?.system?.dateFormat || "DD/MM/YYYY";
+}
+
+/** IANA zone the tenant's books run on (business days, month boundaries). */
+export function useTenantTimezone(): string {
+  const { data } = useTenantSettings();
+  return data?.system?.timezone || "Asia/Dhaka";
 }
 
 /** Tenant share value in BDT (falls back to 1000). */

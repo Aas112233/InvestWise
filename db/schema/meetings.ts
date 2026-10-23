@@ -22,6 +22,8 @@ export const meetings = pgTable('meetings', {
 }, (table) => [
   index('idx_meetings_tenant').on(table.tenantId),
   index('idx_meetings_date_status').on(table.meetingDate.desc(), table.status),
+  // List desk default is newest-created first (GET /api/meetings).
+  index('idx_meetings_tenant_created').on(table.tenantId, table.createdAt.desc()),
   index('idx_meetings_type').on(table.meetingType),
   index('idx_meetings_status').on(table.status),
 ]);

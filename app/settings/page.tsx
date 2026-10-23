@@ -96,9 +96,27 @@ interface SettingsResponse {
     refreshInterval: string;
     theme: string;
     dateFormat: string;
+    timezone: string;
     isMaintenanceMode: boolean;
   };
 }
+
+/**
+ * Business days are counted on the tenant's wall clock (lib/tenant-time.ts),
+ * so the books' zone is a first-class setting. Any valid IANA id is accepted
+ * server-side; this picker covers the common operating zones.
+ */
+const TIMEZONE_OPTIONS = [
+  { value: "Asia/Dhaka", label: "Asia/Dhaka (UTC+6)" },
+  { value: "Asia/Kolkata", label: "Asia/Kolkata (UTC+5:30)" },
+  { value: "Asia/Karachi", label: "Asia/Karachi (UTC+5)" },
+  { value: "Asia/Riyadh", label: "Asia/Riyadh (UTC+3)" },
+  { value: "Asia/Dubai", label: "Asia/Dubai (UTC+4)" },
+  { value: "Asia/Bangkok", label: "Asia/Bangkok (UTC+7)" },
+  { value: "Europe/London", label: "Europe/London" },
+  { value: "America/New_York", label: "America/New_York" },
+  { value: "UTC", label: "UTC" },
+];
 
 const MONTHS: { short: "jan" | "feb" | "mar" | "apr" | "may" | "jun" | "jul" | "aug" | "sep" | "oct" | "nov" | "dec"; full: string }[] = [
   { short: "jan", full: "January" },
@@ -179,6 +197,7 @@ export default function SettingsPage() {
     refreshInterval: "Real-time",
     theme: "Light",
     dateFormat: "DD/MM/YYYY",
+    timezone: "Asia/Dhaka",
     isMaintenanceMode: false,
   });
 
@@ -224,6 +243,7 @@ export default function SettingsPage() {
       refreshInterval: data.system?.refreshInterval || "Real-time",
       theme: data.system?.theme || "Light",
       dateFormat: data.system?.dateFormat || "DD/MM/YYYY",
+      timezone: data.system?.timezone || "Asia/Dhaka",
       isMaintenanceMode: Boolean(data.system?.isMaintenanceMode),
     });
     setShareLocked(Boolean(data.financial?.isShareValueLocked));
@@ -315,6 +335,7 @@ interface BodyProps {
     refreshInterval: string;
     theme: string;
     dateFormat: string;
+    timezone: string;
     isMaintenanceMode: boolean;
   };
   setSys: React.Dispatch<React.SetStateAction<BodyProps["sys"]>>;
@@ -1189,6 +1210,7 @@ function SystemTab({
         refreshInterval: sys.refreshInterval || "Real-time",
         theme: sys.theme || "Light",
         dateFormat: sys.dateFormat || "DD/MM/YYYY",
+        timezone: sys.timezone || "Asia/Dhaka",
         isMaintenanceMode: sys.isMaintenanceMode,
       },
     });
@@ -1245,6 +1267,20 @@ function SystemTab({
                 value={sys.dateFormat || null}
                 onChange={(v) => setSys((p) => ({ ...p, dateFormat: v ?? "" }))}
                 placeholder={t("settings.system.dateFormat")}
+              />
+            </ERPFormField>
+          </ERPFormGrid>
+
+          <ERPFormGrid columns={2}>
+            <ERPFormField
+              label={t("settings.system.timezone", { defaultValue: "Timezone" })}
+              hint={t("settings.system.timezoneHint", { defaultValue: "Business days and month boundaries are counted on this clock." })}
+            >
+              <AppDropdown
+                options={TIMEZONE_OPTIONS}
+                value={sys.timezone || "Asia/Dhaka"}
+                onChange={(v) => setSys((p) => ({ ...p, timezone: v ?? "Asia/Dhaka" }))}
+                placeholder={t("settings.system.timezone", { defaultValue: "Timezone" })}
               />
             </ERPFormField>
           </ERPFormGrid>

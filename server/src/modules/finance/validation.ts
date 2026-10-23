@@ -136,6 +136,8 @@ export const transferSchema = z.object({
   amount: positiveAmount,
   description: z.string().max(500).optional(),
   referenceNumber: z.string().max(100).optional(),
+  /** Effective transfer date (yyyy-mm-dd). Omitted = today. createdAt stays the operation time. */
+  date: z.string().max(10).optional(),
 });
 
 const equityTransferRowSchema = z.object({

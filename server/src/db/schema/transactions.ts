@@ -59,6 +59,11 @@ export const transactions = pgTable('transactions', {
   index('idx_trans_tenant_date').on(
     table.tenantId, table.date.desc(),
   ),
+  // Ledger/desk lists default to newest-created first (GET /api/transactions,
+  // /api/deposits, /api/expenses and the server finance module).
+  index('idx_trans_tenant_created').on(
+    table.tenantId, table.createdAt.desc(),
+  ),
   index('idx_trans_member_type_status_deleted_date').on(
     table.memberId, table.type, table.status, table.isDeleted, table.date.desc(),
   ),

@@ -45,7 +45,7 @@ export async function GET(
           eq(transactions.isDeleted, false),
         ),
       )
-      .orderBy(desc(transactions.date));
+      .orderBy(desc(transactions.createdAt), desc(transactions.date), desc(transactions.id));
 
     return NextResponse.json({
       success: true,

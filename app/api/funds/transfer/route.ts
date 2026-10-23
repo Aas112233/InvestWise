@@ -30,6 +30,9 @@ export async function POST(request: NextRequest) {
     const amount = body.amount;
     const description = body.description;
     const referenceNumber = body.referenceNumber;
+    // Effective transfer date (yyyy-mm-dd). Optional — absent means the
+    // operation moment. createdAt/updatedAt always stay the operation time.
+    const date = typeof body.date === 'string' && body.date.trim() ? body.date.trim() : undefined;
 
     if (!sourceFundId || !targetFundId) {
       throw new AppError('sourceFundId (or fromFundId) and targetFundId (or toFundId) are required', 400, 'VALIDATION_ERROR');
@@ -46,6 +49,7 @@ export async function POST(request: NextRequest) {
         amount,
         description,
         referenceNumber,
+        date,
       },
       user as SessionUser,
     );

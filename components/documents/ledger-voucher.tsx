@@ -9,7 +9,18 @@ import {
   getTransactionStatusLabel,
   getCategoryLabel,
 } from "@/lib/transaction-labels";
-import { DocumentFrame, DocTitle, DocAmount, DocRow, DocField, DocVoidStamp, type DocSignature } from "./document-frame";
+import { amountInWords } from "@/lib/amount-in-words";
+import {
+  DocumentFrame,
+  DocBanner,
+  DocTitle,
+  DocAmount,
+  DocRow,
+  DocField,
+  DocVoidStamp,
+  type DocSignature,
+} from "./document-frame";
+import { useMonthLabel } from "./month-label";
 
 export interface LedgerVoucherData {
   id?: string;
@@ -20,20 +31,29 @@ export interface LedgerVoucherData {
   status?: string;
   category?: string;
   description?: string;
+  expenseName?: string | null;
   memberName?: string;
   memberCode?: string;
   fundName?: string;
+  /** Deposit rows only: the YYYY-MM period the money is FOR. */
+  depositMonth?: string | null;
   projectName?: string;
   depositMethod?: string;
+  /** Project Investment legs only: the deposit fund the capital is drawn FROM. */
+  sourceFundName?: string | null;
   handlingOfficer?: string;
   authorizerName?: string;
+  /** Fund balance immediately before this entry was posted. */
+  balanceBefore?: number | string | null;
   /** Fund balance immediately after this entry was posted. */
   balanceAfter?: number | string | null;
   /** When the row was written, as opposed to the value date it is filed under. */
   createdAt?: string;
   isDeleted?: boolean;
   deletedAt?: string | null;
+  deletedByName?: string | null;
   deletionReason?: string | null;
+  fiscalPeriod?: { year: number; status: string | null; closedAt: string | null } | null;
   /** The other leg of a fund transfer, which shares this row's transferGroupId. */
   transferCounterpart?: {
     type?: string | null;
@@ -55,6 +75,7 @@ export function LedgerVoucher({ data, orgName, orgTagline }: { data: LedgerVouch
   const formatMoney = useFormatMoney();
   const formatDate = useFormatDateOnly();
   const formatDateTime = useFormatDate();
+  const monthLabel = useMonthLabel();
   const na = t("common.na", { defaultValue: "—" });
 
   const title = t("transactions.voucherTitle", { defaultValue: "Financial Voucher" });
@@ -63,16 +84,24 @@ export function LedgerVoucher({ data, orgName, orgTagline }: { data: LedgerVouch
   const typeLabel = getTransactionTypeLabel(data.type, t) || na;
   const categoryLabel = getCategoryLabel(data.category, t);
   const voided = Boolean(data.isDeleted);
+  const upper = (data.status || "").toUpperCase();
+  const pending = !voided && upper === "PENDING";
+  const rejected = !voided && upper === "REJECTED";
 
   // One fund transfer is two rows; from this leg the counterpart is where the
-  // money went (out) or where it came from (in).
+  // money went (out) or where it came from (in). Its reference is printed too:
+  // without it the two halves of one transfer cannot be tied together on paper,
+  // and one leg printed twice reads as two unrelated movements.
+  const counterpartRef = data.transferCounterpart?.referenceNumber;
   const counterpart = data.transferCounterpart?.fundName
     ? {
         label:
           (data.type || "").trim().toLowerCase() === "transfer in"
             ? t("funds.transferModal.source", { defaultValue: "Source Fund" })
             : t("funds.transferModal.destination", { defaultValue: "Destination Fund" }),
-        value: data.transferCounterpart.fundName,
+        value: counterpartRef
+          ? `${data.transferCounterpart.fundName} · ${t("documents.pairedVoucher", { defaultValue: "paired voucher" })} ${counterpartRef}`
+          : data.transferCounterpart.fundName,
       }
     : null;
 
@@ -87,7 +116,7 @@ export function LedgerVoucher({ data, orgName, orgTagline }: { data: LedgerVouch
       orgName={orgName}
       orgTagline={orgTagline}
       docType={t("transactions.voucherSubtitle", { defaultValue: "Official Financial Voucher" })}
-      reference={data.referenceNumber || data.id}
+      reference={data.referenceNumber}
       dateLabel={data.date ? formatDate(data.date) : undefined}
       signatures={signatures}
     >
@@ -95,12 +124,23 @@ export function LedgerVoucher({ data, orgName, orgTagline }: { data: LedgerVouch
         <DocVoidStamp
           label={t("documents.voidStamp", { defaultValue: "Voided entry" })}
           dateLabel={data.deletedAt ? formatDateTime(data.deletedAt, true) : undefined}
+          detail={data.deletedByName ? `${t("documents.voidedBy", { defaultValue: "Voided by" })} ${data.deletedByName}` : undefined}
         />
+      ) : pending ? (
+        <DocBanner label={t("documents.pendingVoucherBanner", { defaultValue: "Not yet authorised — no funds have moved" })} />
+      ) : rejected ? (
+        <DocBanner label={t("documents.rejectedBanner", { defaultValue: "Rejected request — no funds were received" })} />
       ) : null}
 
       <DocTitle>{title}</DocTitle>
-      <DocAmount label={t("transactions.voucherAmount", { type: typeLabel, defaultValue: `${typeLabel} Amount` })}>
-        <span style={voided ? { textDecoration: "line-through" } : undefined}>{formatMoney(Number(data.amount || 0))}</span>
+      <DocAmount
+        label={t("transactions.voucherAmount", { type: typeLabel, defaultValue: `${typeLabel} Amount` })}
+        words={amountInWords(data.amount)}
+        wordsLabel={t("documents.amountInWords", { defaultValue: "In words" })}
+      >
+        <span style={voided || rejected ? { textDecoration: "line-through" } : undefined}>
+          {formatMoney(Number(data.amount || 0))}
+        </span>
       </DocAmount>
 
       <DocRow label={t("documents.type", { defaultValue: "Type" })} value={typeLabel} strong />
@@ -113,15 +153,40 @@ export function LedgerVoucher({ data, orgName, orgTagline }: { data: LedgerVouch
         label={t("transactions.associatedFund", { defaultValue: "Associated Portfolio / Fund" })}
         value={data.fundName || t("transactions.generalTreasury", { defaultValue: "General Treasury" })}
       />
+      {data.sourceFundName ? (
+        <DocRow label={t("documents.drawnFrom", { defaultValue: "Capital drawn from" })} value={data.sourceFundName} />
+      ) : null}
       {counterpart ? <DocRow label={counterpart.label} value={counterpart.value} /> : null}
       {data.projectName ? <DocRow label={t("documents.project", { defaultValue: "Project" })} value={data.projectName} /> : null}
       <DocRow
         label={t("transactions.categoryLabel", { defaultValue: "Category" })}
         value={categoryLabel || t("transactions.generalOperations", { defaultValue: "General Operations" })}
       />
+      {data.expenseName ? (
+        <DocRow label={t("reports.columns.expenseName", { defaultValue: "Expense" })} value={data.expenseName} />
+      ) : null}
+      {data.depositMonth ? (
+        <DocRow label={t("documents.depositFor", { defaultValue: "Deposit for" })} value={monthLabel(data.depositMonth)} strong />
+      ) : null}
       {data.depositMethod ? <DocRow label={t("deposits.columns.method", { defaultValue: "Method" })} value={data.depositMethod} /> : null}
+      {data.balanceBefore != null && data.balanceBefore !== "" ? (
+        <DocRow
+          label={t("documents.openingBalance", { defaultValue: "Fund balance before" })}
+          value={formatMoney(Number(data.balanceBefore))}
+        />
+      ) : null}
       {data.balanceAfter != null && data.balanceAfter !== "" ? (
         <DocRow label={t("reports.summary.closingBalance", { defaultValue: "Closing Balance" })} value={formatMoney(Number(data.balanceAfter))} />
+      ) : null}
+      {data.fiscalPeriod ? (
+        <DocRow
+          label={t("documents.fiscalPeriod", { defaultValue: "Fiscal period" })}
+          value={`${data.fiscalPeriod.year} · ${
+            (data.fiscalPeriod.status || "").toUpperCase() === "CLOSED"
+              ? t("documents.periodClosed", { defaultValue: "CLOSED" })
+              : t("documents.periodOpen", { defaultValue: "OPEN" })
+          }`}
+        />
       ) : null}
       {data.createdAt ? (
         <DocRow label={t("documents.recordedOn", { defaultValue: "Recorded on" })} value={formatDateTime(data.createdAt, true)} />

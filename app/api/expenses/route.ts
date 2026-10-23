@@ -6,7 +6,8 @@ import { eq, and, desc, sql, gte, lte, ilike } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { toCents, fromCents } from '@/lib/money';
-import { endOfRangeUtc } from '@/lib/formatters';
+import { dayRangeUtc } from '@/lib/tenant-time';
+import { getTenantTimezone } from '@/lib/tenant-time-db';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
@@ -68,12 +69,14 @@ export async function GET(request: NextRequest) {
     if (status) {
       conditions.push(sql`${transactions.status} = ${status}`);
     }
+    // Date bounds are TENANT-LOCAL days (Settings → Timezone).
+    const tenantTz = await getTenantTimezone(scopedTenantId);
     if (startDate) {
-      conditions.push(gte(transactions.date, new Date(startDate)));
+      conditions.push(gte(transactions.date, dayRangeUtc(startDate, tenantTz).start));
     }
     if (endDate) {
-      // Date-only end is inclusive of the whole day (see endOfRangeUtc).
-      conditions.push(lte(transactions.date, endOfRangeUtc(endDate)));
+      // Date-only end is inclusive of the whole tenant day (dayRangeUtc).
+      conditions.push(lte(transactions.date, dayRangeUtc(endDate, tenantTz).end));
     }
     if (search) {
       conditions.push(sql`(${transactions.description} ILIKE ${'%' + search + '%'} OR ${transactions.referenceNumber} ILIKE ${'%' + search + '%'})`);
@@ -134,7 +137,7 @@ export async function GET(request: NextRequest) {
         .leftJoin(members, and(eq(transactions.memberId, members.id), eq(members.tenantId, scopedTenantId)))
         .leftJoin(users, and(eq(transactions.authorizedBy, users.id), eq(users.tenantId, scopedTenantId)))
         .where(whereClause)
-        .orderBy(desc(transactions.date))
+        .orderBy(desc(transactions.createdAt), desc(transactions.date), desc(transactions.id))
         .limit(limit)
         .offset(skip),
     ]);

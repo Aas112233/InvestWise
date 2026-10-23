@@ -51,7 +51,7 @@ export async function GET(
         .select()
         .from(projectUpdates)
         .where(and(eq(projectUpdates.projectId, id), eq(projectUpdates.isDeleted, false)))
-        .orderBy(desc(projectUpdates.date)),
+        .orderBy(desc(projectUpdates.createdAt), desc(projectUpdates.date), desc(projectUpdates.id)),
       db
         .select({
           memberId: projectMembers.memberId,
@@ -122,6 +122,24 @@ export async function GET(
     });
 
     const capitalLocked = Boolean(otherMovement[0]) || updates.length > 0;
+
+    // Issuing a charter is an act that has to be traceable, the same as any
+    // other financial document. Only the print view asks for it.
+    if (new URL(request.url).searchParams.get('purpose') === 'print') {
+      await logAudit({
+        user: { id: ctx.user?.id, name: ctx.user?.name },
+        tenantId,
+        action: 'PRINT_DOCUMENT',
+        resourceType: 'Project',
+        resourceId: id,
+        details: {
+          title: project.title,
+          status: project.status,
+          totalCapital: project.initialInvestment,
+          isLocked: project.isLocked,
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,

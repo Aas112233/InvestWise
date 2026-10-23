@@ -20,13 +20,32 @@ import { LedgerVoucher } from "@/components/documents/ledger-voucher";
  */
 
 const PRINT_CSS = `
-@page { size: A4; margin: 0; }
+.doc-running { display: none; }
+@page { size: A4; margin: 12mm 14mm; }
 @media print {
   html, body { background: #ffffff !important; }
   .doc-backdrop { padding: 0 !important; background: #ffffff !important; }
   .no-print { display: none !important; }
   .doc-sheet-wrap { box-shadow: none !important; }
-  #doc-sheet { box-shadow: none !important; margin: 0 !important; width: 210mm !important; min-height: auto !important; }
+  /* The sheet stops being a literal A4 box once @page supplies the gutter:
+     a 210mm sheet inside a 12mm-margin page overflows the printable area. */
+  #doc-sheet { box-shadow: none !important; margin: 0 !important; width: auto !important; min-height: 0 !important; padding: 0 !important; }
+  /* Continuation pages must stay identifiable and keep their column headings. */
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  .doc-running {
+    display: block !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding-top: 2mm;
+    border-top: 1px solid #eef0f3;
+    font-size: 8.5px;
+    color: #9ca3af;
+    text-align: center;
+    background: #ffffff;
+  }
 }
 `;
 
@@ -76,7 +95,9 @@ export default function PrintDocumentPage({ params }: { params: Promise<{ kind: 
     let active = true;
     setLoading(true);
     setError(null);
-    const endpoint = kind === "project" ? `/projects/${id}` : `/transactions/${id}`;
+    // purpose=print makes the API record a PRINT_DOCUMENT audit entry: issuing
+    // a financial document is itself an act that has to be traceable.
+    const endpoint = `${kind === "project" ? `/projects/${id}` : `/transactions/${id}`}?purpose=print`;
     apiClient<Record<string, unknown>>(endpoint)
       .then((res) => {
         if (!active) return;

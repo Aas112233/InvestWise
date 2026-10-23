@@ -10,7 +10,8 @@ import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
 import { toCents, fromCents, parsePositiveAmount } from '@/lib/money';
-import { endOfRangeUtc } from '@/lib/formatters';
+import { dayRangeUtc } from '@/lib/tenant-time';
+import { getTenantTimezone } from '@/lib/tenant-time-db';
 import { inflowSqlPredicate, outflowSqlPredicate } from '@/lib/ledger-selectors';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 
@@ -85,12 +86,15 @@ export async function GET(request: NextRequest) {
     if (status) {
       conditions.push(sql`${transactions.status} = ${status}`);
     }
+    // Date bounds are TENANT-LOCAL days (Settings → Timezone): the picker's
+    // "from the 1st" means the 1st on the books' clock, not UTC's.
+    const tenantTz = await getTenantTimezone(scopedTenantId);
     if (startDate) {
-      conditions.push(gte(transactions.date, new Date(startDate)));
+      conditions.push(gte(transactions.date, dayRangeUtc(startDate, tenantTz).start));
     }
     if (endDate) {
-      // Date-only end is inclusive of the whole day (see endOfRangeUtc).
-      conditions.push(lte(transactions.date, endOfRangeUtc(endDate)));
+      // Date-only end is inclusive of the whole tenant day (dayRangeUtc).
+      conditions.push(lte(transactions.date, dayRangeUtc(endDate, tenantTz).end));
     }
     if (search) {
       const term = search.trim();
@@ -187,11 +191,9 @@ export async function GET(request: NextRequest) {
         .leftJoin(funds, and(eq(transactions.fundId, funds.id), eq(funds.tenantId, scopedTenantId)))
         .leftJoin(projects, and(eq(transactions.projectId, projects.id), eq(projects.tenantId, scopedTenantId)))
         .where(whereClause)
-        // Newest first, with a deterministic tiebreaker so rows sharing a date
-        // never shuffle between requests/pages (report issue 17: the ledger
-        // looked "insertion-ordered" because same-day rows had no defined
-        // order and Postgres was free to return them however it liked).
-        .orderBy(desc(transactions.date), desc(transactions.createdAt), desc(transactions.id))
+        // Newest created first, with a deterministic tiebreaker so rows sharing
+        // a created_at never shuffle between requests/pages (report issue 17).
+        .orderBy(desc(transactions.createdAt), desc(transactions.date), desc(transactions.id))
         .limit(limit)
         .offset(skip),
     ]);
