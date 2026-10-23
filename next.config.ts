@@ -23,6 +23,10 @@ const nextConfig: NextConfig = {
     // lucide-react + recharts ship per-module code; barrel imports without
     // this optimization bloat the client bundle.
     optimizePackageImports: ['lucide-react', 'recharts'],
+    // Security advisory upgrade policy for coding agents ('security' | 'latest'
+    // | 'experimental-future' | false). 'security' keeps agents on the
+    // advisory-driven upgrade track only.
+    agentUpgrade: 'security',
   },
   // Baseline security headers. Applied to every route (API responses included)
   // so a browser cannot be tricked into framing, MIME-sniffing, or leaking the
