@@ -32,6 +32,7 @@ import { isAllowedDepositMethod, normalizePaymentMethods } from '@/lib/payment-m
 import { decideReversal } from '@/lib/transaction-reversal';
 import { DEPOSIT_FUND_REQUIRED_MESSAGE, isDepositFund } from '@/lib/deposit-fund';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
+import { calendarDayForInstant, dayRangeUtc, parseBusinessDate } from '@/lib/tenant-time';
 import { fiscalMonthKeys, isFiscalMonthName } from '@/lib/fiscal-periods';
 import {
   depositMonthOccupiedCondition,
@@ -39,6 +40,15 @@ import {
   findDepositMonthOccupancyInRange,
   depositMonthConflictMessage,
 } from '@/lib/deposit-month-limit';
+import {
+  computeDepositEditDelta,
+  findEquityViolation,
+  findFundDeficitViolation,
+  fundBalanceAcrossEdit,
+  isUnchangedDepositDate,
+  type FundBalanceSnapshot,
+  type MemberEquitySnapshot,
+} from '@/lib/deposit-edit-delta';
 
 /**
  * Dual-drizzle bridge. This service runs on the server/ drizzle instance
@@ -89,11 +99,43 @@ function buildFlexibleMemberIdRegex(search: string): string | null {
   return compact.split('').map((ch) => escapeRegex(ch)).join('[-_\\s]*');
 }
 
+/** The tenant's books run on this clock (system_settings.timezone). */
+async function tenantTimezone(tenantId: string): Promise<string> {
+  const db = getDb();
+  const [row] = await db
+    .select({ timezone: systemSettings.timezone })
+    .from(systemSettings)
+    .where(eq(systemSettings.tenantId, tenantId))
+    .limit(1);
+  return row?.timezone || 'Asia/Dhaka';
+}
+
 /** Resolve the effective deposit date (money received) from date/month label. */
-function resolveDepositDate(date?: string | null, depositMonth?: string | null): Date {
+function resolveDepositDate(
+  date?: string | null,
+  depositMonth?: string | null,
+  opts: { allowFuture?: boolean } = {},
+): Date {
   if (date) {
     const parsed = new Date(date);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
+    if (Number.isNaN(parsed.getTime())) {
+      throw new AppError('date must be a valid ISO date (yyyy-mm-dd)', 400, 'INVALID_DATE');
+    }
+    // Back-entry is normal bookkeeping; time travel is not. A future posting
+    // date would desync the row from balances computed against today (central
+    // rule: lib/tenant-time parseBusinessDate).
+    //
+    // `allowFuture` is for the EDIT path only, and only when the date the
+    // client sends is exactly the date the row ALREADY carries: such an edit
+    // introduces no new future posting, it merely preserves the one the row
+    // was created with (a deposit booked ahead for a future month). Without
+    // this, a row created for a future month could never be edited again —
+    // the very correction it was created for would be impossible to make.
+    if (!opts.allowFuture) {
+      const { error, code } = parseBusinessDate(date);
+      if (error) throw new AppError(error, 400, code);
+    }
+    return parsed;
   }
   const iso = parseDepositMonthToIso(depositMonth);
   if (iso) return new Date(`${iso}T00:00:00.000Z`);
@@ -105,8 +147,9 @@ function resolveDepositDate(date?: string | null, depositMonth?: string | null):
  * the collected-date month is only the fallback when none was sent. An
  * explicit but unparseable value is rejected, never silently replaced.
  */
-function resolveDepositMonthKey(depositMonth: string | null | undefined, fallback: Date): string {
-  if (!depositMonth) return fallback.toISOString().slice(0, 7);
+function resolveDepositMonthKey(depositMonth: string | null | undefined, fallback: Date, tz = 'Asia/Dhaka'): string {
+  // The month a deposit is FOR belongs to the tenant's calendar, not UTC's.
+  if (!depositMonth) return calendarDayForInstant(fallback, tz).slice(0, 7);
   const iso = parseDepositMonthToIso(depositMonth);
   if (!iso) {
     throw new AppError("[Field 'depositMonth', Code: invalid_string] Deposit month must be in YYYY-MM format", 400, 'VALIDATION_ERROR');
@@ -122,9 +165,33 @@ function resolveDepositMonthKey(depositMonth: string | null | undefined, fallbac
 function resolveSubmittedDate(submittedDate?: string | null): Date {
   if (submittedDate) {
     const parsed = new Date(submittedDate);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
+    if (Number.isNaN(parsed.getTime())) {
+      throw new AppError('submittedDate must be a valid ISO date (yyyy-mm-dd)', 400, 'INVALID_DATE');
+    }
+    const { error, code } = parseBusinessDate(submittedDate);
+    if (error) throw new AppError(error, 400, code);
+    return parsed;
   }
   return new Date();
+}
+
+/**
+ * Resolve the effective transfer date. A client-supplied date is the day the
+ * transfer is FOR (back-entry); junk falls back to the operation time, same
+ * convention as resolveSubmittedDate. createdAt/updatedAt stay the wall-clock
+ * moment the transfer was actually performed.
+ */
+function resolveTransferDate(date?: string | null, operationTime?: Date): Date {
+  if (date) {
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new AppError('date must be a valid ISO date (yyyy-mm-dd)', 400, 'INVALID_DATE');
+    }
+    const { error, code } = parseBusinessDate(date);
+    if (error) throw new AppError(error, 400, code);
+    return parsed;
+  }
+  return operationTime ?? new Date();
 }
 
 interface DepositInput {
@@ -168,6 +235,8 @@ interface TransferInput {
   amount: number | string;
   description?: string;
   referenceNumber?: string;
+  /** Effective transfer date (yyyy-mm-dd or full ISO). Omitted = operation time. */
+  date?: string | null;
 }
 
 interface EquityTransferInput {
@@ -213,7 +282,7 @@ export type { DepositInput, ExpenseInput, EarningInput, TransferInput, EquityTra
 export async function getTransactions(query: Record<string, string | undefined>, tenantId: string) {
   const db = getDb();
   const { page, limit, skip, sortBy: sortByParam } = getPaginationParams(query, {
-    sortBy: 'date',
+    sortBy: 'createdAt',
     sortOrder: 'desc',
   });
 
@@ -320,12 +389,16 @@ export async function getTransactions(query: Record<string, string | undefined>,
   if (query.memberId) conditions.push(eq(transactions.memberId, query.memberId));
   if (query.fundId) conditions.push(eq(transactions.fundId, query.fundId));
 
+  // Date bounds are TENANT-LOCAL days (Settings → Timezone). The old form
+  // used `setHours(23:59)` — the API server's clock — so the window shifted
+  // with server deployment.
+  const filterTz = await tenantTimezone(tenantId);
   if (query.startDate) {
-    conditions.push(sql`${transactions.date} >= ${new Date(query.startDate).toISOString()}::timestamptz`);
+    const start = dayRangeUtc(query.startDate, filterTz).start;
+    conditions.push(sql`${transactions.date} >= ${start.toISOString()}::timestamptz`);
   }
   if (query.endDate) {
-    const end = new Date(query.endDate);
-    end.setHours(23, 59, 59, 999);
+    const end = dayRangeUtc(query.endDate, filterTz).end;
     conditions.push(sql`${transactions.date} <= ${end.toISOString()}::timestamptz`);
   }
   if (query.month && query.year) {
@@ -504,7 +577,7 @@ export async function addDeposit(
     // Collected date is the ledger date; the selected deposit month is the
     // month the deposit is FOR (may differ for back-entry).
     const collectedDate = resolveDepositDate(data.collectedDate ?? data.date, data.depositMonth);
-    const depositMonthKey = resolveDepositMonthKey(data.depositMonth, collectedDate);
+    const depositMonthKey = resolveDepositMonthKey(data.depositMonth, collectedDate, await tenantTimezone(tenantId));
     const submittedDate = resolveSubmittedDate(data.submittedDate);
 
     // §12: a posted deposit must land in an OPEN fiscal period (the native
@@ -650,48 +723,110 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
     const newStatus = data.status || existing.status || 'Completed';
     const isNowCompleted = newStatus === 'Success' || newStatus === 'Completed';
 
-    // 1. Revert old financial impact. Shrinking a settled deposit is allowed
-    // while the member's free balance covers the reduction — the equity check
-    // below enforces that, same rule as revertDeposit.
-    if (wasCompleted) {
-      const [oldFund] = await tx.select().from(funds).where(and(eq(funds.id, oldFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
-      if (oldFund) {
-        await tx
-          .update(funds)
-          .set({ balance: sql`(${funds.balance}::numeric - ${oldAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
-          .where(eq(funds.id, oldFundId));
-      }
-      const [oldMember] = await tx.select().from(members).where(and(eq(members.id, oldMemberId), eq(members.tenantId, tenantId))).for('update').limit(1);
-      if (oldMember) {
-        // Un-committing the old deposit then re-applying the new one must never
-        // drive equity negative: money already invested in a project is not
-        // uncommitted and cannot be reclaimed by editing a deposit.
-        const equityCents = toCents(oldMember.totalContributed ?? '0');
-        const reappliedCents = isNowCompleted && newMemberId === oldMemberId ? newAmountCents : 0;
-        if (equityCents - oldAmountCents + reappliedCents < 0) {
-          throw new AppError(
-            `Cannot change this deposit: ${oldMember.name ?? 'the member'} has only ${(equityCents / 100).toFixed(2)} of uncommitted deposit balance — the rest is invested in a project. Wind that investment back first.`,
-            400,
-            'INSUFFICIENT_EQUITY',
-          );
-        }
-        await tx
-          .update(members)
-          .set({
-            totalContributed: sql`(${members.totalContributed}::numeric - ${oldAmountCents / 100})::numeric(15,2)`,
-            updatedAt: new Date(),
-          })
-          .where(eq(members.id, oldMemberId));
-      }
+    // 1. Net financial impact.
+    //
+    // A settled deposit contributes `amount` to its fund's balance and to
+    // its member's totalContributed exactly once. An edit therefore moves
+    // those balances by the DELTA between the old contribution and the new
+    // one.
+    //
+    // It must NOT debit the old contribution and credit the new one as two
+    // separate UPDATEs: the intermediate balance dips below the fund's cash
+    // (and below the DB's `funds_balance_check CHECK (balance >= 0)`)
+    // whenever the fund holds less than the old amount — e.g. after a
+    // dividend run paid the fund out. Postgres then rejects the whole
+    // transaction and the caller sees an opaque 500 instead of a result.
+    // The delta is applied as ONE update per fund and per member, and a
+    // delta that would overdraw a fund is refused with a clean 400 (the
+    // same rule revertDeposit already enforces).
+    //
+    // The rule lives in lib/deposit-edit-delta.ts so it is unit-testable.
+    const { fundDelta, memberDelta } = computeDepositEditDelta(
+      {
+        wasCompleted,
+        oldFundId,
+        oldMemberId,
+        oldAmountCents,
+      },
+      {
+        isNowCompleted,
+        newFundId,
+        newMemberId,
+        newAmountCents,
+      },
+    );
+
+    // Lock every fund and member this edit touches, funds first and in a
+    // stable id order, so two concurrent edits that cross funds cannot
+    // deadlock each other.
+    const lockedFunds = new Map<string, typeof funds.$inferSelect>();
+    for (const fundId of [...fundDelta.keys()].sort()) {
+      const [row] = await tx.select().from(funds).where(and(eq(funds.id, fundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
+      if (row) lockedFunds.set(fundId, row);
+    }
+    const lockedMembers = new Map<string, typeof members.$inferSelect>();
+    for (const memberId of [...memberDelta.keys()].sort()) {
+      const [row] = await tx.select().from(members).where(and(eq(members.id, memberId), eq(members.tenantId, tenantId))).for('update').limit(1);
+      if (row) lockedMembers.set(memberId, row);
+    }
+
+    // Guard: a debit may not push a fund below its floor (its minimum
+    // balance, and never below zero — the DB enforces the same).
+    const fundSnapshots = new Map<string, FundBalanceSnapshot>();
+    for (const [fundId, fund] of lockedFunds) {
+      fundSnapshots.set(fundId, {
+        id: fundId,
+        name: fund.name,
+        balanceCents: toCents(fund.balance ?? '0'),
+        minimumBalanceCents: toCents(fund.minimumBalance ?? '0'),
+      });
+    }
+    const fundViolation = findFundDeficitViolation(fundDelta, fundSnapshots);
+    if (fundViolation) {
+      throw new AppError(
+        `Cannot change this deposit: this change would drop ${fundViolation.fundName} below its minimum balance`,
+        400,
+        'FUND_DEFICIT_PREVENTED',
+      );
+    }
+
+    // Guard: un-committing a deposit must never drive a member's equity
+    // negative — money already invested in a project is not uncommitted and
+    // cannot be reclaimed by editing a deposit.
+    const memberSnapshots = new Map<string, MemberEquitySnapshot>();
+    for (const [memberId, member] of lockedMembers) {
+      memberSnapshots.set(memberId, {
+        id: memberId,
+        name: member.name,
+        equityCents: toCents(member.totalContributed ?? '0'),
+      });
+    }
+    const equityViolation = findEquityViolation(memberDelta, memberSnapshots);
+    if (equityViolation) {
+      throw new AppError(
+        `Cannot change this deposit: ${equityViolation.memberName} has only ${(equityViolation.afterCents / 100).toFixed(2)} of uncommitted deposit balance — the rest is invested in a project. Wind that investment back first.`,
+        400,
+        'INSUFFICIENT_EQUITY',
+      );
     }
 
     // Collected date stays the ledger date; the selected month (or the
     // existing stored month) is what the deposit is FOR.
+    //
+    // A deposit may be booked ahead for a future month (bulk deposits are
+    // created before the money is collected), so its stored date can already
+    // be in the future. An edit that sends back that SAME date is preserving
+    // it, not introducing a new future posting — so the future-date rule is
+    // relaxed exactly when the incoming date equals the row's own date. Any
+    // OTHER date still goes through the rule.
+    const incomingCollectedDate = data.collectedDate ?? data.date;
+    const keepsExistingDate = isUnchangedDepositDate(incomingCollectedDate, existing.date);
     const depositDate = resolveDepositDate(
-      data.collectedDate ?? data.date,
+      incomingCollectedDate,
       data.depositMonth || existing.depositMonth || existing.description,
+      { allowFuture: keepsExistingDate },
     );
-    const depositMonthKey = resolveDepositMonthKey(data.depositMonth || existing.depositMonth, depositDate);
+    const depositMonthKey = resolveDepositMonthKey(data.depositMonth || existing.depositMonth, depositDate, await tenantTimezone(tenantId));
 
     // The new collected date must also land in an OPEN period — otherwise a
     // back-entry edit could move a deposit into a closed year.
@@ -719,9 +854,9 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
       }
     }
 
-    // 2. Apply new financial impact
+    // 2. Apply the net financial impact computed above.
     if (isNowCompleted) {
-      const [newFund] = await tx.select().from(funds).where(and(eq(funds.id, newFundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
+      const newFund = lockedFunds.get(newFundId);
       if (!newFund) throw new NotFoundError('Target fund');
       // Only a fund CHANGE is policed: a legacy deposit already sitting in a
       // non-DEPOSIT fund must stay editable (amount, date, member), otherwise
@@ -729,30 +864,46 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
       if (newFundId !== oldFundId && !isDepositFund(newFund)) {
         throw new AppError(DEPOSIT_FUND_REQUIRED_MESSAGE, 400, 'INVALID_FUND_TYPE');
       }
+      const newMember = lockedMembers.get(newMemberId);
+      if (!newMember) throw new NotFoundError('Member');
+    }
+
+    for (const [fundId, deltaCents] of fundDelta) {
+      if (deltaCents === 0) continue;
       await tx
         .update(funds)
-        .set({ balance: sql`(${funds.balance}::numeric + ${newAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
-        .where(eq(funds.id, newFundId));
+        .set({
+          balance: sql`(${funds.balance}::numeric + ${deltaCents / 100})::numeric(15,2)`,
+          updatedAt: new Date(),
+        })
+        .where(eq(funds.id, fundId));
+    }
 
-      const [newMember] = await tx.select().from(members).where(and(eq(members.id, newMemberId), eq(members.tenantId, tenantId))).for('update').limit(1);
-      if (!newMember) throw new NotFoundError('Member');
+    for (const [memberId, deltaCents] of memberDelta) {
+      if (deltaCents === 0) continue;
       await tx
         .update(members)
         .set({
-          totalContributed: sql`(${members.totalContributed}::numeric + ${newAmountCents / 100})::numeric(15,2)`,
-          lastActive: new Date(),
+          totalContributed: sql`(${members.totalContributed}::numeric + ${deltaCents / 100})::numeric(15,2)`,
+          // Only the member the money lands on counts as active; the member
+          // it leaves keeps its own lastActive.
+          ...(memberId === newMemberId ? { lastActive: new Date() } : {}),
           updatedAt: new Date(),
         })
-        .where(eq(members.id, newMemberId));
+        .where(eq(members.id, memberId));
     }
 
     // 3. Update transaction record. submittedDate override allowed for
     // back-entry correction.
     //
-    // #60: the fund balance was just reverted + re-applied, so this row's
-    // balanceBefore/balanceAfter snapshot is stale. Recompute it from the
-    // target fund's live balance (post-apply) so the running-balance column
-    // in reports/statements stops printing a value from the pre-edit state.
+    // The balanceBefore/balanceAfter snapshot must describe the target fund's
+    // cash ACROSS this edit: the balance the fund held before the edit, and
+    // the balance it holds after it. The edit applied a NET delta (the fund
+    // may be untouched, or credited without ever being debited), so the
+    // pre-edit balance is the live post-edit balance minus that delta —
+    // never `live - amount`, which would print a negative "before" for a fund
+    // that simply holds less cash than this one row is worth (e.g. after a
+    // dividend run paid the fund out).
     const [liveFund] = isNowCompleted
       ? await tx
           .select({ balance: funds.balance })
@@ -760,9 +911,14 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
           .where(and(eq(funds.id, newFundId), eq(funds.tenantId, tenantId)))
           .limit(1)
       : [];
-    const newFundBalanceCents = isNowCompleted ? toCents(liveFund?.balance ?? '0') : 0;
-    const balanceBeforeStr = isNowCompleted ? fmt(newFundBalanceCents - newAmountCents) : undefined;
-    const balanceAfterStr = isNowCompleted ? fmt(newFundBalanceCents) : undefined;
+    const liveFundBalanceCents = isNowCompleted ? toCents(liveFund?.balance ?? '0') : 0;
+    const newFundDeltaCents = fundDelta.get(newFundId) ?? 0;
+    const { beforeCents: fundBalanceBeforeCents, afterCents: liveAfterCents } = fundBalanceAcrossEdit(
+      liveFundBalanceCents,
+      newFundDeltaCents,
+    );
+    const balanceBeforeStr = isNowCompleted ? fmt(fundBalanceBeforeCents) : undefined;
+    const balanceAfterStr = isNowCompleted ? fmt(liveAfterCents) : undefined;
 
     const [updated] = await tx
       .update(transactions)
@@ -812,8 +968,10 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
       resourceType: 'Transaction',
       resourceId: id,
       details: {
-        previous: { amount: oldAmountCents / 100, fundId: oldFundId, memberId: oldMemberId, status: existing.status },
-        current: { amount: newAmountCents / 100, fundId: newFundId, memberId: newMemberId, status: newStatus },
+        // `date` joins the value-change trail: re-dating a posted deposit is
+        // exactly what a period-close audit looks for.
+        previous: { amount: oldAmountCents / 100, fundId: oldFundId, memberId: oldMemberId, status: existing.status, date: existing.date },
+        current: { amount: newAmountCents / 100, fundId: newFundId, memberId: newMemberId, status: newStatus, date: depositDate },
       },
       status: 'SUCCESS',
     });
@@ -1271,6 +1429,10 @@ export async function editExpense(id: string, data: ExpenseInput, user: SessionU
       assertMemberNotSuspended(expenseMember, 'incurring an expense');
     }
 
+    // Editing the posting date must clear the same guards as creating (no
+    // junk, no future postings) — and lands in the audit trail below.
+    const newDate = data.date ? resolveDepositDate(data.date) : existing.date;
+
     await tx
       .update(funds)
       .set({ balance: sql`(${funds.balance}::numeric - ${newAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
@@ -1285,7 +1447,7 @@ export async function editExpense(id: string, data: ExpenseInput, user: SessionU
         memberId: data.memberId || existing.memberId,
         description,
         category: data.category || existing.category,
-        date: data.date ? new Date(data.date) : existing.date,
+        date: newDate,
         updatedBy: user.id,
         updatedAt: new Date(),
       })
@@ -1300,8 +1462,9 @@ export async function editExpense(id: string, data: ExpenseInput, user: SessionU
       resourceType: 'Transaction',
       resourceId: id,
       details: {
-        previous: { amount: oldAmountCents / 100, fundId: oldFundId, projectId: oldProjectId },
-        current: { amount: newAmountCents / 100, fundId: newFundId, projectId: newProjectId },
+        // Date changes join the value-change trail (see EDIT_DEPOSIT).
+        previous: { amount: oldAmountCents / 100, fundId: oldFundId, projectId: oldProjectId, date: existing.date },
+        current: { amount: newAmountCents / 100, fundId: newFundId, projectId: newProjectId, date: newDate },
       },
       status: 'SUCCESS',
     });
@@ -1678,14 +1841,20 @@ export async function transferFunds(data: TransferInput, user: SessionUser) {
     const newSourceBalanceCents = sourceBalBeforeCents - amountCents;
     const newTargetBalanceCents = targetBalBeforeCents + amountCents;
 
+    // One clock for the whole operation: `date` is the effective transfer day
+    // (user-selected, defaults to now); operationTime is when it was recorded
+    // and becomes createdAt/updatedAt on the legs.
+    const operationTime = new Date();
+    const transferDate = resolveTransferDate(data.date, operationTime);
+
     await tx
       .update(funds)
-      .set({ balance: sql`(${funds.balance}::numeric - ${amountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
+      .set({ balance: sql`(${funds.balance}::numeric - ${amountCents / 100})::numeric(15,2)`, updatedAt: operationTime })
       .where(eq(funds.id, data.sourceFundId));
 
     await tx
       .update(funds)
-      .set({ balance: sql`(${funds.balance}::numeric + ${amountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
+      .set({ balance: sql`(${funds.balance}::numeric + ${amountCents / 100})::numeric(15,2)`, updatedAt: operationTime })
       .where(eq(funds.id, data.targetFundId));
 
     const refNumber = data.referenceNumber || `TRF-${Date.now()}-${data.sourceFundId.slice(0, 4)}-${data.targetFundId.slice(0, 4)}`;
@@ -1710,7 +1879,9 @@ export async function transferFunds(data: TransferInput, user: SessionUser) {
         balanceBefore: fmt(sourceBalBeforeCents),
         balanceAfter: fmt(newSourceBalanceCents),
         status: 'Completed',
-        date: new Date(),
+        date: transferDate,
+        createdAt: operationTime,
+        updatedAt: operationTime,
       })
       .returning();
 
@@ -1731,7 +1902,9 @@ export async function transferFunds(data: TransferInput, user: SessionUser) {
         balanceBefore: fmt(targetBalBeforeCents),
         balanceAfter: fmt(newTargetBalanceCents),
         status: 'Completed',
-        date: new Date(),
+        date: transferDate,
+        createdAt: operationTime,
+        updatedAt: operationTime,
       })
       .returning();
     if (!sourceTx || !targetTx) throw new AppError('Failed to record fund transfer', 500);
@@ -1746,6 +1919,7 @@ export async function transferFunds(data: TransferInput, user: SessionUser) {
         amount: amountCents / 100,
         source: data.sourceFundId,
         target: data.targetFundId,
+        transferDate: transferDate.toISOString(),
         sourceTxId: sourceTx.id,
         targetTxId: targetTx.id,
       },
@@ -2192,7 +2366,7 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
         const amountCents = parsePositiveAmount(dep.amount);
         const month = resolveBatchRowMonth(dep, data.commonMonth);
         const depositDate = resolveDepositDate(dep.date, month);
-        const monthKey = resolveDepositMonthKey(month, depositDate);
+        const monthKey = resolveDepositMonthKey(month, depositDate, await tenantTimezone(tenantId));
         const member = memberMap.get(dep.memberId);
         totalAmountCents += amountCents;
 
@@ -2274,7 +2448,7 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
       // The explicitly selected month wins for the deposit-month record,
       // duplicate checks and lastDepositMonth; the resolved collected date
       // remains the ledger date (§12 accuracy — month ≠ collection day).
-      const monthKey = resolveDepositMonthKey(month, depositDate);
+      const monthKey = resolveDepositMonthKey(month, depositDate, await tenantTimezone(tenantId));
       batchMonths.add(monthKey);
 
       // Duplicate deposit check for the month the deposit is FOR (stored

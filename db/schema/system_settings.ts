@@ -62,6 +62,12 @@ export const systemSettings = pgTable('system_settings', {
   refreshInterval: varchar('refresh_interval', { length: 50 }).default('Real-time'),
   theme: varchar('theme', { length: 50 }).default('Light'),
   dateFormat: varchar('date_format', { length: 50 }).default('DD/MM/YYYY'),
+  /**
+   * IANA zone of the tenant's books (default matches the platform default).
+   * Business-day filters and month attribution are evaluated on this wall
+   * clock, not the server's or the viewer's (lib/tenant-time.ts).
+   */
+  timezone: varchar('timezone', { length: 60 }).default('Asia/Dhaka').notNull(),
   isMaintenanceMode: boolean('is_maintenance_mode').default(false),
 
   // Governance & Meeting configuration
