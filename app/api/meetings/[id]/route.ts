@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { meetings, meetingAttendees, members, users } from '@/db/schema/index';
@@ -5,6 +6,7 @@ import { memberDisplayNameSql } from '@/lib/member-display';
 import { eq, and } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
+import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { NotFoundError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 
@@ -80,10 +82,7 @@ export async function GET(
     });
   } catch (err: any) {
     console.error('[MEETING GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch meeting' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to fetch meeting');
   }
 }
 
@@ -96,8 +95,8 @@ export async function PUT(
     if ('error' in ctx) return ctx.error;
     const { user, tenantId } = ctx;
 
-    if (normalizeRole(user.role) === 'Member') {
-      throw new ForbiddenError('Insufficient permissions to update meeting');
+    if (!hasScreenPermission(user, 'MEETINGS', 'WRITE')) {
+      throw new ForbiddenError('Write permission required for: MEETINGS');
     }
 
     const { id } = await params;
@@ -159,10 +158,7 @@ export async function PUT(
     });
   } catch (err: any) {
     console.error('[MEETING PUT ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to update meeting' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to update meeting');
   }
 }
 
@@ -210,9 +206,6 @@ export async function DELETE(
     });
   } catch (err: any) {
     console.error('[MEETING DELETE ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to delete meeting' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to delete meeting');
   }
 }

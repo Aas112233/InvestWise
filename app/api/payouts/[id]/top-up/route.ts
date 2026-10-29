@@ -4,6 +4,7 @@ import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { ForbiddenError } from '@/lib/utils/errors';
 import { topUpPayoutPlan } from '@/lib/member-payouts';
+import { apiError } from '@/lib/utils/api-error';
 
 /**
  * POST /api/payouts/[id]/top-up — reserves money the member earned AFTER the
@@ -29,9 +30,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     return NextResponse.json({ success: true, data: result, message: 'Project return added to the plan' });
   } catch (err: any) {
     console.error('[PAYOUT TOP-UP ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to add project return', code: err.code ?? 'PAYOUT_TOPUP_FAILED' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to add project return');
   }
 }

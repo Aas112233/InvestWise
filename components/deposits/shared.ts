@@ -136,6 +136,13 @@ export interface MemberDepositMonthCell {
   referenceNumber: string | null;
   /** Held by a pending request — it must be approved/rejected, not reverted. */
   pendingRequest: boolean;
+  /**
+   * H6 — settled deposits recorded FOR this month, and their sum. Non-null only for a flexible
+   * schedule, where a month may hold several deposits and `occupied` is false for all of them;
+   * null means the server did not measure it (monthly), which is NOT the same as zero.
+   */
+  depositCount: number | null;
+  periodTotal: string | null;
 }
 
 export interface MemberDepositMonths {
@@ -150,12 +157,19 @@ export interface MemberDepositMonths {
   };
   fiscalYear: string;
   fiscalYearStart: string;
+  /**
+   * Which deposit model produced the grid. Absent on a server predating the flexible model, in
+   * which case monthly is the correct reading (the stricter one).
+   */
+  depositSchedule?: "monthly" | "flexible";
+  obligationEnforced?: boolean;
   months: MemberDepositMonthCell[];
 }
 
 /**
- * The month grid behind the single-member bulk collection: which months of one
- * fiscal year already hold a deposit for the member.
+ * The month grid behind the single-member bulk collection AND the deposit
+ * form's month picker: which months of one fiscal year already hold a deposit
+ * for the member.
  *
  * The server expands the fiscal year from the tenant's own calendar and applies
  * the SAME occupancy rule the bulk POST enforces, so a month this feed reports
@@ -163,13 +177,24 @@ export interface MemberDepositMonths {
  * `["deposits"]` prefix: any deposit mutation invalidates it automatically, and
  * the grid re-greys the month that was just recorded.
  *
- * Not fetched until both a member and a year are chosen — the endpoint answers
- * one member per call and must never be driven speculatively.
+ * Not fetched until a member and a year are chosen — the endpoint answers one
+ * member per call and must never be driven speculatively.
+ *
+ * `keepPreviousData` serves the bulk grid, which changes both member and year
+ * as the desk works. The deposit form opts out: it must never label one
+ * member's grid as another member's while the new one loads.
  */
-export function useMemberDepositMonths(memberId: string | null, fiscalYear: string | null) {
+export function useMemberDepositMonths(
+  memberId: string | null,
+  fiscalYear: string | null,
+  options: { keepPreviousData?: boolean } = {},
+) {
   return useQuery({
     queryKey: ["deposits", "month-status", { memberId, fiscalYear }],
     enabled: Boolean(memberId && fiscalYear),
+    placeholderData: options.keepPreviousData
+      ? (prev: MemberDepositMonths | undefined) => prev
+      : undefined,
     staleTime: 15_000,
     queryFn: async (): Promise<MemberDepositMonths> => {
       const res = await apiClient<MemberDepositMonths & { success: boolean }>("/finance/deposits/month-status", {

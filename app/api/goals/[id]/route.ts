@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { goals, projects } from '@/db/schema/index';
@@ -5,7 +6,8 @@ import { eq, and } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
-import { NotFoundError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
+import { NotFoundError, ForbiddenError, ValidationError, readJsonBody } from '@/lib/utils/errors';
+import { toCents, fromCents, parsePositiveAmount, MoneyError } from '@/lib/money';
 
 /** §6 guard: tenant business route — resolve tenantId or fail closed. */
 async function requireTenantContext(request: NextRequest) {
@@ -64,10 +66,7 @@ export async function GET(
     });
   } catch (err: any) {
     console.error('[GOAL GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch goal' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to fetch goal');
   }
 }
 
@@ -102,8 +101,15 @@ export async function PUT(
 
     if (body.title !== undefined) updateFields.title = body.title.trim();
     if (body.description !== undefined) updateFields.description = body.description ? body.description.trim() : null;
-    if (body.targetAmount !== undefined) updateFields.targetAmount = String(Number(body.targetAmount));
-    if (body.currentAmount !== undefined) updateFields.currentAmount = String(Number(body.currentAmount));
+    // §12 money rule (audit 07 M-5): cents parsing, never `String(Number(x))`.
+    if (body.targetAmount !== undefined) {
+      updateFields.targetAmount = fromCents(parsePositiveAmount(body.targetAmount, { field: 'targetAmount' }));
+    }
+    if (body.currentAmount !== undefined) {
+      const currentCents = toCents(body.currentAmount);
+      if (currentCents < 0) throw new ValidationError('currentAmount cannot be negative');
+      updateFields.currentAmount = fromCents(currentCents);
+    }
     if (body.deadline !== undefined) updateFields.deadline = body.deadline || null;
     if (body.type !== undefined) updateFields.type = body.type;
     if (body.linkedProjectId !== undefined) {
@@ -121,9 +127,9 @@ export async function PUT(
       updateFields.linkedProjectId = body.linkedProjectId || null;
     }
 
-    // Check if goal reached target
-    const current = Number(body.currentAmount !== undefined ? body.currentAmount : existing.currentAmount);
-    const target = Number(body.targetAmount !== undefined ? body.targetAmount : existing.targetAmount);
+    // Check if goal reached target — compare in integer cents, not floats.
+    const current = toCents(body.currentAmount !== undefined ? body.currentAmount : existing.currentAmount);
+    const target = toCents(body.targetAmount !== undefined ? body.targetAmount : existing.targetAmount);
 
     if (body.status !== undefined) {
       updateFields.status = body.status;
@@ -157,10 +163,11 @@ export async function PUT(
     });
   } catch (err: any) {
     console.error('[GOAL PUT ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to update goal' },
-      { status: err.statusCode || 500 }
-    );
+    // Money validation is a 400, not a 500 (same mapping as dividends).
+    if (err instanceof MoneyError) {
+      return NextResponse.json({ success: false, message: err.message, code: err.code }, { status: 400 });
+    }
+    return apiError(err, 'Failed to update goal');
   }
 }
 
@@ -207,9 +214,6 @@ export async function DELETE(
     });
   } catch (err: any) {
     console.error('[GOAL DELETE ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to delete goal' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to delete goal');
   }
 }

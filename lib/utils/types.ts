@@ -23,7 +23,8 @@ export interface PaginatedResponse<T> {
 }
 
 export function getPaginationParams(query: Record<string, any>, defaults?: Partial<PaginationParams>): PaginationParams {
-  const page = Math.max(1, parseInt(query.page) || defaults?.page || 1);
+  // page bounded: a huge `page` is an OFFSET walk Postgres still does
+  const page = Math.min(1000, Math.max(1, parseInt(query.page) || defaults?.page || 1));
   const limit = Math.min(100, Math.max(1, parseInt(query.limit) || defaults?.limit || 20));
   const skip = (page - 1) * limit;
   const sortBy = query.sortBy || defaults?.sortBy || 'createdAt';

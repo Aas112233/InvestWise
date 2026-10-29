@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { users } from '@/db/schema/index';
-import { eq } from 'drizzle-orm';
+import { users, sessions } from '@/db/schema/index';
+import { and, eq } from 'drizzle-orm';
+import { clearAuthCookies } from '@/lib/utils/cookies';
 import { comparePassword, hashPassword, validatePasswordStrength } from '@/lib/utils/password';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { logAudit } from '@/lib/utils/audit';
+import { clearAccountLock } from '@/lib/account-lock';
 import { AuthError, NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 
 export async function PUT(request: NextRequest) {
@@ -54,6 +56,24 @@ export async function PUT(request: NextRequest) {
       .set({ password: hashed, updatedAt: new Date() })
       .where(eq(users.id, userId));
 
+    // A password change is the standard response to "someone else has been
+    // using my account", so it has to end that access now. Sessions are
+    // validated against this row rather than the password, so without this the
+    // existing session survives the change for up to the 24h absolute cap.
+    // All sessions go, including this one: forcing a fresh sign-in with the new
+    // credential is the point of the operation. Requires a full session revoke
+    // rather than the caller's current session only, which would need
+    // sessionId surfaced on AuthenticatedUser.
+    const revokedSessions = await db
+      .update(sessions)
+      .set({ isActive: false, isExpired: true, logoutTime: new Date() })
+      .where(and(eq(sessions.userId, userId), eq(sessions.isActive, true)))
+      .returning({ sessionId: sessions.sessionId });
+
+    // Getting this far proves the caller knows the current password, so any
+    // failed-attempt lockout on the address is stale by definition.
+    const lockCleared = await clearAccountLock(authUser.email);
+
     // Credential change: action-only audit — never snapshot password material.
     await logAudit({
       user: { id: authUser.id, name: authUser.name },
@@ -61,13 +81,20 @@ export async function PUT(request: NextRequest) {
       action: 'PASSWORD_CHANGE',
       resourceType: 'User',
       resourceId: userId,
-      details: { email: authUser.email, selfService: true },
+      details: { email: authUser.email, selfService: true, sessionsRevoked: revokedSessions.length },
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      message: 'Password changed successfully',
+      data: { sessionsRevoked: revokedSessions.length },
+      message: 'Password changed. Please sign in again.',
     });
+
+    // The session behind these cookies was just revoked above, so leaving the
+    // cookies in place would only turn the next request into a confusing 401.
+    clearAuthCookies(response.cookies);
+
+    return response;
   } catch (error: any) {
     console.error('[CHANGE PASSWORD ERROR]', error);
     

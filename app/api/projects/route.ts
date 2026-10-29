@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { projects, projectMembers, funds, transactions, systemSettings } from '@/db/schema/index';
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
     const status = url.searchParams.get('status') || undefined;
     const fundId = url.searchParams.get('fundId') || undefined;
     const search = url.searchParams.get('search') || undefined;
-    const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+    const page = Math.min(1000, Math.max(1, Number(url.searchParams.get('page')) || 1)); // page bounded: a huge `page` is an OFFSET walk Postgres still does
     const pageSize = Math.min(
       MAX_PAGE_SIZE,
       Math.max(1, Number(url.searchParams.get('pageSize')) || DEFAULT_PAGE_SIZE),
@@ -73,10 +74,7 @@ export async function GET(request: NextRequest) {
   } catch (err: unknown) {
     console.error('[PROJECTS LIST ERROR]', err);
     const e = err as { message?: string; statusCode?: number };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to fetch projects' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to fetch projects');
   }
 }
 
@@ -109,11 +107,15 @@ export async function POST(request: NextRequest) {
 
       // 1. Resolve tenant share value from system_settings
       const [settingRow] = await tx
-        .select({ shareValueBdt: systemSettings.shareValueBdt })
+        .select({
+          shareValueBdt: systemSettings.shareValueBdt,
+          baseCurrency: systemSettings.baseCurrency,
+        })
         .from(systemSettings)
         .where(eq(systemSettings.tenantId, tenantId))
         .limit(1);
       const shareValue = Number(settingRow?.shareValueBdt || 1000);
+      const tenantCurrency = settingRow?.baseCurrency || 'BDT';
 
       // 2. Fund management: create dedicated new fund or link existing fund
       let targetFundId: string | null = null;
@@ -125,6 +127,7 @@ export async function POST(request: NextRequest) {
             tenantId,
             name: fundName,
             type: 'PROJECT',
+            currency: tenantCurrency,
             balance: '0.00',
             description: `Dedicated fund for project: ${data.title}`,
           })
@@ -282,9 +285,6 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     console.error('[PROJECTS CREATE ERROR]', err);
     const e = err as { message?: string; statusCode?: number };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to create project' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to create project');
   }
 }

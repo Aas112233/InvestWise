@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { projectUpdates, projects } from '@/db/schema/index';
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     const url = new URL(request.url);
     const projectId = url.searchParams.get('projectId') || undefined;
-    const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+    const page = Math.min(1000, Math.max(1, Number(url.searchParams.get('page')) || 1)); // page bounded: a huge `page` is an OFFSET walk Postgres still does
     const pageSize = Math.min(
       MAX_PAGE_SIZE,
       Math.max(1, Number(url.searchParams.get('pageSize')) || DEFAULT_PAGE_SIZE),
@@ -70,9 +71,6 @@ export async function GET(request: NextRequest) {
   } catch (err: unknown) {
     console.error('[PROJECT UPDATES LIST ERROR]', err);
     const e = err as { message?: string; statusCode?: number };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to fetch project updates' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to fetch project updates');
   }
 }

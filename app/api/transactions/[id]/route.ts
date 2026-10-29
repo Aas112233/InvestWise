@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, members, funds, projects, users, deletedRecords, projectUpdates, fiscalPeriods } from '@/db/schema/index';
@@ -36,6 +37,7 @@ export async function GET(
       .select({
         id: transactions.id,
         referenceNumber: transactions.referenceNumber,
+        docNumber: transactions.docNumber,
         date: transactions.date,
         type: transactions.type,
         category: transactions.category,
@@ -150,6 +152,7 @@ export async function GET(
           type: transactions.type,
           fundName: funds.name,
           referenceNumber: transactions.referenceNumber,
+          docNumber: transactions.docNumber,
         })
         .from(transactions)
         .leftJoin(funds, and(eq(transactions.fundId, funds.id), eq(funds.tenantId, tenantId)))
@@ -190,10 +193,7 @@ export async function GET(
     });
   } catch (err: any) {
     console.error('[TRANSACTION GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch transaction' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to fetch transaction');
   }
 }
 
@@ -526,9 +526,6 @@ export async function DELETE(
 
   } catch (err: any) {
     console.error('[TRANSACTION DELETE ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to soft-delete transaction' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to soft-delete transaction');
   }
 }

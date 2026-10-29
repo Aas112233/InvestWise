@@ -5,18 +5,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Activity,
   ArrowLeft,
   ArrowDownLeft,
   ArrowUpRight,
   Building2,
   CheckCircle2,
   FolderKanban,
+  History,
   KeyRound,
   PauseCircle,
   PiggyBank,
   PlayCircle,
   Receipt,
   ShieldAlert,
+  Trash2,
   TrendingUp,
   Users,
   Wrench,
@@ -29,8 +32,35 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { ERPDataTable, type ERPColumn } from "@/components/ui/erp-data-table";
 import { ERPConfirmDialog } from "@/components/ui/erp-confirm-dialog";
+import { TopSheet } from "@/components/ui/top-sheet";
+import { Input } from "@/components/ui";
 import { TenantModuleAccessPanel } from "@/components/admin/tenant-module-access-panel";
+import { SubscriptionControlPanel } from "@/components/admin/subscription-control-panel";
 import { formatDate } from "@/lib/formatters";
+
+interface PlatformActionLite {
+  id: string;
+  actionType: string;
+  adminEmail: string | null;
+  targetType: string | null;
+  createdAt: string | null;
+}
+
+// Compact "Nd ago" for the activity card. `nowMs` is passed in (query load
+// time) so the render stays pure — Date.now() in render is an eslint purity
+// violation and makes server/client output differ.
+function formatRelative(iso: string | null | undefined, nowMs: number): string {
+  if (!iso || !nowMs) return "—";
+  const diffMin = Math.floor((nowMs - new Date(iso).getTime()) / 60_000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const h = Math.floor(diffMin / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  return mo < 12 ? `${mo}mo ago` : `${Math.floor(d / 365)}y ago`;
+}
 
 // decimal(15,2) string -> display. Grouping only; no arithmetic.
 function formatCentsOnly(value: string | undefined): string {
@@ -47,6 +77,7 @@ interface TenantUser {
   role: string;
   status: string;
   createdAt: string;
+  lastLogin: string | null;
   impersonatable: boolean;
 }
 
@@ -69,6 +100,10 @@ interface TenantDetailResponse {
     totalFunds: number;
     totalProjects: number;
     totalTransactions: number;
+    activeUsers: number;
+    totalMembers: number;
+    transactions30d: number;
+    lastActivityAt: string | null;
   };
   // decimal(15,2) as strings — formatted for display, never re-summed.
   financials: {
@@ -108,9 +143,20 @@ export default function TenantDetailPage({
       ),
   });
 
-  const { data, isLoading, refetch } = useQuery<{ success: boolean; data: TenantDetailResponse }>({
+  const { data, isLoading, refetch, dataUpdatedAt } = useQuery<{ success: boolean; data: TenantDetailResponse }>({
     queryKey: ["admin", "tenants", id],
     queryFn: () => apiClient<{ success: boolean; data: TenantDetailResponse }>(`/admin/tenants/${id}`),
+    staleTime: 30_000,
+  });
+
+  // Platform actions taken ON this tenant — the operator's "what happened
+  // here" stream. Reuses /admin/action-log's server-side tenantId filter.
+  const activityQuery = useQuery<{ success: boolean; data: PlatformActionLite[] }>({
+    queryKey: ["admin", "action-log", "tenant", id],
+    queryFn: () =>
+      apiClient<{ success: boolean; data: PlatformActionLite[] }>("/admin/action-log", {
+        params: { tenantId: id, limit: 5 },
+      }),
     staleTime: 30_000,
   });
 
@@ -136,6 +182,31 @@ export default function TenantDetailPage({
     onError: (err) =>
       toast.error(
         err instanceof ApiError ? err.message : t("admin.tenants.updateFailed", { defaultValue: "Update failed" })
+      ),
+  });
+
+  // High-friction platform wipe. The gate is UI friction only — the server
+  // still enforces SuperAdmin + non-default slug — but a 37-table cascade
+  // deserves an explicit acknowledgement of the live counts.
+  const [wipeOpen, setWipeOpen] = useState(false);
+  const [wipeName, setWipeName] = useState("");
+  const [wipeReason, setWipeReason] = useState("");
+  const wipeArmed = !!tenant && wipeName.trim() === tenant.name && wipeReason.trim().length >= 8;
+
+  const wipeMutation = useMutation({
+    mutationFn: () =>
+      apiClient(`/admin/tenants/${id}`, {
+        method: "DELETE",
+        params: { force: true, reason: wipeReason.trim().slice(0, 500) },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
+      toast.success(t("admin.tenants.deleted", { defaultValue: "Tenant deleted" }));
+      router.push("/admin/tenants");
+    },
+    onError: (err) =>
+      toast.error(
+        err instanceof ApiError ? err.message : t("admin.tenants.deleteFailed", { defaultValue: "Delete failed" })
       ),
   });
 
@@ -165,6 +236,21 @@ export default function TenantDetailPage({
       render: (u) => (
         <StatusBadge tone={u.status === "active" ? "emerald" : "rose"} label={u.status} />
       ),
+    },
+    {
+      key: "lastLogin",
+      header: t("admin.tenants.detail.userLastLogin", { defaultValue: "Last login" }),
+      render: (u) =>
+        u.lastLogin ? (
+          <span className="font-mono text-[11px] text-foreground">
+            {formatRelative(u.lastLogin, dataUpdatedAt)}
+            <span className="block text-[10px] text-muted-foreground">{formatDate(u.lastLogin)}</span>
+          </span>
+        ) : (
+          <span className="text-[11px] text-muted-foreground italic">
+            {t("admin.tenants.detail.neverLoggedIn", { defaultValue: "Never logged in" })}
+          </span>
+        ),
     },
     {
       key: "createdAt",
@@ -206,7 +292,7 @@ export default function TenantDetailPage({
   if (isLoading) {
     return (
       <div className="p-8 text-center text-xs text-muted-foreground">
-        {t("common.loading", { defaultValue: "Loading tenant details…" })}
+        {t("common.loading", { defaultValue: "Loading tenant 360° telemetry…" })}
       </div>
     );
   }
@@ -296,22 +382,40 @@ export default function TenantDetailPage({
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* 360° telemetry */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <ERPMetricCard
-          label={t("admin.tenants.detail.quotaUsers", { defaultValue: "Members & Users" })}
+          label={t("admin.tenants.detail.quotaUsers", { defaultValue: "Accounts (quota)" })}
           value={`${stats?.totalUsers ?? 0} / ${tenant.maxUsers}`}
+          note={`${stats?.activeUsers ?? 0} active`}
           icon={<Users size={16} />}
         />
         <ERPMetricCard
-          label={t("admin.tenants.detail.funds", { defaultValue: "Active Funds" })}
-          value={stats?.totalFunds ?? 0}
-          icon={<PiggyBank size={16} />}
+          label={t("admin.tenants.detail.members", { defaultValue: "Investor Members" })}
+          value={stats?.totalMembers ?? 0}
+          icon={<Building2 size={16} />}
         />
         <ERPMetricCard
-          label={t("admin.tenants.detail.projects", { defaultValue: "Active Projects" })}
-          value={stats?.totalProjects ?? 0}
+          label={t("admin.tenants.detail.fundsProjects", { defaultValue: "Funds · Projects" })}
+          value={`${stats?.totalFunds ?? 0} · ${stats?.totalProjects ?? 0}`}
           icon={<FolderKanban size={16} />}
+        />
+        <ERPMetricCard
+          label={t("admin.tenants.detail.lastActivity", { defaultValue: "Last Activity" })}
+          value={formatRelative(stats?.lastActivityAt, dataUpdatedAt)}
+          note={
+            stats?.lastActivityAt
+              ? formatDate(stats.lastActivityAt)
+              : t("admin.tenants.detail.noLoginsYet", { defaultValue: "no sign-ins yet" })
+          }
+          icon={<Activity size={16} />}
+          tone={
+            stats?.lastActivityAt
+              ? dataUpdatedAt - new Date(stats.lastActivityAt).getTime() < 7 * 86_400_000
+                ? "emerald"
+                : "amber"
+              : "slate"
+          }
         />
       </div>
 
@@ -349,10 +453,18 @@ export default function TenantDetailPage({
           <ERPMetricCard
             label={t("admin.tenants.detail.transactions", { defaultValue: "Transactions" })}
             value={stats?.totalTransactions ?? 0}
+            note={`+${stats?.transactions30d ?? 0} in last 30 days`}
             icon={<Receipt size={16} />}
+            tone={(stats?.transactions30d ?? 0) > 0 ? "emerald" : "slate"}
           />
         </div>
       </div>
+
+      {/* Per-tenant subscription lifecycle: deadlines, grace, change timeline */}
+      <SubscriptionControlPanel
+        tenantId={tenant.id}
+        onUpdated={() => void refetch()}
+      />
 
       {/* Per-tenant module licensing */}
       <TenantModuleAccessPanel
@@ -379,6 +491,148 @@ export default function TenantDetailPage({
           emptyMessage="No users provisioned in this tenant yet"
         />
       </div>
+
+      {/* Platform actions on this tenant — recent operator activity stream */}
+      <div className="rounded-xl bg-card p-4 shadow-xs space-y-2">
+        <div className="flex items-center justify-between gap-2 pb-1 border-b border-border/50">
+          <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <History size={15} className="text-primary" />
+            {t("admin.tenants.detail.activityTitle", { defaultValue: "Platform Activity (audit)" })}
+          </h2>
+          <Link href="/admin/audit-logs" className="ml-auto text-[11px] text-primary hover:underline">
+            {t("admin.tenants.detail.activityAll", { defaultValue: "View all" })}
+          </Link>
+        </div>
+        {activityQuery.isLoading ? (
+          <p className="text-[11px] text-muted-foreground py-2">{t("common.loading", { defaultValue: "Loading…" })}</p>
+        ) : (activityQuery.data?.data?.length ?? 0) === 0 ? (
+          <p className="text-[11px] text-muted-foreground py-2">
+            {t("admin.tenants.detail.activityEmpty", { defaultValue: "No platform actions recorded for this tenant yet." })}
+          </p>
+        ) : (
+          <ol className="divide-y divide-border/50">
+            {(activityQuery.data?.data ?? []).map((row) => (
+              <li key={row.id} className="py-2 flex items-center justify-between gap-3 flex-wrap">
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className="font-mono text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20 shrink-0">
+                    {row.actionType}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground truncate">
+                    {row.adminEmail ?? "system"}
+                    {row.targetType ? ` → ${row.targetType}` : ""}
+                  </span>
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                  {row.createdAt ? formatRelative(row.createdAt, dataUpdatedAt) : "—"}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      {/* Danger Zone — mirrors the tenant-detail pattern: a 37-table cascade
+          gets an explicit impact readout + typed acknowledgement here too. */}
+      <div className="rounded-xl border border-rose-500/30 bg-rose-500/[0.03] p-4 space-y-3">
+        <div className="flex items-center gap-2 pb-1 border-b border-rose-500/20">
+          <ShieldAlert className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+          <h2 className="text-sm font-bold text-rose-700 dark:text-rose-300">
+            {t("admin.tenants.detail.dangerTitle", { defaultValue: "Danger Zone — Platform Wipe" })}
+          </h2>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          {t("admin.tenants.detail.dangerDesc", {
+            defaultValue:
+              "Permanently deletes this tenant's users, members, funds, projects and full ledger. Irreversible — protected by a database backup, not by an undo button. Suspended-only churn is normally what you want instead.",
+          })}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {[
+            `${stats?.totalUsers ?? 0} users`,
+            `${stats?.totalMembers ?? 0} members`,
+            `${stats?.totalFunds ?? 0} funds`,
+            `${stats?.totalProjects ?? 0} projects`,
+            `${stats?.totalTransactions ?? 0} transactions`,
+          ].map((chip) => (
+            <span key={chip} className="font-mono text-[10px] rounded-full border border-rose-500/30 text-rose-700 dark:text-rose-300 px-2 py-0.5">
+              {chip}
+            </span>
+          ))}
+        </div>
+        {tenant.slug === "default" ? (
+          <p className="text-[11px] text-rose-700 dark:text-rose-300">
+            {t("admin.tenants.detail.defaultProtected", {
+              defaultValue: "The default tenant is platform-managed and cannot be deleted.",
+            })}
+          </p>
+        ) : (
+          <Button variant="destructive" size="sm" className="gap-1.5" onClick={() => { setWipeName(""); setWipeReason(""); setWipeOpen(true); }}>
+            <Trash2 size={14} />
+            {t("admin.tenants.detail.wipeButton", { defaultValue: "Force delete tenant…" })}
+          </Button>
+        )}
+      </div>
+
+      <TopSheet
+        isOpen={wipeOpen}
+        onClose={() => setWipeOpen(false)}
+        title={t("admin.tenants.detail.wipeTitle", { defaultValue: "Force delete tenant?" })}
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg bg-rose-500/10 border border-rose-500/30 p-3 text-[11px] text-rose-800 dark:text-rose-200 leading-relaxed">
+            {t("admin.tenants.detail.wipeWarning", {
+              defaultValue:
+                "This wipes every user, member, fund, project and ledger row for {name} in one transaction. There is no recovery from the app. Type the tenant name and give a reason (min 8 characters) to arm the button — the reason is written to the platform audit.",
+              name: tenant.name,
+            })}
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="wipe-name" className="text-xs font-semibold text-foreground">
+              {t("admin.tenants.detail.wipeNameLabel", { defaultValue: "Type the tenant name to confirm" })}
+            </label>
+            <Input
+              id="wipe-name"
+              autoComplete="off"
+              value={wipeName}
+              onChange={(e) => setWipeName(e.target.value)}
+              placeholder={tenant.name}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="wipe-reason" className="text-xs font-semibold text-foreground">
+              {t("admin.tenants.detail.wipeReasonLabel", { defaultValue: "Reason (audited)" })}
+            </label>
+            <textarea
+              id="wipe-reason"
+              rows={3}
+              maxLength={500}
+              value={wipeReason}
+              onChange={(e) => setWipeReason(e.target.value)}
+              placeholder={t("admin.tenants.detail.wipeReasonPlaceholder", {
+                defaultValue: "e.g. contract terminated 25-10-2026, data export delivered, customer requested erasure",
+              })}
+              className="w-full px-3 py-2 rounded-xl border border-border/80 bg-card text-xs text-foreground outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/40"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-border/50">
+            <Button variant="outline" size="sm" onClick={() => setWipeOpen(false)}>
+              {t("common.cancel", { defaultValue: "Cancel" })}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={!wipeArmed}
+              loading={wipeMutation.isPending}
+              onClick={() => wipeMutation.mutate()}
+            >
+              <Trash2 size={14} className="mr-1.5" />
+              {wipeMutation.isPending
+                ? t("common.processing", { defaultValue: "Processing…" })
+                : t("admin.tenants.detail.wipeConfirm", { defaultValue: "Delete permanently" })}
+            </Button>
+          </div>
+        </div>
+      </TopSheet>
 
       {/* Suspend Confirmation Dialog */}
       <ERPConfirmDialog

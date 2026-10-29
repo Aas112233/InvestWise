@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { getMemberDepositHistory } from '@/lib/governance/status-service';
+import { apiError } from '@/lib/utils/api-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,9 +43,6 @@ export async function GET(
     return NextResponse.json({ success: true, data: history });
   } catch (err: any) {
     console.error('[GOVERNANCE MEMBER DEPOSITS GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch deposit history' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to fetch deposit history');
   }
 }

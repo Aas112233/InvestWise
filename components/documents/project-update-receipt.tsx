@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useLocale } from "@/lib/i18n";
-import { useFormatDate, useFormatDateOnly, useFormatMoney } from "@/lib/use-tenant-settings";
+import { useFormatDate, useFormatDateOnly, useFormatMoney, useTenantCurrency } from "@/lib/use-tenant-settings";
 import { translateLedgerDescription } from "@/lib/ledger-description";
 import { getTransactionStatusLabel } from "@/lib/transaction-labels";
 import { amountInWords } from "@/lib/amount-in-words";
@@ -16,9 +16,12 @@ import {
   DocVoidStamp,
   type DocSignature,
 } from "./document-frame";
+import { ledgerRef } from "@/lib/doc-number";
 
 export interface ProjectUpdateReceiptData {
   id?: string;
+  /** Printed reference (DEP-2026-00042). See lib/doc-number.ts. */
+  docNumber?: string | null;
   referenceNumber?: string;
   date?: string;
   amount?: number | string;
@@ -45,6 +48,8 @@ export interface ProjectUpdateReceiptData {
 export function ProjectUpdateReceipt({ data, orgName, orgTagline }: { data: ProjectUpdateReceiptData; orgName?: string; orgTagline?: string }) {
   const { t } = useLocale();
   const formatMoney = useFormatMoney();
+  // Words must name the same currency as the figures — see lib/amount-in-words.ts.
+  const currency = useTenantCurrency();
   const formatDate = useFormatDateOnly();
   const formatDateTime = useFormatDate();
   const na = t("common.na", { defaultValue: "—" });
@@ -77,7 +82,7 @@ export function ProjectUpdateReceipt({ data, orgName, orgTagline }: { data: Proj
       orgName={orgName}
       orgTagline={orgTagline}
       docType={title}
-      reference={data.referenceNumber}
+      reference={ledgerRef(data, "") || undefined}
       dateLabel={data.date ? formatDate(data.date) : undefined}
       signatures={signatures}
     >
@@ -95,7 +100,7 @@ export function ProjectUpdateReceipt({ data, orgName, orgTagline }: { data: Proj
       <DocTitle>{data.projectName || title}</DocTitle>
       <DocAmount
         label={t("deposits.columns.amount", { defaultValue: "Amount" })}
-        words={amountInWords(data.amount)}
+        words={amountInWords(data.amount, currency)}
         wordsLabel={t("documents.amountInWords", { defaultValue: "In words" })}
       >
         <span style={voided || rejected ? { textDecoration: "line-through" } : undefined}>

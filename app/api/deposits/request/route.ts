@@ -1,16 +1,19 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, funds, members, systemSettings } from '@/db/schema/index';
 import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-methods';
-import { DEPOSIT_FUND_REQUIRED_MESSAGE, isDepositFund } from '@/lib/deposit-fund';
+import { DEPOSIT_FUND_REQUIRED_MESSAGE, DEPOSIT_REQUEST_CATEGORY, isDepositFund } from '@/lib/deposit-fund';
 import { findDepositMonthOccupant, depositMonthConflictMessage } from '@/lib/deposit-month-limit';
+import { resolveDepositScheduleDetailed } from '@/lib/deposit-schedule/schedule';
 import { eq, and, sql } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
-import { toCents, fromCents } from '@/lib/money';
+import { toCents, fromCents, MAX_AMOUNT } from '@/lib/money';
+import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
@@ -83,6 +86,16 @@ export async function POST(request: NextRequest) {
       throw new ValidationError('Deposit amount must be a positive number');
     }
 
+    // Same ceiling as POST /api/deposits. Approval copies the requested amount
+    // onto the settled Deposit row without re-checking it, so without this a
+    // request above the module maximum could be approved into the ledger while
+    // the identical amount entered directly is refused.
+    if (amountCents > MAX_AMOUNT * 100) {
+      throw new ValidationError(
+        `[Field 'amount', Code: too_big] Deposit amount may not exceed ${fromCents(MAX_AMOUNT * 100)}`,
+      );
+    }
+
     const formattedAmount = fromCents(amountCents);
     const refNumber = `DEP-REQ-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
@@ -93,7 +106,7 @@ export async function POST(request: NextRequest) {
     // of three sequential ones. Error checks below preserve the original
     // precedence (duplicate ref → missing member → missing fund → month
     // already taken).
-    const [existingDeposit, [member], [fund], [pmSettings], monthOccupant] = await Promise.all([
+    const [existingDeposit, [member], [fund], [pmSettings]] = await Promise.all([
       // Duplicate reference number check (idempotency, tenant-scoped so one
       // tenant cannot squat or probe another tenant's reference).
       db
@@ -119,23 +132,19 @@ export async function POST(request: NextRequest) {
         .from(funds)
         .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)))
         .limit(1),
-      // Tenant-configured payment methods — validates depositMethod below.
+      // Tenant-configured payment methods + deposit schedule — validates
+      // depositMethod and resolves the one-deposit-per-month rule below.
       db
-        .select({ paymentMethods: systemSettings.paymentMethods })
+        .select({
+          paymentMethods: systemSettings.paymentMethods,
+          depositSchedule: systemSettings.depositSchedule,
+        })
         .from(systemSettings)
         .where(eq(systemSettings.tenantId, scopedTenantId))
         .limit(1),
-      // One deposit per member per month (§12): the month this request is
-      // FOR must be free (a settled deposit or another pending request
-      // occupies it; reverted/rejected rows do not). Fast-path only — the
-      // authoritative re-check runs inside the insert transaction below,
-      // under the member row lock, so concurrent requests for the same
-      // member and month can never both book it.
-      findDepositMonthOccupant(db, {
-        tenantId: scopedTenantId,
-        memberId,
-        depositMonthKey: effectiveMonthKey,
-      }),
+      // The month-occupancy check needs the member row resolved first, so it runs
+      // just below. It was only ever a fast path — the authoritative check is the
+      // in-transaction one, under the member FOR UPDATE lock.
     ]);
 
     if (existingDeposit.length > 0) {
@@ -166,13 +175,26 @@ export async function POST(request: NextRequest) {
       throw new ValidationError('Fund is not active');
     }
 
-    // One deposit per member per month (§12). The member already deposited
-    // for, or has a pending request for, the month this request is FOR —
-    // approving a second one would double-count their contribution. Free
-    // the month first: reject/approve the pending request or revert the
-    // settled deposit.
-    if (monthOccupant) {
-      throw new ValidationError(depositMonthConflictMessage(effectiveMonthKey, monthOccupant));
+    // Deposit schedule for this member: 'monthly' reserves the month, 'flexible'
+    // does not. Resolved from rows already fetched — no extra query.
+    const depositSchedule = resolveDepositScheduleDetailed({
+      tenantSchedule: pmSettings?.depositSchedule ?? null,
+      memberDepositFrequency: member.depositFrequency ?? null,
+    });
+
+    // One deposit per member per month (§12) — MONTHLY ONLY. The member already
+    // deposited for, or has a pending request for, the month this request is FOR —
+    // approving a second one would double-count their contribution. Free the month
+    // first: reject/approve the pending request or revert the settled deposit.
+    if (depositSchedule.enforced) {
+      const monthOccupant = await findDepositMonthOccupant(db, {
+        tenantId: scopedTenantId,
+        memberId,
+        depositMonthKey: effectiveMonthKey,
+      });
+      if (monthOccupant) {
+        throw new ValidationError(depositMonthConflictMessage(effectiveMonthKey, monthOccupant));
+      }
     }
 
     // Payment method must be one this tenant configured (Settings →
@@ -200,10 +222,24 @@ export async function POST(request: NextRequest) {
         .limit(1);
       if (!lockedMember) throw new NotFoundError('Member');
 
+      // Asserted inside the transaction, mirroring POST /api/deposits (:477).
+      // This route had no fiscal guard at all while the APPROVE path does, so a
+      // member could file against a closed fiscal year, sit in the queue for
+      // review, and only then be refused — the officer's time and the member's
+      // payment proof both wasted. Checked against the month the request is FOR
+      // (the period the money will occupy) rather than the filing date, so a
+      // back-dated request into a still-open month keeps working. The 15th at
+      // midday is deliberate: it can never roll into a neighbouring month under
+      // any tenant timezone.
+      await assertFiscalPeriodOpen(tx, scopedTenantId, new Date(`${effectiveMonthKey}-15T12:00:00`));
+
       const monthOccupant = await findDepositMonthOccupant(tx, {
         tenantId: scopedTenantId,
         memberId,
         depositMonthKey: effectiveMonthKey,
+        // Flexible members reserve no month — the guard returns null without
+        // querying. Monthly keeps the authoritative lock-protected check.
+        enforced: depositSchedule.enforced,
       });
       if (monthOccupant) {
         throw new ValidationError(depositMonthConflictMessage(effectiveMonthKey, monthOccupant));
@@ -214,7 +250,7 @@ export async function POST(request: NextRequest) {
         type: 'Deposit',
         amount: formattedAmount,
         description: notes || 'Member deposit request',
-        category: 'Deposit Request',
+        category: DEPOSIT_REQUEST_CATEGORY,
         referenceNumber: refNumber,
         date: now,
         status: 'PENDING',
@@ -263,9 +299,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[DEPOSIT REQUEST ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to submit deposit request' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to submit deposit request');
   }
 }

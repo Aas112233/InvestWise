@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { users, sessions, blacklistedTokens, loginAttempts } from '@/db/schema/index';
-import { eq, and, gte, desc, count, ne, sql } from 'drizzle-orm';
+// `count` and `gte` were dropped with the COUNT-based lockout they served; the
+// lock is read from account_locks now (lib/account-lock.ts).
+import { eq, and, desc, ne, sql } from 'drizzle-orm';
 import { generateTokenPair, verifyToken, blacklistToken } from '@/lib/utils/jwt';
 import { hashPassword, comparePassword, validatePasswordStrength } from '@/lib/utils/password';
 import { setAuthCookies, clearAuthCookies, COOKIE_NAMES } from '@/lib/utils/cookies';
@@ -12,11 +14,12 @@ import { normalizeRole } from '@/lib/roles';
 import { AuthError, NotFoundError, ConflictError, LockedError, AppError } from '@/lib/utils/errors';
 import { bucketKey, consumeBucket, type BucketOutcome } from '@/lib/rate-limit';
 import { clampText, getAbuseClientIp, readCappedJson } from '@/lib/request-meta';
+import { readAccountLock, recordAuthFailure, clearAccountLock, type AccountLockState } from '@/lib/account-lock';
 import crypto from 'node:crypto';
 
 // Constants
-const LOCKOUT_THRESHOLD = 5;
-const LOCKOUT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+// Lockout threshold and window live in lib/account-lock.ts, next to the state
+// they govern, because the reset/clear rules have to stay in step with them.
 const MAX_LOGIN_HISTORY = 50;
 // Public, unauthenticated endpoint: bound the platform-side cost (one Postgres
 // round trip + a bcrypt compare per request) that credential stuffing across
@@ -133,6 +136,32 @@ function tooManyRequests(outcome: BucketOutcome) {
   );
 }
 
+/**
+ * 423 with a machine-readable unlock time.
+ *
+ * The per-IP throttle already sent Retry-After; the account lockout never did,
+ * so a client could only ever repeat "try again later" without saying when.
+ * Returned rather than thrown so the header can be attached without changing
+ * LockedError, which six other handlers use for unrelated lock semantics
+ * (suspended, inactive, closed fiscal period, locked share value).
+ */
+function accountLockedResponse(state: AccountLockState) {
+  const minutes = Math.max(1, Math.ceil(state.retryAfterSec / 60));
+  return NextResponse.json(
+    {
+      success: false,
+      message: `Account temporarily locked due to too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+      code: 'LOCKED',
+      lockedUntil: state.lockedUntil?.toISOString() ?? null,
+      retryAfterSec: state.retryAfterSec,
+    },
+    {
+      status: 423,
+      headers: { 'Retry-After': String(state.retryAfterSec) },
+    },
+  );
+}
+
 // POST /api/auth/login
 export async function POST(request: NextRequest) {
   try {
@@ -188,21 +217,32 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const normalizedEmail = normalizeEmail(email);
 
-    // Lockout check
-    const lockoutSince = new Date(now.getTime() - LOCKOUT_WINDOW_MS);
+    // ── Account lockout ───────────────────────────────────────────────────
+    // A read of stored state. It writes nothing, and that is the point: the
+    // previous version counted `login_attempts` rows and then INSERTED another
+    // failed row for the rejection, so each retry while locked moved the unlock
+    // time a full 15 minutes further out and the lockout never expired for
+    // anyone who kept following its own advice.
+    //
+    // Degrades OPEN if the state cannot be read, which is a deliberate
+    // difference from the per-IP throttle above (that one answers 503). The
+    // difference is what each protects: the throttle bounds flooding and must
+    // not lapse, whereas the lockout is a secondary control sitting behind an
+    // intact bcrypt verification — refusing to read its table would turn a
+    // partial outage into nobody being able to sign in anywhere.
     const db = getDb();
-    const [failedCountResult] = await db
-      .select({ count: count() })
-      .from(loginAttempts)
-      .where(
-        and(
-          eq(loginAttempts.email, normalizedEmail),
-          eq(loginAttempts.success, false),
-          gte(loginAttempts.timestamp, lockoutSince),
-        ),
-      );
+    let lock: AccountLockState;
+    try {
+      lock = await readAccountLock(normalizedEmail);
+    } catch (lockReadError) {
+      // Logged and deliberately non-fatal — see the degrade-open note above.
+      console.error('[LOGIN] account lock state unreadable, allowing credential check to proceed', lockReadError);
+      lock = { locked: false, lockedUntil: null, failedAttempts: 0, retryAfterSec: 0 };
+    }
 
-    if ((failedCountResult?.count ?? 0) >= LOCKOUT_THRESHOLD) {
+    if (lock.locked) {
+      // Forensic record only. Nothing reads login_attempts for authorization
+      // any more, so noting the rejection cannot extend it.
       await db.insert(loginAttempts).values({
         email: normalizedEmail,
         ipAddress: ip,
@@ -213,7 +253,7 @@ export async function POST(request: NextRequest) {
         locationCity: city,
       });
 
-      throw new LockedError('Account temporarily locked due to too many failed attempts. Please try again later.');
+      return accountLockedResponse(lock);
     }
 
     // Find user with password.
@@ -248,6 +288,11 @@ export async function POST(request: NextRequest) {
       // Same number of bcrypt compares as the wrong-password branch, so
       // response time cannot reveal whether the address exists.
       await equalizePasswordTiming(password);
+      // Counted exactly like a wrong password. An address that matches no user
+      // is not an unlimited guessing target, and the client sees the same
+      // response either way, so the counter must advance the same way too.
+      const afterUnknown = await recordAuthFailure(normalizedEmail);
+      if (afterUnknown.locked) return accountLockedResponse(afterUnknown);
       throw new AuthError('Invalid email or password');
     }
 
@@ -264,6 +309,11 @@ export async function POST(request: NextRequest) {
         locationCity: city,
         userId: userRow.id,
       });
+      // If this is the strike that locks the address, say so now rather than
+      // returning a plain 401 and letting the user discover the lock on their
+      // next attempt.
+      const afterFailure = await recordAuthFailure(normalizedEmail);
+      if (afterFailure.locked) return accountLockedResponse(afterFailure);
       throw new AuthError('Invalid email or password');
     }
 
@@ -296,11 +346,15 @@ export async function POST(request: NextRequest) {
       throw new LockedError('Account is inactive. Please contact an administrator.');
     }
 
-    // Successful login — all five independent DB operations (attempt log,
-    // lastLogin stamp, subscription gate, session row, audit entry) run
-    // concurrently as one round-trip group instead of five sequential ones;
-    // only token signing waits, because the subscription verdict is baked
-    // into the access-token claims.
+    // Successful login — all independent DB operations (attempt log, lastLogin
+    // stamp, subscription gate, session row, audit entry, lock reset) run
+    // concurrently as one round-trip group instead of sequentially; only token
+    // signing waits, because the subscription verdict is baked into the
+    // access-token claims.
+    //
+    // Clearing the lock here is what the old implementation never did: it wrote
+    // a `success = true` row but left the failures in place, so four historical
+    // typos kept an authenticated user permanently one mistake from locked.
     const user = toUserResponse(userRow);
     const sessionId = crypto.randomUUID();
     const { deviceInfo, osInfo, browserInfo } = parseUserAgent(userAgent);
@@ -343,6 +397,7 @@ export async function POST(request: NextRequest) {
         details: { email: normalizedEmail, ip },
         status: 'SUCCESS',
       }),
+      clearAccountLock(normalizedEmail),
     ]);
 
     const tokens = generateTokenPair(userRow.id, {

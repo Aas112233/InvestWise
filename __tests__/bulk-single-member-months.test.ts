@@ -227,3 +227,66 @@ describe('single-member bulk sheet', () => {
     expect(modal).toContain('deposits.bulkSingle.scopeSingle');
   });
 });
+
+/**
+ * H6 — a flexible grid has nothing locked, so per month it must show PROGRESS instead.
+ *
+ * Three properties are worth pinning at source level (no DB here):
+ *  - the progress read is not schedule-gated, so a period holding four deposits reports four;
+ *  - a monthly grid issues exactly the reads it issued before, i.e. progress is skipped, and its
+ *    cells report `null` rather than a fabricated zero;
+ *  - the UI renders progress only where the server measured it, so a monthly sheet is unchanged.
+ */
+describe('per-period progress on a flexible grid (H6)', () => {
+  /** Everything from the grid read to the end of the service file. */
+  const gridBlock = () => {
+    const service = read('server/src/modules/finance/service.ts');
+    const start = service.indexOf('export async function getMemberDepositMonths');
+    expect(start).toBeGreaterThan(-1);
+    return service.slice(start);
+  };
+
+  it('measures progress only when the month rule is not enforced', () => {
+    const block = gridBlock();
+    // The ternary IS the monthly non-regression proof: monthly never reaches the aggregate.
+    expect(block).toContain('gridSchedule.enforced');
+    expect(block).toMatch(/enforced\s*\?\s*null\s*:\s*await findDepositPeriodProgressInRange/);
+    expect(block).toContain('depositMonthKeys: months');
+  });
+
+  it('reports the measurement as nullable, never as a zero invented for monthly', () => {
+    const block = gridBlock();
+    expect(block).toContain('depositCount: progress?.depositCount ?? null');
+    expect(block).toContain("periodTotal: progress && progress.depositCount > 0 ? progress.totalAmount : null");
+    // The client must be able to tell "flexible, nothing yet" from "monthly, not measured".
+    const client = read('components/deposits/shared.ts');
+    expect(client).toContain('depositCount: number | null');
+    expect(client).toContain('periodTotal: string | null');
+    expect(client).toContain('obligationEnforced?: boolean');
+  });
+
+  it('renders progress only on a cell the server measured', () => {
+    const ui = read('components/deposits/single-member-bulk-deposit.tsx');
+    expect(ui).toContain('typeof cell.depositCount === "number" && cell.depositCount > 0');
+    expect(ui).toContain('cell.periodTotal');
+    // The flexible sheet must not claim months are locked.
+    expect(ui).toContain('!flexibleGrid &&');
+    expect(ui).toContain('deposits.bulkSingle.monthsHintFlexible');
+    // Skeleton cells carry null, not 0, so a loading row cannot read as an empty period.
+    expect(ui).toContain('depositCount: null');
+  });
+
+  it('informs the single-deposit month picker too, without ever locking a month', () => {
+    const modal = read('components/deposits/deposit-modal.tsx');
+    // Progress becomes a caption, and it is attached on the branch where the month is NOT
+    // occupied — i.e. the flexible branch. The monthly branch keeps its own "month taken" caption
+    // and its `disabled` rule untouched.
+    expect(modal).toContain('monthProgress');
+    expect(modal).toContain('{ ...option, caption: progress }');
+    // See fiscal-period-pickers.test.ts: the selectable-month rule now compares against
+    // `effectiveMonth` (explicit pick, else the derived attribution).
+    expect(modal).toContain('disabled: option.value !== effectiveMonth');
+    // A payload from a server without the field must not render "undefined".
+    expect(modal).toContain('typeof cell.depositCount !== "number"');
+  });
+});

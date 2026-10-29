@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { useLocale } from "@/lib/i18n";
+import { useTenantCurrency } from "@/lib/use-tenant-settings";
 import { Project, ProjectMemberParticipation } from "@/types";
 import { formatMoney } from "@/lib/formatters";
 import { intlLocaleFor } from "./project-labels";
@@ -92,7 +93,9 @@ export function DistributeReturnsModal({
   onSubmit,
 }: DistributeReturnsModalProps) {
   const { t, locale } = useLocale();
-  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
+  // Money on this screen is the tenant's money, so it carries the tenant's currency.
+  const tenantCurrency = useTenantCurrency();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, tenantCurrency, { locale: intlLocaleFor(locale) });
 
   // Distribution mode: "custom" (the user picks type + amounts) or "settle"
   // (Distribute Complete Project — the server pays the ENTIRE remaining
@@ -200,7 +203,11 @@ export function DistributeReturnsModal({
         label: f.name,
         caption: `${t("projects.returns.fundBalance", { defaultValue: "Current Balance" })}: ${fm(f.balance)}`,
       }));
-  }, [funds, fundPicks, t]);
+    // `tenantCurrency` is in the deps because `fm` now formats with it, and it arrives from the
+    // settings query AFTER the first render. Without it this caption can keep the pre-load fallback
+    // (BDT) until funds or picks happen to change — a stale currency label on a balance, which is
+    // exactly the class of defect the money views were just cleaned of.
+  }, [funds, fundPicks, t, tenantCurrency]);
 
   // ---- Live preview (display only) — mirrors the server's exact integer-cent
   // math so what the user sees is what the ledger posts:

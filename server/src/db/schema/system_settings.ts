@@ -89,6 +89,42 @@ export const systemSettings = pgTable('system_settings', {
    * admin confirms. Must be > inactiveAfterMonths.
    */
   suspendedAfterMonths: integer('suspended_after_months').default(6),
+  /**
+   * Deposit schedule for this tenant: 'monthly' (default) or 'flexible'.
+   *
+   * 'monthly' is the historical, enforced behaviour — one deposit per member per month,
+   * a period obligation, compliance and performance scoring.
+   * 'flexible' removes the per-month lock and the obligation. It does NOT remove
+   * `transactions.deposit_month`, which is still written on every deposit so reports and
+   * the analytics fiscal series keep working.
+   *
+   * Resolved through `lib/deposit-schedule/schedule.ts` — never read directly, so the
+   * duplicate guard, sweep, scoring, leaderboard and matrix cannot disagree.
+   * NULL/unrecognised fails closed to 'monthly'. Applied by migration 0025.
+   */
+  depositSchedule: varchar('deposit_schedule', { length: 20 }).default('monthly'),
+  /** Set only when the tenant switches schedule. Audit + flexible-path reference point. */
+  depositScheduleChangedAt: timestamp('deposit_schedule_changed_at', { withTimezone: true }),
+  /**
+   * R1 near-duplicate advisory window in DAYS. A deposit matching an earlier one for
+   * the same member on the same amount within this window raises a NON-BLOCKING
+   * warning and an audit entry. `0` disables it.
+   *
+   * This replaces the error ceiling the one-deposit-per-month lock used to provide by
+   * accident. It is advisory on purpose: blocking would rebuild the restriction the
+   * flexible schedule exists to remove.
+   */
+  depositNearDuplicateWindowDays: integer('deposit_near_duplicate_window_days').default(3),
+  /**
+   * R2: above this amount, a FLEXIBLE deposit is filed as a pending request for a
+   * second officer rather than posted as settled money. NULL disables it; 0 routes
+   * every flexible deposit through approval.
+   *
+   * Never applied to a monthly tenant — the month lock already bounds the damage
+   * there, and changing how monthly deposits post would break the guarantee that
+   * monthly behaviour is untouched.
+   */
+  depositFlexApprovalAbove: decimal('deposit_flex_approval_above', { precision: 15, scale: 2 }),
   meetingTypes: jsonb('meeting_types').$type<string[]>().default(DEFAULT_MEETING_TYPES),
   penaltyRules: jsonb('penalty_rules').$type<PenaltyRuleConfig[]>().default(DEFAULT_PENALTY_RULES),
   /** Tenant-configurable payment methods for deposit forms: name + channel type. */

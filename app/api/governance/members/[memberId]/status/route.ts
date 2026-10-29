@@ -3,6 +3,7 @@ import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { reinstateMember, suspendMember } from '@/lib/governance/status-service';
 import { ValidationError } from '@/lib/utils/errors';
+import { apiError } from '@/lib/utils/api-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,9 +61,6 @@ export async function POST(
     return NextResponse.json({ success: true, data: result });
   } catch (err: any) {
     console.error('[GOVERNANCE MEMBER STATUS POST ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to change member status' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to change member status');
   }
 }

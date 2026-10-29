@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useLocale } from "@/lib/i18n";
-import { useFormatDateOnly, useFormatMoney } from "@/lib/use-tenant-settings";
+import { useFormatDateOnly, useFormatMoney, useTenantCurrency } from "@/lib/use-tenant-settings";
 import { getCategoryLabel } from "@/lib/transaction-labels";
 import { amountInWords } from "@/lib/amount-in-words";
 import {
@@ -55,6 +55,8 @@ export interface ProjectCharterData {
 export function ProjectCharter({ data, orgName, orgTagline }: { data: ProjectCharterData; orgName?: string; orgTagline?: string }) {
   const { t } = useLocale();
   const formatMoney = useFormatMoney();
+  // Words must name the same currency as the figures — see lib/amount-in-words.ts.
+  const currency = useTenantCurrency();
   const formatDate = useFormatDateOnly();
   const na = t("common.na", { defaultValue: "—" });
 
@@ -104,7 +106,7 @@ export function ProjectCharter({ data, orgName, orgTagline }: { data: ProjectCha
 
       <DocAmount
         label={t("documents.totalCapital", { defaultValue: "Total Capital" })}
-        words={amountInWords(totalCapital)}
+        words={amountInWords(totalCapital, currency)}
         wordsLabel={t("documents.amountInWords", { defaultValue: "In words" })}
       >
         {formatMoney(totalCapital)}

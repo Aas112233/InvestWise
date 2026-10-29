@@ -3,10 +3,11 @@ import { getDb } from '@/db/index';
 import { meetings, meetingAttendees, memberPenalties, members } from '@/db/schema/index';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
-import { normalizeRole } from '@/lib/roles';
+import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { NotFoundError, ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 import { isSuspendedStatus } from '@/lib/member-display';
+import { apiError } from '@/lib/utils/api-error';
 
 export async function POST(
   request: NextRequest,
@@ -20,8 +21,11 @@ export async function POST(
     // §6: attendance drives member warning counts — tenant context required.
     if (!tenantId) throw new ForbiddenError('Tenant context required');
 
-    if (normalizeRole(user.role) === 'Member') {
-      throw new ForbiddenError('Insufficient permissions to record meeting attendance');
+    // Attendance drives member warning counts, which feed the suspension
+    // engine: this is a governance write, not a "not a Member" check. The
+    // Auditor role is read-only by baseline (lib/roles.ts) and must not do it.
+    if (!hasScreenPermission(user, 'MEETINGS', 'WRITE')) {
+      throw new ForbiddenError('Write permission required for: MEETINGS');
     }
 
     const { id } = await params;
@@ -146,9 +150,6 @@ export async function POST(
     });
   } catch (err: any) {
     console.error('[ATTENDANCE POST ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to record attendance' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to record attendance');
   }
 }

@@ -32,6 +32,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useLocale } from "@/lib/i18n";
 import { hasScreenPermission } from "@/lib/permissions";
 import { useTenantSettingsQueryKey } from "@/lib/use-tenant-settings";
+import { CURRENCIES } from "@/lib/org-setup";
 import { cn } from "@/lib/utils";
 import {
   PAYMENT_TYPES,
@@ -87,6 +88,11 @@ interface SettingsResponse {
     lateDepositGraceMonths: number;
     inactiveAfterMonths: number;
     suspendedAfterMonths: number;
+    /** 'monthly' | 'flexible'. The API fails closed to monthly for an absent value. */
+    depositSchedule: string;
+    depositNearDuplicateWindowDays: number;
+    /** null means the flexible approval threshold is DISABLED — not zero. */
+    depositFlexApprovalAbove: number | string | null;
     meetingTypes: string[];
     penaltyRules: PenaltyRule[];
     paymentMethods: PaymentMethodConfig[];
@@ -187,6 +193,13 @@ export default function SettingsPage() {
     lateDepositGraceMonths: "1",
     inactiveAfterMonths: "3",
     suspendedAfterMonths: "6",
+    // Deposit schedule. Mirrors the server default: monthly is the enforced
+    // historical behaviour, so an unprovisioned tenant must not read as flexible.
+    depositSchedule: "monthly",
+    depositNearDuplicateWindowDays: "3",
+    // Empty string means "no threshold" — the control is disabled. Never coerced to 0,
+    // which would instead route EVERY flexible deposit into approval.
+    depositFlexApprovalAbove: "",
     meetingTypes: [] as string[],
     penaltyRules: [] as PenaltyRule[],
     paymentMethods: [] as PaymentMethodConfig[],
@@ -234,6 +247,15 @@ export default function SettingsPage() {
       lateDepositGraceMonths: String(data.governance?.lateDepositGraceMonths ?? 1),
       inactiveAfterMonths: String(data.governance?.inactiveAfterMonths ?? 3),
       suspendedAfterMonths: String(data.governance?.suspendedAfterMonths ?? 6),
+      depositSchedule: data.governance?.depositSchedule === "flexible" ? "flexible" : "monthly",
+      depositNearDuplicateWindowDays: String(data.governance?.depositNearDuplicateWindowDays ?? 3),
+      // null / undefined / "" all mean "disabled"; a stored 0 must survive as "0".
+      depositFlexApprovalAbove:
+        data.governance?.depositFlexApprovalAbove === null
+        || data.governance?.depositFlexApprovalAbove === undefined
+        || data.governance?.depositFlexApprovalAbove === ""
+          ? ""
+          : String(data.governance.depositFlexApprovalAbove),
       meetingTypes: [...(data.governance?.meetingTypes ?? [])],
       penaltyRules: [...(data.governance?.penaltyRules ?? [])],
       paymentMethods: [...(data.governance?.paymentMethods ?? [])],
@@ -325,6 +347,9 @@ interface BodyProps {
     lateDepositGraceMonths: string;
     inactiveAfterMonths: string;
     suspendedAfterMonths: string;
+    depositSchedule: string;
+    depositNearDuplicateWindowDays: string;
+    depositFlexApprovalAbove: string;
     meetingTypes: string[];
     penaltyRules: PenaltyRule[];
     paymentMethods: PaymentMethodConfig[];
@@ -591,6 +616,21 @@ function FinancialTab({
     return Number.isFinite(n) ? n : fallback;
   };
 
+  /**
+   * The offered list, plus the tenant's own code when it is NOT on that list.
+   *
+   * Without the extra entry an unusual-but-real stored currency would render as "nothing selected",
+   * and `|| "BDT"` below is the fallback for an empty field — so simply opening Settings and
+   * pressing Save would silently convert that tenant's whole ledger to a different currency. The
+   * bare code as its own label is intentional: it stands out in a list of "SAR — Saudi Riyal"
+   * entries, which is the right signal, and it needs no new translation.
+   */
+  const storedCurrency = fin.baseCurrency.trim().toUpperCase();
+  const currencyOptions =
+    storedCurrency && !CURRENCIES.some((c) => c.value === storedCurrency)
+      ? [{ value: storedCurrency, label: storedCurrency }, ...CURRENCIES]
+      : [...CURRENCIES];
+
   const onSave = () => {
     const baseCurr = fin.baseCurrency.trim().toUpperCase() || "BDT";
     save({
@@ -634,11 +674,16 @@ function FinancialTab({
 
           <ERPFormGrid columns={3}>
             <ERPFormField label={t("settings.financial.baseCurrency")}>
-              <input
-                value={fin.baseCurrency}
-                onChange={set("baseCurrency")}
-                placeholder="BDT"
-                className={inputCls}
+              {/*
+                A picker, not a text box: lib/utils/validation.ts only caps this at 10 characters, so
+                a typed typo used to be storable, and every amount then silently loses its symbol
+                (formatMoney catches Intl's RangeError and prints "XX 1,234.56").
+              */}
+              <AppDropdown
+                options={currencyOptions}
+                value={storedCurrency || null}
+                onChange={(v) => setFin((p) => ({ ...p, baseCurrency: v ?? "" }))}
+                placeholder={t("settings.financial.baseCurrency")}
               />
             </ERPFormField>
             <ERPFormField label={t("settings.financial.taxRate")}>
@@ -666,7 +711,7 @@ function FinancialTab({
           </ERPFormGrid>
 
           <ERPFormField
-            label={t("settings.financial.shareValue")}
+            label={t("settings.financial.shareValue", { currency: storedCurrency || "BDT" })}
             hint={shareLocked ? t("settings.financial.shareLockedNote") : undefined}
           >
             <div className="flex items-center gap-3">
@@ -758,7 +803,9 @@ function GovernanceTab({
         | "gracePeriodDays"
         | "lateDepositGraceMonths"
         | "inactiveAfterMonths"
-        | "suspendedAfterMonths",
+        | "suspendedAfterMonths"
+        | "depositNearDuplicateWindowDays"
+        | "depositFlexApprovalAbove",
     ) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setGov((prev) => ({ ...prev, [k]: e.target.value }));
@@ -768,6 +815,17 @@ function GovernanceTab({
     { value: "FUND_DEDUCTION", label: t("settings.governance.fundDeduction") },
     { value: "SUSPENSION", label: t("settings.governance.suspension") },
   ];
+
+  /**
+   * Switching to flexible releases members that governance is currently holding for
+   * deposit non-compliance, and the governance sweep will never restore them (it skips
+   * non-monthly members before it can evaluate a restore). That makes the switch a
+   * status change on real people, so it is confirmed deliberately here and enforced
+   * authoritatively by a 409 from the server — the client cannot bypass it by
+   * reloading, and the server does not trust this form to have asked.
+   */
+  const [scheduleTouched, setScheduleTouched] = useState(false);
+  const [awaitingScheduleConfirm, setAwaitingScheduleConfirm] = useState(false);
 
   // New payment-method row (name the org sets + channel type it picks).
   const [newMethodName, setNewMethodName] = useState("");
@@ -798,7 +856,20 @@ function GovernanceTab({
       return;
     }
 
+    // Second click of a schedule switch. The first click only armed the notice, so the
+    // operator has read what it does before the payload can carry the flag.
+    const switchingToFlexible = gov.depositSchedule === "flexible" && scheduleTouched;
+    if (switchingToFlexible && !awaitingScheduleConfirm) {
+      setAwaitingScheduleConfirm(true);
+      return;
+    }
+
     save({
+      // Root-level flag, never true on the first click. The server refuses the switch
+      // without it when members are held, and refuses to trust this form otherwise.
+      ...(switchingToFlexible && awaitingScheduleConfirm
+        ? { confirmDepositScheduleSwitch: true }
+        : {}),
       governance: {
         monthlyMeetingDay: Math.max(1, Math.min(28, parseInt(gov.monthlyMeetingDay, 10) || 1)),
         depositDueDate: Math.max(1, Math.min(28, parseInt(gov.depositDueDate, 10) || 1)),
@@ -806,6 +877,17 @@ function GovernanceTab({
         lateDepositGraceMonths: Math.max(0, parseInt(gov.lateDepositGraceMonths, 10) || 1),
         inactiveAfterMonths: inactive,
         suspendedAfterMonths: suspended,
+        // 'monthly' is written explicitly rather than omitted, so switching BACK is a
+        // real change the server can detect instead of an absent field that fails
+        // closed to monthly anyway but leaves `depositScheduleChangedAt` unstamped.
+        depositSchedule: gov.depositSchedule === "flexible" ? "flexible" : "monthly",
+        depositNearDuplicateWindowDays: Math.max(0, Math.min(30, parseInt(gov.depositNearDuplicateWindowDays, 10) || 0)),
+        // Blank disables the threshold. Must stay null, never 0: zero means the
+        // opposite — every flexible deposit goes to approval.
+        depositFlexApprovalAbove:
+          gov.depositFlexApprovalAbove.trim() === ""
+            ? null
+            : Math.max(0, Number(gov.depositFlexApprovalAbove) || 0),
         meetingTypes: gov.meetingTypes,
         // Trimmed, deduped (case-insensitive), empty rows dropped — the Zod
         // schema server-side rejects duplicates too; this keeps the payload
@@ -888,6 +970,101 @@ function GovernanceTab({
                   max="6"
                   value={gov.lateDepositGraceMonths}
                   onChange={setNum("lateDepositGraceMonths")}
+                  className={inputCls}
+                />
+              </ERPFormField>
+            </ERPFormGrid>
+          </div>
+
+          {/* Deposit Schedule — enforced monthly obligation vs flexible deposits */}
+          <div className="space-y-4 pt-4 border-t border-border/80">
+            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
+              {t("settings.governance.depositScheduleSection", { defaultValue: "Deposit Schedule" })}
+            </h3>
+
+            <ERPFormField
+              label={t("settings.governance.depositSchedule", { defaultValue: "Deposit model" })}
+              hint={t(`settings.governance.depositScheduleHint.${gov.depositSchedule}`, {
+                defaultValue:
+                  gov.depositSchedule === "flexible"
+                    ? "Members may deposit any number of times. No month is reserved, and deposits are not rated for punctuality, arrears or auto-hold."
+                    : "One deposit per member per month. Compliance, arrears, punctuality scoring and auto-hold all apply.",
+              })}
+            >
+              {/* Two-value enum rendered as a segmented control rather than a dropdown, so
+                  the consequence of each choice is visible instead of one click away. */}
+              <div className="flex flex-wrap gap-2">
+                {(["monthly", "flexible"] as const).map((value) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    variant={gov.depositSchedule === value ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      setGov((p) => ({ ...p, depositSchedule: value }));
+                      setScheduleTouched(true);
+                      // Changing the choice invalidates an outstanding confirmation, so the
+                      // operator can never acknowledge one option and save another.
+                      setAwaitingScheduleConfirm(false);
+                    }}
+                  >
+                    {t(`settings.governance.depositScheduleValue.${value}`, {
+                      defaultValue: value === "monthly" ? "Monthly" : "Flexible",
+                    })}
+                  </Button>
+                ))}
+              </div>
+            </ERPFormField>
+
+            {awaitingScheduleConfirm && (
+              <div className="rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-400/30 dark:bg-amber-950/30 dark:text-amber-200">
+                <p className="font-bold">
+                  {t("settings.governance.depositScheduleConfirmTitle", {
+                    defaultValue: "Confirm the switch to flexible deposits",
+                  })}
+                </p>
+                <p className="mt-1 leading-relaxed">
+                  {t("settings.governance.depositScheduleConfirmBody", {
+                    defaultValue:
+                      "Members currently held for deposit non-compliance will be released, and governance will stop restoring that hold. Click Save again to apply.",
+                  })}
+                </p>
+              </div>
+            )}
+
+            <ERPFormGrid columns={2}>
+              <ERPFormField
+                label={t("settings.governance.depositNearDuplicateWindowDays", {
+                  defaultValue: "Near-duplicate warning window (days)",
+                })}
+                hint={t("settings.governance.depositNearDuplicateWindowDaysHint", {
+                  defaultValue:
+                    "Warns when the same member receives the same amount within this many days. A warning only — it never blocks a deposit. 0 turns it off.",
+                })}
+              >
+                <NumericInput
+                  type="number"
+                  min="0"
+                  max="30"
+                  value={gov.depositNearDuplicateWindowDays}
+                  onChange={setNum("depositNearDuplicateWindowDays")}
+                  className={inputCls}
+                />
+              </ERPFormField>
+              <ERPFormField
+                label={t("settings.governance.depositFlexApprovalAbove", {
+                  defaultValue: "Flexible deposits needing approval (above)",
+                })}
+                hint={t("settings.governance.depositFlexApprovalAboveHint", {
+                  defaultValue:
+                    "A flexible deposit larger than this is filed for a second officer instead of posting immediately. Leave empty to disable. This does not apply to monthly organisations.",
+                })}
+              >
+                <NumericInput
+                  type="number"
+                  min="0"
+                  value={gov.depositFlexApprovalAbove}
+                  onChange={setNum("depositFlexApprovalAbove")}
                   className={inputCls}
                 />
               </ERPFormField>

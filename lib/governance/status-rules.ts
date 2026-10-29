@@ -20,6 +20,8 @@
 
 import { sumCents, toCents } from "../money";
 import { sharesToCents } from "../shares";
+// Pure vocabulary module (it imports nothing), so this cannot create a cycle with governance.
+import { DEPOSIT_SCHEDULE, normalizeDepositSchedule } from "../deposit-schedule/schedule";
 
 export const MEMBER_STATUS = {
   ACTIVE: "active",
@@ -214,6 +216,83 @@ export function monthsBetweenPeriodKeys(from: string, to: string): number {
 }
 
 /** Whole months elapsed since `periodKey`, floored at 0. */
+/**
+ * The earliest month the tenant's MONTHLY obligation may be evaluated in, or null when the
+ * obligation reaches back as far as the caller's own window.
+ *
+ * A tenant that ran flexible and later switched to monthly owed nothing during its flexible
+ * months. Evaluating them anyway turns the lookback window into invented arrears — the nightly
+ * sweep would write PARTIAL/MISSED for money nobody was ever required to pay and could hold the
+ * member for it on the very next run. This is the same shape of rule as "months before the member
+ * joined are not judged against them", applied to the tenant instead of the person.
+ *
+ * The floor is the month AFTER the switch, not the month of it. A month already under way when the
+ * rule changed cannot be owed in full — on a 20 October switch with a 10th deposit due date, the
+ * window for "October" closed a week before the tenant even adopted monthly, so charging it would
+ * recreate the exact invented arrears this function exists to prevent. The cost is at most one
+ * month of leniency when a switch lands on the 1st; the benefit is that no member is ever held for
+ * a period that began before their obligation did.
+ *
+ * Returns null (no clamp) when:
+ *  - the tenant is currently flexible — nothing monthly is evaluated at all;
+ *  - it has never switched. `system_settings.deposit_schedule_changed_at` is stamped only when a
+ *    switch is SAVED, so an always-monthly tenant keeps its full history;
+ *  - the stored stamp is unusable, which falls back to the caller's own window rather than
+ *    silently switching governance off.
+ *
+ * Note the direction this protects: flexible -> monthly. The reverse only ever turns measurement
+ * off, and members held under the old rule are dealt with at the switch itself.
+ */
+export function obligationStartPeriodKey(input: {
+  depositSchedule?: string | null;
+  changedAt?: Date | string | null;
+}): string | null {
+  const schedule = normalizeDepositSchedule(input.depositSchedule ?? null).schedule;
+  if (schedule !== DEPOSIT_SCHEDULE.MONTHLY) return null;
+  const stamp = input.changedAt;
+  if (!stamp) return null;
+  const date = stamp instanceof Date ? stamp : new Date(stamp);
+  if (Number.isNaN(date.getTime())) return null;
+  return addMonthsToPeriodKey(toPeriodKey(date), 1);
+}
+
+/**
+ * Hard ceiling on any lookback window, in months. Lives here because the guard loop in
+ * `buildPeriodRequirements` and the clamping in `firstEnforcedPeriodKey` both depend on it and they
+ * must not disagree about what "far back" means.
+ */
+export const MAX_WINDOW_MONTHS = 60;
+
+/**
+ * The first month a monthly obligation may be charged in, combining the caller's lookback window
+ * with the month the tenant actually became monthly.
+ *
+ * ONE definition on purpose: the deposit-legs query and the period evaluation must agree on the
+ * window, or the evaluation would judge months the query never loaded and report them as missing.
+ * That drift is a silent-arrears bug, not a crash, so it is exactly the kind of thing that must not
+ * live in two places.
+ *
+ * The result may be LATER than the as-of month, and that is meaningful rather than a bug to clamp
+ * away: a tenant that adopted monthly last month has no owed period yet. Callers must therefore
+ * treat "start after the end" as an empty window — `buildPeriodRequirements` does — which reads as
+ * "nothing owed", correctly, instead of either a fabricated arrears or a fake perfect score.
+ */
+export function firstEnforcedPeriodKey(input: {
+  asOfPeriodKey: string;
+  windowMonths: number;
+  depositSchedule?: string | null;
+  changedAt?: Date | string | null;
+}): string {
+  const windowMonths = Math.max(1, Math.min(MAX_WINDOW_MONTHS, Math.trunc(input.windowMonths) || 1));
+  const windowStart = addMonthsToPeriodKey(input.asOfPeriodKey, -(windowMonths - 1));
+  const floor = obligationStartPeriodKey({
+    depositSchedule: input.depositSchedule,
+    changedAt: input.changedAt,
+  });
+  if (floor === null) return windowStart;
+  return floor > windowStart ? floor : windowStart;
+}
+
 export function monthsSincePeriodKey(periodKey: string, asOf: Date): number {
   return Math.max(0, monthsBetweenPeriodKeys(periodKey, toPeriodKey(asOf)));
 }

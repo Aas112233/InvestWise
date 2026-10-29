@@ -29,14 +29,30 @@ describe("signup rate-limit keys", () => {
 });
 
 describe("client IP selection for abuse controls", () => {
-  it("prefers the edge-stamped header over the spoofable first XFF entry", () => {
-    const req = requestWith({ "x-real-ip": "198.51.100.7", "x-forwarded-for": "203.0.113.99, 10.0.0.1" });
+  // Only headers this deployment's own edge writes may be trusted. Vercel sets
+  // `x-vercel-forwarded-for` and will not let a client overwrite it; `x-real-ip`
+  // and `cf-connecting-ip` are never set by Vercel, so a value in them arrived
+  // in the request. The two tests below previously asserted the OPPOSITE
+  // (x-real-ip winning, and raw XFF being usable) — i.e. they pinned the
+  // bypass in place: one request header bought a fresh bucket per request.
+
+  it("trusts the edge-stamped header over client-supplied forwarded headers", () => {
+    const req = requestWith({
+      "x-vercel-forwarded-for": "198.51.100.7",
+      "x-real-ip": "203.0.113.99",
+      "x-forwarded-for": "203.0.113.99, 10.0.0.1",
+    });
     expect(getAbuseClientIp(req)).toBe("198.51.100.7");
   });
 
-  it("takes the first forwarded entry only when no trusted header exists", () => {
+  it("ignores a spoofed x-real-ip so a header cannot buy a fresh bucket", () => {
+    const req = requestWith({ "x-real-ip": "203.0.113.99", "x-forwarded-for": "203.0.113.99" });
+    expect(getAbuseClientIp(req)).toBe("unknown");
+  });
+
+  it("does not fall back to raw x-forwarded-for, whose first entry is caller-chosen", () => {
     const req = requestWith({ "x-forwarded-for": "203.0.113.99, 10.0.0.1" });
-    expect(getAbuseClientIp(req)).toBe("203.0.113.99");
+    expect(getAbuseClientIp(req)).toBe("unknown");
   });
 
   it("never fabricates an address it cannot see", () => {
@@ -188,6 +204,7 @@ describe("tenant provisioning input validation", () => {
       provisionTenant({ ...valid, email: { toString: () => "a@b.co" } as unknown as string }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
+
 });
 
 describe("password length policy (8-char minimum)", () => {

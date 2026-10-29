@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useLocale } from "@/lib/i18n";
-import { useFormatDate, useFormatDateOnly, useFormatMoney } from "@/lib/use-tenant-settings";
+import { useFormatDate, useFormatDateOnly, useFormatMoney, useTenantCurrency } from "@/lib/use-tenant-settings";
 import { translateLedgerDescription } from "@/lib/ledger-description";
 import {
   getTransactionTypeLabel,
@@ -21,9 +21,12 @@ import {
   type DocSignature,
 } from "./document-frame";
 import { useMonthLabel } from "./month-label";
+import { ledgerRef } from "@/lib/doc-number";
 
 export interface LedgerVoucherData {
   id?: string;
+  /** Printed reference (DEP-2026-00042). See lib/doc-number.ts. */
+  docNumber?: string | null;
   referenceNumber?: string;
   date?: string;
   type?: string;
@@ -58,7 +61,8 @@ export interface LedgerVoucherData {
   transferCounterpart?: {
     type?: string | null;
     fundName?: string | null;
-    referenceNumber?: string | null;
+    docNumber?: string | null;
+  referenceNumber?: string | null;
   } | null;
 }
 
@@ -73,6 +77,8 @@ export interface LedgerVoucherData {
 export function LedgerVoucher({ data, orgName, orgTagline }: { data: LedgerVoucherData; orgName?: string; orgTagline?: string }) {
   const { t } = useLocale();
   const formatMoney = useFormatMoney();
+  // Words must name the same currency as the figures — see lib/amount-in-words.ts.
+  const currency = useTenantCurrency();
   const formatDate = useFormatDateOnly();
   const formatDateTime = useFormatDate();
   const monthLabel = useMonthLabel();
@@ -92,7 +98,7 @@ export function LedgerVoucher({ data, orgName, orgTagline }: { data: LedgerVouch
   // money went (out) or where it came from (in). Its reference is printed too:
   // without it the two halves of one transfer cannot be tied together on paper,
   // and one leg printed twice reads as two unrelated movements.
-  const counterpartRef = data.transferCounterpart?.referenceNumber;
+  const counterpartRef = ledgerRef(data.transferCounterpart, "") || undefined;
   const counterpart = data.transferCounterpart?.fundName
     ? {
         label:
@@ -116,7 +122,7 @@ export function LedgerVoucher({ data, orgName, orgTagline }: { data: LedgerVouch
       orgName={orgName}
       orgTagline={orgTagline}
       docType={t("transactions.voucherSubtitle", { defaultValue: "Official Financial Voucher" })}
-      reference={data.referenceNumber}
+      reference={ledgerRef(data, "") || undefined}
       dateLabel={data.date ? formatDate(data.date) : undefined}
       signatures={signatures}
     >
@@ -135,7 +141,7 @@ export function LedgerVoucher({ data, orgName, orgTagline }: { data: LedgerVouch
       <DocTitle>{title}</DocTitle>
       <DocAmount
         label={t("transactions.voucherAmount", { type: typeLabel, defaultValue: `${typeLabel} Amount` })}
-        words={amountInWords(data.amount)}
+        words={amountInWords(data.amount, currency)}
         wordsLabel={t("documents.amountInWords", { defaultValue: "In words" })}
       >
         <span style={voided || rejected ? { textDecoration: "line-through" } : undefined}>

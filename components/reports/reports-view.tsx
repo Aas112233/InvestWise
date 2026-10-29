@@ -10,7 +10,7 @@ import { AppDropdown, AppMultiSelect, Button, DropdownOption, ERPDatePicker, ERP
 import { Project, Member } from "@/types";
 import { useLocale } from "@/lib/i18n";
 import { memberDisplayName } from "@/lib/member-display";
-import { useTenantSettings } from "@/lib/use-tenant-settings";
+import { useTenantSettings, useTenantDateFormat } from "@/lib/use-tenant-settings";
 import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
 import { useFiscalYearSync } from "@/lib/fiscal-year-context";
 import { resolveFiscalQuarterBounds } from "@/lib/fiscal-periods";
@@ -113,6 +113,7 @@ export function ReportsView({
   }, [reportSlug, activeCategory, selectedProjectId, memberSelection, selectedFundId, periodType, startDate, endDate]);
 
   const { data: tenantSettings } = useTenantSettings();
+  const dateFormat = useTenantDateFormat();
   const fiscalStartMonth = tenantSettings?.financial?.fiscalYearStart || "July";
   // One fiscal option source for every period control, shared with Analysis,
   // the deposit desk and the fiscal-period screen.
@@ -402,10 +403,10 @@ export function ReportsView({
             {periodType === "Custom" && (
               <>
                 <ERPFormField label={t("reports.startDate", { defaultValue: "Start Date" })}>
-                  <ERPDatePicker value={startDate} onChange={setStartDate} />
+                  <ERPDatePicker value={startDate} onChange={setStartDate} displayFormat={dateFormat} />
                 </ERPFormField>
                 <ERPFormField label={t("reports.endDate", { defaultValue: "End Date" })}>
-                  <ERPDatePicker value={endDate} onChange={setEndDate} min={startDate ?? null} />
+                  <ERPDatePicker value={endDate} onChange={setEndDate} displayFormat={dateFormat} min={startDate ?? null} />
                 </ERPFormField>
               </>
             )}

@@ -19,10 +19,13 @@ import {
   DEFAULT_FISCAL_YEAR_END,
   DEFAULT_FISCAL_YEAR_START,
   DEFAULT_SHARE_VALUE,
+  DEPOSIT_SCHEDULES,
+  DEPOSIT_SCHEDULE_VALUES,
   FISCAL_MONTHS,
   MAX_EXTRA_FUNDS,
   SIGNUP_FUND_TYPES,
 } from "@/lib/org-setup";
+import { type DepositSchedule } from "@/lib/deposit-schedule/schedule";
 import { cn } from "@/lib/utils";
 import {
   ERPFormField,
@@ -58,6 +61,11 @@ const signupSchema = z
     dateFormat: z.string().min(1),
     fiscalYearStart: z.string().min(1),
     fiscalYearEnd: z.string().min(1),
+    // No default anywhere: the form has to be answered (§15). The vocabulary is the same list the
+    // cards are rendered from, so the check and the choice cannot drift apart.
+    depositSchedule: z.string().refine((v): v is DepositSchedule => (DEPOSIT_SCHEDULE_VALUES as readonly string[]).includes(v), {
+      message: "depositScheduleRequired",
+    }),
   })
   .refine((v) => v.password === v.confirmPassword, {
     path: ["confirmPassword"],
@@ -187,6 +195,9 @@ export default function SignupPage() {
   const dateFormat = watch("dateFormat") ?? DEFAULT_DATE_FORMAT;
   const fiscalYearStart = watch("fiscalYearStart") ?? "";
   const fiscalYearEnd = watch("fiscalYearEnd") ?? "";
+  // Starts unselected: "" is not a schedule, so the refine fails and submit stays inert until the
+  // visitor answers the question.
+  const depositSchedule = watch("depositSchedule") ?? "";
   const score = strengthScore(password);
   const strengthLabel =
     score <= 1
@@ -232,6 +243,7 @@ export default function SignupPage() {
           dateFormat: values.dateFormat,
           fiscalYearStart: values.fiscalYearStart,
           fiscalYearEnd: values.fiscalYearEnd,
+          depositSchedule: values.depositSchedule,
           // Send only rows the owner actually filled (name + type). Opening
           // balances are never taken from the client (§12).
           funds: extraFunds
@@ -433,6 +445,52 @@ export default function SignupPage() {
                     />
                   </ERPFormField>
                 </ERPFormGrid>
+
+                <ERPFormField
+                  label={t("settings.governance.depositSchedule")}
+                  required
+                  error={errors.depositSchedule ? t("common.selectPlaceholder") : undefined}
+                >
+                  {/*
+                    Deliberately NOT pre-selected (AGENTS.md §15). This single value decides whether
+                    the one-deposit-per-member-per-month rule and deposit-compliance governance ever
+                    apply to the organisation, and switching it later has real consequences for
+                    held members — so it is a choice, not a default the visitor has to notice and
+                    undo. Each card states what it turns on, using the same wording the Settings
+                    screen uses for the same setting afterwards.
+                  */}
+                  <div role="radiogroup" aria-label={t("settings.governance.depositSchedule")} className="grid gap-2 sm:grid-cols-2">
+                    {DEPOSIT_SCHEDULES.map((option) => {
+                      const checked = depositSchedule === option.value;
+                      return (
+                        <label
+                          key={option.value}
+                          className={cn(
+                            "flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 text-xs transition-colors",
+                            checked
+                              ? "border-primary bg-primary/5"
+                              : "border-border/80 bg-card hover:border-border",
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="depositSchedule"
+                            value={option.value}
+                            checked={checked}
+                            onChange={() => setValue("depositSchedule", option.value, { shouldValidate: true })}
+                            className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
+                          />
+                          <span className="min-w-0">
+                            <span className="block font-medium text-foreground">{t(option.labelKey)}</span>
+                            <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                              {t(option.hintKey)}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </ERPFormField>
               </ERPFormSection>
 
               <ERPFormSection
@@ -505,7 +563,7 @@ export default function SignupPage() {
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="submit"
-                  disabled={isSubmitting || (siteKey !== "" && !captchaToken)}
+                  disabled={isSubmitting || !depositSchedule || (siteKey !== "" && !captchaToken)}
                   className="inline-flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-primary hover:opacity-90 disabled:opacity-60 text-primary-foreground text-sm font-medium transition-opacity disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (

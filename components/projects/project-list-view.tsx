@@ -40,6 +40,7 @@ import {
   projectStatusLabel,
 } from "./project-labels";
 import { useLocale } from "@/lib/i18n";
+import { useTenantCurrency } from "@/lib/use-tenant-settings";
 import { usePermissions } from "@/lib/use-permissions";
 
 interface ProjectListViewProps {
@@ -62,7 +63,9 @@ export function ProjectListView({
   onDeleteProject,
 }: ProjectListViewProps) {
   const { t, locale } = useLocale();
-  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
+  // Money on this screen is the tenant's money, so it carries the tenant's currency.
+  const tenantCurrency = useTenantCurrency();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, tenantCurrency, { locale: intlLocaleFor(locale) });
   const { can } = usePermissions();
   const canWrite = can("PROJECT_MANAGEMENT", "WRITE");
 

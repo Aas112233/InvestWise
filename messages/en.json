@@ -554,7 +554,9 @@
       "resetFor": "Set a new password for {name}",
       "resetConfirm": "Reset password",
       "resetToast": "Password reset for {name}",
-      "passwordMismatch": "Passwords do not match"
+      "passwordMismatch": "Passwords do not match",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password"
     }
   },
   "fiscal": {
@@ -840,6 +842,10 @@
     "investmentsCount": "{count} investments",
     "monthlyDepositTrend": "Deposit Submission Rate",
     "monthlyDepositTrendDesc": "Monthly deposits and share of members submitting",
+    "depositTotalCollected": "Collected",
+    "depositAvgRate": "Avg rate",
+    "depositPeakMonth": "Peak month",
+    "submittingMembers": "Members submitting",
     "submissionRate": "Submission rate",
     "noDepositData": "No deposits recorded yet.",
     "incomeVsExpenses": "Project Income vs Expenses",
@@ -1456,7 +1462,9 @@
       "stable": "Stable",
       "atRisk": "At Risk",
       "critical": "Critical"
-    }
+    },
+    "printCharter": "Print Charter",
+    "printReceipt": "Print Receipt"
   },
   "analysis": {
     "portfolio": "Portfolio",
@@ -1504,6 +1512,7 @@
     "consolidatedPortfolioValue": "Consolidated Portfolio Value",
     "portfolioNetReturn": "Portfolio Net Return",
     "realizedReturn": "Realized Return: {value}%",
+    "depositModelNotMeasured": "This organisation uses flexible deposits — members have no monthly obligation, so punctuality and arrears are not measured. An empty grid below is expected, not a problem.",
     "collectionEfficiency": "Collection Efficiency",
     "collectionEfficiencyHelperOne": "{count} active portfolio project",
     "collectionEfficiencyHelperOther": "{count} active portfolio projects",
@@ -2068,7 +2077,8 @@
       "minOneMonth": "Select at least one available month and enter an amount.",
       "invalidAmount": "Enter a valid amount for every selected month.",
       "amountFor": "Amount for {month}",
-      "lockedNote": "Locked months already hold a deposit."
+      "lockedNote": "Locked months already hold a deposit.",
+      "monthsHintFlexible": "Pick the months to record for this member. This organisation uses a flexible schedule, so no month is locked and one month can hold more than one deposit; the figure beside a month is money already recorded for it."
     },
     "excel": {
       "modeManual": "Manual entry",
@@ -2533,7 +2543,7 @@
       "accountingMethod": "Accounting method",
       "cash": "Cash",
       "accrual": "Accrual",
-      "shareValue": "Share value (BDT)",
+      "shareValue": "Share value ({currency})",
       "shareLocked": "Locked",
       "shareUnlocked": "Editable",
       "shareLockedNote": "Share value is locked because transactions exist and cannot be changed.",
@@ -2593,7 +2603,23 @@
         "active": "ACTIVE",
         "waived": "WAIVED",
         "resolved": "RESOLVED"
-      }
+      },
+      "depositScheduleSection": "Deposit schedule",
+      "depositSchedule": "Deposit model",
+      "depositScheduleValue": {
+        "monthly": "Monthly",
+        "flexible": "Flexible"
+      },
+      "depositScheduleHint": {
+        "monthly": "One deposit per member per month. Compliance, arrears, punctuality scoring and auto-hold all apply.",
+        "flexible": "Members may deposit any number of times. No month is reserved, and deposits are not rated for punctuality, arrears or auto-hold."
+      },
+      "depositScheduleConfirmTitle": "Confirm the switch to flexible deposits",
+      "depositScheduleConfirmBody": "Members currently held for deposit non-compliance will be released, and governance will stop restoring that hold. Click Save again to apply.",
+      "depositNearDuplicateWindowDays": "Near-duplicate warning window (days)",
+      "depositNearDuplicateWindowDaysHint": "Warns when the same member receives the same amount within this many days. A warning only - it never blocks a deposit. 0 turns it off.",
+      "depositFlexApprovalAbove": "Flexible deposits needing approval (above)",
+      "depositFlexApprovalAboveHint": "A flexible deposit larger than this is filed for a second officer instead of posting immediately. Leave empty to disable. Does not apply to monthly organisations."
     },
     "system": {
       "title": "System and localization",
@@ -2639,7 +2665,9 @@
       "selectYear": "Select fiscal year...",
       "month": "Month",
       "selectMonth": "Select month...",
-      "selectYearFirst": "Select fiscal year first..."
+      "selectYearFirst": "Select fiscal year first...",
+      "monthTaken": "already deposited",
+      "monthsLoading": "Checking deposited months..."
     },
     "dataTable": {
       "emptyMessage": "No data found",
@@ -2828,7 +2856,11 @@
       "submitting": "Submitting...",
       "successToast": "{count} deposit requests submitted successfully.",
       "minOneRow": "Add at least one request row with amount and TRX ID."
-    }
+    },
+    "invalidAmount": "Enter a valid amount, up to 2 decimal places",
+    "trxIdRequired": "Enter the transaction reference from your payment",
+    "monthTaken": "This member already has a deposit for that month",
+    "memberNotActive": "This membership is not active, so deposits cannot be requested"
   },
   "subscription": {
     "inactiveTitle": "Subscription inactive",
@@ -3057,9 +3089,9 @@
       "resetPassword": "Reset password",
       "resetAction": "Reset password",
       "newPassword": "New password",
-      "passwordReset": "Password reset — share it out of band",
+      "passwordReset": "Password reset. The user was signed out of every device — share the new credential over a channel you trust.",
       "passwordFailed": "Password reset failed",
-      "passwordWarning": "This overwrites the user's credential immediately. Share it over a channel you trust and ask them to change it.",
+      "passwordWarning": "This sets a new credential and signs the user out of every device immediately. Share it over a channel you trust and ask them to change it.",
       "activate": "Activate",
       "deactivate": "Deactivate",
       "activateTitle": "Reactivate this user?",
@@ -3079,7 +3111,11 @@
       "deleteTitle": "Delete this user?",
       "deleteDesc": "{email} is removed and can never sign in again; their sessions and personal goals go with them. The tenant, its members, the ledger and the audit history are kept. This cannot be undone.",
       "deleted": "User deleted",
-      "deleteFailed": "Delete failed"
+      "deleteFailed": "Delete failed",
+      "confirmPassword": "Confirm new password",
+      "passwordMismatch": "Passwords do not match",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password"
     },
     "actionLog": {
       "platformTab": "Platform Actions",

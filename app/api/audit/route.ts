@@ -7,6 +7,7 @@ import { normalizeRole } from '@/lib/roles';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
 import { getPaginationParams, formatPaginatedResponse } from '@/lib/utils/types';
 import { endOfRangeUtc } from '@/lib/formatters';
+import { escapeLikePattern } from '@/lib/utils/validation';
 
 interface AuditLogQuery {
   page?: string;
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
     conditions.push(eq(auditLogs.tenantId, tenantId));
 
     if (query.action) {
-      conditions.push(sql`${auditLogs.action} ILIKE ${'%' + query.action + '%'}`);
+      conditions.push(sql`${auditLogs.action} ILIKE ${'%' + escapeLikePattern(query.action) + '%'}`);
     }
 
     if (query.resourceType) {
@@ -82,7 +83,7 @@ export async function GET(request: NextRequest) {
 
     if (query.search) {
       conditions.push(
-        sql`(${auditLogs.userName} ILIKE ${'%' + query.search + '%'} OR ${auditLogs.details}::text ILIKE ${'%' + query.search + '%'})`,
+        sql`(${auditLogs.userName} ILIKE ${'%' + escapeLikePattern(query.search) + '%'} OR ${auditLogs.details}::text ILIKE ${'%' + escapeLikePattern(query.search) + '%'})`,
       );
     }
 

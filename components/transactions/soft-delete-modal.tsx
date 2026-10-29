@@ -7,6 +7,7 @@ import { useFormatMoney } from "@/lib/use-tenant-settings";
 import { useLocale } from "@/lib/i18n";
 import { translateLedgerDescription } from "@/lib/ledger-description";
 import { getTransactionTypeLabel } from "./shared";
+import { ledgerRef } from "@/lib/doc-number";
 
 interface SoftDeleteModalProps {
   isOpen: boolean;
@@ -55,8 +56,10 @@ export function SoftDeleteModal({
       onClose={onClose}
       title={t("transactions.softDeleteTitle", { defaultValue: "Soft Delete Transaction" })}
       description={t("transactions.voucherReference", {
-        ref: transaction.referenceNumber || transaction.id,
-        defaultValue: `Reference: ${transaction.referenceNumber || transaction.id}`,
+        // Never fall back to the raw primary key: this string is echoed into the
+        // deletion audit reason, where a 36-char UUID is unreadable.
+        ref: ledgerRef(transaction),
+        defaultValue: `Reference: ${ledgerRef(transaction)}`,
       })}
     >
       <form method="post" onSubmit={handleSubmit} className="space-y-4">

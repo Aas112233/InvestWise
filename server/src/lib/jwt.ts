@@ -32,7 +32,9 @@ function getSecret(type: 'access' | 'refresh'): string {
 
 export function verifyToken(token: string, type: 'access' | 'refresh'): TokenPayload {
   try {
-    const decoded = jwt.verify(token, getSecret(type)) as TokenPayload;
+    // Pin the algorithm (HS256) exactly like the root stack (lib/utils/jwt.ts)
+    // so this copy cannot drift into an algorithm-confusion surface (audit 07 L-4).
+    const decoded = jwt.verify(token, getSecret(type), { algorithms: ['HS256'] }) as TokenPayload;
     if (decoded.type !== type) {
       throw new AuthError('Invalid token type', 'INVALID_TOKEN');
     }

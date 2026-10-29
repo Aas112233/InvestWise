@@ -20,7 +20,25 @@ export const transactions = pgTable('transactions', {
   // .workbuddy-ai/tmp/add-transfer-group.mjs.
   transferGroupId: uuid('transfer_group_id'),
   category: varchar('category', { length: 100 }),
+  /**
+   * Internal idempotency token + the clerk's own bank/challan number. NOT a
+   * display field: it carries client retry keys (`BLK-<uuid>-001`,
+   * `EQT-<ts>-<rand>`), transfer-leg suffixes (`-OUT` / `-IN`), and is the
+   * target of `uq_trans_tenant_reference` below, whose whole job is to stop a
+   * concurrent double-submit from crediting a fund twice. Rendering it is what
+   * put `BLK-9f3c1a2b-…-001` on member receipts. Use `docNumber` for display.
+   */
   referenceNumber: varchar('reference_number', { length: 255 }),
+  /**
+   * The reference the client and every printed report show: `{CODE}-{YEAR}-
+   * {SEQ5}`, e.g. `DEP-2026-00042`. Assigned by trigger
+   * `trg_transactions_doc_number` from `document_sequences`, per tenant, per
+   * document type, per year of `date`. Never reused — including after a soft
+   * delete — because a receipt already handed to a member must stay resolvable.
+   * Nullable only so pre-0026 rows without a tenant can exist; new rows always
+   * get one. See db/migrations/0026_doc_number.sql.
+   */
+  docNumber: varchar('doc_number', { length: 32 }),
   // Collected date: when cash was received by cashier/accountant. Canonical
   // money-movement date — drives ledger ordering, monthly totals,
   // member lastDepositMonth. Allows past dates for back-entry.
@@ -92,6 +110,15 @@ export const transactions = pgTable('transactions', {
   uniqueIndex('uq_trans_tenant_reference').on(
     table.tenantId, table.referenceNumber,
   ).where(sql`is_deleted = false AND reference_number is not null`),
+  // doc_number uniqueness is NOT partial on is_deleted, unlike the reference
+  // index above: a soft-deleted row keeps its number so the series never
+  // reissues a value that was already printed. NULLs stay unconstrained in
+  // Postgres, which is what lets pre-0026 tenant-less rows survive. Mirrors
+  // uq_trans_tenant_doc_number in db/migrations/0026_doc_number.sql and the
+  // never-reuse decision already made for member codes (uq_members_tenant_member_id).
+  uniqueIndex('uq_trans_tenant_doc_number').on(
+    table.tenantId, table.docNumber,
+  ),
   // Deposit month view: GET /api/deposits?depositMonth=YYYY-MM filters on
   // COALESCE(deposit_month, to_char(date …)) — a function expression no index
   // can serve, so it full-scans the tenant ledger. This composite lets the
@@ -104,6 +131,10 @@ export const transactions = pgTable('transactions', {
   // pg_trgm extension (CREATE EXTENSION IF NOT EXISTS pg_trgm — applied live
   // via .workbuddy-ai/tmp/add-search-indexes.mjs).
   index('idx_trans_ref_trgm').using('gin', sql`${table.referenceNumber} gin_trgm_ops`),
+  // doc_number is now the string a member actually reads off a receipt, so it
+  // is what the ledger search box must match. Same pg_trgm support as the
+  // reference column above.
+  index('idx_trans_doc_number_trgm').using('gin', sql`${table.docNumber} gin_trgm_ops`),
   index('idx_trans_desc_trgm').using('gin', sql`${table.description} gin_trgm_ops`),
   index('idx_trans_id_text_trgm').using('gin', sql`(${table.id}::text) gin_trgm_ops`),
 ]);

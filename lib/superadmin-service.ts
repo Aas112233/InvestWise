@@ -337,7 +337,11 @@ export async function evaluateSubscriptionExpiry(
 // Irreversible full wipe of one tenant. Platform (null-tenant) users are
 // untouched. The platform audit row keeps tenantId NULL with the slug in
 // details, because the tenant FK row is gone in the same transaction.
-export async function forceDeleteTenant(tenantId: string, context: SuperAdminContext): Promise<void> {
+export async function forceDeleteTenant(
+  tenantId: string,
+  context: SuperAdminContext,
+  options?: { reason?: string | null },
+): Promise<void> {
   const db = getDb();
   const [target] = await db
     .select({ id: tenants.id, slug: tenants.slug })
@@ -409,7 +413,12 @@ export async function forceDeleteTenant(tenantId: string, context: SuperAdminCon
       targetType: 'Tenant',
       targetId: tenantId,
       tenantId: null,
-      details: { tenantSlug: target.slug } as unknown as Record<string, unknown>,
+      details: {
+        tenantSlug: target.slug,
+        // Operator-supplied justification; survives the wipe precisely because
+        // the audit row's tenant_id is nulled rather than deleted.
+        reason: options?.reason?.trim() ? options.reason.trim().slice(0, 500) : null,
+      } as unknown as Record<string, unknown>,
       ipAddress: context.ipAddress ?? null,
     });
   });

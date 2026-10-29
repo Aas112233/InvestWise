@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { members } from '@/db/schema/index';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { ForbiddenError } from '@/lib/utils/errors';
 
@@ -49,11 +49,28 @@ export async function GET(request: NextRequest) {
         eq(members.isDeleted, false),
         eq(members.status, 'active'),
       ))
-      .orderBy(desc(members.performanceScore), desc(members.shares));
+      // NULLS LAST is not cosmetic: PostgreSQL sorts NULL first under DESC, so an
+      // unscored member used to be ranked #1 AND rendered below as 100/A+ by the
+      // `?? 100` fallback. An unrated member is now ranked last and reported as
+      // unrated instead of being handed a top grade they never earned.
+      .orderBy(
+        sql`${members.performanceScore} DESC NULLS LAST`,
+        sql`${members.shares} DESC`,
+      );
 
     const data = rows.map((r, idx) => {
-      const score = Number(r.performanceScore ?? 100);
-      return { rank: idx + 1, ...r, performanceScore: score, grade: resolveGrade(score) };
+      // Never fabricate a score. `null` means "not yet evaluated", which is a
+      // different fact from "scored 0" and must not be presented as either 100 or 0.
+      const score = r.performanceScore === null || r.performanceScore === ''
+        ? null
+        : Number(r.performanceScore);
+      return {
+        rank: idx + 1,
+        ...r,
+        performanceScore: score,
+        grade: score === null ? null : resolveGrade(score),
+        unrated: score === null,
+      };
     });
 
     return NextResponse.json({ success: true, data });

@@ -226,8 +226,15 @@ export interface LeaderboardEntry {
   shares: number;
   avatar?: string;
   warningCount: number;
-  performanceScore: number;
-  grade: "A+" | "A" | "B" | "C" | "D" | "F";
+  /**
+   * null when the member has not been scored yet. Callers must render "—" for
+   * null: the API used to substitute 100 for a missing score, which ranked an
+   * unscored member first on the board and labelled them A+.
+   */
+  performanceScore: number | null;
+  grade: "A+" | "A" | "B" | "C" | "D" | "F" | null;
+  /** True when no score exists yet (see `performanceScore`). */
+  unrated?: boolean;
   status: string;
 }
 
@@ -311,6 +318,19 @@ export interface AnalysisData {
     /** Full roster size, so the view can say "Top 15 of N" when truncated. */
     totalShareholders?: number;
   };
+  /**
+   * H9 — whether deposit obligations were measured at all this period.
+   *
+   * A blank payment matrix and a "—" efficiency score mean "money is owed" for a
+   * monthly organisation and "nothing was ever due" for a flexible one. The view uses
+   * this to say which, so an unmeasured value is never read as compliance. Optional
+   * because cached responses produced before this field existed omit it; absence is
+   * treated as monthly (the measured, stricter reading).
+   */
+  depositModel?: {
+    schedule: "monthly" | "flexible";
+    obligationMeasured: boolean;
+  };
   monthlyTrends: Array<{
     month: string;
     monthKey: string;
@@ -369,6 +389,17 @@ export interface AnalysisData {
 
 export interface Transaction {
   id: string;
+  /**
+   * Client-facing reference, e.g. `DEP-2026-00042`. Assigned by the database
+   * (migration 0026) and the only value that should be rendered or printed.
+   * Use `ledgerRef()` from `@/lib/doc-number` rather than reading this directly,
+   * so the fallback policy stays in one place.
+   */
+  docNumber?: string | null;
+  /**
+   * Internal idempotency token and the clerk's own bank/challan number. Do not
+   * render as the row's reference — see `lib/doc-number.ts`.
+   */
   referenceNumber?: string;
   date: string | Date;
   type: string;

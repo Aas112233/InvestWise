@@ -78,6 +78,27 @@ describe('fiscal period pickers', () => {
     }
   });
 
+  it('passes a caller-disabled month through to the dropdown', () => {
+    // The deposit form disables months the member already holds. The picker
+    // used to rebuild each month option as `{ value, label }`, which silently
+    // dropped `disabled` — every occupied month stayed selectable even though
+    // the caller marked it, because the extra fields are optional in
+    // `DropdownOption` and TypeScript saw nothing wrong.
+    const picker = read('components/ui/erp-fiscal-month-picker.tsx');
+    expect(picker, 'the picker must not rebuild month options').not.toMatch(
+      /months\.map\(/,
+    );
+    expect(picker).toContain('const monthOptions: DropdownOption[] = months;');
+
+    // And the deposit form must actually mark occupied months.
+    const modal = read('components/deposits/deposit-modal.tsx');
+    expect(modal).toContain('useMemberDepositMonths');
+    // Only the row's own month stays selectable among the occupied ones. Compared against
+    // `effectiveMonth` — the explicit pick, or the derived attribution when the officer did not pick
+    // one on a flexible schedule — which for an EDITED row is always the stored month.
+    expect(modal).toContain('disabled: option.value !== effectiveMonth');
+  });
+
   it('sends the picked period on the wire as an absolute calendar month', () => {
     const bulk = read('components/deposits/bulk-deposit-modal.tsx');
     expect(bulk).toContain('const monthKey = month.month;');

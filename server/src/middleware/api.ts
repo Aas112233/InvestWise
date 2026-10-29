@@ -381,7 +381,7 @@ export function getPaginationParams(
   query: Record<string, string | undefined>,
   defaults?: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc'; maxLimit?: number },
 ): { page: number; limit: number; skip: number; sortBy: string; sortOrder: 'asc' | 'desc' } {
-  const page = Math.max(1, Number.parseInt(query.page || '', 10) || defaults?.page || 1);
+  const page = Math.min(1000, Math.max(1, Number.parseInt(query.page || '', 10) || defaults?.page || 1)); // page bounded: a huge `page` is an OFFSET walk Postgres still does
   // Default ceiling 100 for table endpoints. Dropdown feeds legitimately need
   // more rows and pass a higher maxLimit (mirroring their Zod schema cap).
   const maxLimit = Math.max(1, defaults?.maxLimit ?? 100);

@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { members, transactions, users } from '@/db/schema/index';
@@ -21,10 +22,7 @@ function tenantScope(tenantId: string | null, user: AuthenticatedUser): ReturnTy
 function errJson(err: unknown, fallback: string) {
   console.error('[MEMBER ID ERROR]', err);
   const e = err as { statusCode?: number; message?: string };
-  return NextResponse.json(
-    { success: false, message: e.message || fallback },
-    { status: e.statusCode || 500 },
-  );
+  return apiError(e, fallback);
 }
 
 // GET /api/members/[id] — member profile (uuid or MEM-XXXX code) plus recent
@@ -64,6 +62,7 @@ export async function GET(
         amount: transactions.amount,
         description: transactions.description,
         referenceNumber: transactions.referenceNumber,
+        docNumber: transactions.docNumber,
         date: transactions.date,
         status: transactions.status,
         depositMethod: transactions.depositMethod,
@@ -191,7 +190,7 @@ export async function PUT(
         await tx
           .update(members)
           .set({ shares: sharesNum, updatedAt: new Date() })
-          .where(eq(members.id, existing.id));
+          .where(and(eq(members.id, existing.id), eq(members.tenantId, requireTenant(user.tenantId, user))));
       });
       sharesUpdated = true;
     }
@@ -204,7 +203,7 @@ export async function PUT(
     const [updated] = await db
       .update(members)
       .set({ ...patch, updatedAt: new Date() })
-      .where(eq(members.id, existing.id))
+      .where(and(eq(members.id, existing.id), eq(members.tenantId, requireTenant(user.tenantId, user))))
       .returning();
 
     await logAudit({
@@ -313,7 +312,7 @@ export async function DELETE(
         deletionReason: reason,
         updatedAt: new Date(),
       })
-      .where(eq(members.id, existing.id));
+      .where(and(eq(members.id, existing.id), eq(members.tenantId, requireTenant(user.tenantId, user))));
 
     await logAudit({
       user: { id: user.id, name: user.name },

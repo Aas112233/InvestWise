@@ -10,6 +10,7 @@ import { LockedError, NotFoundError, ValidationError, ForbiddenError, readJsonBo
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import { toCents } from '@/lib/money';
 import { decideReversal, shouldRefundProjectExpenses, shouldRefundProjectEarnings } from '@/lib/transaction-reversal';
+import { apiError } from '@/lib/utils/api-error';
 
 type DbTransaction = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
 type TransactionRow = typeof transactions.$inferSelect;
@@ -288,9 +289,6 @@ export async function POST(
     });
   } catch (err: any) {
     console.error('[RESTORE TRANSACTION ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to restore transaction' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to restore transaction');
   }
 }

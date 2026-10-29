@@ -26,17 +26,37 @@ import { memberPenalties, members, meetingAttendees, meetings, transactions } fr
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { toCents } from "../money";
 import { NotFoundError } from "../utils/errors";
-import { addMonthsToPeriodKey, resolveDepositDeadline, toPeriodKey, type GovernanceRules } from "./status-rules";
+import {
+  addMonthsToPeriodKey,
+  firstEnforcedPeriodKey,
+  resolveDepositDeadline,
+  toPeriodKey,
+  type GovernanceRules,
+} from "./status-rules";
 import { getGovernanceRules, resolveRequiredMonthlyCents } from "./status-service";
+import { loadTenantDepositSchedule } from "../deposit-schedule/lookup";
+import { resolveDepositScheduleDetailed } from "../deposit-schedule/schedule";
 
 export interface PerformanceBreakdown {
   memberId: string;
   name: string;
   overallScore: number;
   grade: "A+" | "A" | "B" | "C" | "D" | "F";
+  /**
+   * 'MONTHLY_PUNCTUALITY' — the 60% deposit-punctuality weight applies.
+   * 'NOT_APPLICABLE'  — the member is on a FLEXIBLE deposit schedule, carries no
+   * monthly obligation, and is therefore rated on attendance alone (penalties are
+   * still deducted). Reporting a fabricated 0 here would grade a fully compliant
+   * member as failing a rule that does not apply to them; reporting 100 would
+   * credit them for something never required. Neither is honest, so the value is
+   * null and the basis is stated.
+   */
+  depositRating: "MONTHLY_PUNCTUALITY" | "NOT_APPLICABLE";
   depositMetrics: {
-    score: number;
-    weight: 60;
+    /** null when the member's schedule does not rate deposits (see `depositRating`). */
+    score: number | null;
+    /** 60 when rated; null when the deposit weight is removed and attendance is 100%. */
+    weight: 60 | null;
     evaluatedMonths: number;
     onTimeMonths: number;
     lateMonths: number;
@@ -44,7 +64,12 @@ export interface PerformanceBreakdown {
   };
   attendanceMetrics: {
     score: number;
-    weight: 40;
+    /**
+     * 40 when punctuality is rated; 100 when it is not. Attendance carries the whole grade for a
+     * member whose deposit punctuality cannot be measured, and the breakdown said `40` either way —
+     * which read as "the other 60 points exist somewhere" on the governance screen.
+     */
+    weight: 40 | 100;
     totalCompletedMeetings: number;
     presentCount: number;
     excusedCount: number;
@@ -81,6 +106,7 @@ export async function calculateMemberPerformance(
       shares: members.shares,
       monthlyDepositTarget: members.monthlyDepositTarget,
       joinDate: members.joinDate,
+      depositFrequency: members.depositFrequency,
     })
     .from(members)
     // §6: member must belong to the caller's tenant.
@@ -97,13 +123,45 @@ export async function calculateMemberPerformance(
     snapshot.shareValueCents,
   );
 
+  /**
+   * H1 — a FLEXIBLE member carries no monthly deposit obligation, so punctuality
+   * must not be measured for them. Before this guard the scoring engine read only
+   * `shares` / `monthlyDepositTarget` and never `depositFrequency`, so a member who
+   * deposited faithfully every week was graded on a target they were never required
+   * to hit: `depositScore` 0 ⇒ overall ≤ 40 ⇒ grade D/F written to their record.
+   * The governance sweep already honoured this exemption (`status-service.ts:612`);
+   * scoring was the one module that had been forgotten.
+   */
+  const { tenantSchedule, depositScheduleChangedAt } = await loadTenantDepositSchedule(db, tenantId);
+  const depositSchedule = resolveDepositScheduleDetailed({
+    tenantSchedule,
+    memberDepositFrequency: member.depositFrequency,
+  });
+  const depositEnforced = depositSchedule.enforced;
+
   const joinDate = member.joinDate ?? new Date(Date.UTC(asOf.getUTCFullYear(), 0, 1));
   const months = Math.max(1, Math.min(36, Math.trunc(evaluationMonths)));
+
+  /**
+   * Earliest month scoring may charge an obligation in — the same helper the governance sweep uses,
+   * so a tenant that switched from flexible to monthly cannot be graded on months it never
+   * required anyone to pay into.
+   *
+   * Computed from `months` (the window the loop below actually walks) rather than the raw
+   * `evaluationMonths` argument: a floor derived from a wider window can land earlier than the loop
+   * start and silently stop clamping anything.
+   */
+  const scoringFloorPeriodKey = firstEnforcedPeriodKey({
+    asOfPeriodKey: toPeriodKey(asOf),
+    windowMonths: months,
+    depositSchedule: tenantSchedule,
+    changedAt: depositScheduleChangedAt,
+  });
 
   // ── 1. Deposit punctuality (60%) ──────────────────────────────────────────
   const windowStart = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth() - months, 1));
 
-  const windowDeposits = await db
+  const windowDeposits = depositEnforced ? await db
     .select({ date: transactions.date, amount: transactions.amount })
     .from(transactions)
     .where(
@@ -117,7 +175,11 @@ export async function calculateMemberPerformance(
         sql`${transactions.date} >= ${windowStart.toISOString()}::timestamptz`,
       ),
     )
-    .orderBy(transactions.date);
+    .orderBy(transactions.date)
+    // Not enforced ⇒ no deposit rows are read at all. The scoring path for a
+    // flexible member must not depend on, or be slowed by, money movement it will
+    // never look at.
+    : [];
 
   const legs = windowDeposits
     .filter((d) => d.date !== null)
@@ -128,11 +190,20 @@ export async function calculateMemberPerformance(
   let missedMonths = 0;
   let evaluatedMonths = 0;
 
-  for (let i = 0; i < months; i += 1) {
+  // Flexible members are not evaluated month-by-month at all: `evaluatedMonths`
+  // stays 0 and the deposit weight is dropped from the overall score below.
+  for (let i = 0; depositEnforced && i < months; i += 1) {
     const periodKey = addMonthsToPeriodKey(toPeriodKey(asOf), -i);
 
     // Months before the member joined are not judged against them.
     if (periodKey < toPeriodKey(joinDate)) break;
+
+    // Nor months before the tenant adopted the monthly rule. Without this, switching from
+    // flexible to monthly grades a compliant member as absent for every pre-switch month in the
+    // window — `missedMonths` inflates and the punctuality score collapses on a book that owed
+    // nothing. `break`, not `continue`: the loop walks backwards, so everything older also falls
+    // before the switch.
+    if (periodKey < scoringFloorPeriodKey) break;
 
     evaluatedMonths += 1;
 
@@ -156,6 +227,18 @@ export async function calculateMemberPerformance(
   }
 
   const depositScore = evaluatedMonths > 0 ? (onTimeMonths / evaluatedMonths) * 100 : 100;
+  /**
+   * "Nothing was measurable" is NOT "perfectly punctual".
+   *
+   * `depositScore` above falls back to 100 so the arithmetic stays finite, but that fallback must
+   * never buy a member 60 points of grade. It used to be reachable only for a fully flexible
+   * member (already excluded by `depositEnforced`); the schedule floor makes it reachable for a
+   * monthly tenant whose entire window predates its own switch, and a member who joined after the
+   * window opened. All three are graded on attendance alone, exactly like the flexible path — same
+   * principle as the leaderboard's NULL score (H2): an unmeasured member must not be ranked as if
+   * they had been measured and excelled.
+   */
+  const depositMeasured = depositEnforced && evaluatedMonths > 0;
 
   // ── 2. Meeting attendance (40%) ──────────────────────────────────────────
   const completedMeetings = await db
@@ -237,7 +320,13 @@ export async function calculateMemberPerformance(
   }
 
   // ── 4. Overall ───────────────────────────────────────────────────────────
-  const rawScore = 0.6 * depositScore + 0.4 * attendanceScore;
+  // Monthly members: 60% punctuality + 40% attendance. Where punctuality cannot be measured —
+  // flexible schedule, or a monthly window that lies entirely before the tenant adopted monthly,
+  // or a member who joined after the window opened — the deposit weight is removed and the member
+  // is graded on attendance alone. The weights RENORMALISE rather than being zero-filled, so nobody
+  // is marked down for a requirement they did not have and nobody is handed 60 points for a
+  // requirement that was never measured (see `depositMeasured`).
+  const rawScore = depositMeasured ? 0.6 * depositScore + 0.4 * attendanceScore : attendanceScore;
   const overallScore = Math.max(0, Math.min(100, Number((rawScore - penaltyPointsDeduction).toFixed(2))));
 
   return {
@@ -245,9 +334,13 @@ export async function calculateMemberPerformance(
     name: member.name,
     overallScore,
     grade: resolveGrade(overallScore),
+    // Reported from `depositMeasured`, not `depositEnforced`: claiming MONTHLY_PUNCTUALITY with
+    // zero evaluated months would tell an admin the member was measured and scored, when in fact
+    // nothing was measurable — the same misreading the NULL leaderboard score fixed (H2).
+    depositRating: depositMeasured ? "MONTHLY_PUNCTUALITY" : "NOT_APPLICABLE",
     depositMetrics: {
-      score: Math.round(depositScore),
-      weight: 60,
+      score: depositMeasured ? Math.round(depositScore) : null,
+      weight: depositMeasured ? 60 : null,
       evaluatedMonths,
       onTimeMonths,
       lateMonths,
@@ -255,7 +348,10 @@ export async function calculateMemberPerformance(
     },
     attendanceMetrics: {
       score: Math.round(attendanceScore),
-      weight: 40,
+      // The weight the member's grade actually carries. Reporting a constant 40 while attendance
+      // carried the whole score made an unmeasured member's grade look like it had a deposit
+      // component it did not have.
+      weight: depositMeasured ? 40 : 100,
       totalCompletedMeetings: completedMeetings.length,
       presentCount,
       excusedCount,
@@ -285,7 +381,15 @@ export async function recalculateMemberPerformance(
   return breakdown.overallScore;
 }
 
-/** Recalculate every monthly member in one tenant, in bounded pages. */
+/**
+ * Recalculate every ACTIVE member in one tenant, in bounded pages.
+ *
+ * NOT monthly-only, and must not become so: a flexible member still earns an
+ * attendance-based score and still carries penalty deductions, so they need
+ * recalculating too. What `calculateMemberPerformance` now does per member is skip
+ * the deposit-punctuality measurement for flexible schedules — skipping the whole
+ * member here would freeze their score at whatever it was before the switch.
+ */
 export async function recalculateAllMembersPerformance(
   tenantId: string,
 ): Promise<{ updatedCount: number }> {

@@ -4,10 +4,12 @@ import { members, projects, funds, transactions, systemSettings } from "@/db/sch
 import { eq, and, or, sql, gte, lte } from "drizzle-orm";
 import { getAuthContext } from "@/lib/middleware/auth";
 import { requireTenant } from '@/lib/tenant';
+import { guard } from '@/lib/guarded-route';
 import { hasScreenPermission } from "@/lib/permissions";
 import { SETTLED_DEPOSIT_STATUSES } from "@/lib/ledger-selectors";
 import { memberDisplayNameSql } from "@/lib/member-display";
-import { isMonthlySchedule } from "@/lib/governance/status-service";
+import { isMemberObligationEnforced } from "@/lib/governance/status-service";
+import { obligationStartPeriodKey } from "@/lib/governance/status-rules";
 import {
   fiscalMonthOffsetForDate,
   fiscalMonthSequence,
@@ -17,6 +19,7 @@ import {
   resolveFiscalBounds,
 } from "@/lib/fiscal-periods";
 import { AnalysisData } from "@/types";
+import { apiError } from '@/lib/utils/api-error';
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,13 @@ export async function GET(request: NextRequest) {
     }
 
     const scopedTenantId = requireTenant(tenantId, user);
+
+    // 5 parallel queries including all-time aggregates and a full
+    // fiscal-year transaction load; unlimited calls let one session keep the
+    // pool saturated. Throttled by user AND tenant so a clerk cannot multiply
+    // the ceiling with several sessions.
+    const limited = await guard(request, 'expensive', { user: user.id, tenant: scopedTenantId });
+    if (limited) return limited;
 
     // Screen-permission gate — the same contract every other read route keeps
     // (deposits, expenses, members, fiscal, dividends). The sidebar / AppShell
@@ -60,6 +70,11 @@ export async function GET(request: NextRequest) {
         fiscalYearEnd: systemSettings.fiscalYearEnd,
         depositDueDate: systemSettings.depositDueDate,
         gracePeriodDays: systemSettings.gracePeriodDays,
+        depositSchedule: systemSettings.depositSchedule,
+        // When the tenant ADOPTED its current model. A tenant that switched from flexible to
+        // monthly mid-year has no obligation in the earlier slots, and counting them would both
+        // draw a wall of fake MISSED cells and depress collection efficiency for the whole FY.
+        depositScheduleChangedAt: systemSettings.depositScheduleChangedAt,
       })
       .from(systemSettings)
       .where(eq(systemSettings.tenantId, scopedTenantId))
@@ -397,6 +412,20 @@ export async function GET(request: NextRequest) {
     let totalExpectedSlots = 0;
     let totalPaidSlots = 0;
 
+    /**
+     * First FY slot in which this tenant's monthly obligation exists at all.
+     *
+     * Same pure helper the governance sweep and performance scoring use, so the three surfaces
+     * cannot disagree about when an obligation began. null (never switched, or currently flexible)
+     * leaves every slot as it was. A tenant that switched from flexible to monthly in, say, slot 8
+     * previously showed seven red MISSED cells per member and dragged collection efficiency down
+     * for months in which nobody owed anything.
+     */
+    const obligationFloorPeriodKey = obligationStartPeriodKey({
+      depositSchedule: fiscalSettings?.depositSchedule ?? null,
+      changedAt: fiscalSettings?.depositScheduleChangedAt ?? null,
+    });
+
     const paymentMatrix = targetMembers.map((m) => {
       const months: Record<string, "PAID" | "PENDING" | "MISSED"> = {};
       const paidSet = memberMonthlyPaid.get(m.id) || new Set();
@@ -407,7 +436,15 @@ export async function GET(request: NextRequest) {
       // (lib/governance/status-service.ts — flagged skippedFrequency there);
       // the old grid marked a quarterly member 9 months MISSED and a
       // mid-year joiner's early months MISSED too.
-      const monthly = isMonthlySchedule(m.depositFrequency);
+      // Obligation model: a member only owes the months (a) from their join
+      // month forward, and (b) while the ENFORCED monthly schedule applies to them.
+      // Tenant-level counts as well as the member's own cadence: a tenant switched
+      // to flexible deposits must not keep showing twelve fake MISSED cells per
+      // member, because `deposit_frequency` still says 'monthly' on every legacy row.
+      const monthly = isMemberObligationEnforced(
+        { depositSchedule: fiscalSettings?.depositSchedule ?? null },
+        m.depositFrequency,
+      );
       // Obligation starts at the JOIN MONTH (month granularity, like the
       // governance period keys): a member who joins mid-July still owes July.
       const joinDate = m.joinDate ? new Date(m.joinDate) : null;
@@ -424,7 +461,9 @@ export async function GET(request: NextRequest) {
         if (!fiscalMonth) continue;
         const { slotYear, slotMonth0 } = slotOfYear(i);
         const joinedAfterSlot = joinMonthTs !== null && Date.UTC(slotYear, slotMonth0, 1) < joinMonthTs;
-        const isEvaluated = monthly && !joinedAfterSlot && isSlotEvaluated(i);
+        // 'YYYY-MM' keys are zero-padded, so lexical order is chronological order.
+        const beforeModel = obligationFloorPeriodKey !== null && fiscalMonth.key < obligationFloorPeriodKey;
+        const isEvaluated = monthly && !joinedAfterSlot && !beforeModel && isSlotEvaluated(i);
 
         if (paidSet.has(i)) {
           months[fiscalMonth.key] = "PAID";
@@ -457,6 +496,17 @@ export async function GET(request: NextRequest) {
         punctualityScore,
       };
     });
+
+    /**
+     * Tenant-level answer, asked through the same gate every other consumer uses — a
+     * null member frequency means "no per-member override", so only the tenant
+     * schedule decides. Passing `null` here rather than re-reading the column keeps a
+     * single definition of "is the obligation enforced" for the whole codebase.
+     */
+    const tenantObligationEnforced = isMemberObligationEnforced(
+      { depositSchedule: fiscalSettings?.depositSchedule ?? null },
+      null,
+    );
 
     const collectionEfficiency = totalExpectedSlots > 0
       ? Number(((totalPaidSlots / totalExpectedSlots) * 100).toFixed(1))
@@ -516,6 +566,18 @@ export async function GET(request: NextRequest) {
       // Server-authoritative calendar label: the client no longer re-derives
       // the FY label from its own (cached) settings copy.
       fiscalYearLabel: fiscalBounds.label,
+      /**
+       * H9 — an empty matrix and a "—" efficiency score have two very different
+       * meanings, and the view must not let an operator confuse them:
+       *   monthly  ⇒ a gap means money is genuinely owed.
+       *   flexible ⇒ nothing was ever due, so nothing is measured.
+       * Without this the reporting would read as perfect compliance for an
+       * organisation whose obligations were simply never defined.
+       */
+      depositModel: {
+        schedule: tenantObligationEnforced ? ("monthly" as const) : ("flexible" as const),
+        obligationMeasured: tenantObligationEnforced,
+      },
       // Scope marker: when a member is selected, the KPI cards that CANNOT be
       // scoped to one member (treasury, net return, ROI) and the sector /
       // risk / leaderboard tabs stay tenant-wide — the view badges them so a
@@ -530,9 +592,6 @@ export async function GET(request: NextRequest) {
   } catch (err: unknown) {
     const error = err as Error & { statusCode?: number };
     console.error("[ANALYTICS ANALYSIS GET ERROR]", error);
-    return NextResponse.json(
-      { success: false, message: error.message || "Failed to compile financial analysis" },
-      { status: error.statusCode || 500 },
-    );
+    return apiError(error, "Failed to compile financial analysis");
   }
 }

@@ -38,7 +38,9 @@ import {
   projectSectorLabel,
   projectStatusLabel,
 } from "./project-labels";
+import { ledgerRef } from "@/lib/doc-number";
 import { useLocale } from "@/lib/i18n";
+import { useTenantCurrency } from "@/lib/use-tenant-settings";
 import { usePermissions } from "@/lib/use-permissions";
 import { apiClient } from "@/lib/api-client";
 
@@ -76,7 +78,9 @@ export function ProjectDetailView({
   onOpenDistributeReturns,
 }: ProjectDetailViewProps) {
   const { t, locale } = useLocale();
-  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
+  // Money on this screen is the tenant's money, so it carries the tenant's currency.
+  const tenantCurrency = useTenantCurrency();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, tenantCurrency, { locale: intlLocaleFor(locale) });
   const { can } = usePermissions();
   const canWrite = can("PROJECT_MANAGEMENT", "WRITE");
 
@@ -291,7 +295,7 @@ export function ProjectDetailView({
       header: t("transactions.reference", { defaultValue: "REF #" }),
       render: (tx) => (
         <span className="text-[11px] font-mono font-medium text-foreground bg-muted/60 px-1.5 py-0.5 rounded">
-          {tx.referenceNumber}
+          {ledgerRef(tx)}
         </span>
       ),
     },

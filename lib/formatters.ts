@@ -24,9 +24,14 @@ export const intlLocaleFor = (uiLocale: string): string => {
   }
 };
 
+/**
+ * `currencyCode` is deliberately required: a default let call sites silently
+ * stamp a tenant's money with "BDT". Callers in components use
+ * useFormatMoney() (tenant currency); server code passes the tenant setting.
+ */
 export const formatMoney = (
   amount: number | string | null | undefined,
-  currencyCode: string = "BDT",
+  currencyCode: string,
   options?: { minimumFractionDigits?: number; maximumFractionDigits?: number; locale?: string }
 ): string => {
   if (amount === null || amount === undefined || amount === "") return "-";

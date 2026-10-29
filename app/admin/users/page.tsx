@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Eye,
+  EyeOff,
   KeyRound,
   Pencil,
   Power,
@@ -61,6 +63,53 @@ function fmtDate(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? "—" : formatDate(d);
 }
 
+/**
+ * Password input with a reveal toggle, matching the reveal already used by the
+ * tenant onboarding form (app/admin/tenants/page.tsx). The toggle is
+ * tabIndex={-1} so keyboard traversal goes field -> field, not through the
+ * reveal control.
+ */
+function PasswordField({
+  value,
+  onChange,
+  autoComplete,
+  ariaLabel,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  autoComplete: string;
+  ariaLabel: string;
+  autoFocus?: boolean;
+}) {
+  const { t } = useLocale();
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div className="relative">
+      <Input
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        aria-label={ariaLabel}
+        autoFocus={autoFocus}
+        className="pr-10 text-xs"
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? t("admin.users.hidePassword", { defaultValue: "Hide password" }) : t("admin.users.showPassword", { defaultValue: "Show password" })}
+        aria-pressed={visible}
+        tabIndex={-1}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+      </button>
+    </div>
+  );
+}
+
 export default function AdminUsersPage() {
   const { t } = useLocale();
   const qc = useQueryClient();
@@ -78,6 +127,7 @@ export default function AdminUsersPage() {
 
   const [passwordUser, setPasswordUser] = useState<AdminUserRow | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   const [toggleTarget, setToggleTarget] = useState<AdminUserRow | null>(null);
   const [impersonateTarget, setImpersonateTarget] = useState<AdminUserRow | null>(null);
@@ -131,8 +181,12 @@ export default function AdminUsersPage() {
       void qc.invalidateQueries({ queryKey: ["admin", "users"] });
       setPasswordUser(null);
       setNewPassword("");
+      setConfirmPassword("");
       toast.success(
-        t("admin.users.passwordReset", { defaultValue: "Password reset — share it out of band" })
+        t("admin.users.passwordReset", {
+          defaultValue:
+            "Password reset. The user was signed out of every device — share the new credential over a channel you trust.",
+        })
       );
     },
     onError: (err) =>
@@ -254,6 +308,7 @@ export default function AdminUsersPage() {
             onClick={() => {
               setPasswordUser(row);
               setNewPassword("");
+              setConfirmPassword("");
             }}
             title={t("admin.users.resetPassword", { defaultValue: "Reset password" })}
             aria-label={`${t("admin.users.resetPassword", { defaultValue: "Reset password" })}: ${row.email}`}
@@ -479,6 +534,7 @@ export default function AdminUsersPage() {
         onClose={() => {
           setPasswordUser(null);
           setNewPassword("");
+          setConfirmPassword("");
         }}
         title={t("admin.users.resetPassword", { defaultValue: "Reset password" })}
         maxWidth="md"
@@ -489,12 +545,21 @@ export default function AdminUsersPage() {
               onClick={() => {
                 setPasswordUser(null);
                 setNewPassword("");
+                setConfirmPassword("");
               }}
             >
               {t("common.cancel", { defaultValue: "Cancel" })}
             </Button>
             <Button
-              disabled={!newPassword.trim() || passwordMutation.isPending}
+              // Retype must match before this is actionable: the credential is
+              // typed blind and then handed to someone else, so a mistyped
+              // character is otherwise discovered only by the user failing to
+              // sign in.
+              disabled={
+                !newPassword.trim() ||
+                newPassword !== confirmPassword ||
+                passwordMutation.isPending
+              }
               loading={passwordMutation.isPending}
               onClick={() =>
                 passwordUser &&
@@ -512,7 +577,7 @@ export default function AdminUsersPage() {
             <p className="text-[11px] text-amber-800 dark:text-amber-200">
               {t("admin.users.passwordWarning", {
                 defaultValue:
-                  "This overwrites the user's credential immediately. Share it over a channel you trust and ask them to change it.",
+                  "This sets a new credential and signs the user out of every device immediately. Share it over a channel you trust and ask them to change it.",
               })}
             </p>
           </div>
@@ -520,12 +585,28 @@ export default function AdminUsersPage() {
             label={t("admin.users.newPassword", { defaultValue: "New password" })}
             required
           >
-            <Input
-              type="password"
+            <PasswordField
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              onChange={setNewPassword}
               autoComplete="new-password"
-              className="text-xs"
+              autoFocus
+              ariaLabel={t("admin.users.newPassword", { defaultValue: "New password" })}
+            />
+          </ERPFormField>
+          <ERPFormField
+            label={t("admin.users.confirmPassword", { defaultValue: "Confirm new password" })}
+            required
+            error={
+              confirmPassword.length > 0 && newPassword !== confirmPassword
+                ? t("admin.users.passwordMismatch", { defaultValue: "Passwords do not match" })
+                : undefined
+            }
+          >
+            <PasswordField
+              value={confirmPassword}
+              onChange={setConfirmPassword}
+              autoComplete="new-password"
+              ariaLabel={t("admin.users.confirmPassword", { defaultValue: "Confirm new password" })}
             />
           </ERPFormField>
         </div>

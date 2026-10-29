@@ -1,9 +1,9 @@
-import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSql } from '@/db/index';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { requireTenant } from '@/lib/tenant';
+import { guard } from '@/lib/guarded-route';
 import { logAudit } from '@/lib/utils/audit';
 import { AppError, AuthError, ForbiddenError } from '@/lib/utils/errors';
 
@@ -31,48 +31,12 @@ function rowCounts(backup: Record<string, unknown[]>): Record<string, number> {
   return Object.fromEntries(TABLES.map((t) => [t, backup[t]?.length ?? 0]));
 }
 
-// Constant-time bearer comparison (SEV-024): plain !== leaks the secret
-// prefix through response timing.
-function isValidCronSecret(cronSecret: string, auth: string | null): boolean {
-  if (!auth || !auth.startsWith('Bearer ')) return false;
-  const presented = Buffer.from(auth.slice(7));
-  const expected = Buffer.from(`Bearer ${cronSecret}`.slice(7));
-  if (presented.length !== expected.length) return false;
-  return timingSafeEqual(presented, expected);
-}
-
-// POST /api/backup/cron - Cron endpoint (no auth, uses CRON_SECRET)
-export async function POST(request: NextRequest) {
-  try {
-    const cronSecret = process.env.CRON_SECRET;
-    const auth = request.headers.get('authorization');
-
-    if (!cronSecret || !isValidCronSecret(cronSecret, auth)) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid or missing cron secret' },
-        { status: 401 }
-      );
-    }
-
-    // ponytail: this endpoint historically materialized every table into
-    // memory and discarded it (DATA-021 DoS amplifier). The durable backup is
-    // the R2 pg_dump workflow; the cron hook stays as a liveness signal only.
-    console.log(`[cron] Backup ping at ${new Date().toISOString()}`);
-
-    return NextResponse.json({
-      success: true,
-      status: 'completed',
-      tables: TABLES.length,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error: any) {
-    console.error('[CRON BACKUP ERROR]', error);
-    return NextResponse.json(
-      { success: false, message: 'Backup failed', code: 'BACKUP_FAILED' },
-      { status: 500 }
-    );
-  }
-}
+// POST /api/backup (the CRON_SECRET liveness ping that used to live here) has
+// moved to app/api/cron/backup/route.ts. It could never execute at this path:
+// the edge only exempts /api/cron/* from the session check, so a scheduler
+// presenting just `Authorization: Bearer $CRON_SECRET` was rejected here before
+// the secret was ever compared. Do NOT re-add this path to PUBLIC_PATHS to
+// "make it work" — that is how a money-adjacent route becomes unauthenticated.
 
 // GET /api/backup/manual - Manual backup (admin only)
 export async function GET(request: NextRequest) {
@@ -94,6 +58,13 @@ export async function GET(request: NextRequest) {
     // Fail closed: tenant Admins export only their own slice; platform
     // operators (null tenant) must use /api/admin, never this endpoint.
     const scopedTenantId = requireTenant(tenantId, authUser);
+
+    // Seven sequential unbounded `SELECT *` over the tenant's whole dataset,
+    // fully materialised and JSON.stringify'd for ?download=true. One stolen
+    // Admin session otherwise yields a complete data exfiltration loop and a
+    // memory-per-request DoS at the same time.
+    const limited = await guard(request, 'export', { user: authUser.id, tenant: scopedTenantId });
+    if (limited) return limited;
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'daily';

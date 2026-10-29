@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { members, funds, transactions, profitAllocations, fiscalPeriods, systemSettings } from '@/db/schema/index';
@@ -420,9 +421,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: err.message, code: err.code }, { status: 400 });
     }
     const e = err as { statusCode?: number; message?: string };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to distribute dividend' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to distribute dividend');
   }
 }

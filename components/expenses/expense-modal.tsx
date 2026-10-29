@@ -8,6 +8,7 @@ import {
   ERPFormSection,
   ERPFormGrid,
   ERPFormField,
+  ERPDatePicker,
   AppDropdown,
   DropdownOption,
   Button,
@@ -18,6 +19,7 @@ import { toast } from "sonner";
 import { useLocale } from "@/lib/i18n";
 import { memberDisplayName } from "@/lib/member-display";
 import { formatMoney, todayLocalIso } from "@/lib/formatters";
+import { useTenantCurrency, useTenantDateFormat } from "@/lib/use-tenant-settings";
 import { Plus, Loader2 } from "lucide-react";
 
 interface FundOption {
@@ -46,9 +48,17 @@ interface ExpenseModalProps {
   currency?: string;
 }
 
-export function ExpenseModal({ isOpen, onClose, currency = "BDT" }: ExpenseModalProps) {
+export function ExpenseModal({ isOpen, onClose, currency }: ExpenseModalProps) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
+  /**
+   * An omitted prop meant "Bangladeshi taka" until now, which labelled a Saudi or American
+   * society's expense in the wrong currency. Absent now means the tenant's own base currency; an
+   * explicit prop still wins, because a fund row carries its own currency code.
+   */
+  const tenantCurrency = useTenantCurrency();
+  const currencyCode = currency || tenantCurrency;
+  const dateFormat = useTenantDateFormat();
 
   const [category, setCategory] = useState("");
   const [expenseName, setExpenseName] = useState("");
@@ -126,7 +136,7 @@ export function ExpenseModal({ isOpen, onClose, currency = "BDT" }: ExpenseModal
 
   const fundOptions: DropdownOption[] = fundsList.map((f) => ({
     value: f.id,
-    label: `${f.name} (Bal: ${formatMoney(f.balance, currency)})`,
+    label: `${f.name} (Bal: ${formatMoney(f.balance, currencyCode)})`,
   }));
 
   const memberOptions: DropdownOption[] = membersList.map((m) => ({
@@ -192,7 +202,7 @@ export function ExpenseModal({ isOpen, onClose, currency = "BDT" }: ExpenseModal
     },
     onSuccess: () => {
       toast.success(
-        t("expenses.confirmSuccess", { amount: formatMoney(amount, currency) }) ||
+        t("expenses.confirmSuccess", { amount: formatMoney(amount, currencyCode) }) ||
           "Expense recorded successfully."
       );
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
@@ -319,11 +329,12 @@ export function ExpenseModal({ isOpen, onClose, currency = "BDT" }: ExpenseModal
 
           <ERPFormGrid cols={2}>
             <ERPFormField label={t("expenses.expenseDate")}>
-              <input
-                type="date"
-                className="w-full px-3 py-2 text-xs bg-card border border-border/80 text-foreground rounded-xl placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
+              <ERPDatePicker
+                value={date || null}
+                onChange={(v) => setDate(v ?? "")}
+                displayFormat={dateFormat}
+                clearable={false}
+                placeholder={t("erp.datePicker.placeholder")}
               />
             </ERPFormField>
 

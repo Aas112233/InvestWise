@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { goals, projects } from '@/db/schema/index';
@@ -6,6 +7,8 @@ import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
+import { toCents, fromCents, parsePositiveAmount, MoneyError } from '@/lib/money';
+import { escapeLikePattern } from '@/lib/utils/validation';
 
 export async function GET(request: NextRequest) {
   try {
@@ -37,7 +40,7 @@ export async function GET(request: NextRequest) {
       conditions.push(sql`${goals.type} = ${type}`);
     }
     if (search) {
-      conditions.push(sql`(${goals.title} ILIKE ${'%' + search + '%'} OR ${goals.description} ILIKE ${'%' + search + '%'})`);
+      conditions.push(sql`(${goals.title} ILIKE ${'%' + escapeLikePattern(search) + '%'} OR ${goals.description} ILIKE ${'%' + escapeLikePattern(search) + '%'})`);
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -70,10 +73,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[GOALS GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch goals' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to fetch goals');
   }
 }
 
@@ -91,6 +91,18 @@ export async function POST(request: NextRequest) {
     if (!title || targetAmount === undefined) {
       throw new ValidationError('title and targetAmount are required');
     }
+    if (typeof title !== 'string' || title.trim().length === 0 || title.trim().length > 200) {
+      throw new ValidationError('title must be a string of 1-200 characters');
+    }
+
+    // §12 money rule (audit 07 M-5): cents parsing with the shared ceiling —
+    // never `String(Number(x))`, which passes "NaN" and loses precision.
+    const targetCents = parsePositiveAmount(targetAmount, { field: 'targetAmount' });
+    const currentCents =
+      currentAmount === undefined || currentAmount === null || currentAmount === ''
+        ? 0
+        : toCents(currentAmount);
+    if (currentCents < 0) throw new ValidationError('currentAmount cannot be negative');
 
     const db = getDb();
     if (linkedProjectId !== undefined && linkedProjectId !== null && linkedProjectId !== '') {
@@ -110,8 +122,8 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         title: title.trim(),
         description: description ? description.trim() : null,
-        targetAmount: String(Number(targetAmount)),
-        currentAmount: String(Number(currentAmount || 0)),
+        targetAmount: fromCents(targetCents),
+        currentAmount: fromCents(currentCents),
         deadline: deadline || null,
         status: 'In Progress',
         type: type || 'Other',
@@ -137,9 +149,10 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   } catch (err: any) {
     console.error('[GOALS POST ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to create goal' },
-      { status: err.statusCode || 500 }
-    );
+    // Money validation is a 400, not a 500 (same mapping as dividends).
+    if (err instanceof MoneyError) {
+      return NextResponse.json({ success: false, message: err.message, code: err.code }, { status: 400 });
+    }
+    return apiError(err, 'Failed to create goal');
   }
 }

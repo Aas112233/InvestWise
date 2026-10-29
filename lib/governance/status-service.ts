@@ -13,6 +13,12 @@ import { getDb } from "@/db/index";
 import { auditLogs, memberPayoutPlans, members, systemSettings, tenants, transactions } from "@/db/schema/index";
 import { and, asc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import { toCents } from "../money";
+import {
+  DEPOSIT_SCHEDULE,
+  isMonthlyDepositFrequency,
+  normalizeDepositSchedule,
+  resolveDepositScheduleDetailed,
+} from "../deposit-schedule/schedule";
 import { DEFAULT_SHARE_VALUE_CENTS, resolveShareValueCents } from "../shares";
 import { ConflictError, NotFoundError, ValidationError } from "../utils/errors";
 import { logAudit } from "../utils/audit";
@@ -26,7 +32,9 @@ import {
   addMonthsToPeriodKey,
   evaluatePeriodDeposits,
   evaluateStatusTransition,
+  firstEnforcedPeriodKey,
   hasOutstandingObligation,
+  MAX_WINDOW_MONTHS,
   isMemberStatusReason,
   isValidPeriodKey,
   monthsSincePeriodKey,
@@ -45,10 +53,11 @@ import {
   type StatusTransition,
 } from "./status-rules";
 
-const MAX_WINDOW_MONTHS = 60;
+// MAX_WINDOW_MONTHS is imported above, from the module whose guard loop it protects.
 
-/** Members on a non-monthly schedule are not judged by a monthly rule. */
-const MONTHLY_FREQUENCIES = new Set(["monthly", "month", "1"]);
+/** Members on a non-monthly schedule are not judged by a monthly rule. The vocabulary itself
+ * is owned by `lib/deposit-schedule/schedule.ts` — one source of truth shared with the
+ * duplicate guard, performance scoring, the leaderboard and the analysis matrix. */
 
 export interface GovernanceRulesSnapshot {
   rules: GovernanceRules;
@@ -56,6 +65,45 @@ export interface GovernanceRulesSnapshot {
   /** True when a stored value was out of range and defaults were substituted. */
   usedDefaults: boolean;
   problem?: string;
+  /**
+   * This tenant's configured deposit schedule ('monthly' | 'flexible').
+   *
+   * Part of the snapshot because governance is judged against the TENANT's schedule
+   * as well as the member's own cadence. Without it a tenant could switch to
+   * flexible in Settings and still have every member auto-held for "missing"
+   * monthly deposits, because `members.deposit_frequency` defaults to 'monthly' and
+   * would keep saying so. Fail-closed: an absent or unrecognised value is monthly.
+   */
+  depositSchedule: string;
+  /**
+   * When this tenant last SWITCHED its deposit schedule, or null when it never has.
+   *
+   * Read from the settings row already fetched here, so it costs no query. It exists because
+   * `deposit_schedule_changed_at` was previously written and then read by nothing, which left one
+   * direction of switching able to invent arrears: a tenant that ran flexible for two years and
+   * then chose monthly would have its whole lookback window judged as monthly, writing PARTIAL /
+   * MISSED for months nobody ever owed, and could auto-hold members on the very next sweep.
+   * `firstEnforcedPeriodKey` turns it into the month the obligation actually began.
+   */
+  depositScheduleChangedAt: Date | null;
+}
+
+/**
+ * Is this member subject to the enforced monthly obligation?
+ *
+ * THE question governance, the payment matrix and scoring all need the same answer
+ * to. Flexible if EITHER the tenant switched the book over OR the member's own
+ * cadence is non-monthly — see `lib/deposit-schedule/schedule.ts` for why tenant
+ * wins over the stored per-member default.
+ */
+export function isMemberObligationEnforced(
+  snapshot: { depositSchedule?: string | null },
+  depositFrequency: string | null | undefined,
+): boolean {
+  return resolveDepositScheduleDetailed({
+    tenantSchedule: snapshot.depositSchedule,
+    memberDepositFrequency: depositFrequency,
+  }).enforced;
 }
 
 /**
@@ -78,6 +126,11 @@ export async function getGovernanceRules(tenantId: string): Promise<GovernanceRu
       rules: { ...DEFAULT_GOVERNANCE_RULES },
       shareValueCents: DEFAULT_SHARE_VALUE_CENTS,
       usedDefaults: true,
+      // No settings row ⇒ monthly. Governance stays ON rather than silently
+      // exempting a tenant whose row has not been provisioned.
+      depositSchedule: DEPOSIT_SCHEDULE.MONTHLY,
+      // No row ⇒ nothing to clamp: the window stays the rule-derived one.
+      depositScheduleChangedAt: null,
     };
   }
 
@@ -109,7 +162,19 @@ export async function getGovernanceRules(tenantId: string): Promise<GovernanceRu
     problem = problem ?? "shareValueBdt is not a positive amount; using the default";
   }
 
-  return { rules, shareValueCents, usedDefaults, problem };
+  return {
+    rules,
+    shareValueCents,
+    usedDefaults,
+    problem,
+    // Read from the row already fetched — no extra query. An unrecognised stored
+    // value fails closed to monthly, so governance is never switched off by accident.
+    depositSchedule: normalizeDepositSchedule(settings.depositSchedule ?? null).schedule,
+    // Same row, same query. A junk value becomes an Invalid Date inside
+    // obligationStartPeriodKey and falls back to no clamp, so this can never switch
+    // governance off by accident.
+    depositScheduleChangedAt: settings.depositScheduleChangedAt ?? null,
+  };
 }
 
 export interface MemberStatusSnapshot {
@@ -175,6 +240,13 @@ function buildPeriodRequirements(
   toPeriodKeyInclusive: string,
   requiredCents: number,
 ): PeriodRequirement[] {
+  // An empty window is a real state, not a caller mistake: `firstEnforcedPeriodKey` returns a start
+  // AFTER the as-of month when the tenant adopted monthly so recently that no period has become
+  // owed yet. Without this guard the loop below never reaches `to`, runs to its guard limit, and
+  // hands back ~60 FUTURE periods — which the deadline filter then ignores, so it looked harmless
+  // while quietly evaluating a member against money that has not been demanded.
+  if (fromPeriodKey > toPeriodKeyInclusive) return [];
+
   const requirements: PeriodRequirement[] = [];
   let cursor = fromPeriodKey;
   // Guard against a malformed cursor looping forever.
@@ -219,7 +291,15 @@ export function evaluateMemberFromLegs(
   const { rules, shareValueCents } = snapshot;
   const requiredCents = resolveRequiredMonthlyCents(member, shareValueCents);
   const asOfPeriodKey = toPeriodKey(asOf);
-  const firstPeriodKey = addMonthsToPeriodKey(asOfPeriodKey, -(windowMonths - 1));
+  // Same helper the deposit-legs query uses, so the months judged and the months
+  // loaded cannot disagree — a wider judgement window would report unloaded
+  // history as missing money.
+  const firstPeriodKey = firstEnforcedPeriodKey({
+    asOfPeriodKey,
+    windowMonths,
+    depositSchedule: snapshot.depositSchedule,
+    changedAt: snapshot.depositScheduleChangedAt,
+  });
 
   const requirements = buildPeriodRequirements(firstPeriodKey, asOfPeriodKey, requiredCents);
   const { allocations, unallocatedCents } = allocateDepositsToPeriods(legs, requirements, rules.lateDepositGraceMonths);
@@ -291,9 +371,18 @@ export function evaluateMemberFromLegs(
  * schedule — quarterly, semi-annual, ad-hoc — is skipped by the monthly
  * rules, so a non-monthly member must never accrue monthly MISSED cells.
  */
+/**
+ * @deprecated Use `isMemberObligationEnforced(snapshot, depositFrequency)` instead.
+ *
+ * This answers only "what does the member's own row say", and every production
+ * consumer of it was a bug once the tenant-level schedule existed: `members
+ * .deposit_frequency` defaults to 'monthly' on every row, so a tenant that switched
+ * to flexible would still have been governed, auto-held and shown a matrix full of
+ * fake MISSED cells. It is kept solely because the byte-equivalence test asserts the
+ * port, and must not gain new callers.
+ */
 export function isMonthlySchedule(depositFrequency: string | null | undefined): boolean {
-  if (!depositFrequency) return true;
-  return MONTHLY_FREQUENCIES.has(String(depositFrequency).trim().toLowerCase());
+  return isMonthlyDepositFrequency(depositFrequency);
 }
 
 /** How far back a member's history must reach to be judged correctly. */
@@ -322,12 +411,23 @@ async function loadDepositLegsForMembers(
   memberIds: string[],
   asOf: Date,
   windowMonths: number,
+  snapshot: GovernanceRulesSnapshot,
 ): Promise<Map<string, Array<{ date: Date; amountCents: number }>>> {
   const empty = new Map<string, Array<{ date: Date; amountCents: number }>>();
   if (memberIds.length === 0) return empty;
 
   const db = getDb();
-  const windowStart = windowStartDate(addMonthsToPeriodKey(toPeriodKey(asOf), -(windowMonths - 1)));
+  // Must stay identical to the window `evaluateMemberFromLegs` builds. If this query were
+  // narrowed further than the judgement, a month with money in it would come back empty and be
+  // reported as MISSED — so the window is computed by one function, not copied here.
+  const windowStart = windowStartDate(
+    firstEnforcedPeriodKey({
+      asOfPeriodKey: toPeriodKey(asOf),
+      windowMonths,
+      depositSchedule: snapshot.depositSchedule,
+      changedAt: snapshot.depositScheduleChangedAt,
+    }),
+  );
 
   const legRows = await db
     .select({
@@ -406,7 +506,11 @@ async function loadTenantMembers(
   return { rows, total: Number(totalRes[0]?.count ?? 0) };
 }
 
-function toStatusSnapshot(member: MemberRow, result: MemberEvaluation): MemberStatusSnapshot {
+function toStatusSnapshot(
+  member: MemberRow,
+  result: MemberEvaluation,
+  tenantSchedule?: string,
+): MemberStatusSnapshot {
   return {
     memberId: member.id,
     memberCode: member.memberId,
@@ -421,9 +525,17 @@ function toStatusSnapshot(member: MemberRow, result: MemberEvaluation): MemberSt
     transition: result.evaluation.transition,
     nextStatus: result.evaluation.nextStatus,
     autoApply: result.evaluation.autoApply,
-    skippedFrequency: isMonthlySchedule(member.depositFrequency)
+    // Reports WHY the member was not judged: their own cadence, or the tenant-wide
+    // switch. Without the tenant case a flexible book would report these members as
+    // if they were on 'monthly' and simply had no history.
+    skippedFrequency: isMemberObligationEnforced(
+      { depositSchedule: tenantSchedule ?? DEPOSIT_SCHEDULE.MONTHLY },
+      member.depositFrequency,
+    )
       ? undefined
-      : (member.depositFrequency ?? "unknown"),
+      : tenantSchedule === DEPOSIT_SCHEDULE.FLEXIBLE
+        ? "flexible-schedule"
+        : (member.depositFrequency ?? "unknown"),
   };
 }
 
@@ -460,11 +572,12 @@ export async function listMemberGovernanceStatuses(
     memberRows.map((m) => m.id),
     asOf,
     windowMonths,
+    snapshot,
   );
 
   const members = memberRows.map((member) => {
     const result = evaluateMemberFromLegs(member, legsByMember.get(member.id) ?? [], snapshot, asOf, windowMonths);
-    return toStatusSnapshot(member, result);
+    return toStatusSnapshot(member, result, snapshot.depositSchedule);
   });
 
   return {
@@ -528,7 +641,7 @@ export async function getMemberDepositHistory(
 
   const snapshot = await getGovernanceRules(tenantId);
   const windowMonths = Math.max(months, requiredWindowMonths(snapshot.rules));
-  const legsByMember = await loadDepositLegsForMembers(tenantId, [member.id], asOf, windowMonths);
+  const legsByMember = await loadDepositLegsForMembers(tenantId, [member.id], asOf, windowMonths, snapshot);
 
   const result = evaluateMemberFromLegs(member, legsByMember.get(member.id) ?? [], snapshot, asOf, windowMonths);
   const visiblePeriods = result.periods.filter((p) => {
@@ -602,6 +715,7 @@ export async function sweepMemberStatuses(
     memberRows.map((m) => m.id),
     asOf,
     windowMonths,
+    snapshot,
   );
 
   const pending: Array<{ row: MemberRow; snapshot: MemberStatusSnapshot }> = [];
@@ -610,12 +724,16 @@ export async function sweepMemberStatuses(
   let skippedNonMonthly = 0;
 
   for (const row of memberRows) {
-    if (!isMonthlySchedule(row.depositFrequency)) {
+    // Tenant schedule counts, not only the member's own cadence: a tenant that
+    // switched to flexible must not keep having members auto-held for deposits the
+    // schedule no longer requires. Members on a monthly cadence in a flexible
+    // tenant are exempt too, because the tenant decision governs the book.
+    if (!isMemberObligationEnforced(snapshot, row.depositFrequency)) {
       skippedNonMonthly += 1;
       continue;
     }
     const result = evaluateMemberFromLegs(row, legsByMember.get(row.id) ?? [], snapshot, asOf, windowMonths);
-    const statusSnapshot = toStatusSnapshot(row, result);
+    const statusSnapshot = toStatusSnapshot(row, result, snapshot.depositSchedule);
     if (statusSnapshot.suspensionEligible) suspensionEligible += 1;
     if (statusSnapshot.reinstateRecommended) reinstateRecommended += 1;
     if (statusSnapshot.autoApply) pending.push({ row, snapshot: statusSnapshot });

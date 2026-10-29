@@ -5,6 +5,7 @@ import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormField, Button } from "@
 import { MemberPenalty } from "@/types";
 import { useLocale } from "@/lib/i18n";
 import { formatMoney } from "@/lib/formatters";
+import { useTenantCurrency } from "@/lib/use-tenant-settings";
 
 /** Stored enum -> message key. Unknown values fall back to the raw enum. */
 const PENALTY_TYPE_KEYS: Record<string, string> = {
@@ -27,6 +28,7 @@ export function WaivePenaltyModal({
   onWaive,
 }: WaivePenaltyModalProps) {
   const { t } = useLocale();
+  const currency = useTenantCurrency();
   const [waiveReason, setWaiveReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export function WaivePenaltyModal({
             <div className="flex justify-between">
               <span className="text-slate-500 dark:text-slate-400">{t("governance.columns.deduction", { defaultValue: "Deduction Amount:" })}</span>
               <span className="font-mono text-rose-600 dark:text-rose-400">
-                {formatMoney(Number(penalty.calculatedDeduction || penalty.deductionAmount || 0))}
+                {formatMoney(Number(penalty.calculatedDeduction || penalty.deductionAmount || 0), currency)}
               </span>
             </div>
           )}

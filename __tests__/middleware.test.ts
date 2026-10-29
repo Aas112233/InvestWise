@@ -145,14 +145,20 @@ describe('middleware fencing (regression)', () => {
     expect(response.headers.get('location')).toContain('redirect=%2Fdashboard');
   });
 
-  it('APIs require the access cookie (presence check)', async () => {
+  it('APIs require a verifiable access token, not merely a cookie', async () => {
+    // Regression for audit 07 M-2. The edge used to test only
+    // `cookies.has('accessToken')`, so `Cookie: accessToken=x` reached every
+    // business handler and the whole API's safety rested on each handler
+    // remembering to call a guard. Signature/expiry are now checked here; the
+    // per-request handlers remain authoritative for blacklist + tenant state.
     const middleware = await loadMiddleware('production');
     const anonymous = await middleware(makeRequest('/api/members'));
     expect(anonymous.status).toBe(401);
-    const withCookie = await middleware(
+    const garbageToken = await middleware(
       makeRequest('/api/members', { headers: { cookie: 'accessToken=fake' } }),
     );
-    expect(withCookie.status).toBe(200);
+    expect(garbageToken.status).toBe(401);
+    expect(await garbageToken.json()).toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
   it('rejects cross-site state-changing requests (CSRF)', async () => {

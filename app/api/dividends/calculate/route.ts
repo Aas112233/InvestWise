@@ -2,10 +2,12 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
+import { guard } from '@/lib/guarded-route';
 import { hasScreenPermission } from '@/lib/permissions';
 import { MoneyError } from '@/lib/money';
 import { planDividendRun } from '@/server/modules/finance/dividend-engine';
 import { ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
+import { apiError } from '@/lib/utils/api-error';
 
 /**
  * POST /api/dividends/calculate — preview a dividend run without writing.
@@ -29,6 +31,10 @@ export async function POST(request: NextRequest) {
     if (!hasScreenPermission(user, 'DIVIDENDS', 'READ')) {
       throw new ForbiddenError('Read permission required for: DIVIDENDS');
     }
+
+    // planDividendRun walks the whole member roster in JS and returns it all.
+    const limited = await guard(request, 'expensive', { user: user.id, tenant: scopedTenantId });
+    if (limited) return limited;
 
     const body = await readJsonBody(request);
     const { grossEarnings, distributableFundId, statutoryReservePercent, reserveFundId, fiscalPeriodId } = body;
@@ -89,9 +95,6 @@ export async function POST(request: NextRequest) {
     if (err instanceof MoneyError) {
       return NextResponse.json({ success: false, message: err.message, code: err.code }, { status: 400 });
     }
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to calculate dividend' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to calculate dividend');
   }
 }

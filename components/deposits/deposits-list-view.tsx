@@ -14,7 +14,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { TopSheet } from "@/components/ui/top-sheet";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import { openPrintTab, releasePrintWindow, reservePrintWindow } from "@/lib/documents";
+import { offerPrintDocument, openPrintTab } from "@/lib/documents";
 import { hasScreenPermission } from "@/lib/permissions";
 import { isSuperAdminRole, normalizeRole } from "@/lib/roles";
 import { formatDateOnly, formatDatePattern, formatMoney } from "@/lib/formatters";
@@ -34,6 +34,7 @@ import {
   useTenantDateFormat,
   type DepositRow,
 } from "./shared";
+import { ledgerRef } from "@/lib/doc-number";
 
 const MONTH_SHORT = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const;
 
@@ -346,14 +347,23 @@ export function DepositsListView({
       }),
     onSuccess: (_, vars) => {
       invalidate();
-      toast.success(t(vars.decision === "approve" ? "deposits.verifiedToast" : "deposits.rejectedToast"));
+      const decided = t(vars.decision === "approve" ? "deposits.verifiedToast" : "deposits.rejectedToast");
       closeConfirm();
-      // Deposit is now settled — open its printable receipt. The tab was
-      // reserved at click time (see onConfirm) so popup blockers allow it.
-      if (vars.decision === "approve") openPrintTab("deposit", vars.id);
+      // The deposit has just settled, so its receipt is offered — but only now,
+      // and only if the officer wants it. Approval and paper issue are separate
+      // decisions.
+      if (vars.decision === "approve") {
+        offerPrintDocument({
+          kind: "deposit",
+          id: vars.id,
+          title: decided,
+          actionLabel: t("deposits.actions.print", { defaultValue: "Print Receipt" }),
+        });
+      } else {
+        toast.success(decided);
+      }
     },
     onError: (err) => {
-      releasePrintWindow();
       toast.error(err instanceof ApiError ? err.message : t("deposits.loadFailed"));
     },
   });
@@ -413,7 +423,7 @@ export function DepositsListView({
       key: "referenceNumber",
       header: t("deposits.columns.receipt"),
       sortable: true,
-      render: (r) => <span className="font-mono text-[11px]">{r.referenceNumber || "—"}</span>,
+      render: (r) => <span className="font-mono text-[11px]">{ledgerRef(r)}</span>,
     },
     {
       key: "memberName",
@@ -662,7 +672,7 @@ export function DepositsListView({
         open={receipt !== null}
         onClose={() => setReceipt(null)}
         title={t("deposits.receiptTitle")}
-        subtitle={receipt?.referenceNumber || undefined}
+          subtitle={ledgerRef(receipt, "") || undefined}
       >
         {receipt && (
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-xs">
@@ -710,7 +720,7 @@ export function DepositsListView({
               ? t("deposits.rejectMessage", { amount: formatMoney(confirm.row.amount, currency), member: confirm.row.memberName || "" })
               : confirm?.kind === "revert"
                 ? t("deposits.revertMessage", { amount: formatMoney(confirm.row.amount, currency), member: confirm.row.memberName || "" })
-                : t("deposits.deleteMessage", { ref: confirm?.row.referenceNumber || "" })
+                : t("deposits.deleteMessage", { ref: ledgerRef(confirm?.row, "") })
         }
         confirmLabel={
           confirm?.kind === "verify"
@@ -756,7 +766,9 @@ export function DepositsListView({
         onConfirm={() => {
           if (!confirm) return;
           if (confirm.kind === "verify") {
-            reservePrintWindow(); // pre-open now, while this click gesture is live
+            // No window is pre-opened here: the receipt is offered on the
+            // success toast, so cancelling or failing the approval can no longer
+            // leave a stray print tab behind.
             reviewMutation.mutate({ id: confirm.row.id, decision: "approve" });
             return;
           }

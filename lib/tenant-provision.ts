@@ -264,6 +264,10 @@ export async function provisionTenant(input: ProvisionTenantInput): Promise<Prov
         // unit value. Stays unlocked: a fresh tenant has no transactions, so the
         // share-value lock in the settings service is not triggered.
         shareValueBdt: financial.shareValue,
+        // Chosen at signup, not inferred: this column decides whether the
+        // one-deposit-per-member-per-month rule and the deposit-compliance
+        // governance apply to this tenant from its first transaction.
+        depositSchedule: financial.depositSchedule,
       });
 
       // Standard institutional funds, so a new organization can record a

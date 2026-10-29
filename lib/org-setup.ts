@@ -1,4 +1,5 @@
 import { ValidationError } from '@/lib/utils/errors';
+import { DEPOSIT_SCHEDULE, type DepositSchedule } from '@/lib/deposit-schedule/schedule';
 
 /**
  * The organization defaults a new tenant is created with, and the enumerations
@@ -12,13 +13,51 @@ export interface Option {
   label: string;
 }
 
+/**
+ * Currencies a tenant can run its books in. The list is deliberately shorter than ISO 4217.
+ *
+ * **KWD, BHD and OMR are excluded on purpose, not forgotten.** Every amount in this system is a
+ * `decimal(15,2)` string and lib/money.ts treats 100 subunits as one unit (`const CENTS = 100`,
+ * plus a DEC15_2 pattern that throws `PRECISION_LOSS` beyond 2dp) per AGENTS.md §8. Those three
+ * currencies have 1/1000 minor units, so 1.234 KWD is not a representable amount here: the money
+ * boundary rejects it outright. Offering them would mean a society either cannot record a real
+ * deposit or records a rounded one and tells the member they paid less. Supporting them is a
+ * per-currency minor-unit scale across storage, arithmetic and printing — a data-model change, not
+ * a dropdown entry.
+ *
+ * 0-decimal currencies (JPY, KRW) are absent for the opposite reason: nothing would be lost, but
+ * every amount would print as `¥1,000.00`, advertising a precision the currency does not have.
+ *
+ * Labels stay in English because they are the picker's own text and the value stored is the code —
+ * matching the 6 entries this list shipped with, rather than adding 19 strings to four locales.
+ */
 export const CURRENCIES: readonly Option[] = [
+  // Platform default first (DEFAULT_CURRENCY), then the existing set, then the wider list.
   { value: 'BDT', label: 'BDT — Bangladeshi Taka' },
   { value: 'PKR', label: 'PKR — Pakistani Rupee' },
   { value: 'INR', label: 'INR — Indian Rupee' },
   { value: 'USD', label: 'USD — US Dollar' },
   { value: 'AED', label: 'AED — UAE Dirham' },
   { value: 'GBP', label: 'GBP — Pound Sterling' },
+  // Arabian Peninsula — 1/100 minor units only, see the exclusion note above.
+  { value: 'SAR', label: 'SAR — Saudi Riyal' },
+  { value: 'QAR', label: 'QAR — Qatari Riyal' },
+  { value: 'YER', label: 'YER — Yemeni Rial' },
+  // Levant, Egypt and Turkey.
+  { value: 'JOD', label: 'JOD — Jordanian Dinar' },
+  { value: 'LBP', label: 'LBP — Lebanese Pound' },
+  { value: 'EGP', label: 'EGP — Egyptian Pound' },
+  { value: 'TRY', label: 'TRY — Turkish Lira' },
+  // Rest of South Asia — same lakh/crore grouping as BDT (lib/amount-in-words.ts).
+  { value: 'NPR', label: 'NPR — Nepalese Rupee' },
+  { value: 'LKR', label: 'LKR — Sri Lankan Rupee' },
+  // Wider Asia plus the world majors every remittance-heavy society asks for.
+  { value: 'MYR', label: 'MYR — Malaysian Ringgit' },
+  { value: 'SGD', label: 'SGD — Singapore Dollar' },
+  { value: 'CNY', label: 'CNY — Chinese Yuan' },
+  { value: 'EUR', label: 'EUR — Euro' },
+  { value: 'CAD', label: 'CAD — Canadian Dollar' },
+  { value: 'AUD', label: 'AUD — Australian Dollar' },
 ];
 
 // Mirrors the three formats lib/formatters.ts understands and the tenant
@@ -163,6 +202,39 @@ export const DEFAULT_FISCAL_YEAR_END = 'June';
 export const DEFAULT_SHARE_VALUE = '1000.00';
 
 /**
+ * How a brand-new organisation's members will deposit, offered at signup. Monthly is the default
+ * because it is what every existing tenant does and the stricter model — a tenant that never
+ * thought about the question is safe.
+ *
+ * The values come from DEPOSIT_SCHEDULE, the same vocabulary `lib/deposit-schedule/schedule.ts`
+ * resolves at runtime and the Settings screen writes, so signup can never offer a schedule the
+ * write paths would not recognise.
+ */
+export const DEFAULT_DEPOSIT_SCHEDULE: DepositSchedule = DEPOSIT_SCHEDULE.MONTHLY;
+
+export const DEPOSIT_SCHEDULES: ReadonlyArray<{
+  value: DepositSchedule;
+  /** i18n key for the option label, so signup and Settings show identical wording. */
+  labelKey: string;
+  /** i18n key spelling out what the model turns on and off — the choice must not be blind. */
+  hintKey: string;
+}> = [
+  {
+    value: DEPOSIT_SCHEDULE.MONTHLY,
+    labelKey: 'settings.governance.depositScheduleValue.monthly',
+    hintKey: 'settings.governance.depositScheduleHint.monthly',
+  },
+  {
+    value: DEPOSIT_SCHEDULE.FLEXIBLE,
+    labelKey: 'settings.governance.depositScheduleValue.flexible',
+    hintKey: 'settings.governance.depositScheduleHint.flexible',
+  },
+];
+
+/** The schedule vocabulary as a plain value list, for validators and zod enums. */
+export const DEPOSIT_SCHEDULE_VALUES = DEPOSIT_SCHEDULES.map((s) => s.value);
+
+/**
  * Client-side password strength meter, 0-4. Mirrors validatePasswordStrength
  * (lib/utils/password.ts) so the meter tells the truth about what the server
  * will accept: 8+ chars, upper+lower, digit, special. Lifted here from the
@@ -187,6 +259,8 @@ export interface FinancialDefaults {
   shareValue: string;
   fiscalYearStart: string;
   fiscalYearEnd: string;
+  /** 'monthly' | 'flexible' — see DEFAULT_DEPOSIT_SCHEDULE above. */
+  depositSchedule: DepositSchedule;
 }
 
 export interface FinancialDefaultsInput {
@@ -195,6 +269,7 @@ export interface FinancialDefaultsInput {
   shareValue?: unknown;
   fiscalYearStart?: unknown;
   fiscalYearEnd?: unknown;
+  depositSchedule?: unknown;
 }
 
 /**
@@ -252,6 +327,19 @@ export function resolveFinancialDefaults(input: FinancialDefaultsInput = {}): Fi
     );
   }
 
+  /**
+   * The deposit model. Validated rather than normalised, unlike the runtime resolver in
+   * lib/deposit-schedule/schedule.ts (which fails an unknown stored value closed to monthly):
+   * at provisioning there is nothing to fail closed FROM, and quietly accepting a client bug
+   * would hand a tenant a deposit model nobody chose.
+   */
+  const depositSchedule = textOr(input.depositSchedule, DEFAULT_DEPOSIT_SCHEDULE, 'depositSchedule');
+  if (!DEPOSIT_SCHEDULE_VALUES.includes(depositSchedule as DepositSchedule)) {
+    throw new ValidationError(
+      `[Field 'depositSchedule', Code: invalid_schedule] Not a supported deposit model`,
+    );
+  }
+
   return {
     baseCurrency,
     dateFormat,
@@ -260,5 +348,6 @@ export function resolveFinancialDefaults(input: FinancialDefaultsInput = {}): Fi
     shareValue: Number(shareValue).toFixed(2),
     fiscalYearStart,
     fiscalYearEnd,
+    depositSchedule: depositSchedule as DepositSchedule,
   };
 }

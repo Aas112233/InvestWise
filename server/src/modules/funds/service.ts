@@ -1,6 +1,6 @@
 import { eq, and, desc, asc, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '../../lib/db';
-import { funds, transactions, projects } from '../../db/schema/index';
+import { funds, transactions, projects, systemSettings } from '../../db/schema/index';
 import { getPaginationParams, formatPaginatedResponse, type SessionUser } from '../../middleware/api';
 import { AppError, NotFoundError } from '../../shared/errors';
 import { parsePositiveAmount, fromCents, toCents } from '@/lib/money';
@@ -148,6 +148,19 @@ export async function createFund(data: CreateFundData, user: SessionUser, tenant
 
   const minBalCents = data.minimumBalance ? parsePositiveAmount(data.minimumBalance) : 0;
 
+  // The fund's currency is the tenant's base currency unless the caller names
+  // one explicitly — never a hardcoded default (a SAR tenant's funds were
+  // being stamped 'BDT', and the funds screen trusts the row's own code).
+  let currency = data.currency?.trim().toUpperCase();
+  if (!currency) {
+    const [settings] = await db
+      .select({ baseCurrency: systemSettings.baseCurrency })
+      .from(systemSettings)
+      .where(eq(systemSettings.tenantId, effectiveTenantId))
+      .limit(1);
+    currency = settings?.baseCurrency || 'BDT';
+  }
+
   const created = await db.transaction(async (tx) => {
     const [fund] = await tx
       .insert(funds)
@@ -158,7 +171,7 @@ export async function createFund(data: CreateFundData, user: SessionUser, tenant
         status: data.status || 'ACTIVE',
         balance: '0',
         minimumBalance: fromCents(minBalCents),
-        currency: data.currency || 'BDT',
+        currency,
         description: data.description ?? null,
         handlingOfficer: data.handlingOfficer ?? null,
         accountNumber: data.accountNumber ?? null,
@@ -215,10 +228,12 @@ export async function createFund(data: CreateFundData, user: SessionUser, tenant
   return created;
 }
 
-export async function updateFund(id: string, data: UpdateFundData, tenantId?: string | null, user?: SessionUser) {
+// tenantId is REQUIRED (audit 07 L-12): the optional form scoped the update
+// only when a caller remembered to pass it — a future omission would have
+// updated funds across tenants.
+export async function updateFund(id: string, data: UpdateFundData, tenantId: string, user?: SessionUser) {
   const db = getDb();
-  const conditions = [eq(funds.id, id)];
-  if (tenantId) conditions.push(eq(funds.tenantId, tenantId));
+  const conditions = [eq(funds.id, id), eq(funds.tenantId, tenantId)];
 
   const [existing] = await db
     .select()

@@ -35,7 +35,10 @@ import {
 } from "recharts";
 import { useLocale } from "@/lib/i18n";
 import { formatMoney, formatCompactNumber, formatDateOnly } from "@/lib/formatters";
+import { useTenantCurrency } from "@/lib/use-tenant-settings";
+import { fromCents, toCents } from "@/lib/money";
 import { ERPMetricCard, Button, CardGridSkeleton, Skeleton } from "@/components/ui";
+import { ledgerRef } from "@/lib/doc-number";
 import { cn } from "@/lib/utils";
 import { AnalyticsStats, Project, Member, Transaction } from "@/types";
 
@@ -95,6 +98,7 @@ export function DashboardView({
   onNavigate,
 }: DashboardViewProps) {
   const { t } = useLocale();
+  const currency = useTenantCurrency();
   const { theme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -119,7 +123,7 @@ export function DashboardView({
   const normalMembers = stats?.normalMembers ?? 0;
   const investmentsTotal = stats?.investmentsTotal ?? 0;
   const investmentsCount = stats?.investmentsCount ?? 0;
-  const monthlyDeposits = stats?.monthlyDeposits ?? [];
+  const monthlyDeposits = useMemo(() => stats?.monthlyDeposits ?? [], [stats?.monthlyDeposits]);
   const ongoingProjectFinance = stats?.ongoingProjectFinance ?? [];
   const fundsHealth = stats?.fundsHealth;
   // null = no historical data to compute growth from — render "—", not a guess.
@@ -175,6 +179,31 @@ export function DashboardView({
   );
 
   const hasDepositSeries = monthlyDeposits.some((m) => m.amount > 0 || m.count > 0);
+  // Chart header summary. Derived from the SAME series the chart plots, so the
+  // headline can never disagree with the bars: collected is the integer-cent
+  // sum of every month, the rate is the mean over months that actually have
+  // members submitting (an idle month reads 0% and would drag the average
+  // down into a number no month on screen shows).
+  const depositTotals = useMemo(() => {
+    // The API sends amounts as floats; convert to integer cents before summing
+    // (§12 — never accumulate money in floating point) and back for display.
+    const collectedCents = monthlyDeposits.reduce((acc, m) => acc + toCents(m.amount), 0);
+    const ratedMonths = monthlyDeposits.filter((m) => m.submissionRate !== null);
+    const submissionMonths = ratedMonths.filter((m) => m.submittingMembers > 0);
+    const avgRate = submissionMonths.length
+      ? submissionMonths.reduce((acc, m) => acc + (m.submissionRate ?? 0), 0) / submissionMonths.length
+      : null;
+    const peak = monthlyDeposits.reduce<{ month: string; amount: number } | null>(
+      (best, m) => (best === null || m.amount > best.amount ? { month: m.month, amount: m.amount } : best),
+      null,
+    );
+    return {
+      collected: fromCents(collectedCents),
+      months: monthlyDeposits.length,
+      avgRate: avgRate === null ? null : Math.round(avgRate * 10) / 10,
+      peak: peak && peak.amount > 0 ? peak : null,
+    };
+  }, [monthlyDeposits]);
   const sharesSplitTotal = foundingShares + normalShares;
   const healthTone = fundsHealth ? FUNDS_HEALTH_TONE[fundsHealth.status] ?? FUNDS_HEALTH_TONE.Stable : null;
   const runwayPct =
@@ -232,7 +261,7 @@ export function DashboardView({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <ERPMetricCard
           label={t("dashboard.totalDeposits", { defaultValue: "Total Deposits" })}
-          value={formatMoney(totalDeposits)}
+          value={formatMoney(totalDeposits, currency)}
           icon={Wallet}
           tone="emerald"
           helperText={t("dashboard.depositsCount", { count: depositCount, defaultValue: `${depositCount} deposits` })}
@@ -269,14 +298,14 @@ export function DashboardView({
           value={activeProjects}
           icon={Layers}
           tone="amber"
-          helperText={`${t("dashboard.ongoingBudget", { defaultValue: "Committed budget" })}: ${formatMoney(ongoingBudget)}`}
+          helperText={`${t("dashboard.ongoingBudget", { defaultValue: "Committed budget" })}: ${formatMoney(ongoingBudget, currency)}`}
           footer={
             <FooterLink label={t("dashboard.quickProjects", { defaultValue: "Projects" })} onClick={() => onNavigate("/projects")} />
           }
         />
         <ERPMetricCard
           label={t("dashboard.totalInvestments", { defaultValue: "Total Investments" })}
-          value={formatMoney(investmentsTotal)}
+          value={formatMoney(investmentsTotal, currency)}
           icon={TrendingUp}
           tone="slate"
           helperText={t("dashboard.investmentsCount", { count: investmentsCount, defaultValue: `${investmentsCount} investments` })}
@@ -290,7 +319,7 @@ export function DashboardView({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <ERPMetricCard
           label={t("dashboard.totalAssets", { defaultValue: "Total Assets" })}
-          value={formatMoney(totalAssets)}
+          value={formatMoney(totalAssets, currency)}
           icon={Landmark}
           tone="cyan"
           trend={
@@ -305,10 +334,10 @@ export function DashboardView({
         />
         <ERPMetricCard
           label={t("dashboard.dividendsDistributed", { defaultValue: "Dividends Distributed" })}
-          value={formatMoney(dividends)}
+          value={formatMoney(dividends, currency)}
           icon={PiggyBank}
           tone="amber"
-          helperText={`${t("dashboard.netReserves", { defaultValue: "Net Reserves" })}: ${formatMoney(netReserves)}`}
+          helperText={`${t("dashboard.netReserves", { defaultValue: "Net Reserves" })}: ${formatMoney(netReserves, currency)}`}
           footer={
             <FooterLink label={t("dashboard.dividendsLink", { defaultValue: "Dividends" })} onClick={() => onNavigate("/dividends")} />
           }
@@ -325,21 +354,21 @@ export function DashboardView({
         />
         <ERPMetricCard
           label={t("dashboard.income", { defaultValue: "Income" })}
-          value={formatMoney(totalIncome)}
+          value={formatMoney(totalIncome, currency)}
           icon={HandCoins}
           tone="emerald"
           helperText={`${
             totalIncome - totalExpenses >= 0
               ? t("dashboard.surplus", { defaultValue: "Surplus" })
               : t("dashboard.deficit", { defaultValue: "Deficit" })
-          }: ${formatMoney(Math.abs(totalIncome - totalExpenses))}`}
+          }: ${formatMoney(Math.abs(totalIncome - totalExpenses), currency)}`}
           footer={
             <FooterLink label={t("dashboard.fullLedger", { defaultValue: "Full Ledger" })} onClick={() => onNavigate("/transactions")} />
           }
         />
         <ERPMetricCard
           label={t("dashboard.expenses", { defaultValue: "Expenses" })}
-          value={formatMoney(totalExpenses)}
+          value={formatMoney(totalExpenses, currency)}
           icon={Receipt}
           tone="rose"
           helperText={`${t("dashboard.activeProjects", { defaultValue: "Active Projects" })}: ${activeProjects}`}
@@ -353,7 +382,7 @@ export function DashboardView({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Deposit submission rate by month */}
         <div className="lg:col-span-7 rounded-xl bg-card p-5 shadow-2xs flex flex-col">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex items-start justify-between gap-3">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-muted-foreground" />
               <div>
@@ -365,7 +394,46 @@ export function DashboardView({
                 </p>
               </div>
             </div>
+            <div className="flex shrink-0 items-center gap-3 text-[10px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-[2px]" style={{ backgroundColor: DEPOSIT_BAR }} aria-hidden="true" />
+                {t("dashboard.depositsStream", { defaultValue: "Member Deposits" })}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-0.5 w-3 rounded-full" style={{ backgroundColor: RATE_LINE }} aria-hidden="true" />
+                {t("dashboard.submissionRate", { defaultValue: "Submission rate" })}
+              </span>
+            </div>
           </div>
+
+          {hasDepositSeries && (
+            <dl className="mb-4 grid grid-cols-3 gap-3 border-y border-border/60 py-2.5">
+              <div className="min-w-0">
+                <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("dashboard.depositTotalCollected", { defaultValue: "Collected" })}
+                </dt>
+                <dd className="truncate font-mono text-xs font-semibold text-foreground">
+                  {formatMoney(depositTotals.collected, currency)}
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("dashboard.depositAvgRate", { defaultValue: "Avg rate" })}
+                </dt>
+                <dd className="font-mono text-xs font-semibold" style={{ color: RATE_LINE }}>
+                  {depositTotals.avgRate === null ? "—" : `${depositTotals.avgRate}%`}
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("dashboard.depositPeakMonth", { defaultValue: "Peak month" })}
+                </dt>
+                <dd className="truncate font-mono text-xs font-semibold text-foreground">
+                  {depositTotals.peak ? formatMonthKey(depositTotals.peak.month) : "—"}
+                </dd>
+              </div>
+            </dl>
+          )}
 
           <div className="h-64 w-full">
             {hasDepositSeries ? (
@@ -421,12 +489,18 @@ export function DashboardView({
                           </div>
                           <div className="flex items-center justify-between gap-4">
                             <span className="text-muted-foreground">{t("dashboard.depositsStream", { defaultValue: "Member Deposits" })}</span>
-                            <span className="font-mono font-semibold text-foreground">{formatMoney(p.amount)}</span>
+                            <span className="font-mono font-semibold text-foreground">{formatMoney(p.amount, currency)}</span>
                           </div>
                           <div className="flex items-center justify-between gap-4">
                             <span className="text-muted-foreground">{t("dashboard.depositsCount", { count: p.count, defaultValue: `${p.count} deposits` })}</span>
-                            <span className="font-mono text-foreground">{p.submittingMembers}</span>
+                            <span className="font-mono text-foreground">{p.count}</span>
                           </div>
+                          {p.submissionRate !== null && (
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="text-muted-foreground">{t("dashboard.submittingMembers", { defaultValue: "Members submitting" })}</span>
+                              <span className="font-mono text-foreground">{p.submittingMembers}</span>
+                            </div>
+                          )}
                           {p.submissionRate !== null && (
                             <div className="flex items-center justify-between gap-4">
                               <span className="text-muted-foreground">{t("dashboard.submissionRate", { defaultValue: "Submission rate" })}</span>
@@ -518,7 +592,7 @@ export function DashboardView({
                     {t("dashboard.netReserves", { defaultValue: "Net Reserves" })}
                   </div>
                   <div className="mt-0.5 text-sm font-bold font-mono text-foreground">
-                    {formatMoney(fundsHealth.reserves)}
+                    {formatMoney(fundsHealth.reserves, currency)}
                   </div>
                 </div>
                 <div>
@@ -526,7 +600,7 @@ export function DashboardView({
                     {t("dashboard.monthlyBurn", { defaultValue: "Monthly Burn" })}
                   </div>
                   <div className="mt-0.5 text-sm font-bold font-mono text-foreground">
-                    {formatMoney(fundsHealth.monthlyBurn)}
+                    {formatMoney(fundsHealth.monthlyBurn, currency)}
                   </div>
                 </div>
                 <div>
@@ -621,7 +695,7 @@ export function DashboardView({
                     <Tooltip
                       cursor={{ fill: dark ? "#ffffff10" : "#0f172a08" }}
                       contentStyle={tooltipStyle}
-                      formatter={(value: any) => [formatMoney(Number(value) || 0), ""]}
+                      formatter={(value: any) => [formatMoney(Number(value) || 0, currency), ""]}
                     />
                     <Bar dataKey="income" fill={INCOME_BAR} radius={[0, 4, 4, 0]} barSize={10} name={t("dashboard.chartIncome", { defaultValue: "Income" })} />
                     <Bar dataKey="expenses" fill={EXPENSE_BAR} radius={[0, 4, 4, 0]} barSize={10} name={t("dashboard.expenses", { defaultValue: "Expenses" })} />
@@ -631,11 +705,11 @@ export function DashboardView({
               <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-1 rounded-b-xl border-t border-border/60 bg-muted/15 p-3 px-5 -mx-5 -mb-5 mt-4 text-xs text-muted-foreground">
                 <span>
                   {t("dashboard.chartIncome", { defaultValue: "Income" })}:{" "}
-                  <span className="font-mono font-semibold text-foreground">{formatMoney(financeTotals.income)}</span>
+                  <span className="font-mono font-semibold text-foreground">{formatMoney(financeTotals.income, currency)}</span>
                 </span>
                 <span>
                   {t("dashboard.expenses", { defaultValue: "Expenses" })}:{" "}
-                  <span className="font-mono font-semibold text-foreground">{formatMoney(financeTotals.expenses)}</span>
+                  <span className="font-mono font-semibold text-foreground">{formatMoney(financeTotals.expenses, currency)}</span>
                 </span>
                 <span>
                   {financeTotals.income - financeTotals.expenses >= 0
@@ -643,7 +717,7 @@ export function DashboardView({
                     : t("dashboard.deficit", { defaultValue: "Deficit" })}
                   :{" "}
                   <span className="font-mono font-semibold text-foreground">
-                    {formatMoney(Math.abs(financeTotals.income - financeTotals.expenses))}
+                    {formatMoney(Math.abs(financeTotals.income - financeTotals.expenses), currency)}
                   </span>
                 </span>
               </div>
@@ -679,7 +753,7 @@ export function DashboardView({
                   <PieChart>
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      formatter={(value: any, name: any) => [formatMoney(Number(value) || 0), String(name)]}
+                      formatter={(value: any, name: any) => [formatMoney(Number(value) || 0, currency), String(name)]}
                     />
                     <Pie
                       data={sectorData}
@@ -705,7 +779,7 @@ export function DashboardView({
                     {t("dashboard.totalDeployed", { defaultValue: "Total Deployed" })}
                   </span>
                   <span className="text-base font-bold tracking-tight text-foreground">
-                    {formatMoney(sectorTotal)}
+                    {formatMoney(sectorTotal, currency)}
                   </span>
                 </div>
               </div>
@@ -791,7 +865,7 @@ export function DashboardView({
                           {formatDateOnly(txn.date)}
                         </td>
                         <td className="px-3 py-2 font-medium text-foreground">
-                          {txn.referenceNumber || txn.id.slice(0, 8)}
+                          {ledgerRef(txn)}
                         </td>
                         <td className="px-3 py-2 text-foreground">{txn.memberName || "—"}</td>
                         <td className="px-3 py-2">
@@ -806,7 +880,7 @@ export function DashboardView({
                           )}
                         >
                           {isCredit ? "+" : "−"}
-                          {formatMoney(Math.abs(amount))}
+                          {formatMoney(Math.abs(amount), currency)}
                         </td>
                       </tr>
                     );
@@ -818,7 +892,7 @@ export function DashboardView({
 
           <div className="flex items-center justify-end rounded-b-xl border-t border-border/60 bg-muted/15 p-3 px-5 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">
-              {t("dashboard.totalDeposits", { defaultValue: "Total Deposits" })}: {formatMoney(totalDeposits)}
+              {t("dashboard.totalDeposits", { defaultValue: "Total Deposits" })}: {formatMoney(totalDeposits, currency)}
             </span>
           </div>
         </div>

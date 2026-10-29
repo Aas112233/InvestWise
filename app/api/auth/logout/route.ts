@@ -14,6 +14,36 @@ export async function POST(request: NextRequest) {
   try {
     const { user: authUser, error } = await getAuthContext(request);
     if (error || !authUser) {
+      // Best-effort revocation even when the access token is expired or
+      // absent: verify the refresh cookie directly and end what it points at,
+      // so "logout" cannot leave a still-refreshable session behind
+      // (audit 07 L-2). Scoped to the token's own user + session; a token
+      // that fails signature verification revokes nothing.
+      const staleRefresh = request.cookies.get(COOKIE_NAMES.REFRESH_TOKEN)?.value;
+      if (staleRefresh) {
+        try {
+          const decoded = verifyToken(staleRefresh, 'refresh');
+          if (decoded.sessionId) {
+            const db = getDb();
+            const expiry = getTokenExpiry(staleRefresh);
+            await db.insert(blacklistedTokens).values({
+              // Store sha256(token) hex, never the raw JWT (leak-safe at rest).
+              token: tokenHash(staleRefresh),
+              type: 'refresh',
+              userId: decoded.id,
+              expiresAt: expiry,
+              reason: 'logout',
+            });
+            blacklistToken(staleRefresh, expiry);
+            await db
+              .update(sessions)
+              .set({ isActive: false, isExpired: true, logoutTime: new Date() })
+              .where(and(eq(sessions.sessionId, decoded.sessionId), eq(sessions.userId, decoded.id)));
+          }
+        } catch {
+          // Malformed or already-revoked token: nothing left to revoke
+        }
+      }
       // Still wipe cookies: an expired-token logout must not leave stale
       // tokens behind to trap the user in 401s without redirect.
       const denied =

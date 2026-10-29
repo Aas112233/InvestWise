@@ -13,24 +13,30 @@ export function getClientIp(request: NextRequest): string | null {
 }
 
 /**
- * Client IP for abuse controls, with the spoofable header last.
+ * Client IP for abuse controls.
  *
- * `x-forwarded-for`'s first entry is whatever the caller sent whenever a hop in
- * front of the app does not normalize it, so a throttle keyed on it alone can be
- * bypassed by adding one request header. Headers a platform edge stamps on the
- * request win; the raw socket address would win outright but is not exposed to
- * Next route handlers.
+ * Only headers that this deployment's own edge stamps are trusted, because a
+ * throttle keyed on anything else is a suggestion: Vercel sets
+ * `x-vercel-forwarded-for` itself and will not let a client overwrite it, while
+ * `x-real-ip` and `cf-connecting-ip` are never set by Vercel at all — so any
+ * value present in them arrived in the request and is attacker-chosen. Reading
+ * them first (as this function used to) let one request header buy a fresh rate
+ * limit bucket per request, and spawned a new `rate_limit_buckets` row each
+ * time: the abuse control became the storage problem it exists to prevent.
  *
- * Still best-effort by design: never make this the only dimension a limit is
- * keyed on (see app/api/auth/signup, which also keys on email and a global
- * ceiling plus a human-proof token).
+ * `x-forwarded-for` is deliberately not consulted either. Each proxy PREPENDS,
+ * so its first entry is whatever the caller sent unless every hop normalises
+ * it, and this app has no such hop.
+ *
+ * With no trustworthy header the answer is 'unknown', which every caller maps
+ * to its own (wider but finite) ceiling — so local development and any
+ * non-Vercel deployment still get a bound, just a looser one. Never add a
+ * client-controlled header back to this list without also stripping it in
+ * middleware.ts.
  */
 export function getAbuseClientIp(request: NextRequest): string {
   return (
-    request.headers.get('x-real-ip') ||
-    request.headers.get('cf-connecting-ip') ||
     request.headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     'unknown'
   );
 }

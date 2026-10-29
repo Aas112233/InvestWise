@@ -3,6 +3,8 @@ import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
 import { recalculateAllMembersPerformance } from '@/lib/governance/performance';
+import { apiError } from '@/lib/utils/api-error';
+import { guard } from '@/lib/guarded-route';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -38,6 +40,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // maxDuration = 300: a single Admin pressing the button repeatedly pins one
+    // serverless function for five minutes each time, so this is the tightest
+    // profile in the app rather than the generic expensive one.
+    const limited = await guard(request, 'recompute', { user: user.id, tenant: tenantId });
+    if (limited) return limited;
+
     const result = await recalculateAllMembersPerformance(tenantId);
 
     await logAudit({
@@ -51,9 +59,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: result });
   } catch (err: any) {
     console.error('[GOVERNANCE RECALCULATE-ALL ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to recalculate performance scores' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to recalculate performance scores');
   }
 }

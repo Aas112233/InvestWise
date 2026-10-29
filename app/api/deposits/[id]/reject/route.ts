@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, funds, members } from '@/db/schema/index';
@@ -149,9 +150,6 @@ export async function POST(
     });
   } catch (err: any) {
     console.error('[DEPOSIT REJECT ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to reject deposit' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to reject deposit');
   }
 }

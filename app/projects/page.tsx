@@ -11,7 +11,7 @@ import {
   DistributeReturnsModal,
 } from "@/components/projects";
 import { apiClient } from "@/lib/api-client";
-import { openPrintTab, releasePrintWindow, reservePrintWindow } from "@/lib/documents";
+import { offerPrintDocument, openPrintTab } from "@/lib/documents";
 import { Project, Member, ProjectUpdateRecord } from "@/types";
 import { toast } from "sonner";
 import { useLocale } from "@/lib/i18n";
@@ -43,12 +43,15 @@ import {
   StatusBadge,
 } from "@/components/ui";
 import { formatMoney, formatDateOnly } from "@/lib/formatters";
+import { ledgerRef } from "@/lib/doc-number";
 import { intlLocaleFor, projectTxLabel } from "../../components/projects/project-labels";
 import { usePermissions } from "@/lib/use-permissions";
 
 export default function ProjectsPage() {
   const { t, locale } = useLocale();
-  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
+  // Money on this screen is the tenant's money, so it carries the tenant's currency.
+  const tenantCurrency = useTenantCurrency();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, tenantCurrency, { locale: intlLocaleFor(locale) });
   const { can } = usePermissions();
   const canWrite = can("PROJECT_MANAGEMENT", "WRITE");
   const queryClient = useQueryClient();
@@ -131,9 +134,8 @@ export default function ProjectsPage() {
     queryFn: () => loadListOrToast("/members?limit=500"),
   });
 
-  // Tenant settings for share value and base currency
+  // Tenant share value. The base currency is read above, beside the money helper that uses it.
   const tenantShareValue = useTenantShareValue();
-  const tenantCurrency = useTenantCurrency();
 
   // Tab 2: Server-paginated project updates (5 years of disbursements is
   // tens of thousands of rows — never fetch them all for one table page).
@@ -228,9 +230,9 @@ export default function ProjectsPage() {
           body: JSON.stringify(payload.data),
         });
       }
-      // Pre-open the charter tab while this submit's user gesture is live,
-      // so popup blockers don't eat the window.open on success.
-      reservePrintWindow();
+      // No tab is pre-opened. The charter is offered from the success toast,
+      // whose button is itself a user gesture, so a failed save can no longer
+      // leave a stray print window behind.
       return await apiClient("/projects", {
         method: "POST",
         body: JSON.stringify(payload.data),
@@ -241,21 +243,25 @@ export default function ProjectsPage() {
       queryClient.invalidateQueries({ queryKey: ["members"] });
       queryClient.invalidateQueries({ queryKey: ["funds"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      toast.success(
-        variables.id
-          ? t("projects.updatedSuccess", { defaultValue: "Project updated successfully" })
-          : t("projects.savedSuccess", { defaultValue: "Project created successfully with shareholder allocations" }),
-      );
+      const savedMessage = variables.id
+        ? t("projects.updatedSuccess", { defaultValue: "Project updated successfully" })
+        : t("projects.savedSuccess", { defaultValue: "Project created successfully with shareholder allocations" });
       setIsCreateOpen(false);
       setEditingProject(null);
-      // New project → open its printable charter (the edit path has no document).
-      if (!variables.id) {
-        if (_res && _res.id) openPrintTab("project", String(_res.id));
-        else releasePrintWindow();
+      // New project → the printable charter is offered on the success toast
+      // (the edit path has no document).
+      if (!variables.id && _res?.id) {
+        offerPrintDocument({
+          kind: "project",
+          id: String(_res.id),
+          title: savedMessage,
+          actionLabel: t("projects.printCharter", { defaultValue: "Print Charter" }),
+        });
+      } else {
+        toast.success(savedMessage);
       }
     },
     onError: (err: any) => {
-      releasePrintWindow();
       toast.error(
         err?.message ||
           t("common.errors.failedToCreateProject", { defaultValue: "Failed to save project" }),
@@ -271,8 +277,7 @@ export default function ProjectsPage() {
       projectId: string;
       updateData: { type: "Earning" | "Expense"; amount: number; description: string; referenceNumber: string; date: string; handledByMemberId: string | null };
     }) => {
-      // Pre-open the receipt tab while this submit's user gesture is live.
-      reservePrintWindow();
+      // No tab pre-opened — the receipt is offered from the success toast.
       return await apiClient(`/projects/${projectId}/updates`, {
         method: "POST",
         body: JSON.stringify({
@@ -289,15 +294,22 @@ export default function ProjectsPage() {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["funds"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      toast.success(t("projects.updatePosted", { defaultValue: "Project spending recorded" }));
       setIsUpdateOpen(false);
       setProjectForUpdate(null);
-      // Open the printable receipt for the ledger row this posting created.
-      if (res && res.transactionId) openPrintTab("project-update", String(res.transactionId));
-      else releasePrintWindow();
+      // Offer the printable receipt for the ledger row this posting created.
+      const postedMessage = t("projects.updatePosted", { defaultValue: "Project spending recorded" });
+      if (res && res.transactionId) {
+        offerPrintDocument({
+          kind: "project-update",
+          id: String(res.transactionId),
+          title: postedMessage,
+          actionLabel: t("projects.printReceipt", { defaultValue: "Print Receipt" }),
+        });
+      } else {
+        toast.success(postedMessage);
+      }
     },
     onError: (err: any) => {
-      releasePrintWindow();
       toast.error(err?.message || t("common.errors.failedToPostDisbursement", { defaultValue: "Failed to post spending" }));
     },
   });
@@ -484,7 +496,7 @@ export default function ProjectsPage() {
       header: t("transactions.reference", { defaultValue: "REF #" }),
       render: (tx) => (
         <span className="text-[11px] font-mono font-medium text-foreground bg-muted/60 px-1.5 py-0.5 rounded">
-          {tx.referenceNumber}
+          {ledgerRef(tx)}
         </span>
       ),
     },
@@ -607,7 +619,7 @@ export default function ProjectsPage() {
       header: t("projects.distributions.runRef", { defaultValue: "RUN REF" }),
       render: (tx) => (
         <span className="text-[11px] font-mono font-medium text-foreground bg-muted/60 px-1.5 py-0.5 rounded">
-          {tx.referenceNumber}
+          {ledgerRef(tx)}
         </span>
       ),
     },

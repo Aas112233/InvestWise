@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
@@ -145,9 +146,6 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     console.error('[MEMBERS POST ERROR]', err);
     const e = err as { statusCode?: number; message?: string };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to create member' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to create member');
   }
 }

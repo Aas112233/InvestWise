@@ -10,6 +10,7 @@ import { ConflictError, ForbiddenError, ValidationError, readJsonUnknown } from 
 import { logAudit } from '@/lib/utils/audit';
 import { resolveFiscalBounds } from '@/lib/fiscal-periods';
 import { computeFiscalPeriodTotals } from '@/lib/fiscal-totals';
+import { apiError } from '@/lib/utils/api-error';
 
 const createPeriodSchema = z.object({
   startYear: z.number().int().min(1900).max(9998),
@@ -18,10 +19,7 @@ const createPeriodSchema = z.object({
 
 function responseError(error: unknown, fallback: string) {
   const err = error as { message?: string; statusCode?: number; code?: string };
-  return NextResponse.json(
-    { success: false, message: err.message || fallback, code: err.code || 'INTERNAL_ERROR' },
-    { status: err.statusCode || 500 },
-  );
+  return apiError(err, fallback);
 }
 
 function fiscalLabel(start: Date, end: Date): string {

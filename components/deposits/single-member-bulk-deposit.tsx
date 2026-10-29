@@ -76,7 +76,9 @@ export function SingleMemberBulkDeposit({
   const fiscalYear = pickedYear || defaultPostableFiscalYear;
   const setFiscalYear = setPickedYear;
 
-  const grid = useMemberDepositMonths(memberId, fiscalYear);
+  // Keeps the previous member's grid on screen while the next one loads,
+  // instead of flashing the whole year as unavailable.
+  const grid = useMemberDepositMonths(memberId, fiscalYear, { keepPreviousData: true });
 
   // Suspended members stay visible but disabled — the marker explains why, and
   // the write path refuses them anyway (assertMemberNotSuspended).
@@ -117,10 +119,21 @@ export function SingleMemberBulkDeposit({
       transactionId: null,
       referenceNumber: null,
       pendingRequest: false,
+      // Unknown until the server answers — "0" would claim an empty period.
+      depositCount: null,
+      periodTotal: null,
     }));
   }, [grid.data, grid.isError, fiscalYear, monthsFor]);
 
   const availableMonths = useMemo(() => cells.filter((cell) => !cell.occupied), [cells]);
+
+  /**
+   * Which model this grid belongs to, straight from the server. Absent while the grid loads and
+   * absent on a server that predates the flexible model — both read as monthly, i.e. the answer
+   * that keeps the "locked months" wording, because a grid with nothing locked is also what a
+   * monthly member at the start of the year looks like.
+   */
+  const flexibleGrid = grid.data?.obligationEnforced === false;
 
   /** shares × share value — the same prefill the multi-member sheet uses. */
   const suggestedAmount = useMemo(() => {
@@ -285,7 +298,14 @@ export function SingleMemberBulkDeposit({
         </ERPFormGrid>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[11px] text-muted-foreground">{t("deposits.bulkSingle.monthsHint")}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {flexibleGrid
+              ? t("deposits.bulkSingle.monthsHintFlexible", {
+                  defaultValue:
+                    "Flexible schedule: every month stays selectable and one month may hold more than one deposit. Figures shown are deposits already recorded for that month.",
+                })
+              : t("deposits.bulkSingle.monthsHint")}
+          </p>
           {!noSelection && !failed && (
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-medium text-muted-foreground">
@@ -394,6 +414,17 @@ export function SingleMemberBulkDeposit({
                         <Check size={9} />
                         {t("deposits.bulkSingle.chosen")}
                       </span>
+                    ) : typeof cell.depositCount === "number" && cell.depositCount > 0 ? (
+                      // H6 — the month is still selectable (flexible schedule) but is NOT empty.
+                      // Composed from the EXISTING "deposited" label plus the numeral, because the
+                      // count is the news and digits need no translation; a new phrase here would
+                      // have to be authored and reviewed in four scripts. Under a monthly schedule
+                      // `depositCount` is null, so this branch cannot change that grid.
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        <span className="font-mono">{cell.depositCount}</span>
+                        <span aria-hidden>·</span>
+                        {t("deposits.bulkSingle.deposited")}
+                      </span>
                     ) : (
                       <span className="inline-flex shrink-0 items-center rounded-full border border-border/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                         {t("deposits.bulkSingle.available")}
@@ -401,7 +432,11 @@ export function SingleMemberBulkDeposit({
                     )}
                   </label>
                   <span className="whitespace-nowrap text-right font-mono text-[11px] text-muted-foreground">
-                    {locked && cell.amount ? formatMoney(cell.amount, currency) : ""}
+                    {locked && cell.amount
+                      ? formatMoney(cell.amount, currency)
+                      : cell.periodTotal
+                        ? formatMoney(cell.periodTotal, currency)
+                        : ""}
                   </span>
                   <NumericInput
                     type="text"
@@ -419,7 +454,11 @@ export function SingleMemberBulkDeposit({
                 </div>
               );
             })}
-            <p className="pt-1 text-[11px] text-muted-foreground">{t("deposits.bulkSingle.lockedNote")}</p>
+            {/* "Locked months already hold a deposit" is a monthly rule; a flexible grid has
+                nothing locked, so the sentence is not translated differently — it is not shown. */}
+            {!flexibleGrid && (
+              <p className="pt-1 text-[11px] text-muted-foreground">{t("deposits.bulkSingle.lockedNote")}</p>
+            )}
           </div>
         )}
       </ERPFormSection>

@@ -74,8 +74,18 @@ try {
   const perms = Object.fromEntries(SCREENS.map((s) => [s, 'WRITE']));
   const existing = await sql`select id from users where email = ${EMAIL} limit 1`;
   if (existing.length > 0) {
-    await sql`update users set password = ${hash}, role = 'SuperAdmin', status = 'active', permissions = ${sql.json(perms)}, updated_at = now() where email = ${EMAIL}`;
-    console.log('superadmin updated:', EMAIL);
+    // The update branch rewrites the password on EVERY run. A re-seed against
+    // a mislabeled environment (NODE_ENV unset) would silently reset the only
+    // platform operator to the public dev default. Require an explicit
+    // opt-in before touching an existing account's credentials
+    // (audit 07 L-6); role/status/permissions repair rides the same branch.
+    const allowReset = process.argv.includes('--reset-password') || env.SEED_RESET_PASSWORD === '1';
+    if (!allowReset) {
+      console.log('superadmin already exists:', EMAIL, '— password left unchanged (pass --reset-password to force a reset)');
+    } else {
+      await sql`update users set password = ${hash}, role = 'SuperAdmin', status = 'active', permissions = ${sql.json(perms)}, updated_at = now() where email = ${EMAIL}`;
+      console.log('superadmin updated:', EMAIL);
+    }
   } else {
     await sql`insert into users (id, name, email, password, role, status, permissions) values (${crypto.randomUUID()}, 'SuperAdmin', ${EMAIL}, ${hash}, 'SuperAdmin', 'active', ${sql.json(perms)})`;
     console.log('superadmin created:', EMAIL);

@@ -1,6 +1,9 @@
 import { getDb } from '@/db/index';
 import { auditLogs } from '@/db/schema/index';
 
+/** The only values `audit_logs_status_check` accepts. */
+export type AuditStatus = 'SUCCESS' | 'FAILURE' | 'WARNING';
+
 interface AuditParams {
   user?: { id?: string; name?: string } | null;
   req?: { ip?: string; headers?: Record<string, string | undefined> } | null;
@@ -8,7 +11,15 @@ interface AuditParams {
   resourceType?: string;
   resourceId?: string;
   details?: unknown;
-  status?: string;
+  /**
+   * Outcome of the audited action. Constrained to this union because the column
+   * carries a CHECK for exactly these three values and `logAudit` swallows every
+   * error — so any other string (a `'PENDING'` in the forgot-password handler
+   * did this for its whole life) failed the INSERT silently and the event was
+   * simply never recorded, while the caller still saw a 200. Typing it turns
+   * that class of mistake into a compile error at the call site.
+   */
+  status?: AuditStatus;
   /** §6: tenant scope of the audited action — required for tenant business actions. */
   tenantId?: string | null;
   /**

@@ -30,7 +30,7 @@ import {
 import { assertIntegralShares } from '@/lib/shares';
 import { isAllowedDepositMethod, normalizePaymentMethods } from '@/lib/payment-methods';
 import { decideReversal } from '@/lib/transaction-reversal';
-import { DEPOSIT_FUND_REQUIRED_MESSAGE, isDepositFund } from '@/lib/deposit-fund';
+import { DEPOSIT_CATEGORY, DEPOSIT_FUND_REQUIRED_MESSAGE, DEPOSIT_REQUEST_CATEGORY, isDepositFund } from '@/lib/deposit-fund';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import { calendarDayForInstant, dayRangeUtc, parseBusinessDate } from '@/lib/tenant-time';
 import { fiscalMonthKeys, isFiscalMonthName } from '@/lib/fiscal-periods';
@@ -38,8 +38,13 @@ import {
   depositMonthOccupiedCondition,
   findDepositMonthOccupant,
   findDepositMonthOccupancyInRange,
+  findDepositPeriodProgressInRange,
   depositMonthConflictMessage,
+  type DepositPeriodProgress,
 } from '@/lib/deposit-month-limit';
+import { loadMemberDepositSchedule, loadMemberDepositSchedules } from '@/lib/deposit-schedule/lookup';
+import { resolveDepositScheduleDetailed } from '@/lib/deposit-schedule/schedule';
+import { resolveFlexApprovalDecision } from '@/lib/deposit-schedule/approval-threshold';
 import {
   computeDepositEditDelta,
   findDeployedFundsViolation,
@@ -51,6 +56,7 @@ import {
   type FundBalanceSnapshot,
   type MemberEquitySnapshot,
 } from '@/lib/deposit-edit-delta';
+import { escapeLikePattern } from '../../../../lib/utils/validation';
 
 /**
  * Dual-drizzle bridge. This service runs on the server/ drizzle instance
@@ -149,7 +155,7 @@ function resolveDepositDate(
  * the collected-date month is only the fallback when none was sent. An
  * explicit but unparseable value is rejected, never silently replaced.
  */
-function resolveDepositMonthKey(depositMonth: string | null | undefined, fallback: Date, tz = 'Asia/Dhaka'): string {
+export function resolveDepositMonthKey(depositMonth: string | null | undefined, fallback: Date, tz = 'Asia/Dhaka'): string {
   // The month a deposit is FOR belongs to the tenant's calendar, not UTC's.
   if (!depositMonth) return calendarDayForInstant(fallback, tz).slice(0, 7);
   const iso = parseDepositMonthToIso(depositMonth);
@@ -309,11 +315,19 @@ export async function getTransactions(query: Record<string, string | undefined>,
       if (isValidUUID(search)) {
         conditions.push(eq(transactions.id, search));
       } else {
-        conditions.push(ilike(transactions.referenceNumber, `%${search}%`));
+        // doc_number first: since 0026 it is the string printed on the receipt,
+        // so it is what a member reads out. reference_number stays searchable
+        // because clerks still key the bank/challan number they typed.
+        conditions.push(
+          or(
+            ilike(transactions.docNumber, `%${escapeLikePattern(search)}%`),
+            ilike(transactions.referenceNumber, `%${escapeLikePattern(search)}%`),
+          )!,
+        );
       }
     } else if (searchField === 'memberId') {
       const flexible = buildFlexibleMemberIdRegex(search);
-      const memberConds: (SQL | undefined)[] = [ilike(members.memberId, `%${search}%`)];
+      const memberConds: (SQL | undefined)[] = [ilike(members.memberId, `%${escapeLikePattern(search)}%`)];
       if (flexible) memberConds.push(sql`${members.memberId} ~* ${flexible}`);
       const matchingMembers = await db
         .select({ id: members.id })
@@ -329,7 +343,7 @@ export async function getTransactions(query: Record<string, string | undefined>,
       const matchingMembers = await db
         .select({ id: members.id })
         .from(members)
-        .where(and(eq(members.tenantId, tenantId), ilike(members.name, `%${search}%`)));
+        .where(and(eq(members.tenantId, tenantId), ilike(members.name, `%${escapeLikePattern(search)}%`)));
       if (matchingMembers.length > 0) {
         conditions.push(inArray(transactions.memberId, matchingMembers.map((m) => m.id)));
       } else {
@@ -339,7 +353,7 @@ export async function getTransactions(query: Record<string, string | undefined>,
       const matchingFunds = await db
         .select({ id: funds.id })
         .from(funds)
-        .where(and(eq(funds.tenantId, tenantId), ilike(funds.name, `%${search}%`)));
+        .where(and(eq(funds.tenantId, tenantId), ilike(funds.name, `%${escapeLikePattern(search)}%`)));
       if (matchingFunds.length > 0) {
         conditions.push(inArray(transactions.fundId, matchingFunds.map((f) => f.id)));
       } else {
@@ -356,20 +370,21 @@ export async function getTransactions(query: Record<string, string | undefined>,
             and(
               eq(members.tenantId, tenantId),
               or(
-                ilike(members.name, `%${search}%`),
-                ilike(members.memberId, `%${search}%`),
+                ilike(members.name, `%${escapeLikePattern(search)}%`),
+                ilike(members.memberId, `%${escapeLikePattern(search)}%`),
                 ...(flexible ? [sql`${members.memberId} ~* ${flexible}`] : []),
               ),
             ),
           ),
-        db.select({ id: funds.id }).from(funds).where(and(eq(funds.tenantId, tenantId), ilike(funds.name, `%${search}%`))),
+        db.select({ id: funds.id }).from(funds).where(and(eq(funds.tenantId, tenantId), ilike(funds.name, `%${escapeLikePattern(search)}%`))),
       ]);
 
       const orConds: (SQL | undefined)[] = [
-        ilike(transactions.type, `%${search}%`),
-        ilike(transactions.description, `%${search}%`),
-        ilike(transactions.status, `%${search}%`),
-        ilike(transactions.referenceNumber, `%${search}%`),
+        ilike(transactions.type, `%${escapeLikePattern(search)}%`),
+        ilike(transactions.description, `%${escapeLikePattern(search)}%`),
+        ilike(transactions.status, `%${escapeLikePattern(search)}%`),
+        ilike(transactions.referenceNumber, `%${escapeLikePattern(search)}%`),
+        ilike(transactions.docNumber, `%${escapeLikePattern(search)}%`),
       ];
       if (memberMatches.length > 0) {
         orConds.push(inArray(transactions.memberId, memberMatches.map((m) => m.id)));
@@ -420,6 +435,7 @@ export async function getTransactions(query: Record<string, string | undefined>,
     status: transactions.status,
     description: transactions.description,
     referenceNumber: transactions.referenceNumber,
+    docNumber: transactions.docNumber,
     category: transactions.category,
     handlingOfficer: transactions.handlingOfficer,
     depositMethod: transactions.depositMethod,
@@ -455,6 +471,7 @@ export async function getTransactions(query: Record<string, string | undefined>,
         description: transactions.description,
         category: transactions.category,
         referenceNumber: transactions.referenceNumber,
+        docNumber: transactions.docNumber,
         date: transactions.date,
         status: transactions.status,
         memberId: transactions.memberId,
@@ -587,15 +604,21 @@ export async function addDeposit(
     // closed-period back door).
     await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, collectedDate);
 
+    // Deposit schedule, read inside the tx on the locked member row so a
+    // concurrent settings switch cannot be honoured halfway through a deposit.
+    const depositSchedule = await loadMemberDepositSchedule(tx, { tenantId, memberId: targetMemberId });
+
     // §12 one-deposit-per-member-per-month (canonical rule, any fund, also
-    // counts pending requests). The member row is locked FOR UPDATE above, so
-    // concurrent deposits for this member serialize on this check. A reverted
-    // direct deposit (category 'Deposit' + PENDING) freed its month and does
-    // not block.
+    // counts pending requests) — MONTHLY members only. The member row is locked
+    // FOR UPDATE above, so concurrent deposits for this member serialize on this
+    // check. A reverted direct deposit (category 'Deposit' + PENDING) freed its
+    // month and does not block. A flexible member reserves no month, so the guard
+    // returns null without querying.
     const monthOccupant = await findDepositMonthOccupant(tx, {
       tenantId,
       memberId: targetMemberId,
       depositMonthKey,
+      enforced: depositSchedule.enforced,
     });
     if (monthOccupant) {
       throw new AppError(depositMonthConflictMessage(depositMonthKey, monthOccupant), 409, 'DUPLICATE_DEPOSIT');
@@ -632,7 +655,7 @@ export async function addDeposit(
           balance: sql`(${funds.balance}::numeric + ${amountCents / 100})::numeric(15,2)`,
           updatedAt: new Date(),
         })
-        .where(eq(funds.id, data.fundId));
+        .where(and(eq(funds.id, data.fundId), eq(funds.tenantId, tenantId)));
 
       // Back-entry of an older month must never regress lastDepositMonth.
       await tx
@@ -642,7 +665,7 @@ export async function addDeposit(
           lastDepositMonth: sql`GREATEST(COALESCE(${members.lastDepositMonth}, ''), ${depositMonthKey})`,
           updatedAt: new Date(),
         })
-        .where(eq(members.id, targetMemberId));
+        .where(and(eq(members.id, targetMemberId), eq(members.tenantId, tenantId)));
     }
 
     await tx.insert(auditLogs).values({
@@ -894,11 +917,16 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
       isNowCompleted ||
       (String(newStatus).toLowerCase() === 'pending' && (existing.category ?? '') !== 'Deposit');
     if (editedOccupiesMonth) {
+      const editedSchedule = await loadMemberDepositSchedule(tx, { tenantId, memberId: newMemberId });
       const monthOccupant = await findDepositMonthOccupant(tx, {
         tenantId,
         memberId: newMemberId,
         depositMonthKey,
         excludeId: existing.id,
+        // Flexible member: moving money between months needs no reservation. The
+        // row EXCLUDES itself either way, so a monthly edit that keeps its own
+        // month still never self-conflicts.
+        enforced: editedSchedule.enforced,
       });
       if (monthOccupant) {
         throw new AppError(depositMonthConflictMessage(depositMonthKey, monthOccupant), 409, 'DUPLICATE_DEPOSIT');
@@ -927,7 +955,7 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
           balance: sql`(${funds.balance}::numeric + ${deltaCents / 100})::numeric(15,2)`,
           updatedAt: new Date(),
         })
-        .where(eq(funds.id, fundId));
+        .where(and(eq(funds.id, fundId), eq(funds.tenantId, tenantId)));
     }
 
     for (const [memberId, deltaCents] of memberDelta) {
@@ -941,7 +969,7 @@ export async function editDeposit(id: string, data: DepositInput, user: SessionU
           ...(memberId === newMemberId ? { lastActive: new Date() } : {}),
           updatedAt: new Date(),
         })
-        .where(eq(members.id, memberId));
+        .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId)));
     }
 
     // 3. Update transaction record. submittedDate override allowed for
@@ -1052,6 +1080,24 @@ export async function approveDeposit(id: string, user: SessionUser) {
     }
     if (txn.type !== 'Deposit') throw new AppError('Only deposits can be approved', 400, 'INVALID_TYPE');
 
+    // ── Parity with the native POST /api/deposits/[id]/approve handler ──────
+    // This service is a second implementation of the same unit of work, and it
+    // used to be the *weaker* one: an unreferenced door that could credit
+    // settled money into a closed fiscal year, re-approve an already-REJECTED
+    // row, and let an officer approve their own request. A duplicated write must
+    // not be a policy bypass, so the three guards are asserted here too.
+    if (String(txn.status).toLowerCase() !== 'pending') {
+      throw new ConflictError(`Only a pending deposit request can be approved (status: ${txn.status})`);
+    }
+    if (txn.createdBy && txn.createdBy === user.id) {
+      throw new AppError(
+        "You cannot approve your own deposit request. Ask another officer with Deposits write access to approve it.",
+        400,
+        'SELF_APPROVAL',
+      );
+    }
+    if (txn.date) await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, txn.date);
+
     const fundId = txn.fundId!;
     const memberId = txn.memberId!;
     const [fund] = await tx.select().from(funds).where(and(eq(funds.id, fundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
@@ -1062,17 +1108,21 @@ export async function approveDeposit(id: string, user: SessionUser) {
     // to a suspended member (same gate as the native approve route).
     assertMemberNotSuspended(member, 'approving a deposit');
 
-    // §12 one-deposit-per-member-per-month: the final gate — approval credits
-    // settled money, so the month must be free of any OTHER occupant (the
-    // row being approved is excluded). Month key: stored deposit_month first,
-    // collected-date month as fallback (same rule as the native approve
-    // route).
+    // Deposit schedule, resolved inside the tx on the locked member row.
+    const approvedSchedule = await loadMemberDepositSchedule(tx, { tenantId, memberId });
+
+    // §12 one-deposit-per-member-per-month (MONTHLY only): the final gate —
+    // approval credits settled money, so the month must be free of any OTHER
+    // occupant (the row being approved is excluded). Month key: stored
+    // deposit_month first, collected-date month as fallback (same rule as the
+    // native approve route). A flexible member reserves no month.
     const depositMonthKey = txn.depositMonth || (txn.date ? new Date(txn.date).toISOString().slice(0, 7) : new Date().toISOString().slice(0, 7));
     const monthOccupant = await findDepositMonthOccupant(tx, {
       tenantId,
       memberId,
       depositMonthKey,
       excludeId: txn.id,
+      enforced: approvedSchedule.enforced,
     });
     if (monthOccupant) {
       throw new AppError(depositMonthConflictMessage(depositMonthKey, monthOccupant), 409, 'DUPLICATE_DEPOSIT');
@@ -1083,16 +1133,19 @@ export async function approveDeposit(id: string, user: SessionUser) {
     await tx
       .update(funds)
       .set({ balance: sql`(${funds.balance}::numeric + ${txnCents / 100})::numeric(15,2)`, updatedAt: new Date() })
-      .where(eq(funds.id, fundId));
+      .where(and(eq(funds.id, fundId), eq(funds.tenantId, tenantId)));
 
     await tx
       .update(members)
       .set({ totalContributed: sql`(${members.totalContributed}::numeric + ${txnCents / 100})::numeric(15,2)`, updatedAt: new Date() })
-      .where(eq(members.id, memberId));
+      .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId)));
 
     const [updated] = await tx
       .update(transactions)
-      .set({ status: 'Completed', authorizedBy: user.id, updatedBy: user.id, updatedAt: new Date() })
+      // Approval must also retire the request label: settled money that still
+      // reads as 'Deposit Request' is what made approved bulk deposits fail to
+      // appear as deposits in the report. Mirrors the native approve route.
+      .set({ status: 'Completed', category: DEPOSIT_CATEGORY, authorizedBy: user.id, updatedBy: user.id, updatedAt: new Date() })
       .where(eq(transactions.id, id))
       .returning();
     if (!updated) throw new NotFoundError('Transaction');
@@ -1142,6 +1195,12 @@ export async function revertDeposit(id: string, reason: string, user: SessionUse
       throw new AppError('Only completed deposits can be reverted to request', 400, 'INVALID_STATUS');
     }
     if (!txn.fundId || !txn.memberId) throw new AppError('Deposit is missing fund or member linkage', 400, 'INVALID_LINKAGE');
+
+    // Parity with the native POST /api/deposits/[id]/revert handler (which
+    // asserts this at :105): reverting un-credits settled money, so it is a
+    // write into the period the deposit belongs to and must not reach a closed
+    // fiscal year.
+    if (txn.date) await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, txn.date);
 
     const txnCents = toCents(txn.amount);
 
@@ -1275,6 +1334,10 @@ export async function addExpense(data: ExpenseInput, user: SessionUser) {
     const [fund] = await tx.select().from(funds).where(and(eq(funds.id, data.fundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
     if (!fund) throw new NotFoundError('Source Fund');
 
+    // Parity with the native POST /api/expenses handler (:355): an expense is a
+    // ledger write on the fund, so it cannot be booked into a closed period.
+    if (data.date) await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, new Date(data.date));
+
     const projectId = data.projectId || null;
     const amountCents = parsePositiveAmount(data.amount);
     let projectRef: typeof projects.$inferSelect | null = null;
@@ -1349,7 +1412,7 @@ export async function addExpense(data: ExpenseInput, user: SessionUser) {
     await tx
       .update(funds)
       .set({ balance: sql`(${funds.balance}::numeric - ${amountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
-      .where(eq(funds.id, data.fundId));
+      .where(and(eq(funds.id, data.fundId), eq(funds.tenantId, tenantId)));
 
     let balanceAfter: string;
     if (projectId) {
@@ -1443,7 +1506,7 @@ export async function editExpense(id: string, data: ExpenseInput, user: SessionU
       await tx
         .update(funds)
         .set({ balance: sql`(${funds.balance}::numeric + ${oldAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
-        .where(eq(funds.id, oldFundId));
+        .where(and(eq(funds.id, oldFundId), eq(funds.tenantId, tenantId)));
     }
 
     // 2. Apply new impact
@@ -1515,7 +1578,7 @@ export async function editExpense(id: string, data: ExpenseInput, user: SessionU
     await tx
       .update(funds)
       .set({ balance: sql`(${funds.balance}::numeric - ${newAmountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
-      .where(eq(funds.id, newFundId));
+      .where(and(eq(funds.id, newFundId), eq(funds.tenantId, tenantId)));
 
     const [updated] = await tx
       .update(transactions)
@@ -1590,7 +1653,7 @@ export async function addEarning(data: EarningInput, user: SessionUser) {
     await tx
       .update(funds)
       .set({ balance: sql`(${funds.balance}::numeric + ${amountCents / 100})::numeric(15,2)`, updatedAt: new Date() })
-      .where(eq(funds.id, data.fundId));
+      .where(and(eq(funds.id, data.fundId), eq(funds.tenantId, tenantId)));
 
     const newFundBalanceCents = toCents(fund.balance ?? '0') + amountCents;
     let balanceAfter = fmt(newFundBalanceCents);
@@ -1685,6 +1748,11 @@ export async function deleteTransaction(
       .limit(1);
     if (!txn) throw new NotFoundError('Transaction');
     if (txn.isDeleted) throw new AppError('Transaction is already deleted', 400, 'ALREADY_DELETED');
+
+    // Parity with the native DELETE /api/transactions/[id] handler (:244): a
+    // delete reverses the balance the row created, so deleting inside a closed
+    // period restates books that have been signed off.
+    if (txn.date) await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, txn.date);
 
     const isPrivileged =
       user.role === 'Admin' ||
@@ -2390,8 +2458,19 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
     const seenEntries = new Set<string>();
     const memberIds = data.deposits.map((d) => d.memberId);
 
+    // Per-member deposit schedule, resolved once for the whole batch. A batch can
+    // mix monthly and flexible members, so the per-month guards are applied PER
+    // member — a flexible member must not inherit a monthly restriction, and a
+    // monthly member must not inherit a flexible exemption.
+    const memberSchedules = await loadMemberDepositSchedules(tx, { tenantId, memberIds });
+    /** Unknown member ⇒ enforced: the strict reading, never an accidental exemption. */
+    const isEnforcedFor = (memberId: string): boolean => memberSchedules.get(memberId)?.enforced ?? true;
+
     for (const dep of data.deposits) {
       const month = resolveBatchRowMonth(dep, data.commonMonth);
+      // MONTHLY members only — a flexible member may legitimately appear twice for
+      // the same month in one upload.
+      if (!isEnforcedFor(dep.memberId)) continue;
       const entryKey = `${dep.memberId}-${month}`;
       if (seenEntries.has(entryKey)) {
         throw new AppError(
@@ -2436,7 +2515,7 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
 
     if (existingBatchRows.length > 0) {
       const existingByReference = new Map(existingBatchRows.map((row) => [row.referenceNumber, row]));
-      const results: Array<{ member: string; amount: number; txId?: string }> = [];
+      const results: Array<{ member: string; amount: number; txId?: string; postedAsPending?: boolean }> = [];
       let totalAmountCents = 0;
       let matches = existingBatchRows.length === data.deposits.length;
 
@@ -2484,10 +2563,13 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
     }
 
     const [paymentSettings] = await tx
-      .select({ paymentMethods: systemSettings.paymentMethods })
-      .from(systemSettings)
-      .where(eq(systemSettings.tenantId, tenantId))
-      .limit(1);
+        .select({
+          paymentMethods: systemSettings.paymentMethods,
+          depositFlexApprovalAbove: systemSettings.depositFlexApprovalAbove,
+        })
+        .from(systemSettings)
+        .where(eq(systemSettings.tenantId, tenantId))
+        .limit(1);
     if (!isAllowedDepositMethod(data.depositMethod ?? null, normalizePaymentMethods(paymentSettings?.paymentMethods))) {
       throw new AppError(
         "[Field 'depositMethod', Code: invalid_payment_method] Unknown payment method — configure it in Settings → Governance first",
@@ -2502,7 +2584,7 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
     const memberContributions = new Map<string, number>();
     const memberLastMonth = new Map<string, string>();
     const batchSubmittedDate = new Date();
-    const results: Array<{ member: string; amount: number; txId?: string }> = [];
+    const results: Array<{ member: string; amount: number; txId?: string; postedAsPending?: boolean }> = [];
     // §12: every distinct posting date must land in an OPEN fiscal period.
     // Deduped so a single-month batch takes the advisory lock once.
     const fiscalCheckedDates = new Set<string>();
@@ -2556,6 +2638,10 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
             tenantId,
             memberId: dep.memberId,
             depositMonthKey: monthKey,
+            // Flexible member ⇒ the shared builder returns an always-false
+            // predicate, so this lookup can never reserve a month for them while
+            // monthly members keep the canonical rule byte-for-byte.
+            enforced: isEnforcedFor(dep.memberId),
           }) as unknown as SQL,
         )
         .limit(1);
@@ -2568,35 +2654,66 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
         );
       }
 
+      /**
+       * R2 in the bulk path. A batch may legitimately MIX outcomes: three rows post
+       * as settled money and the oversized fourth is filed for approval. Pending rows
+       * advance neither the running fund balance nor the member's contribution, so
+       * every `balanceBefore`/`balanceAfter` snapshot in the batch stays truthful and
+       * the totals at the end of the loop describe only money that actually moved.
+       */
+      const rowApproval = resolveFlexApprovalDecision({
+        enforced: isEnforcedFor(dep.memberId),
+        approvalAbove: paymentSettings?.depositFlexApprovalAbove,
+        amountCents: depositAmountCents,
+      });
+      const postsAsPending = rowApproval.postsAsPending;
+
       const balanceBeforeCents = runningFundBalanceCents + totalBatchAmountCents;
-      const balanceAfterCents = balanceBeforeCents + depositAmountCents;
-      totalBatchAmountCents += depositAmountCents;
+      const balanceAfterCents = postsAsPending
+        ? balanceBeforeCents
+        : balanceBeforeCents + depositAmountCents;
+      if (!postsAsPending) totalBatchAmountCents += depositAmountCents;
 
       txnInserts.push({
         tenantId,
         type: 'Deposit',
+        // Was never set, so bulk deposits landed with a NULL category and showed
+        // up blank in the report's Category column while direct single deposits
+        // showed "Deposit". Same money, same type, same status — different label.
+        // A rerouted row is written in the request shape, so the existing approve /
+        // reject paths handle it with no special casing downstream.
+        category: postsAsPending ? DEPOSIT_REQUEST_CATEGORY : DEPOSIT_CATEGORY,
         amount: fmt(depositAmountCents),
         description: `Bulk Deposit [${monthKey}]`,
         memberId: dep.memberId,
         fundId: data.fundId,
         date: depositDate,
         submittedDate: batchSubmittedDate,
-        status: 'Completed',
+        status: postsAsPending ? 'PENDING' : 'Completed',
         authorizedBy: user.id,
         createdBy: user.id,
         updatedBy: user.id,
         handlingOfficer: user.name || data.cashierName || 'System',
         depositMethod: data.depositMethod || 'Cash',
-        depositMonth: monthKey || null,
+        // Never `|| null`: a NULL deposit_month is silently excluded by the range
+        // filters in analytics/analysis and analytics/stats, so the money would be
+        // in the ledger but missing from the fiscal-year report. `monthKey` always
+        // resolves to YYYY-MM (see resolveDepositMonthKey), so the coercion was
+        // only ever a door to that failure.
+        depositMonth: monthKey,
         referenceNumber: bulkDepositReference(batchId, rowIndex),
         balanceBefore: fmt(balanceBeforeCents),
         balanceAfter: fmt(balanceAfterCents),
       });
 
-      memberContributions.set(dep.memberId, (memberContributions.get(dep.memberId) || 0) + depositAmountCents);
-      const prevMonth = memberLastMonth.get(dep.memberId);
-      if (!prevMonth || monthKey > prevMonth) memberLastMonth.set(dep.memberId, monthKey);
-      results.push({ member: member.name, amount: depositAmountCents / 100 });
+      // Only settled money counts toward the member's contribution or their last
+      // active deposit month — an unapproved filing has moved nothing.
+      if (!postsAsPending) {
+        memberContributions.set(dep.memberId, (memberContributions.get(dep.memberId) || 0) + depositAmountCents);
+        const prevMonth = memberLastMonth.get(dep.memberId);
+        if (!prevMonth || monthKey > prevMonth) memberLastMonth.set(dep.memberId, monthKey);
+      }
+      results.push({ member: member.name, amount: depositAmountCents / 100, postedAsPending: postsAsPending });
     }
 
     const insertedTxns = await tx.insert(transactions).values(txnInserts).returning();
@@ -2630,8 +2747,11 @@ export async function bulkAddDeposits(data: BulkDepositInput, user: SessionUser)
       resourceType: 'Finance',
       details: {
         batchId,
+        // Settled money only — rows filed for approval moved nothing, so the batch
+        // total in the audit trail must not imply they did.
         totalAmount: totalBatchAmountCents / 100,
         count: data.deposits.length,
+        filedForApprovalCount: results.filter((r) => r.postedAsPending).length,
         fundName: fund.name,
         // `month` stays the shared month of a multi-member collection; a
         // single-member run posts into several, so every period is listed.
@@ -2663,6 +2783,17 @@ export interface MemberDepositMonthCell {
   referenceNumber: string | null;
   /** Held by a pending request — approve/reject it rather than revert. */
   pendingRequest: boolean;
+  /**
+   * H6 — settled deposits attributed to this month and their sum.
+   *
+   * Unlike `occupied`/`amount`, which describe the ONE row that reserves a monthly slot, this
+   * counts every settled deposit for the period. It is the only month-level figure that stays
+   * true on a flexible schedule, where a month can legitimately hold several deposits and the
+   * occupancy map is empty by design.
+   */
+  depositCount: number | null;
+  /** decimal(15,2) string, or null when nothing is settled for the month. */
+  periodTotal: string | null;
 }
 
 /**
@@ -2705,6 +2836,7 @@ export async function getMemberDepositMonths(
       shares: members.shares,
       totalContributed: members.totalContributed,
       lastDepositMonth: members.lastDepositMonth,
+      depositFrequency: members.depositFrequency,
     })
     .from(members)
     // Fail-closed tenant scope + soft-deleted members are not readable (§6).
@@ -2715,7 +2847,10 @@ export async function getMemberDepositMonths(
   if (!member) throw new NotFoundError('Member');
 
   const [settings] = await db
-    .select({ fiscalYearStart: systemSettings.fiscalYearStart })
+    .select({
+      fiscalYearStart: systemSettings.fiscalYearStart,
+      depositSchedule: systemSettings.depositSchedule,
+    })
     .from(systemSettings)
     .where(eq(systemSettings.tenantId, tenantId))
     .limit(1);
@@ -2727,14 +2862,44 @@ export async function getMemberDepositMonths(
   const fiscalYearStart = isFiscalMonthName(configuredStart) ? configuredStart : 'July';
 
   const months = fiscalMonthKeys(fiscalYear, fiscalYearStart);
+  // The per-member month grid. Under a flexible schedule no month is reserved, so
+  // the guard returns an empty map and the picker greys nothing out — a greyed
+  // month means "the POST would reject this" and for a flexible member that is
+  // never true.
+  const gridSchedule = resolveDepositScheduleDetailed({
+    tenantSchedule: settings?.depositSchedule ?? null,
+    memberDepositFrequency: member.depositFrequency ?? null,
+  });
   const occupancy = await findDepositMonthOccupancyInRange(db, {
     tenantId,
     memberId: member.id,
     depositMonthKeys: months,
+    enforced: gridSchedule.enforced,
   });
+
+  /**
+   * H6 — per-period PROGRESS, and only where it is the correct question.
+   *
+   * A flexible month holds an unbounded number of deposits and reserves none of them, so the
+   * empty occupancy map above leaves the grid with nothing to say about a period the desk is
+   * about to file into. This aggregate answers that instead: how many settled deposits and how
+   * much money the period already holds.
+   *
+   * It is skipped entirely for a monthly schedule rather than run and ignored: the monthly grid
+   * already reports the reserving row's `amount`, and skipping keeps that path issuing exactly
+   * the queries it issued before the second deposit model existed.
+   */
+  const periodProgress: Map<string, DepositPeriodProgress> | null = gridSchedule.enforced
+    ? null
+    : await findDepositPeriodProgressInRange(db, {
+        tenantId,
+        memberId: member.id,
+        depositMonthKeys: months,
+      });
 
   const cells: MemberDepositMonthCell[] = months.map((month) => {
     const occupant = occupancy.get(month) ?? null;
+    const progress = periodProgress?.get(month) ?? null;
     return {
       month,
       occupied: occupant !== null,
@@ -2744,6 +2909,9 @@ export async function getMemberDepositMonths(
       transactionId: occupant?.id ?? null,
       referenceNumber: occupant?.referenceNumber ?? null,
       pendingRequest: String(occupant?.status ?? '').toLowerCase() === 'pending',
+      depositCount: progress?.depositCount ?? null,
+      // Zero money on a zero-count period is reported as "nothing", not "0.00".
+      periodTotal: progress && progress.depositCount > 0 ? progress.totalAmount : null,
     };
   });
 
@@ -2759,6 +2927,13 @@ export async function getMemberDepositMonths(
     },
     fiscalYear: String(fiscalYear),
     fiscalYearStart,
+    /**
+     * Which model produced this grid. The client must not infer it from "is anything locked":
+     * an all-free grid is also what a monthly member at the start of the year looks like, and
+     * labelling that flexible would tell the desk that repeat deposits are welcome.
+     */
+    depositSchedule: gridSchedule.schedule,
+    obligationEnforced: gridSchedule.enforced,
     months: cells,
   };
 }

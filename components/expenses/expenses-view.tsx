@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { formatMoney, formatDateOnly } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { useTenantCurrency } from "@/lib/use-tenant-settings";
 import { translateLedgerDescription } from "@/lib/ledger-description";
 import { usePermissions } from "@/lib/use-permissions";
 import { apiClient } from "@/lib/api-client";
@@ -27,6 +28,7 @@ import {
   Search,
 } from "lucide-react";
 import { ExpenseModal } from "./expense-modal";
+import { ledgerRef } from "@/lib/doc-number";
 
 export interface ExpenseRecord {
   id: string;
@@ -50,6 +52,9 @@ export interface ExpenseRecord {
 
 export function ExpensesView() {
   const { t } = useLocale();
+  // These amounts are the tenant's money, so they carry the tenant's currency. The
+  // literal "BDT" here predates multi-currency tenants and mislabeled every other one.
+  const currency = useTenantCurrency();
   const { can } = usePermissions();
   // Write-gated via the shared evaluator; the POST /api/expenses API
   // enforces the same screen server-side, so this only hides dead buttons.
@@ -143,7 +148,7 @@ export function ExpensesView() {
       sortable: true,
       render: (row) => (
         <span className="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100">
-          {row.referenceNumber || "-"}
+          {ledgerRef(row)}
         </span>
       ),
     },
@@ -184,7 +189,7 @@ export function ExpensesView() {
       sortable: true,
       render: (row) => (
         <span className="font-semibold text-xs text-rose-600 dark:text-rose-400">
-          -{formatMoney(row.amount, "BDT")}
+          -{formatMoney(row.amount, currency)}
         </span>
       ),
     },
@@ -273,21 +278,21 @@ export function ExpensesView() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <ERPMetricCard
           label={t("expenses.cumulativeOutflow")}
-          value={formatMoney(totalExpenseSum, "BDT")}
+          value={formatMoney(totalExpenseSum, currency)}
           icon={<ArrowDownLeft className="w-4 h-4" />}
           tone="rose"
           description="Outflow in current view"
         />
         <ERPMetricCard
           label={t("expenses.categories.operational")}
-          value={formatMoney(operationalTotal, "BDT")}
+          value={formatMoney(operationalTotal, currency)}
           icon={<Building2 className="w-4 h-4" />}
           tone="slate"
           description="Treasury fund deductions"
         />
         <ERPMetricCard
           label="Direct Spending"
-          value={formatMoney(projectTotal, "BDT")}
+          value={formatMoney(projectTotal, currency)}
           icon={<Briefcase className="w-4 h-4" />}
           tone="slate"
           description="Capital expenditure allocations"
@@ -380,7 +385,7 @@ export function ExpensesView() {
       <ExpenseModal
         isOpen={isExpenseModalOpen}
         onClose={() => setIsExpenseModalOpen(false)}
-        currency="BDT"
+        currency={currency}
       />
     </div>
   );

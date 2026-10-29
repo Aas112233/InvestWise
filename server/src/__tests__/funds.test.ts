@@ -17,6 +17,15 @@ describe('Funds Validation & Governance Rules', () => {
     expect(valid.currency).toBe('USD');
   });
 
+  it('leaves an omitted currency unresolved so the service can use the tenant base currency', () => {
+    // A 'BDT' default here stamped every fund of a non-BDT tenant with the
+    // wrong currency, and the funds screen trusts the row's own code.
+    expect(createFundSchema.parse({ name: 'Reserve Fund' }).currency).toBeUndefined();
+    expect(updateFundSchema.parse({ name: 'Renamed Fund' }).currency).toBeUndefined();
+    // Invalid codes are dropped, not rewritten to a hardcoded currency.
+    expect(updateFundSchema.parse({ currency: 'Rial' }).currency).toBeUndefined();
+  });
+
   it('rejects direct balance override in updateFundSchema', () => {
     const parsed = updateFundSchema.parse({
       name: 'Updated Fund',

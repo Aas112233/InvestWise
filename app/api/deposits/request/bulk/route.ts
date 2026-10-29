@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, funds, members, systemSettings } from '@/db/schema/index';
 import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-methods';
-import { DEPOSIT_FUND_REQUIRED_MESSAGE, isDepositFund } from '@/lib/deposit-fund';
+import { DEPOSIT_FUND_REQUIRED_MESSAGE, DEPOSIT_REQUEST_CATEGORY, isDepositFund } from '@/lib/deposit-fund';
+import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import {
   findDepositMonthOccupant,
   findDepositMonthOccupants,
   depositMonthConflictMessage,
 } from '@/lib/deposit-month-limit';
+import { resolveDepositScheduleDetailed } from '@/lib/deposit-schedule/schedule';
 import { and, eq, inArray } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
@@ -16,6 +18,7 @@ import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
 import { toCents, fromCents } from '@/lib/money';
 import crypto from 'node:crypto';
+import { apiError } from '@/lib/utils/api-error';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
 // Batch ceiling — one pending request per row, all inserted in a single
@@ -103,21 +106,9 @@ export async function POST(request: NextRequest) {
       return { memberId, trxId, amount: fromCents(amountCents) };
     });
 
-    // One deposit per member per month (§12) — also WITHIN the batch: the
-    // whole batch shares one effective month, so two rows for the same member
-    // would create two requests for the same month. The in-transaction
-    // re-check below cannot see rows inserted later in the same tx (single
-    // insert statement), so this set is the within-batch guard.
-    const seenBatchMembers = new Set<string>();
-    rows.forEach((r, i) => {
-      if (seenBatchMembers.has(r.memberId)) {
-        throw new ValidationError(
-          `Row ${i + 1}: this member already has a deposit request for ${effectiveMonthKey} in this batch. Only one deposit per member per month is allowed.`,
-        );
-      }
-      seenBatchMembers.add(r.memberId);
-    });
-
+    // The within-batch duplicate guard lives AFTER the member rows are read, so
+    // it can be skipped for flexible members (multiple deposits per month are
+    // legitimate for them). See `seenBatchMembers` below the member lookup.
     const db = getDb();
     const now = new Date();
     // Unique reference per request (same shape as the single route).
@@ -129,19 +120,22 @@ export async function POST(request: NextRequest) {
     // Reference/member/fund lookups are independent — one round-trip group.
     // Members are fetched once for the whole batch (tenant-scoped) and matched
     // locally.
-    const [[fund], [pmSettings], memberRows, monthOccupants] = await Promise.all([
+    const [[fund], [pmSettings], memberRows] = await Promise.all([
       db
         .select()
         .from(funds)
         .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)))
         .limit(1),
       db
-        .select({ paymentMethods: systemSettings.paymentMethods })
+        .select({
+          paymentMethods: systemSettings.paymentMethods,
+          depositSchedule: systemSettings.depositSchedule,
+        })
         .from(systemSettings)
         .where(eq(systemSettings.tenantId, scopedTenantId))
         .limit(1),
       db
-        .select({ id: members.id, status: members.status, name: members.name })
+        .select({ id: members.id, status: members.status, name: members.name, depositFrequency: members.depositFrequency })
         .from(members)
         .where(
           and(
@@ -149,16 +143,9 @@ export async function POST(request: NextRequest) {
             eq(members.tenantId, scopedTenantId),
           ),
         ),
-      // One deposit per member per month (§12): any member in the batch who
-      // already occupies the effective month (settled deposit or pending
-      // request) fails the whole batch. Fast-path only — the authoritative
-      // re-check runs inside the insert transaction below, under the member
-      // row locks, so concurrent batches can never both book a month.
-      findDepositMonthOccupants(db, {
-        tenantId: scopedTenantId,
-        memberIds: [...new Set(prepared.map((r) => r.memberId))],
-        depositMonthKey: effectiveMonthKey,
-      }),
+      // The month-occupancy check is per-member and needs the member rows, so it
+      // runs below rather than in this group. It was only ever a fast path — the
+      // authoritative check is the in-transaction one, under the member locks.
     ]);
 
     if (!fund) {
@@ -184,9 +171,46 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // One deposit per member per month (§12): fail the batch naming the first
-    // offending row — approving any of these requests would double-count the
-    // member's contribution for the month.
+    /**
+     * Per-member schedule. A batch can MIX monthly and flexible members (tenant
+     * default plus a member-level cadence), so enforcement is partitioned per
+     * member rather than applied to the batch as a whole: a flexible member must
+     * not inherit a monthly restriction, and a monthly member must not inherit a
+     * flexible exemption.
+     */
+    const distinctMemberIds = [...new Set(prepared.map((r) => r.memberId))];
+    const enforcedSet = new Set(
+      distinctMemberIds.filter((id) => resolveDepositScheduleDetailed({
+        tenantSchedule: pmSettings?.depositSchedule ?? null,
+        memberDepositFrequency: memberById.get(id)?.depositFrequency ?? null,
+      }).enforced),
+    );
+
+    // Within-batch guard (§12), MONTHLY members only: the whole batch shares one
+    // effective month, so two rows for the same member would create two requests
+    // for that month. The in-transaction re-check cannot see rows inserted later
+    // in the same tx (one insert statement), so this set is the only guard.
+    const seenBatchMembers = new Set<string>();
+    rows.forEach((r, i) => {
+      if (!enforcedSet.has(r.memberId)) return;
+      if (seenBatchMembers.has(r.memberId)) {
+        throw new ValidationError(
+          `Row ${i + 1}: this member already has a deposit request for ${effectiveMonthKey} in this batch. Only one deposit per member per month is allowed.`,
+        );
+      }
+      seenBatchMembers.add(r.memberId);
+    });
+
+    // One deposit per member per month (§12), MONTHLY members only: fail the batch
+    // naming the first offending row — approving any of these requests would
+    // double-count the member's contribution for the month.
+    const monthOccupants = enforcedSet.size === 0
+      ? []
+      : await findDepositMonthOccupants(db, {
+          tenantId: scopedTenantId,
+          memberIds: [...enforcedSet],
+          depositMonthKey: effectiveMonthKey,
+        });
     const occupantByMember = new Map(monthOccupants.map((o) => [o.memberId, o]));
     rows.forEach((r, i) => {
       const occupant = occupantByMember.get(r.memberId);
@@ -226,18 +250,22 @@ export async function POST(request: NextRequest) {
       // same members serialize, then re-check each member's month under the
       // locks (the outer fast-path races). The within-batch duplicate set
       // above covers rows this tx cannot yet see.
-      const distinctMemberIds = [...new Set(prepared.map((r) => r.memberId))];
       await tx
         .select({ id: members.id })
         .from(members)
         .where(and(inArray(members.id, distinctMemberIds), eq(members.tenantId, scopedTenantId)))
         .for('update');
 
-      const occupants = await findDepositMonthOccupants(tx, {
-        tenantId: scopedTenantId,
-        memberIds: distinctMemberIds,
-        depositMonthKey: effectiveMonthKey,
-      });
+      // Authoritative re-check under the member locks — MONTHLY members only.
+      // Flexible members reserve no month, so they are excluded from the query
+      // entirely rather than relying on the guard to forgive them.
+      const occupants = enforcedSet.size === 0
+        ? []
+        : await findDepositMonthOccupants(tx, {
+            tenantId: scopedTenantId,
+            memberIds: [...enforcedSet],
+            depositMonthKey: effectiveMonthKey,
+          });
       if (occupants.length > 0) {
         const occupantByMember = new Map(occupants.map((o) => [o.memberId, o]));
         for (const [i, r] of prepared.entries()) {
@@ -248,6 +276,14 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Same guard as the single-request route: a bulk batch filed against a
+      // closed fiscal year used to be accepted and then refused row-by-row at
+      // approval, so an entire spreadsheet of proof could sit in the queue for
+      // days before anyone found out none of it could ever be posted. Asserted
+      // inside the transaction, on the 15th at midday so no tenant timezone can
+      // roll it into a neighbouring month.
+      await assertFiscalPeriodOpen(tx, scopedTenantId, new Date(`${effectiveMonthKey}-15T12:00:00`));
+
       await tx.insert(transactions).values(
         prepared.map((r) => ({
           tenantId: scopedTenantId,
@@ -256,7 +292,7 @@ export async function POST(request: NextRequest) {
           // TRX id + proof travel in `notes`, same as the single request route
           // (the request contract carries no dedicated proof fields).
           description: `TRX ID: ${r.trxId}`,
-          category: 'Deposit Request',
+          category: DEPOSIT_REQUEST_CATEGORY,
           referenceNumber: r.referenceNumber,
           date: now,
           status: 'PENDING',
@@ -309,9 +345,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[DEPOSIT REQUEST BULK ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to submit deposit requests' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to submit deposit requests');
   }
 }

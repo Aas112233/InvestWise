@@ -8,6 +8,7 @@ import { AuthError, ForbiddenError } from '@/lib/utils/errors';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { formatPaginatedResponse } from '@/lib/utils/types';
+import { escapeLikePattern } from '@/lib/utils/validation';
 
 const MAX_LIMIT = 100;
 const SORTABLE: Record<string, PgColumn> = {
@@ -108,7 +109,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(rows.map(toUserResponse));
     }
 
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    // page is clamped so `page=1000000` cannot force an unbounded OFFSET
+    // walk (Postgres still visits and discards every skipped row).
+    const page = Math.min(1000, Math.max(1, parseInt(searchParams.get('page') || '1', 10)));
     const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
     const search = (searchParams.get('search') || '').trim();
     const status = (searchParams.get('status') || '').trim();
@@ -120,7 +123,7 @@ export async function GET(request: NextRequest) {
     const filters: SQL[] = [];
     if (scope) filters.push(scope);
     if (search) {
-      filters.push(or(ilike(users.name, `%${search}%`), ilike(users.email, `%${search}%`))!);
+      filters.push(or(ilike(users.name, `%${escapeLikePattern(search)}%`), ilike(users.email, `%${escapeLikePattern(search)}%`))!);
     }
     if (status) filters.push(eq(users.status, status));
     if (role) filters.push(eq(users.role, role));

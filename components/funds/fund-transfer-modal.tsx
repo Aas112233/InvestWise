@@ -12,7 +12,7 @@ import { ERPDatePicker } from "@/components/ui/erp-date-picker";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { formatMoney, todayLocalIso } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
-import { useTenantCurrency } from "@/components/deposits/shared";
+import { useTenantCurrency, useTenantDateFormat } from "@/components/deposits/shared";
 import type { FundRow } from "./shared";
 
 const AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
@@ -41,6 +41,7 @@ export function FundTransferModal({
   const { t } = useLocale();
   const queryClient = useQueryClient();
   const currency = useTenantCurrency();
+  const dateFormat = useTenantDateFormat();
 
   const [sourceId, setSourceId] = useState<string | null>(presetSourceId ?? null);
   const [destId, setDestId] = useState<string | null>(null);
@@ -184,6 +185,7 @@ export function FundTransferModal({
               <ERPDatePicker
                 value={transferDate}
                 onChange={setTransferDate}
+                displayFormat={dateFormat}
                 max={todayLocalIso()}
                 placeholder={t("erp.datePicker.placeholder")}
               />

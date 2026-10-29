@@ -1,0 +1,74 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.12 [39m[90mD:/my project/Investwise_app_source_code/investwise_web_app[39m
+
+ [32m✓[39m __tests__/fiscal-period-pickers.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m lib/governance/status-rules.test.ts [2m([22m[2m49 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32m✓[39m lib/utils/errors.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 54[2mms[22m[39m
+ [32m✓[39m lib/money.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 84[2mms[22m[39m
+ [32m✓[39m lib/tenant-time.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 47[2mms[22m[39m
+ [32m✓[39m __tests__/middleware.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 571[2mms[22m[39m
+     [33m[2m✓[22m[39m production: script-src carries a 32-byte nonce + strict-dynamic, no unsafe-inline [33m 525[2mms[22m[39m
+ [32m✓[39m lib/api-client.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 50[2mms[22m[39m
+ [32m✓[39m lib/deposit-excel.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 908[2mms[22m[39m
+     [33m[2m✓[22m[39m round-trips with amounts prefilled as shares x share value [33m 491[2mms[22m[39m
+ [32m✓[39m lib/ledger-description.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m lib/shares.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m lib/settings-api.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m lib/org-setup.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m lib/deposit-schedule/approval-threshold.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m lib/member-schema.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m lib/fiscal-period-options.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m lib/deposit-schedule/schedule.test.ts [2m([22m[2m37 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m __tests__/deposit-schedule-exemptions.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m __tests__/subscription-patch.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m lib/payout-schedule.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m lib/governance/status-rules.characterisation.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m lib/use-permissions.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m lib/reports/catalog.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m lib/deposit-edit-delta.test.ts [2m([22m[2m29 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m __tests__/schema-parity.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m __tests__/fiscal-year-selector.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m lib/member-roles.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m lib/ledger-type-vocabulary.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m __tests__/deposit-month-limit.characterisation.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m lib/fiscal-periods.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m server/src/__tests__/funds.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m lib/request-hardening.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 41[2mms[22m[39m
+ [32m✓[39m __tests__/deleted-transactions-module.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m lib/numeric-input.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+stderr | lib/signup-hardening.test.ts > bot protection posture > treats an unreachable provider as a denial, not a pass
+[TURNSTILE] verification request failed: Error
+
+ [32m✓[39m lib/signup-hardening.test.ts [2m([22m[2m26 tests[22m[2m)[22m[32m 68[2mms[22m[39m
+ [32m✓[39m server/src/__tests__/dividend-engine.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m sqlcap.test.mts [2m([22m[2m1 test[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m server/src/__tests__/features.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m __tests__/bulk-single-member-months.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 35[2mms[22m[39m
+ [32m✓[39m server/src/__tests__/governance.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m lib/member-privacy.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m __tests__/dividend-single-path.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m lib/formatters.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m components/layout/navigation.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m lib/amount-in-words.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m lib/session-limits.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m server/src/__tests__/members-correlated-subquery.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m server/src/__tests__/health.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m server/src/__tests__/money-schema-coercion.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m lib/deposit-duplicate-advisory.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m server/src/__tests__/bulk-deposit-idempotency.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m __tests__/deposit-month-attribution.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 53[2mms[22m[39m
+ [32m✓[39m __tests__/deposit-month-limit.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m lib/reports/reports.test.ts [2m([22m[2m35 tests[22m[2m)[22m[33m 2458[2mms[22m[39m
+     [33m[2m✓[22m[39m builds a real xlsx workbook buffer [33m 714[2mms[22m[39m
+     [33m[2m✓[22m[39m builds a real PDF for every locale (embedded fonts load from disk) [33m 608[2mms[22m[39m
+     [33m[2m✓[22m[39m books real inflows as credits and real outflows as debits [33m 657[2mms[22m[39m
+ [32m✓[39m lib/transaction-reversal.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m lib/account-lock.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m lib/multitenant.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m server/src/__tests__/pagination-limits.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m57 passed[39m[22m[90m (57)[39m
+[2m      Tests [22m [1m[32m669 passed[39m[22m[90m (669)[39m
+[2m   Start at [22m 18:37:39
+[2m   Duration [22m 4.19s[2m (transform 11.03s, setup 0ms, import 30.91s, tests 5.06s, environment 13ms)[22m
+

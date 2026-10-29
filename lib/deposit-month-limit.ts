@@ -47,6 +47,27 @@ export interface DepositMonthOccupant {
   referenceNumber: string | null;
 }
 
+/**
+ * Schedule input for the duplicate-month rule.
+ *
+ * `enforced` is OPTIONAL and defaults to true, so every pre-existing caller keeps the monthly
+ * behaviour without change. Pass `enforced: false` — from
+ * `isDepositObligationEnforced()` in `lib/deposit-schedule/schedule.ts` — only for a flexible
+ * member, for whom repeated deposits in one period are legitimate.
+ *
+ * The branch lives HERE rather than at the 8 call sites on purpose: a missed call site under
+ * the old layout meant double-counted member contribution and fund balance, which is the exact
+ * incident this file was written to prevent. Callers cannot forget a check they never had to
+ * write, and the monthly predicate stays byte-identical (guarded by
+ * `__tests__/deposit-month-limit.characterisation.test.ts`).
+ */
+export interface DepositMonthScheduleInput {
+  enforced?: boolean;
+}
+
+/** An always-false predicate: nothing occupies any month on a flexible schedule. */
+const NOTHING_OCCUPIED = sql`false`;
+
 type DbLike = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
 
 /**
@@ -77,11 +98,19 @@ const OCCUPANT_FIELDS = {
 const DEPOSIT_MONTH_KEY_EXPR = sql<string>`COALESCE(${transactions.depositMonth}, to_char(${transactions.date} AT TIME ZONE 'UTC', 'YYYY-MM'))`;
 
 /**
+ * Settled money. Written as a raw `sql` template, so this vocabulary is INLINE TEXT in the
+ * rendered statement rather than a bind parameter — which is exactly why
+ * `__tests__/deposit-month-limit.characterisation.test.ts` pins it as golden SQL. Named once so
+ * the occupancy rule and the period-progress read cannot drift apart on status meaning.
+ */
+const SETTLED_STATUS_CONDITION = sql`${transactions.status} IN ('Completed', 'Success')`;
+
+/**
  * Settled money, or a pending request-style row. A reverted direct deposit
  * (category 'Deposit' + PENDING) freed its month and must not block; REJECTED
  * rows are neither settled nor pending.
  */
-const OCCUPYING_STATUS_CONDITION = sql`(${transactions.status} IN ('Completed', 'Success') OR (lower(COALESCE(${transactions.status}, '')) = 'pending' AND COALESCE(${transactions.category}, '') <> 'Deposit'))`;
+const OCCUPYING_STATUS_CONDITION = sql`(${SETTLED_STATUS_CONDITION} OR (lower(COALESCE(${transactions.status}, '')) = 'pending' AND COALESCE(${transactions.category}, '') <> 'Deposit'))`;
 
 /**
  * The shared month-occupancy predicate. Kept as a condition builder (not a
@@ -93,7 +122,8 @@ export function depositMonthOccupiedCondition(args: {
   memberId: string;
   depositMonthKey: string;
   excludeId?: string | null;
-}): SQL {
+} & DepositMonthScheduleInput): SQL {
+  if (args.enforced === false) return NOTHING_OCCUPIED as SQL;
   const conditions: SQL[] = [
     eq(transactions.tenantId, args.tenantId),
     eq(transactions.memberId, args.memberId),
@@ -113,7 +143,8 @@ export function depositMonthOccupiedBatchCondition(args: {
   tenantId: string;
   memberIds: string[];
   depositMonthKey: string;
-}): SQL {
+} & DepositMonthScheduleInput): SQL {
+  if (args.enforced === false) return NOTHING_OCCUPIED as SQL;
   return and(
     eq(transactions.tenantId, args.tenantId),
     inArray(transactions.memberId, args.memberIds),
@@ -134,8 +165,9 @@ export function depositMonthsOccupiedCondition(args: {
   tenantId: string;
   memberId: string;
   depositMonthKeys: string[];
-}): SQL | null {
+} & DepositMonthScheduleInput): SQL | null {
   if (args.depositMonthKeys.length === 0) return null;
+  if (args.enforced === false) return NOTHING_OCCUPIED as SQL;
   return and(
     eq(transactions.tenantId, args.tenantId),
     eq(transactions.memberId, args.memberId),
@@ -149,8 +181,10 @@ export function depositMonthsOccupiedCondition(args: {
 /** Find the row that already occupies this member's month, if any. */
 export async function findDepositMonthOccupant(
   db: unknown,
-  args: { tenantId: string; memberId: string; depositMonthKey: string; excludeId?: string | null },
+  args: { tenantId: string; memberId: string; depositMonthKey: string; excludeId?: string | null } & DepositMonthScheduleInput,
 ): Promise<DepositMonthOccupant | null> {
+  // Flexible: no month is taken. Return before a pointless round trip.
+  if (args.enforced === false) return null;
   const [row] = await asQueryable(db)
     .select(OCCUPANT_FIELDS)
     .from(transactions)
@@ -162,8 +196,9 @@ export async function findDepositMonthOccupant(
 /** Batch finder: every occupant for the given members in one month. */
 export async function findDepositMonthOccupants(
   db: unknown,
-  args: { tenantId: string; memberIds: string[]; depositMonthKey: string },
+  args: { tenantId: string; memberIds: string[]; depositMonthKey: string } & DepositMonthScheduleInput,
 ): Promise<DepositMonthOccupant[]> {
+  if (args.enforced === false) return [];
   if (args.memberIds.length === 0) return [];
   return asQueryable(db)
     .select(OCCUPANT_FIELDS)
@@ -185,14 +220,31 @@ export interface DepositMonthOccupancy extends DepositMonthOccupant {
  * enforces, so a month the grid greys out is exactly a month the bulk POST
  * would reject — the desk never selects a month and then eats a 409.
  */
+/**
+ * Flexible note: with `enforced: false` this returns an EMPTY map, which is what makes the
+ * deposit month picker stop greying months out (nothing is reserved). It deliberately does NOT
+ * return per-period totals — "which months are taken" is not a meaningful question under a
+ * flexible schedule, and a one-row-per-month map would silently under-report periods holding
+ * several deposits. Period *progress* (count and total per period) is the separate read below,
+ * {@link findDepositPeriodProgressInRange}; see docs/DEPOSIT_SCHEDULE_DESIGN.md §7 H6.
+ */
 export async function findDepositMonthOccupancyInRange(
   db: unknown,
-  args: { tenantId: string; memberId: string; depositMonthKeys: string[] },
+  args: { tenantId: string; memberId: string; depositMonthKeys: string[] } & DepositMonthScheduleInput,
 ): Promise<Map<string, DepositMonthOccupancy>> {
   const occupancy = new Map<string, DepositMonthOccupancy>();
+  if (args.enforced === false) return occupancy;
   const condition = depositMonthsOccupiedCondition(args);
   if (!condition) return occupancy;
 
+  // No LIMIT. The month set is already bounded by the OR of at most twelve
+  // equalities, but a member can hold MORE rows than months (a settled deposit
+  // plus a legacy/duplicate row for the same month, revert→re-approve trails).
+  // A `.limit(months.length)` silently truncated those surplus rows and the
+  // grid then reported a genuinely taken month as free — while the write path,
+  // which checks one month with `.limit(1)`, correctly rejected it. That split
+  // is what made the deposit form offer 2026-12 for a member who already held
+  // it. Extra rows only shuffle which occupant wins below, never the keys.
   const rows = await asQueryable(db)
     .select({
       ...OCCUPANT_FIELDS,
@@ -200,8 +252,7 @@ export async function findDepositMonthOccupancyInRange(
       depositMonthKey: DEPOSIT_MONTH_KEY_EXPR,
     })
     .from(transactions)
-    .where(condition)
-    .limit(args.depositMonthKeys.length);
+    .where(condition);
 
   for (const row of rows) {
     // A settled row wins over a pending one for the same month; the write
@@ -234,4 +285,83 @@ export function depositMonthConflictMessage(
     ? 'Approve or reject the pending request first'
     : 'Revert the recorded deposit first';
   return `[Field 'depositMonth', Code: DUPLICATE_MONTH] This member already has a deposit for ${depositMonthKey}. Only one deposit per member per month is allowed — ${next} if this entry should replace it.`;
+}
+
+// ---------------------------------------------------------------------------
+// Per-period PROGRESS (H6) — a read, never a rule
+// ---------------------------------------------------------------------------
+
+/** How much has actually landed in one period, regardless of schedule. */
+export interface DepositPeriodProgress {
+  /** Settled deposits attributed to the period. Under monthly this is 0 or 1; under flexible it is however many were filed. */
+  depositCount: number;
+  /** Their sum as a decimal(15,2) string — never a float (§8). */
+  totalAmount: string;
+}
+
+/**
+ * Count and total of SETTLED deposits per period for one member.
+ *
+ * Deliberately NOT gated by `enforced` and deliberately NOT built from the occupancy
+ * predicate: "is this month taken" is a monthly-only question, but "what has this member
+ * already paid into this period" is always true and is exactly what a flexible grid needs to
+ * show instead of a lock. Reusing the one-row-per-month occupancy map here would silently
+ * report 1 deposit for a period holding 5 (docs/DEPOSIT_SCHEDULE_DESIGN.md §7 H6), so this is
+ * a separate aggregate that can never disagree with the ledger.
+ *
+ * Settled money only (`SETTLED_STATUS_CONDITION`) — a pending request is not money yet, and
+ * counting it would make the flexible grid disagree with the fund balance beside it.
+ */
+export function depositPeriodProgressCondition(args: {
+  tenantId: string;
+  memberId: string;
+  depositMonthKeys: string[];
+}): SQL | null {
+  if (args.depositMonthKeys.length === 0) return null;
+  // NO `enforced` parameter, on purpose. Progress is a measurement, not a restriction: gating it
+  // would recreate H6, where a flexible period silently reports one deposit for any number.
+  return and(
+    eq(transactions.tenantId, args.tenantId),
+    eq(transactions.memberId, args.memberId),
+    eq(transactions.type, 'Deposit'),
+    eq(transactions.isDeleted, false),
+    SETTLED_STATUS_CONDITION,
+    or(...args.depositMonthKeys.map((key) => sql`${DEPOSIT_MONTH_KEY_EXPR} = ${key}`)),
+  ) as SQL;
+}
+
+/** The SELECT list of {@link findDepositPeriodProgressInRange}, exported so its SQL can be pinned. */
+export const DEPOSIT_PERIOD_PROGRESS_FIELDS = {
+  depositMonthKey: DEPOSIT_MONTH_KEY_EXPR,
+  depositCount: sql<number>`count(*)::int`,
+  totalAmount: sql<string>`coalesce(sum(${transactions.amount}), 0)`,
+} as const;
+
+export async function findDepositPeriodProgressInRange(
+  db: unknown,
+  args: { tenantId: string; memberId: string; depositMonthKeys: string[] },
+): Promise<Map<string, DepositPeriodProgress>> {
+  const progress = new Map<string, DepositPeriodProgress>();
+  // Same rule as the occupancy finder: an empty month set must never degrade into "every
+  // period this member has ever paid into".
+  if (args.depositMonthKeys.length === 0) return progress;
+  const condition = depositPeriodProgressCondition(args);
+  if (!condition) return progress;
+
+  // No LIMIT: this counts rows, so truncating one period would understate both the count and the
+  // total. Tenant-scoped and soft-delete-filtered (§6, §12), and the month key expression is the
+  // SAME one the list filter and the write guard use, so grid, ledger and rule cannot drift.
+  const rows = await asQueryable(db)
+    .select(DEPOSIT_PERIOD_PROGRESS_FIELDS)
+    .from(transactions)
+    .where(condition)
+    .groupBy(DEPOSIT_MONTH_KEY_EXPR);
+
+  for (const row of rows) {
+    progress.set(row.depositMonthKey, {
+      depositCount: Number(row.depositCount ?? 0),
+      totalAmount: row.totalAmount ?? '0.00',
+    });
+  }
+  return progress;
 }

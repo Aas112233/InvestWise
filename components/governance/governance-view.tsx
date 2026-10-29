@@ -289,7 +289,13 @@ export function GovernanceView({
       key: "grade",
       header: t("governance.columns.grade", { defaultValue: "GRADE" }),
       render: (l) => (
-        <StatusBadge tone={mapGradeTone(l.grade)} label={l.grade} />
+        l.grade ? (
+          <StatusBadge tone={mapGradeTone(l.grade)} label={l.grade} />
+        ) : (
+          // Unrated, not zero-rated. A member with no score yet must not be shown
+          // as a failing grade.
+          <span className="font-mono text-xs text-slate-400 dark:text-slate-500">—</span>
+        )
       ),
     },
     {
@@ -299,7 +305,7 @@ export function GovernanceView({
       sortable: true,
       render: (l) => (
         <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
-          {l.performanceScore}%
+          {l.performanceScore === null ? "—" : `${l.performanceScore}%`}
         </span>
       ),
     },

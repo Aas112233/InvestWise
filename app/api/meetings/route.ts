@@ -1,11 +1,13 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { meetings, users } from '@/db/schema/index';
 import { eq, and, desc, sql, ilike } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
-import { normalizeRole } from '@/lib/roles';
+import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
+import { escapeLikePattern } from '@/lib/utils/validation';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +21,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     // Clamp pagination at the boundary — an unbounded `limit` returns every
     // meeting plus its count in one response.
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const page = Math.min(1000, Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)); // page bounded: a huge `page` is an OFFSET walk Postgres still does
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const skip = (page - 1) * limit;
     const status = searchParams.get('status');
@@ -38,7 +40,7 @@ export async function GET(request: NextRequest) {
       conditions.push(sql`${meetings.meetingType} = ${meetingType}`);
     }
     if (search) {
-      conditions.push(sql`(${meetings.title} ILIKE ${'%' + search + '%'} OR ${meetings.location} ILIKE ${'%' + search + '%'})`);
+      conditions.push(sql`(${meetings.title} ILIKE ${'%' + escapeLikePattern(search) + '%'} OR ${meetings.location} ILIKE ${'%' + escapeLikePattern(search) + '%'})`);
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -86,10 +88,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[MEETINGS GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch meetings' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to fetch meetings');
   }
 }
 
@@ -101,8 +100,8 @@ export async function POST(request: NextRequest) {
     }
     if (!tenantId) throw new ForbiddenError('Tenant context required');
 
-    if (normalizeRole(user.role) === 'Member') {
-      throw new ForbiddenError('Insufficient permissions to schedule meetings');
+    if (!hasScreenPermission(user, 'MEETINGS', 'WRITE')) {
+      throw new ForbiddenError('Write permission required for: MEETINGS');
     }
 
     const body = await readJsonBody(request);
@@ -110,6 +109,27 @@ export async function POST(request: NextRequest) {
 
     if (!title || !meetingDate || !meetingType) {
       throw new ValidationError('title, meetingDate, and meetingType are required');
+    }
+    // Bounded shapes (audit 07 L-11): these columns are unbounded text, so
+    // without caps a single request can park arbitrarily large payloads.
+    if (typeof title !== 'string' || title.trim().length === 0 || title.trim().length > 200) {
+      throw new ValidationError('title must be a string of 1-200 characters');
+    }
+    if (typeof meetingType !== 'string' || meetingType.trim().length === 0 || meetingType.length > 100) {
+      throw new ValidationError('meetingType must be a string of 1-100 characters');
+    }
+    if (location != null && (typeof location !== 'string' || location.length > 200)) {
+      throw new ValidationError('location must be a string of at most 200 characters');
+    }
+    if (agenda != null && (typeof agenda !== 'string' || agenda.length > 10000)) {
+      throw new ValidationError('agenda must be a string of at most 10000 characters');
+    }
+    if (notes != null && (typeof notes !== 'string' || notes.length > 10000)) {
+      throw new ValidationError('notes must be a string of at most 10000 characters');
+    }
+    const parsedDate = new Date(meetingDate);
+    if (Number.isNaN(parsedDate.getTime())) {
+      throw new ValidationError('meetingDate must be a valid date');
     }
 
     const db = getDb();
@@ -119,7 +139,7 @@ export async function POST(request: NextRequest) {
       .values({
         tenantId,
         title: title.trim(),
-        meetingDate: new Date(meetingDate),
+        meetingDate: parsedDate,
         meetingType: meetingType.trim(),
         location: location ? location.trim() : 'HQ / Online',
         agenda: agenda ? agenda.trim() : null,
@@ -148,9 +168,6 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   } catch (err: any) {
     console.error('[MEETINGS POST ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to schedule meeting' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to schedule meeting');
   }
 }

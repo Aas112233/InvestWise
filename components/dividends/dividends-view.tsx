@@ -29,6 +29,7 @@ import {
   Search,
 } from "lucide-react";
 import { DividendDistributionModal } from "./dividend-distribution-modal";
+import { ledgerRef } from "@/lib/doc-number";
 
 export interface DividendRecord {
   id: string;
@@ -135,7 +136,7 @@ export function DividendsView() {
       sortable: true,
       render: (row) => (
         <span className="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100">
-          {row.referenceNumber || "-"}
+          {ledgerRef(row)}
         </span>
       ),
     },

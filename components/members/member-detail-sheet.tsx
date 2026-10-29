@@ -13,6 +13,7 @@ import { memberDisplayName } from "@/lib/member-display";
 import { memberStatusReasonKey } from "@/lib/member-status-reason";
 import { useTenantCurrency, useTenantDateFormat } from "@/lib/use-tenant-settings";
 import type { Member } from "@/types";
+import { hasLedgerRef, ledgerRef } from "@/lib/doc-number";
 
 interface MemberDeposit {
   id: string;
@@ -217,8 +218,8 @@ export function MemberDetailSheet({
                       <tr key={d.id} className="hover:bg-muted/30">
                         <td className="px-3 py-2 font-mono text-muted-foreground">
                           {formatDatePattern(d.date, dateFormat)}
-                          {d.referenceNumber && (
-                            <span className="block text-[10px] text-muted-foreground">{d.referenceNumber}</span>
+                          {hasLedgerRef(d) && (
+                            <span className="block text-[10px] text-muted-foreground">{ledgerRef(d)}</span>
                           )}
                         </td>
                         <td className="px-3 py-2 font-mono font-medium text-foreground">{formatMoney(d.amount, currency)}</td>

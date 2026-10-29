@@ -4,6 +4,7 @@ import { transactions, members, funds, users } from '@/db/schema/index';
 import { memberDisplayNameSql } from '@/lib/member-display';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { requireProjectContext } from '../../_helpers';
+import { apiError } from '@/lib/utils/api-error';
 
 export async function GET(
   request: NextRequest,
@@ -21,6 +22,7 @@ export async function GET(
       .select({
         id: transactions.id,
         referenceNumber: transactions.referenceNumber,
+        docNumber: transactions.docNumber,
         date: transactions.date,
         type: transactions.type,
         category: transactions.category,
@@ -54,9 +56,6 @@ export async function GET(
   } catch (err: unknown) {
     console.error('[PROJECT TRANSACTIONS ERROR]', err);
     const e = err as { message?: string; statusCode?: number };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to fetch project transactions' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to fetch project transactions');
   }
 }

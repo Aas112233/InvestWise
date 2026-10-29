@@ -8,6 +8,15 @@ export interface FiscalMonthOption {
   /** Stable option value. Keep as string on the wire. */
   value: string;
   label: string;
+  /**
+   * Months a caller must not offer (e.g. a member already holds a deposit for
+   * it). Passed through to the dropdown verbatim — a picker that rebuilt the
+   * option from `value`/`label` alone would silently drop it and leave an
+   * occupied month selectable.
+   */
+  disabled?: boolean;
+  /** Secondary line under the label (e.g. "already deposited · 5,000.00"). */
+  caption?: string;
 }
 
 export interface FiscalMonthValue {
@@ -56,7 +65,9 @@ export function ERPFiscalMonthPicker({
   const { t } = useLocale();
 
   const yearOptions: DropdownOption[] = fiscalYears.map((fy) => ({ value: fy.value, label: fy.label }));
-  const monthOptions: DropdownOption[] = months.map((m) => ({ value: m.value, label: m.label }));
+  // Pass each month through as given: callers mark occupied months `disabled`
+  // (and caption why), and rebuilding the option here would strip that flag.
+  const monthOptions: DropdownOption[] = months;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

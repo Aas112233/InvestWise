@@ -15,6 +15,7 @@ import { useFormatDateOnly, useFormatMoney } from "@/lib/use-tenant-settings";
 import { useLocale } from "@/lib/i18n";
 import { translateLedgerDescription } from "@/lib/ledger-description";
 import { getTransactionTypeLabel, getTransactionStatusLabel, getTransactionStatusTone } from "./shared";
+import { ledgerRef } from "@/lib/doc-number";
 
 export interface TransactionRecord {
   id: string;
@@ -99,7 +100,7 @@ export function TransactionsListView({
       header: t("transactions.refHeader", { defaultValue: "Ref Number" }),
       render: (row) => (
         <span className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">
-          {row.referenceNumber || row.id.slice(0, 8)}
+          {ledgerRef(row)}
         </span>
       ),
     },

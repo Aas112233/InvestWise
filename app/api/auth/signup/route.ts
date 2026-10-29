@@ -11,9 +11,11 @@ import {
   DATE_FORMATS,
   DEFAULT_CURRENCY,
   DEFAULT_DATE_FORMAT,
+  DEFAULT_DEPOSIT_SCHEDULE,
   DEFAULT_FISCAL_YEAR_END,
   DEFAULT_FISCAL_YEAR_START,
   DEFAULT_SHARE_VALUE,
+  DEPOSIT_SCHEDULE_VALUES,
   FISCAL_MONTHS,
 } from '@/lib/org-setup';
 import { provisionTenant } from '@/lib/tenant-provision';
@@ -74,6 +76,11 @@ const signupSchema = z.object({
   dateFormat: oneOf(DATE_FORMATS, 'dateFormat').default(DEFAULT_DATE_FORMAT),
   fiscalYearStart: oneOf(FISCAL_MONTHS.map((m) => m.full), 'fiscalYearStart').default(DEFAULT_FISCAL_YEAR_START),
   fiscalYearEnd: oneOf(FISCAL_MONTHS.map((m) => m.full), 'fiscalYearEnd').default(DEFAULT_FISCAL_YEAR_END),
+  // Optional on the wire like every other onboarding default, so an older client or another
+  // provisioner still gets monthly. The signup FORM, by contrast, requires an explicit choice
+  // (AGENTS.md §15) because this one value decides whether the month rule and deposit governance
+  // ever apply to the organisation.
+  depositSchedule: oneOf([...DEPOSIT_SCHEDULE_VALUES], 'depositSchedule').default(DEFAULT_DEPOSIT_SCHEDULE),
   // Optional extra funds named at signup. Bounded here for an early, field-level
   // 400; lib/org-setup.normalizeExtraFunds is the authoritative guard so any
   // caller (not just this route) cannot skip it. Money is never client-set.
@@ -264,6 +271,7 @@ export async function POST(request: NextRequest) {
       dateFormat,
       fiscalYearStart,
       fiscalYearEnd,
+      depositSchedule,
       funds,
     } = parsed.data;
 
@@ -325,7 +333,7 @@ export async function POST(request: NextRequest) {
       // Financial configuration for the tenant's system_settings row. The
       // currency shown here wins over platform_settings.default_currency, which
       // is only the fallback for clients that do not ask.
-      financial: { baseCurrency, shareValue, dateFormat, fiscalYearStart, fiscalYearEnd },
+      financial: { baseCurrency, shareValue, dateFormat, fiscalYearStart, fiscalYearEnd, depositSchedule },
       // Extra funds the owner named at signup, added on top of the standard
       // seeded set. Validated and account-numbered server-side in provisioning.
       funds,

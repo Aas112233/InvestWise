@@ -6,6 +6,7 @@ import { hasScreenPermission } from '@/lib/permissions';
 import { ForbiddenError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { createPayoutPlan, listPayoutPlans } from '@/lib/member-payouts';
 import { MAX_PAYOUT_INSTALLMENTS, MAX_PAYOUT_INTERVAL_MONTHS } from '@/lib/payout-schedule';
+import { apiError } from '@/lib/utils/api-error';
 
 // Payouts are member exit settlements — a cash handover, not a dividend run.
 // They get their own PAYOUTS screen grant so a treasurer can be allowed to
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const page = Math.min(1000, Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)); // page bounded: a huge `page` is an OFFSET walk Postgres still does
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
 
     const result = await listPayoutPlans({
@@ -60,10 +61,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[PAYOUTS LIST ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch payout plans', code: err.code ?? 'PAYOUTS_LIST_FAILED' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to fetch payout plans');
   }
 }
 
@@ -101,9 +99,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: result }, { status: 201 });
   } catch (err: any) {
     console.error('[PAYOUTS CREATE ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to create payout plan', code: err.code ?? 'PAYOUT_CREATE_FAILED' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to create payout plan');
   }
 }

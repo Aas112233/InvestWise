@@ -4,10 +4,13 @@ import { memberPenalties, members, meetings, systemSettings, funds, DEFAULT_PENA
 import { memberDisplayNameSql } from '@/lib/member-display';
 import { eq, and, desc, sql, ilike } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
-import { normalizeRole } from '@/lib/roles';
+import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { getPaginationParams, formatPaginatedResponse } from '@/lib/utils/types';
 import { AppError, NotFoundError, ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
+import { toCents, fromCents, roundToCents, parsePositiveAmount, MoneyError } from '@/lib/money';
+import { apiError } from '@/lib/utils/api-error';
+import { escapeLikePattern } from '@/lib/utils/validation';
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,7 +26,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     // Clamp pagination at the boundary — unbounded limit returns the whole
     // tenant penalty book plus its count in one response.
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const page = Math.min(1000, Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)); // page bounded: a huge `page` is an OFFSET walk Postgres still does
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const skip = (page - 1) * limit;
     const tier = searchParams.get('tier');
@@ -47,7 +50,7 @@ export async function GET(request: NextRequest) {
       conditions.push(sql`${memberPenalties.memberId} = ${memberId}`);
     }
     if (search) {
-      conditions.push(sql`(${memberPenalties.title} ILIKE ${'%' + search + '%'} OR ${memberPenalties.reason} ILIKE ${'%' + search + '%'})`);
+      conditions.push(sql`(${memberPenalties.title} ILIKE ${'%' + escapeLikePattern(search) + '%'} OR ${memberPenalties.reason} ILIKE ${'%' + escapeLikePattern(search) + '%'})`);
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -99,10 +102,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[PENALTIES GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch penalties' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to fetch penalties');
   }
 }
 
@@ -117,15 +117,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'Tenant context required' }, { status: 403 });
     }
 
-    if (normalizeRole(user.role) === 'Member') {
-      throw new ForbiddenError('Insufficient permissions to issue penalties');
+    // A penalty debits members.totalContributed, so it is a money write and
+    // must respect the GOVERNANCE grant rather than a bare "not a Member" test
+    // (the Auditor role is read-only by baseline, lib/roles.ts).
+    if (!hasScreenPermission(user, 'GOVERNANCE', 'WRITE')) {
+      throw new ForbiddenError('Write permission required for: GOVERNANCE');
     }
 
     const body = await readJsonBody(request);
     const { memberId, meetingId, tier, title, type, deductionAmount, isPercentage, fundId, reason } = body;
 
-    if (!memberId || !tier || !reason) {
+    if (!memberId || tier === undefined || tier === null || !reason) {
       throw new ValidationError('memberId, tier, and reason are required');
+    }
+    if (!Number.isInteger(tier) || tier < 1 || tier > 10) {
+      throw new ValidationError('tier must be an integer between 1 and 10');
+    }
+    if (typeof reason !== 'string' || reason.trim().length === 0 || reason.length > 1000) {
+      throw new ValidationError('reason must be a non-empty string of at most 1000 characters');
+    }
+    if (title !== undefined && title !== null && (typeof title !== 'string' || title.length > 200)) {
+      throw new ValidationError('title must be a string of at most 200 characters');
     }
 
     const db = getDb();
@@ -178,20 +190,36 @@ export async function POST(request: NextRequest) {
       const penaltyType = type || tierRule.type;
       const penaltyTitle = title || tierRule.title;
       const penaltyIsPercentage = isPercentage ?? tierRule.isPercentage ?? false;
-      const nominalDeduction = deductionAmount !== undefined ? deductionAmount : (tierRule.deductionAmount ?? 0);
 
-      let calculatedDeduction = 0;
+      // §12 money rule (audit 07 M-6): parse the nominal deduction with the
+      // same cents discipline as the finance core — never float math on a raw
+      // body value. Percentages are 2dp values in [0, 100] (stored as percent
+      // cents: 12.5% = 1250); fixed amounts respect the global ceiling.
+      let nominalCents: number;
+      if (deductionAmount !== undefined && deductionAmount !== null) {
+        nominalCents = parsePositiveAmount(deductionAmount, { field: 'deductionAmount', minCents: 0 });
+        if (penaltyIsPercentage && nominalCents > 100_00) {
+          throw new ValidationError('deductionAmount percentage cannot exceed 100');
+        }
+      } else {
+        nominalCents = toCents(tierRule.deductionAmount ?? 0);
+        if (nominalCents < 0) {
+          throw new ValidationError('Configured penalty deduction cannot be negative');
+        }
+      }
+      const nominalDeduction = fromCents(nominalCents);
+
+      let calculatedCents = 0;
       let targetFundId = fundId || null;
 
-      if (penaltyType === 'FUND_DEDUCTION' || (penaltyType === 'SUSPENSION' && nominalDeduction > 0)) {
-        const memberContributed = Number(member.totalContributed ?? 0);
-        if (penaltyIsPercentage) {
-          calculatedDeduction = Math.round(memberContributed * (nominalDeduction / 100) * 100) / 100;
-        } else {
-          calculatedDeduction = nominalDeduction;
-        }
+      if (penaltyType === 'FUND_DEDUCTION' || (penaltyType === 'SUSPENSION' && nominalCents > 0)) {
+        const memberContributedCents = toCents(member.totalContributed ?? '0');
+        calculatedCents = penaltyIsPercentage
+          ? roundToCents((memberContributedCents * nominalCents) / 100_00)
+          : nominalCents;
 
-        if (calculatedDeduction > 0) {
+        if (calculatedCents > 0) {
+          const calculatedDeduction = fromCents(calculatedCents);
           if (!targetFundId) {
             const [defaultFund] = await tx
               .select({ id: funds.id })
@@ -233,9 +261,9 @@ export async function POST(request: NextRequest) {
           tier,
           title: penaltyTitle,
           type: penaltyType,
-          deductionAmount: String(nominalDeduction),
+          deductionAmount: nominalDeduction,
           isPercentage: penaltyIsPercentage,
-          calculatedDeduction: String(calculatedDeduction),
+          calculatedDeduction: fromCents(calculatedCents),
           fundId: targetFundId,
           status: 'ACTIVE',
           reason,
@@ -263,9 +291,10 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   } catch (err: any) {
     console.error('[PENALTIES POST ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to issue penalty' },
-      { status: err.statusCode || 500 }
-    );
+    // Money validation is a 400, not a 500 (same mapping as dividends).
+    if (err instanceof MoneyError) {
+      return NextResponse.json({ success: false, message: err.message, code: err.code }, { status: 400 });
+    }
+    return apiError(err, 'Failed to issue penalty');
   }
 }

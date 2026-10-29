@@ -1,9 +1,11 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { members, transactions } from '@/db/schema/index';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { getAuthContext, requirePermission } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
+import { guard } from '@/lib/guarded-route';
 import { SETTLED_DEPOSIT_STATUSES } from '@/lib/ledger-selectors';
 import { logAudit } from '@/lib/utils/audit';
 import { toCents, fromCents } from '@/lib/money';
@@ -47,6 +49,12 @@ export async function POST(request: NextRequest) {
     // Belt-and-braces permission read for non-SuperAdmin tenant Admins.
     requirePermission('MEMBERS', 'WRITE')(user);
     const tenantId = requireTenant(user.tenantId, user);
+
+    // Three unbounded full-tenant aggregates plus an UPDATE whose VALUES list
+    // grows with the number of drifted members, and no maxDuration declared —
+    // so a second concurrent call does not just cost more, it dies mid-write.
+    const limited = await guard(request, 'recompute', { user: user.id, tenant: tenantId });
+    if (limited) return limited;
 
     const db = getDb();
 
@@ -181,9 +189,6 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     console.error('[RECALCULATE MEMBER FINANCIALS ERROR]', err);
     const e = err as { statusCode?: number; message?: string; code?: string };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Recalculation failed', code: e.code ?? 'RECALCULATE_FAILED' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Recalculation failed');
   }
 }

@@ -16,6 +16,7 @@ import {
 import { NumericInput } from "@/components/ui/numeric-input";
 import { Plus, Trash2, AlertCircle, Info, Landmark, Layers, Lock } from "lucide-react";
 import { useLocale } from "@/lib/i18n";
+import { useTenantCurrency, useTenantDateFormat } from "@/lib/use-tenant-settings";
 import { memberDisplayName } from "@/lib/member-display";
 import { Project, Member } from "@/types";
 import { formatMoney } from "@/lib/formatters";
@@ -47,7 +48,10 @@ export function ProjectFormModal({
   initialData,
 }: ProjectFormModalProps) {
   const { t, locale } = useLocale();
-  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
+  // Money on this screen is the tenant's money, so it carries the tenant's currency.
+  const tenantCurrency = useTenantCurrency();
+  const dateFormat = useTenantDateFormat();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, tenantCurrency, { locale: intlLocaleFor(locale) });
 
   // Basic Information
   const [title, setTitle] = useState(initialData?.title || "");
@@ -567,6 +571,7 @@ export function ProjectFormModal({
               <ERPDatePicker
                 value={startDate || null}
                 onChange={(iso) => setStartDate(iso || "")}
+                displayFormat={dateFormat}
                 placeholder={t("projects.startDate", { defaultValue: "Start Date" })}
               />
             </ERPFormField>
@@ -575,6 +580,7 @@ export function ProjectFormModal({
               <ERPDatePicker
                 value={completionDate || null}
                 onChange={(iso) => setCompletionDate(iso || "")}
+                displayFormat={dateFormat}
                 placeholder={t("projects.completionDate", { defaultValue: "Estimated Completion Date" })}
               />
             </ERPFormField>

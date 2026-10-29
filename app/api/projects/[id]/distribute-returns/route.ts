@@ -17,6 +17,7 @@ import {
 } from '@/lib/money';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
+import { apiError } from '@/lib/utils/api-error';
 
 // The run locks the project + every fund + every recipient row and writes
 // grouped ledger rows — keep headroom over the 10s serverless default.
@@ -668,9 +669,6 @@ export async function POST(
   } catch (err: unknown) {
     console.error('[PROJECT RETURN DISTRIBUTION ERROR]', err);
     const e = err as { message?: string; statusCode?: number };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to distribute project returns' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to distribute project returns');
   }
 }

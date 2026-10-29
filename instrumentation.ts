@@ -81,6 +81,26 @@ export async function register() {
           DEFAULT '[{"name":"Cash","type":"CASH"},{"name":"Bank Transfer","type":"BANK"},{"name":"bKash","type":"MOBILE"},{"name":"Nagad","type":"MOBILE"},{"name":"Rocket","type":"MOBILE"},{"name":"Check","type":"CHECK"},{"name":"Other","type":"OTHER"}]'::jsonb;
       `;
       await sql`ALTER TABLE "transactions" DROP CONSTRAINT IF EXISTS "transactions_deposit_method_check"`;
+      // doc_number (migration 0026) is intentionally NOT mirrored here. The boot
+      // DDL above only patches columns; 0026 also defines four functions and a
+      // BEFORE INSERT trigger, and duplicating that would put a second copy of
+      // the numbering rules somewhere it can drift from db/migrations/ — the
+      // failure being dev and prod issuing different references for the same
+      // ledger position. `next dev` therefore needs the migration, like every
+      // other migration this file does not reproduce. Warn loudly instead of
+      // letting a receipt silently print a fallback.
+      const docNumberReady = await sql`
+        SELECT count(*)::int AS n FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public' AND p.proname = 'app_next_doc_number'
+      `;
+      if (docNumberReady[0]?.n === 0) {
+        console.warn(
+          "[DB] transactions.doc_number is not wired up: migration 0026_doc_number " +
+            "has not been applied. Ledger references will fall back to the internal " +
+            "reference number. Run: npm run db:migrate",
+        );
+      }
     } catch (err) {
       console.error(
         "[DB] Boot connection or column verification notice:",

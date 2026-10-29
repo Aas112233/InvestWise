@@ -11,6 +11,13 @@ export function requireSuperAdmin(user: AuthenticatedUser): void {
   if (!isSuperAdminRole(role) && !isPlatformOwnerEmail(user.email)) {
     throw new ForbiddenError("SuperAdmin access required");
   }
+  // SuperAdmin is platform-only by the role model's own definition: a row
+  // that pairs the role with tenant context is config drift (no app path
+  // creates one). Fail closed instead of letting platform powers ride on a
+  // tenant-scoped identity (audit 07 L-8).
+  if (user.tenantId) {
+    throw new ForbiddenError("SuperAdmin accounts must not be bound to a tenant");
+  }
 }
 
 export async function requireAuthUser(request: NextRequest): Promise<AuthenticatedUser> {

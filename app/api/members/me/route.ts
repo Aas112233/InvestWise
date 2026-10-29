@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { members } from '@/db/schema/index';
@@ -34,9 +35,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: member });
   } catch (err: unknown) {
     const e = err as { statusCode?: number; message?: string; code?: string };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to fetch member profile', code: e.code },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to fetch member profile');
   }
 }

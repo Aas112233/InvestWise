@@ -157,7 +157,12 @@ const equityTransferRowSchema = z.object({
 export const equityTransferSchema = z
   .object({
     fromMemberId: uuidField,
-    transfers: z.array(equityTransferRowSchema).min(1, 'At least one transfer recipient is required'),
+    // Upper bound as well as lower: every row becomes a locked member update,
+    // so an unbounded array is an in-memory CPU/lock bomb behind a valid session.
+    transfers: z
+      .array(equityTransferRowSchema)
+      .min(1, 'At least one transfer recipient is required')
+      .max(500, 'A single equity transfer may address at most 500 recipients'),
     reason: z.string().min(1, 'Reason is required').max(500),
     /** Client retry key. A repeat of an already-recorded key is rejected rather
      *  than moving the same equity a second time. */

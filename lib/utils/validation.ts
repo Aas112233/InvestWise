@@ -186,6 +186,14 @@ export const updateSettingsSchema = z.object({
       isMaintenanceMode: z.boolean().optional(),
     })
     .optional(),
+  /**
+   * Explicit operator acknowledgement required to switch a tenant onto flexible
+   * deposits while members are held for deposit non-compliance. Those holds are
+   * never auto-restored afterwards — the governance sweep skips non-monthly
+   * members before it can evaluate a restore — so the switch IS their release,
+   * and it must not happen as a side effect of ticking a settings checkbox.
+   */
+  confirmDepositScheduleSwitch: z.boolean().optional(),
   governance: z
     .object({
       monthlyMeetingDay: z.number().int().min(1).max(28).optional(),
@@ -197,6 +205,29 @@ export const updateSettingsSchema = z.object({
       inactiveAfterMonths: z.number().int().min(1).max(36).optional(),
       /** Months without a deposit before a member becomes suspension-eligible. */
       suspendedAfterMonths: z.number().int().min(2).max(60).optional(),
+      /**
+       * Deposit schedule for the whole tenant.
+       * 'monthly'  — one deposit per member per month, obligation + compliance +
+       *              punctuality scoring apply (the historical behaviour).
+       * 'flexible' — a member may deposit any number of times; no month is
+       *              reserved and deposits are not rated.
+       * Switching TO flexible needs `confirmDepositScheduleSwitch` when members
+       * are currently held for non-compliance (see the PUT handler).
+       */
+      depositSchedule: z.enum(['monthly', 'flexible']).optional(),
+      /**
+       * R1 near-duplicate advisory window, in days. `0` disables the advisory — it is
+       * offered as a real option because some tenants legitimately collect identical
+       * payments from several members on the same day, and the noise would train
+       * officers to ignore every warning.
+       */
+      depositNearDuplicateWindowDays: z.number().int().min(0).max(30).optional(),
+      /**
+       * R2 approval threshold for FLEXIBLE deposits. `null` disables the control;
+       * `0` routes every flexible deposit through approval. Never applied to a
+       * monthly tenant.
+       */
+      depositFlexApprovalAbove: z.number().min(0).max(9_999_999).nullable().optional(),
       meetingTypes: z.array(z.string().min(1)).optional(),
       /**
        * Tenant-configurable payment methods (deposit forms list these). Name
@@ -236,5 +267,16 @@ export const updateSettingsSchema = z.object({
     })
     .optional(),
 });
+
+/**
+ * Escape LIKE/ILIKE wildcards in client search input (audit 07 L-10).
+ * Postgres' default LIKE escape character is the backslash, so `\%` and `\_`
+ * match literally inside the (still fully parameterized) pattern. Without
+ * this, a client-supplied `%` or `_` acts as a wildcard — broad scans and
+ * filter bypasses, not injection.
+ */
+export function escapeLikePattern(input: string): string {
+  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
 
 export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;

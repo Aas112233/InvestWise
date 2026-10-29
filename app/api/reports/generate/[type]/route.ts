@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/middleware/auth";
 import { requireTenant } from "@/lib/tenant";
+import { guard } from "@/lib/guarded-route";
+import { hasScreenPermission } from "@/lib/permissions";
 import { getDb } from "@/db/index";
 import { systemSettings, tenants } from "@/db/schema/index";
 import { eq } from "drizzle-orm";
-import { ValidationError } from "@/lib/utils/errors";
+import { ValidationError, ForbiddenError } from "@/lib/utils/errors";
 import {
   getReportDefinition,
   parseMemberSelection,
@@ -57,6 +59,19 @@ export async function GET(
       return error || NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
     const scopedTenantId = requireTenant(tenantId, user);
+
+    // Reports render the whole ledger for the tenant, so authentication alone
+    // is not an entitlement — the sibling POST /api/reports/export-generic has
+    // always required REPORTS read, and this is the path the UI actually calls.
+    if (!hasScreenPermission(user, "REPORTS", "READ")) {
+      throw new ForbiddenError("Read permission required for: REPORTS");
+    }
+
+    // Renders up to REPORT_MAX_ROWS through exceljs/pdfkit with embedded Noto
+    // fonts and declares maxDuration = 60: the row cap bounds one request, the
+    // limiter is what bounds a loop.
+    const limited = await guard(request, "export", { user: user.id, tenant: scopedTenantId });
+    if (limited) return limited;
 
     const { type } = await params;
     // decodeURIComponent can throw on a malformed % sequence — a 400, not a

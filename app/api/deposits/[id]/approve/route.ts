@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, funds, members } from '@/db/schema/index';
@@ -11,7 +12,9 @@ import { toCents, fromCents } from '@/lib/money';
 import { isSuperAdminRole, normalizeRole } from '@/lib/roles';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import { findDepositMonthOccupant, depositMonthConflictMessage } from '@/lib/deposit-month-limit';
+import { loadMemberDepositSchedule } from '@/lib/deposit-schedule/lookup';
 import { assertMemberNotSuspended } from '@/lib/member-display';
+import { DEPOSIT_CATEGORY } from '@/lib/deposit-fund';
 import crypto from 'node:crypto';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
@@ -165,17 +168,27 @@ export async function POST(
       // Re-assert on the locked row (race: suspension between outer read and tx).
       assertMemberNotSuspended(lockedMember, 'approving a deposit');
 
-      // §12 one-deposit-per-month: the final gate. Approval credits settled
-      // money, so the member's month must be free of any OTHER occupant —
-      // the request being approved is excluded, but a settled deposit or a
-      // second pending request for the same month (legacy duplicates) blocks
-      // the approval. A reverted deposit re-approves cleanly: it excludes
-      // itself and a reverted direct row never occupies its month.
+      // Resolved INSIDE the tx, on the locked member row, so a schedule switched
+      // between the request being filed and it being approved cannot slip a
+      // double-credit through a stale outer read.
+      const depositSchedule = await loadMemberDepositSchedule(tx, {
+        tenantId: scopedTenantId,
+        memberId: sourceMemberId,
+      });
+
+      // §12 one-deposit-per-month (MONTHLY only): the final gate. Approval credits
+      // settled money, so the member's month must be free of any OTHER occupant —
+      // the request being approved is excluded, but a settled deposit or a second
+      // pending request for the same month (legacy duplicates) blocks the approval.
+      // A reverted deposit re-approves cleanly: it excludes itself and a reverted
+      // direct row never occupies its month. Under a flexible schedule the guard
+      // returns null without querying.
       const monthOccupant = await findDepositMonthOccupant(tx, {
         tenantId: scopedTenantId,
         memberId: sourceMemberId,
         depositMonthKey,
         excludeId: id,
+        enforced: depositSchedule.enforced,
       });
       if (monthOccupant) {
         throw new ValidationError(depositMonthConflictMessage(depositMonthKey, monthOccupant));
@@ -212,6 +225,14 @@ export async function POST(
         .update(transactions)
         .set({
           status: 'Completed',
+          // Approval used to flip only the status, so a settled deposit kept the
+          // 'Deposit Request' label it was filed with, permanently. Two things
+          // read that label: the report's Category column, and the
+          // pending-request rules (GET /api/deposits excludes
+          // status='PENDING' AND category='Deposit Request'; the finance service
+          // releases a month once category === 'Deposit'). Settled money has to
+          // read as a deposit from the moment it settles.
+          category: DEPOSIT_CATEGORY,
           balanceBefore: fromCents(fundBalanceCents),
           balanceAfter: fromCents(newFundBalanceCents),
           authorizedBy: user.id,
@@ -269,9 +290,6 @@ export async function POST(
     });
   } catch (err: any) {
     console.error('[DEPOSIT APPROVE ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to approve deposit' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to approve deposit');
   }
 }

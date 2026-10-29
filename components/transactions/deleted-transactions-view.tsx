@@ -20,6 +20,7 @@ import { memberDisplayName } from "@/lib/member-display";
 import { translateLedgerDescription } from "@/lib/ledger-description";
 import { useFormatMoney, useTenantDateFormat } from "@/lib/use-tenant-settings";
 import { getTransactionTypeLabel } from "./shared";
+import { ledgerRef } from "@/lib/doc-number";
 
 interface DeletedTransactionsResponse {
   data: DeletedTransactionRow[];
@@ -182,7 +183,7 @@ export function DeletedTransactionsView() {
       key: "referenceNumber",
       header: t("transactions.refHeader"),
       render: (row) => (
-        <span className="font-mono text-[11px]">{row.referenceNumber || row.id.slice(0, 8)}</span>
+        <span className="font-mono text-[11px]">{ledgerRef(row)}</span>
       ),
     },
     {
@@ -375,7 +376,7 @@ export function DeletedTransactionsView() {
         subtitle={
           restoreTarget
             ? t("transactions.deleted.restoreSubtitle", {
-                ref: restoreTarget.referenceNumber || restoreTarget.id.slice(0, 8),
+                ref: ledgerRef(restoreTarget),
               })
             : undefined
         }

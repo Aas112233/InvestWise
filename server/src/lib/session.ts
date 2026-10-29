@@ -30,10 +30,11 @@ interface CachedUser {
   tenantId: string | null;
 }
 
-const USER_CACHE_TTL = 60_000;
-// Keyed by sha256(token) (never the raw token): distinct credentials never
-// share a cached identity. Active-session and blacklist state are rechecked
+// 10s, matching the modern stack (lib/middleware/auth.ts) so a suspension or
+// role demotion takes effect on /api/finance/* within the same window
+// (audit 07 L-1). Session/blacklist state is NOT cached — always rechecked
 // against PostgreSQL before this cache is consulted.
+const USER_CACHE_TTL = 10_000;
 const userCache = new Map<string, { user: CachedUser; expires: number }>();
 
 let cacheLastSweep = 0;

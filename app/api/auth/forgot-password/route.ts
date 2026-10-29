@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { users } from '@/db/schema/index';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { normalizeEmail } from '@/lib/utils/types';
 import { logAudit } from '@/lib/utils/audit';
 import { bucketKey, consumeBucket, type BucketOutcome } from '@/lib/rate-limit';
@@ -77,10 +77,24 @@ export async function POST(request: NextRequest) {
     if (!mailboxBudget.ok) return tooManyRequests(mailboxBudget);
 
     const db = getDb();
+    // Exactly one row, and exactly one SELECT, whether or not the account
+    // exists: writing N rows for N matching accounts would make response timing
+    // an account-existence oracle again on a financial system, which is the
+    // thing this handler was rewritten to stop being.
+    //
+    // tenantId is part of this select because the audit row below is scoped by
+    // it. /api/audit filters `tenant_id = <caller tenant>`, so a recovery
+    // request written with a NULL tenant was invisible to the very Admin who
+    // owns the locked-out user and could only ever be seen through
+    // /api/admin/audit-logs (no tenant filter) by a platform operator.
+    //
+    // The ordering mirrors POST /api/auth/login so the tenant this gets routed
+    // to is the same account that would actually authenticate for the address.
     const [user] = await db
-      .select({ id: users.id, email: users.email, name: users.name })
+      .select({ id: users.id, email: users.email, name: users.name, tenantId: users.tenantId })
       .from(users)
       .where(eq(users.email, normalizedEmail))
+      .orderBy(sql`${users.tenantId} IS NOT NULL`, users.createdAt)
       .limit(1);
 
     // One audit row per request, found or not: identical work in both branches
@@ -89,12 +103,23 @@ export async function POST(request: NextRequest) {
     // the response must not distinguish existing accounts.
     await logAudit({
       user: user ? { id: user.id, name: user.name } : null,
+      // An address matching no account has no tenant to route to and stays
+      // platform-visible only, which is correct: there is nobody to notify.
+      tenantId: user?.tenantId ?? null,
       action: 'PASSWORD_RESET_REQUESTED',
       resourceType: 'User',
       resourceId: user?.id,
-      details: { email: normalizedEmail, accountFound: Boolean(user) },
+      details: { email: normalizedEmail, accountFound: Boolean(user), awaitingAdminAction: true },
       req: { ip },
-      status: 'PENDING',
+      // 'SUCCESS' — the audited event is "a recovery request was recorded", and
+      // recording it succeeded. This previously said 'PENDING', which
+      // audit_logs_status_check does not allow (only SUCCESS/FAILURE/WARNING),
+      // so the INSERT was rejected on EVERY request. logAudit never throws, so
+      // the whole feature silently wrote nothing while still returning 200.
+      // "Awaiting an admin" is a business state, not an audit outcome, so it now
+      // travels in `details` above; `action = 'PASSWORD_RESET_REQUESTED'` is the
+      // selector for the open queue.
+      status: 'SUCCESS',
     });
 
     return NextResponse.json({

@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { memberPenalties, members } from '@/db/schema/index';
@@ -106,9 +107,6 @@ export async function POST(
     });
   } catch (err: any) {
     console.error('[WAIVE PENALTY ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to waive penalty' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to waive penalty');
   }
 }

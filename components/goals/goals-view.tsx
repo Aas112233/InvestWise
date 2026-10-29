@@ -30,6 +30,7 @@ import {
 } from "@/components/ui";
 import { formatMoney, formatDateOnly } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
+import { useTenantCurrency } from "@/lib/use-tenant-settings";
 
 interface GoalsViewProps {
   goals: Goal[];
@@ -51,6 +52,7 @@ export function GoalsView({
   onUpdateProgress,
 }: GoalsViewProps) {
   const { t } = useLocale();
+  const currency = useTenantCurrency();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
@@ -158,7 +160,7 @@ export function GoalsView({
       sortable: true,
       render: (g) => (
         <span className="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100">
-          {formatMoney(g.targetAmount)}
+          {formatMoney(g.targetAmount, currency)}
         </span>
       ),
     },
@@ -169,7 +171,7 @@ export function GoalsView({
       sortable: true,
       render: (g) => (
         <span className="font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-          {formatMoney(g.currentAmount)}
+          {formatMoney(g.currentAmount, currency)}
         </span>
       ),
     },
@@ -272,13 +274,13 @@ export function GoalsView({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <ERPMetricCard
           label={t("goals.metrics.totalTarget", { defaultValue: "Total Capital Target" })}
-          value={formatMoney(metrics.totalTarget)}
+          value={formatMoney(metrics.totalTarget, currency)}
           icon={Target}
           tone="slate"
         />
         <ERPMetricCard
           label={t("goals.metrics.currentAccumulated", { defaultValue: "Accumulated Savings" })}
-          value={formatMoney(metrics.totalCurrent)}
+          value={formatMoney(metrics.totalCurrent, currency)}
           icon={DollarSign}
           tone="emerald"
           // #48 — the sum is only as trustworthy as its source; say so.

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { tenants, users, funds, projects, transactions } from '@/db/schema/index';
-import { eq, and, count, sql } from 'drizzle-orm';
+import { tenants, users, funds, projects, transactions, members } from '@/db/schema/index';
+import { eq, and, count, sql, gte } from 'drizzle-orm';
 import { AuthError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
 import { requireSuperAdmin, requireAuthUser } from '@/lib/admin-guard';
 import { resolveModuleAccess } from '@/lib/tenant-modules';
@@ -65,12 +65,17 @@ export async function GET(
         role: users.role,
         status: users.status,
         createdAt: users.createdAt,
+        lastLogin: users.lastLogin,
       })
       .from(users)
       .where(eq(users.tenantId, id))
       .limit(50);
 
-    const [userCountResult, fundsCountResult, projectsCountResult, reserveAgg, txAgg, txCountResult] =
+    // 360° telemetry: engagement is measured over the WHOLE tenant, not the
+    // first 50 user rows the table shows, so active-user count and last-login
+    // run their own aggregates.
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
+    const [userCountResult, fundsCountResult, projectsCountResult, reserveAgg, txAgg, txCountResult, engagement, memberCountResult, tx30dResult] =
       await Promise.all([
         db.select({ count: count() }).from(users).where(eq(users.tenantId, id)),
         db.select({ count: count() }).from(funds).where(eq(funds.tenantId, id)),
@@ -95,12 +100,34 @@ export async function GET(
           .select({ count: count() })
           .from(transactions)
           .where(and(eq(transactions.tenantId, id), eq(transactions.isDeleted, false))),
+        db
+          .select({ active: count(), lastLogin: sql<unknown>`max(${users.lastLogin})` })
+          .from(users)
+          .where(and(eq(users.tenantId, id), eq(users.status, 'active'))),
+        db.select({ count: count() }).from(members).where(eq(members.tenantId, id)),
+        db
+          .select({ count: count() })
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.tenantId, id),
+              eq(transactions.isDeleted, false),
+              gte(transactions.createdAt, thirtyDaysAgo),
+            ),
+          ),
       ]);
 
     const totalUsers = Number(userCountResult[0]?.count ?? 0);
     const totalFunds = Number(fundsCountResult[0]?.count ?? 0);
     const totalProjects = Number(projectsCountResult[0]?.count ?? 0);
     const flow = txAgg[0];
+    const rawLastLogin = engagement[0]?.lastLogin;
+    const lastActivityAt =
+      rawLastLogin instanceof Date
+        ? rawLastLogin
+        : rawLastLogin
+          ? new Date(String(rawLastLogin))
+          : null;
 
     return NextResponse.json({
       success: true,
@@ -112,6 +139,15 @@ export async function GET(
           totalFunds,
           totalProjects,
           totalTransactions: Number(txCountResult[0]?.count ?? 0),
+          // 360° telemetry: engagement + momentum. lastActivityAt is the newest
+          // sign-in across the tenant, transactions30d is ledger momentum.
+          activeUsers: Number(engagement[0]?.active ?? 0),
+          totalMembers: Number(memberCountResult[0]?.count ?? 0),
+          transactions30d: Number(tx30dResult[0]?.count ?? 0),
+          lastActivityAt:
+            lastActivityAt && !Number.isNaN(lastActivityAt.getTime())
+              ? lastActivityAt.toISOString()
+              : null,
         },
         financials: {
           // decimal(15,2) crosses the wire as a string — never a JS float.
@@ -124,6 +160,7 @@ export async function GET(
         users: tenantUsers.map(u => ({
           ...u,
           createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : '',
+          lastLogin: u.lastLogin instanceof Date ? u.lastLogin.toISOString() : null,
         })),
       },
     });
@@ -342,11 +379,16 @@ export async function DELETE(
     // tenant itself, in one transaction, plus a TENANT_FORCE_DELETE audit row.
     // Without it this stays a guarded delete that refuses on any remaining data.
     if (request.nextUrl.searchParams.get('force') === 'true') {
-      await forceDeleteTenant(id, {
-        adminUserId: user.id || null,
-        adminEmail: user.email,
-        ipAddress: getClientIp(request),
-      });
+      const wipeReason = request.nextUrl.searchParams.get('reason');
+      await forceDeleteTenant(
+        id,
+        {
+          adminUserId: user.id || null,
+          adminEmail: user.email,
+          ipAddress: getClientIp(request),
+        },
+        { reason: typeof wipeReason === 'string' ? wipeReason : null },
+      );
 
       return NextResponse.json({
         success: true,

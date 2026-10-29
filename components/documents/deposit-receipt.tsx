@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useLocale } from "@/lib/i18n";
-import { useFormatDate, useFormatDateOnly, useFormatMoney } from "@/lib/use-tenant-settings";
+import { useFormatDate, useFormatDateOnly, useFormatMoney, useTenantCurrency } from "@/lib/use-tenant-settings";
 import { translateLedgerDescription } from "@/lib/ledger-description";
 import { monthKeyOf } from "@/components/deposits/shared";
 import { amountInWords } from "@/lib/amount-in-words";
@@ -17,9 +17,12 @@ import {
   type DocSignature,
 } from "./document-frame";
 import { useMonthLabel } from "./month-label";
+import { ledgerRef } from "@/lib/doc-number";
 
 export interface DepositReceiptData {
   id?: string;
+  /** Printed reference (DEP-2026-00042). See lib/doc-number.ts. */
+  docNumber?: string | null;
   referenceNumber?: string;
   date?: string;
   amount?: number | string;
@@ -49,6 +52,9 @@ export interface DepositReceiptData {
 export function DepositReceipt({ data, orgName, orgTagline }: { data: DepositReceiptData; orgName?: string; orgTagline?: string }) {
   const { t } = useLocale();
   const formatMoney = useFormatMoney();
+  // The words line is the tamper evidence on this document, so it has to name the
+  // currency the figures above it are in.
+  const currency = useTenantCurrency();
   const formatDate = useFormatDateOnly();
   const formatDateTime = useFormatDate();
   const monthLabel = useMonthLabel();
@@ -85,14 +91,14 @@ export function DepositReceipt({ data, orgName, orgTagline }: { data: DepositRec
     { label: t("documents.approvedBy", { defaultValue: "Approved By" }), name: data.authorizerName },
   ];
 
-  const words = amountInWords(data.amount);
+  const words = amountInWords(data.amount, currency);
 
   return (
     <DocumentFrame
       orgName={orgName}
       orgTagline={orgTagline}
       docType={title}
-      reference={data.referenceNumber}
+      reference={ledgerRef(data, "") || undefined}
       dateLabel={data.date ? formatDate(data.date) : undefined}
       signatures={signatures}
     >

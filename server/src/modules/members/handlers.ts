@@ -84,6 +84,7 @@ export async function handleCreateFund(request: NextRequest) {
         name,
         type: (body.type as 'DEPOSIT' | 'PRIMARY' | 'PROJECT' | 'RESERVE' | 'OTHER') || 'OTHER',
         description: body.description ? String(body.description) : undefined,
+        currency: body.currency ? String(body.currency) : undefined,
         handlingOfficer: body.handlingOfficer ? String(body.handlingOfficer) : undefined,
         accountNumber: body.accountNumber ? String(body.accountNumber) : undefined,
         initialBalance: body.initialBalance !== undefined && body.initialBalance !== '' ? Number(body.initialBalance) : undefined,

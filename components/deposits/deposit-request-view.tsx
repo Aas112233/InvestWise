@@ -18,7 +18,7 @@ import { useTenantShareValue, useTenantPaymentMethods } from "@/lib/use-tenant-s
 import { PAYMENT_TYPE_LABEL_KEY, type PaymentType } from "@/lib/payment-methods";
 import { DepositsListView } from "./deposits-list-view";
 import { BulkDepositRequestModal } from "./bulk-deposit-request-modal";
-import { useFundOptions, useMemberOptions } from "./shared";
+import { useFundOptions, useMemberOptions, useMemberDepositMonths } from "./shared";
 import { DEPOSIT_FUND_TYPE } from "@/lib/deposit-fund";
 import { hasScreenPermission } from "@/lib/permissions";
 
@@ -97,12 +97,29 @@ export function DepositRequestView() {
 
   const amountValid = AMOUNT_RE.test(amount.trim()) && parseFloat(amount) > 0;
   const monthValid = /^\d{4}-(0[1-9]|1[0-2])$/.test(depositMonth);
+  // The write path refuses any member that is not 'active', so the button now
+  // agrees instead of letting a fully-filled form die on a toast.
+  const memberActive = scopeMember?.status === "active";
   const formValid =
-    !!effectiveMemberId && !!fundId && amountValid && !!method && trxId.trim().length > 0 && monthValid;
+    !!effectiveMemberId && memberActive && !!fundId && amountValid && !!method && trxId.trim().length > 0 && monthValid;
+  // Unsaved-work guard for TopSheet. depositMonth/depositFiscalYear are seeded
+  // on open, so they are excluded and only genuine user input marks the form dirty.
+  const dirty =
+    !!memberId || !!fundId || amount.trim() !== "" || !!method || trxId.trim() !== "" || proofNote.trim() !== "";
 
   const onSubmit = () => {
     setTouched(true);
     if (!formValid || !effectiveMemberId || !fundId || !method) return;
+    // Belt-and-braces against the one-deposit-per-month rule. The picker already
+    // greys occupied months, but this grid is the same source the server
+    // consults, and a stale read (or a request a second officer filed in the
+    // last few seconds) should fail here rather than as an opaque toast. The
+    // write path still re-checks under the member row lock; this only improves
+    // the message.
+    if (occupiedMonths.has(depositMonth)) {
+      toast.error(t("requestDeposit.monthTaken", { defaultValue: "This member already has a deposit for that month." }));
+      return;
+    }
     const parts: string[] = [`TRX ID: ${trxId.trim()}`];
     if (proofNote.trim()) parts.push(proofNote.trim());
     submitMutation.mutate({
@@ -116,23 +133,22 @@ export function DepositRequestView() {
   };
 
   const memberOptions = selfMember
-    ? [{ value: selfMember.id, label: memberDisplayName(selfMember.name, selfMember.status), caption: selfMember.memberId, disabled: selfMember.status === "suspended" }]
+    ? [{ value: selfMember.id, label: memberDisplayName(selfMember.name, selfMember.status), caption: selfMember.memberId, disabled: selfMember.status !== "active" }]
     : (membersQuery.data ?? [])
-        // Inactive (dormant) members may still request a deposit, so they are
-        // selectable; suspended members stay visible but DISABLED with a marker
-        // that explains why (the write path refuses them anyway). Soft-deleted
-        // rows are excluded defensively — the API already filters isDeleted,
-        // and legacy rows tagged in the email must not resurface here.
-        .filter(
-          (m) =>
-            (m.status === "active" || m.status === "inactive" || m.status === "suspended") &&
-            !m.email?.toLowerCase().includes("deleted"),
-        )
+        // Only ACTIVE members are selectable, because that is the rule
+        // POST /api/deposits/request enforces (`member.status !== 'active'` is
+        // refused). This picker previously claimed dormant members could
+        // request and offered inactive AND suspended rows, so choosing one gave
+        // a form that looked complete and could only ever fail on submit.
+        // Anything not active stays visible but disabled, with the status in
+        // its label — hiding them read as "my member record is missing".
+        // Soft-deleted rows are excluded defensively as before.
+        .filter((m) => !m.email?.toLowerCase().includes("deleted"))
         .map((m) => ({
           value: m.id,
           label: memberDisplayName(m.name, m.status),
           caption: m.memberId,
-          disabled: m.status === "suspended",
+          disabled: m.status !== "active",
         }));
   const fundOptions = (fundsQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
 
@@ -153,7 +169,24 @@ export function DepositRequestView() {
   const { yearOptionsIncluding, monthsFor, defaultPostableFiscalYear } = useFiscalPeriodOptions();
   const effectiveFiscalYear = depositFiscalYear || defaultPostableFiscalYear || "";
   const yearOptions = yearOptionsIncluding(effectiveFiscalYear || null);
-  const monthOptions = monthsFor(effectiveFiscalYear || null);
+  const baseMonthOptions = monthsFor(effectiveFiscalYear || null);
+
+  // Which months of the chosen fiscal year the member already holds. The record
+  // -deposit form has greyed these out for a long time; this screen offered every
+  // month and let the server reject the pick after the member had typed the TRX
+  // ID and proof note. Same query, same occupancy rule, so the two screens can
+  // not drift apart, and it is keyed under ["deposits"] so any write refreshes it.
+  const monthGridQuery = useMemberDepositMonths(effectiveMemberId, effectiveFiscalYear || null);
+  // Deliberately NOT wrapped in useMemo: this project compiles with the React
+  // Compiler, and a hand-written memo the compiler cannot preserve makes it skip
+  // optimizing the whole component (react-hooks/preserve-manual-memoization).
+  const occupiedMonths = new Set<string>();
+  for (const cell of monthGridQuery.data?.months ?? []) {
+    if (cell.occupied) occupiedMonths.add(cell.month);
+  }
+  const monthsWithOccupancy = baseMonthOptions.map((m) =>
+    occupiedMonths.has(m.value) ? { ...m, disabled: true } : m,
+  );
 
   return (
     <>
@@ -174,11 +207,23 @@ export function DepositRequestView() {
         onClose={() => setSheetOpen(false)}
         title={t("requestDeposit.title")}
         subtitle={t("requestDeposit.subtitle")}
+        isDirty={dirty}
       >
-        <ERPFormLayout>
+        {/* A real <form> so Enter submits from any field. Before this the only
+            way to send a request was to find and press the button, while the
+            record-deposit sheet has submitted on Enter throughout. */}
+        <form
+          method="post"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSubmit();
+          }}
+        >
+          <ERPFormLayout>
           <ERPFormSection title={t("requestDeposit.title")}>
             <ERPFormGrid columns={2}>
-              <ERPFormField label={t("requestDeposit.member")} required error={touched && !effectiveMemberId ? t("requestDeposit.selectMember") : undefined}>
+              <ERPFormField label={t("requestDeposit.member")} required error={touched && !effectiveMemberId ? t("requestDeposit.selectMember") : !!effectiveMemberId && !memberActive ? t("requestDeposit.memberNotActive", { defaultValue: "This membership is not active, so deposits cannot be requested" }) : undefined}>
                 <AppDropdown
                   options={memberOptions}
                   value={effectiveMemberId}
@@ -198,7 +243,7 @@ export function DepositRequestView() {
               </ERPFormField>
             </ERPFormGrid>
             <ERPFormGrid columns={2}>
-              <ERPFormField label={t("requestDeposit.amount")} required error={touched && !amountValid ? t("deposits.modal.amount") : undefined}>
+              <ERPFormField label={t("requestDeposit.amount")} required error={touched && !amountValid ? t("requestDeposit.invalidAmount", { defaultValue: "Enter a valid amount, up to 2 decimal places" }) : undefined}>
                 <NumericInput
                   type="text"
                   inputMode="decimal"
@@ -219,7 +264,7 @@ export function DepositRequestView() {
             </ERPFormGrid>
             <ERPFiscalMonthPicker
               fiscalYears={yearOptions}
-              months={monthOptions}
+              months={monthsWithOccupancy}
               required
               monthLabel={t("deposits.modal.depositMonth")}
               error={touched && !monthValid ? t("deposits.modal.selectMonth") : undefined}
@@ -233,7 +278,7 @@ export function DepositRequestView() {
               }}
             />
             <ERPFormGrid columns={2}>
-              <ERPFormField label={t("requestDeposit.trxId")} required error={touched && !trxId.trim() ? t("requestDeposit.trxId") : undefined}>
+              <ERPFormField label={t("requestDeposit.trxId")} required error={touched && !trxId.trim() ? t("requestDeposit.trxIdRequired", { defaultValue: "Enter the transaction reference from your payment" }) : undefined}>
                 <input
                   type="text"
                   placeholder={t("requestDeposit.trxPlaceholder")}
@@ -254,20 +299,23 @@ export function DepositRequestView() {
             </ERPFormGrid>
           </ERPFormSection>
           <div className="flex items-center justify-end gap-2 pt-2">
-            <Button variant="ghost" size="sm" onClick={() => setSheetOpen(false)} disabled={submitMutation.isPending}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setSheetOpen(false)} disabled={submitMutation.isPending}>
               {t("common.cancel")}
             </Button>
+            {/* type="submit" and no onClick: with both, a click would run the
+                handler twice (once directly, once via the form). */}
             <Button
+              type="submit"
               variant="primary"
               size="sm"
-              onClick={onSubmit}
               loading={submitMutation.isPending}
               loadingLabel={t("requestDeposit.submitting")}
             >
               {t("requestDeposit.submit")}
             </Button>
           </div>
-        </ERPFormLayout>
+          </ERPFormLayout>
+        </form>
       </TopSheet>
     </>
   );

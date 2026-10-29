@@ -4,8 +4,21 @@
  */
 import type { ReportDocument } from "./data";
 
+// CSV formula injection (audit 07 M-4): a cell starting with =, +, -, @, tab
+// or CR becomes a live formula when the export is opened in Excel/Sheets.
+// Neutralize by prefixing a single quote — except plain negative numbers
+// ("-1250.50"), which are legitimate money values in every finance export.
+const CSV_FORMULA_PREFIX = /^[=+\-@\t\r]/;
+const PLAIN_NEGATIVE_NUMBER = /^-\d+(\.\d+)?$/;
+
+export function neutralizeCsvFormula(value: string): string {
+  if (!CSV_FORMULA_PREFIX.test(value)) return value;
+  if (PLAIN_NEGATIVE_NUMBER.test(value)) return value;
+  return `'${value}`;
+}
+
 function escapeCsvValue(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
+  return `"${neutralizeCsvFormula(value).replace(/"/g, '""')}"`;
 }
 
 export function buildCsv(doc: ReportDocument): string {

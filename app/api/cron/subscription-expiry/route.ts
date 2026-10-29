@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { evaluateSubscriptionExpiry } from '@/lib/superadmin-service';
 import { pruneRateLimitBuckets } from '@/lib/rate-limit';
+import { pruneAccountLocks } from '@/lib/account-lock';
 import { authorizeCronRequest } from '@/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
@@ -39,14 +40,18 @@ export async function GET(request: NextRequest) {
     // is one row per client IP, so an unswept table turns a security control
     // into a storage problem. Best-effort — a failed prune must not fail the
     // expiry sweep it rides along with.
+    // account_locks has the same shape problem: one row per email address that
+    // ever mistyped a password, with no natural expiry of its own.
     let prunedBuckets: number | null = null;
+    let prunedLocks: number | null = null;
     try {
       prunedBuckets = await pruneRateLimitBuckets();
+      prunedLocks = await pruneAccountLocks();
     } catch (error) {
-      console.warn('[SUBSCRIPTION EXPIRY CRON] bucket prune failed:', (error as Error)?.message);
+      console.warn('[SUBSCRIPTION EXPIRY CRON] prune failed:', (error as Error)?.message);
     }
 
-    return NextResponse.json({ success: true, data: { ...result, prunedBuckets } });
+    return NextResponse.json({ success: true, data: { ...result, prunedBuckets, prunedLocks } });
   } catch (error) {
     console.error('[SUBSCRIPTION EXPIRY CRON ERROR]', error);
     return NextResponse.json(

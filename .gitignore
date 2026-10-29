@@ -251,3 +251,6 @@ txns.yaml
 root?
 root*
 /monthly_check.json
+
+# Cloudflare tooling cache (leaks account id / owner email — audit 07 L-5)
+.wrangler/

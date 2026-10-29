@@ -4,6 +4,7 @@ import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { ForbiddenError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { cancelPayoutPlan } from '@/lib/member-payouts';
+import { apiError } from '@/lib/utils/api-error';
 
 /**
  * POST /api/payouts/[id]/cancel — closes an open plan and returns the unpaid
@@ -37,9 +38,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     return NextResponse.json({ success: true, data: result, message: 'Payout plan cancelled' });
   } catch (err: any) {
     console.error('[PAYOUT CANCEL ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to cancel payout plan', code: err.code ?? 'PAYOUT_CANCEL_FAILED' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to cancel payout plan');
   }
 }

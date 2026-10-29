@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { fiscalPeriods, systemSettings, transactions, DEFAULT_MEETING_TYPES, DEFAULT_PENALTY_RULES } from '@/db/schema/index';
+import { fiscalPeriods, members, systemSettings, transactions, DEFAULT_MEETING_TYPES, DEFAULT_PENALTY_RULES } from '@/db/schema/index';
+import { MEMBER_STATUS_REASON } from '@/lib/governance/status-rules';
+import { DEPOSIT_SCHEDULE } from '@/lib/deposit-schedule/schedule';
 import { eq, and, count } from 'drizzle-orm';
 import { getAuthContext, type AuthenticatedUser } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
@@ -47,6 +49,13 @@ function formatSettingsResponse(settings: any): Record<string, unknown> {
       monthlyMeetingDay: settings.monthlyMeetingDay || 5,
       depositDueDate: settings.depositDueDate || 10,
       gracePeriodDays: settings.gracePeriodDays || 3,
+      // Absent (pre-0025 row) is monthly: the write path fails closed the same way,
+      // so the form must not show a blank or an implied 'flexible'.
+      depositSchedule: settings.depositSchedule || 'monthly',
+      depositScheduleChangedAt: settings.depositScheduleChangedAt ?? null,
+      depositNearDuplicateWindowDays: settings.depositNearDuplicateWindowDays ?? 3,
+      // null = the R2 approval threshold is disabled for this tenant.
+      depositFlexApprovalAbove: settings.depositFlexApprovalAbove ?? null,
       lateDepositGraceMonths: settings.lateDepositGraceMonths ?? 1,
       inactiveAfterMonths: settings.inactiveAfterMonths ?? 3,
       suspendedAfterMonths: settings.suspendedAfterMonths ?? 6,
@@ -353,6 +362,16 @@ export async function PUT(request: NextRequest) {
       if (data.governance.penaltyRules !== undefined) {
         updateData.penaltyRules = data.governance.penaltyRules;
       }
+      if (data.governance.depositSchedule !== undefined) {
+        updateData.depositSchedule = data.governance.depositSchedule;
+      }
+      if (data.governance.depositNearDuplicateWindowDays !== undefined) {
+        updateData.depositNearDuplicateWindowDays = data.governance.depositNearDuplicateWindowDays;
+      }
+      if (data.governance.depositFlexApprovalAbove !== undefined) {
+        // Explicit null is meaningful: it DISABLES the threshold. Do not coalesce it.
+        updateData.depositFlexApprovalAbove = data.governance.depositFlexApprovalAbove;
+      }
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -384,6 +403,61 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    // ── Deposit schedule switch (spec §8, finding H3) ────────────────────────
+    // The governance sweep skips non-monthly members BEFORE it can evaluate a
+    // restore, so a member auto-held with statusReason = DEPOSIT_NON_COMPLIANCE
+    // would stay inactive forever the moment the tenant went flexible: nothing
+    // would ever restore them. The switch is therefore their release, and a status
+    // change on real members must be acknowledged rather than fall out of saving a
+    // settings form.
+    const switchingToFlexible =
+      updateData.depositSchedule === DEPOSIT_SCHEDULE.FLEXIBLE
+      && (currentSettings.depositSchedule ?? 'monthly') !== DEPOSIT_SCHEDULE.FLEXIBLE;
+
+    // Stamp the moment of an actual change, in either direction. Never backfilled
+    // by the migration — a timestamp for a switch that did not happen would make
+    // the audit trail lie.
+    if (
+      updateData.depositSchedule !== undefined
+      && (currentSettings.depositSchedule ?? 'monthly') !== updateData.depositSchedule
+    ) {
+      updateData.depositScheduleChangedAt = new Date();
+    }
+
+    let heldForNonCompliance: Array<{ id: string; memberId: string; name: string }> = [];
+    if (switchingToFlexible) {
+      heldForNonCompliance = await db
+        .select({ id: members.id, memberId: members.memberId, name: members.name })
+        .from(members)
+        .where(and(
+          // §6 tenant scope; soft-deleted members are never revived.
+          eq(members.tenantId, tenantId),
+          eq(members.isDeleted, false),
+          eq(members.statusReason, MEMBER_STATUS_REASON.DEPOSIT_NON_COMPLIANCE),
+        ))
+        .orderBy(members.name);
+
+      if (heldForNonCompliance.length > 0 && data.confirmDepositScheduleSwitch !== true) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'DEPOSIT_SCHEDULE_SWITCH_CONFIRMATION_REQUIRED',
+            message:
+              `[Field 'depositSchedule', Code: SWITCH_CONFIRMATION_REQUIRED] `
+              + `${heldForNonCompliance.length} member(s) are currently held for deposit `
+              + `non-compliance. A flexible schedule stops evaluating that obligation, so `
+              + `these holds will not be lifted automatically. Resubmit with `
+              + `confirmDepositScheduleSwitch = true to switch and release them.`,
+            data: {
+              heldMemberCount: heldForNonCompliance.length,
+              heldMembers: heldForNonCompliance,
+            },
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     updateData.updatedAt = new Date();
 
     const [updated] = await db
@@ -394,6 +468,37 @@ export async function PUT(request: NextRequest) {
 
     // Invalidate settings cache
     settingsCache.delete(`settings:${tenantId}`);
+
+    // Release the holds the switch has made unenforceable. Deliberately AFTER the
+    // settings row commits: a settings write that failed must not leave members
+    // released under a schedule that never took effect. Only rows carrying the
+    // sweep's own reason are touched — an officer-set hold is left alone.
+    if (switchingToFlexible && heldForNonCompliance.length > 0) {
+      const released = await db
+        .update(members)
+        .set({ status: 'active', statusReason: null, updatedAt: new Date() })
+        .where(and(
+          eq(members.tenantId, tenantId),
+          eq(members.isDeleted, false),
+          eq(members.statusReason, MEMBER_STATUS_REASON.DEPOSIT_NON_COMPLIANCE),
+        ))
+        .returning({ id: members.id });
+
+      await logAudit({
+        tenantId,
+        user: { id: user.id, name: user.name || user.email },
+        action: 'UPDATE_SETTINGS',
+        resourceType: 'MEMBER',
+        // No single resource: this entry covers a set of releases, and the
+        // affected ids are listed in `details`.
+        details: {
+          reason: 'DEPOSIT_SCHEDULE_SWITCH_TO_FLEXIBLE',
+          releasedHoldCount: released.length,
+          releasedMemberIds: released.map((r) => r.id),
+        },
+        status: 'SUCCESS',
+      });
+    }
 
     // Audit log — `logAudit` takes a nested `user` object; passing flat
     // userId/userName silently wrote the row with no actor recorded.

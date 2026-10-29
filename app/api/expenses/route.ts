@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, funds, projects, members, users, systemSettings } from '@/db/schema/index';
@@ -13,6 +14,7 @@ import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
+import { escapeLikePattern } from '@/lib/utils/validation';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
 
@@ -34,7 +36,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     // Clamp pagination at the boundary: this GET fans out to four LEFT JOINs
     // on top of count/SUM work, so an unbounded `limit` is a memory/CPU DoS.
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const page = Math.min(1000, Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)); // page bounded: a huge `page` is an OFFSET walk Postgres still does
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const skip = (page - 1) * limit;
     const fundId = searchParams.get('fundId');
@@ -79,7 +81,7 @@ export async function GET(request: NextRequest) {
       conditions.push(lte(transactions.date, dayRangeUtc(endDate, tenantTz).end));
     }
     if (search) {
-      conditions.push(sql`(${transactions.description} ILIKE ${'%' + search + '%'} OR ${transactions.referenceNumber} ILIKE ${'%' + search + '%'})`);
+      conditions.push(sql`(${transactions.description} ILIKE ${'%' + escapeLikePattern(search) + '%'} OR ${transactions.referenceNumber} ILIKE ${'%' + escapeLikePattern(search) + '%'})`);
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -112,6 +114,7 @@ export async function GET(request: NextRequest) {
           expenseName: transactions.expenseName,
           category: transactions.category,
           referenceNumber: transactions.referenceNumber,
+          docNumber: transactions.docNumber,
           date: transactions.date,
           status: transactions.status,
           fundId: transactions.fundId,
@@ -162,10 +165,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[EXPENSES GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch expenses' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to fetch expenses');
   }
 }
 
@@ -475,9 +475,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[EXPENSES POST ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to record expense' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to record expense');
   }
 }

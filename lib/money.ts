@@ -10,7 +10,14 @@
  */
 
 const CENTS = 100;
-const MAX_AMOUNT = 10_000_000; // matches server validation ceiling
+/**
+ * Money-module ceiling, exported so EVERY write path enforces the same one.
+ * It used to be private here and re-declared inside POST /api/deposits, which
+ * is how POST /api/deposits/request ended up with no ceiling at all: a request
+ * for more than the cap can be filed and then approved into the ledger without
+ * ever passing the check a direct deposit would have failed.
+ */
+export const MAX_AMOUNT = 10_000_000; // matches server validation ceiling
 const DEC15_2 = /^-?\d{1,13}(\.\d{1,2})?$/;
 
 export class MoneyError extends Error {

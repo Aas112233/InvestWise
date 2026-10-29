@@ -1,9 +1,11 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, withDbRetry } from '@/db/index';
 import { members, projects, funds, transactions, auditLogs, systemSettings } from '@/db/schema/index';
 import { eq, and, or, sql, desc, gte, lte, inArray } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
+import { guard } from '@/lib/guarded-route';
 import { SETTLED_DEPOSIT_STATUSES } from '@/lib/ledger-selectors';
 import {
   fiscalMonthSequence,
@@ -44,6 +46,12 @@ export async function GET(request: NextRequest) {
     // licensable `analysis` module covers its sibling route
     // `/api/analytics/analysis` via the tenant-module gate.
     const scopedTenantId = requireTenant(tenantId, user);
+
+    // 13 parallel queries, six of them unbounded tenant-wide aggregates, and
+    // the dashboard calls it on every load — so the ceiling has to sit well
+    // above honest navigation while still bounding a scripted loop.
+    const limited = await guard(request, 'expensive', { user: user.id, tenant: scopedTenantId });
+    if (limited) return limited;
 
     const db = getDb();
 
@@ -395,9 +403,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(stats);
   } catch (err: any) {
     console.error('[ANALYTICS STATS GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to aggregate analytics' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to aggregate analytics');
   }
 }

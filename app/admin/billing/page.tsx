@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { History, Layers, Pencil, Plus, Trash2 } from "lucide-react";
+import { History, Layers, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useLocale } from "@/lib/i18n";
 import { toCents, fromCents } from "@/lib/money";
@@ -209,6 +209,33 @@ export default function AdminBillingPage() {
       ),
   });
 
+  // Manual expiry sweep: applies past-due / expired transitions immediately
+  // instead of waiting for the nightly cron. Idempotent server-side.
+  const [sweepConfirm, setSweepConfirm] = useState(false);
+  const sweepMutation = useMutation<{ success: boolean; data: { scanned: number; expired: number; trialsExpired: number } }>({
+    mutationFn: () =>
+      apiClient<{ success: boolean; data: { scanned: number; expired: number; trialsExpired: number } }>(
+        "/admin/billing/run-expiry",
+        { method: "POST" },
+      ),
+    onSuccess: (res) => {
+      setSweepConfirm(false);
+      void qc.invalidateQueries({ queryKey: ["admin", "billing"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
+      const d = res.data;
+      toast.success(
+        t("admin.billing.sweepDone", {
+          defaultValue: "Sweep done: {scanned} scanned, {expired} expired, {trials} trials ended",
+          scanned: d.scanned,
+          expired: d.expired,
+          trials: d.trialsExpired,
+        }),
+      );
+    },
+    onError: (err) =>
+      toast.error(err instanceof ApiError ? err.message : t("admin.billing.sweepFailed", { defaultValue: "Expiry sweep failed" })),
+  });
+
   const columns: ERPColumn<BillingRow>[] = [
     {
       key: "tenant",
@@ -373,14 +400,46 @@ export default function AdminBillingPage() {
 
   return (
     <div className="space-y-4">
-      <div className="pb-2 border-b border-border/80">
-        <p className="text-xs uppercase font-mono tracking-wider text-muted-foreground">
-          {t("nav.superadminPanel")}
-        </p>
-        <h1 className="text-lg font-bold tracking-tight text-foreground">
-          {t("admin.billing.title", { defaultValue: "Billing & Subscriptions" })}
-        </h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border/80">
+        <div>
+          <p className="text-xs uppercase font-mono tracking-wider text-muted-foreground">
+            {t("nav.superadminPanel")}
+          </p>
+          <h1 className="text-lg font-bold tracking-tight text-foreground">
+            {t("admin.billing.title", { defaultValue: "Billing & Subscriptions" })}
+          </h1>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSweepConfirm(true)}
+          disabled={sweepMutation.isPending}
+          loading={sweepMutation.isPending}
+          className="gap-1.5 shrink-0"
+          title={t("admin.billing.sweepHint", {
+            defaultValue: "Apply past-due/expired transitions now instead of waiting for the nightly cron",
+          })}
+        >
+          {!sweepMutation.isPending && <RefreshCw size={13} />}
+          {t("admin.billing.sweepNow", { defaultValue: "Run expiry sweep" })}
+        </Button>
       </div>
+
+      <ERPConfirmDialog
+        isOpen={sweepConfirm}
+        onClose={() => setSweepConfirm(false)}
+        title={t("admin.billing.sweepTitle", { defaultValue: "Run the expiry sweep now?" })}
+        description={t("admin.billing.sweepDesc", {
+          defaultValue:
+            "Every trial past its deadline becomes expired and every paid-through lapse moves to past-due (or expired once grace ends). Idempotent — each transition is written to the change log and the platform audit.",
+        })}
+        confirmLabel={t("admin.billing.sweepNow", { defaultValue: "Run expiry sweep" })}
+        cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
+        confirmVariant="primary"
+        pending={sweepMutation.isPending}
+        pendingLabel={t("admin.billing.sweeping", { defaultValue: "Sweeping…" })}
+        onConfirm={() => sweepMutation.mutate()}
+      />
 
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
         <ERPMetricCard

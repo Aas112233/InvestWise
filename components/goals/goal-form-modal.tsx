@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
+import { TopSheet, ERPFormLayout, ERPFormSection, ERPFormGrid, ERPFormField, ERPDatePicker, AppDropdown, DropdownOption, Button } from "@/components/ui";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { Goal, Project } from "@/types";
 import { useLocale } from "@/lib/i18n";
+import { useTenantDateFormat } from "@/lib/use-tenant-settings";
 
 interface GoalFormModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export function GoalFormModal({
   initialData,
 }: GoalFormModalProps) {
   const { t } = useLocale();
+  const dateFormat = useTenantDateFormat();
 
   const [title, setTitle] = useState(initialData?.title || "");
   const [description, setDescription] = useState(initialData?.description || "");
@@ -192,11 +194,11 @@ export function GoalFormModal({
 
           <ERPFormGrid cols={2}>
             <ERPFormField label={t("goals.form.deadline", { defaultValue: "Target Date" })}>
-              <input
-                type="date"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-card border border-border/80 text-foreground rounded-xl placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
+              <ERPDatePicker
+                value={deadline || null}
+                onChange={(v) => setDeadline(v ?? "")}
+                displayFormat={dateFormat}
+                placeholder={t("erp.datePicker.placeholder")}
               />
             </ERPFormField>
 

@@ -8,6 +8,7 @@ import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError, readJsonUnknown } from '@/lib/utils/errors';
 import { computeFiscalPeriodTotals } from '@/lib/fiscal-totals';
+import { apiError } from '@/lib/utils/api-error';
 
 const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('close'), notes: z.string().trim().max(1000).optional() }),
@@ -16,10 +17,7 @@ const actionSchema = z.discriminatedUnion('action', [
 
 function responseError(error: unknown, fallback: string) {
   const err = error as { message?: string; statusCode?: number; code?: string };
-  return NextResponse.json(
-    { success: false, message: err.message || fallback, code: err.code || 'INTERNAL_ERROR' },
-    { status: err.statusCode || 500 },
-  );
+  return apiError(err, fallback);
 }
 
 export async function POST(

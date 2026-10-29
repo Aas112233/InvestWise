@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getDb } from '@/db/index';
-import { users } from '@/db/schema/index';
+import { sessions, users } from '@/db/schema/index';
 import { and, count, eq } from 'drizzle-orm';
 import {
   AppError,
@@ -19,6 +19,7 @@ import { isPlatformOwnerEmail } from '@/lib/platform-owner';
 import { hashPassword, validatePasswordStrength } from '@/lib/utils/password';
 import { logAudit } from '@/lib/utils/audit';
 import { getClientIp } from '@/lib/request-meta';
+import { clearAccountLock } from '@/lib/account-lock';
 
 // Mirrors the screen list in lib/middleware/auth.ts (permission matrix keys).
 const ALL_SCREENS = [
@@ -264,6 +265,23 @@ export async function POST(
       .set({ password: await hashPassword(parsed.data.password), updatedAt: new Date() })
       .where(and(eq(users.id, target.id), eq(users.tenantId, admin.callerTenantId)));
 
+    // End the target's live sessions. Requests are authorised from the sessions
+    // row (lib/middleware/auth.ts isSessionTokenActive), never from the password,
+    // so resetting a credential without revoking leaves whoever is already
+    // signed in working for up to the 24h absolute session cap — which defeats
+    // the only reason an admin reaches for this button. Same primitive as
+    // POST /api/auth/logout-all.
+    const revokedSessions = await db
+      .update(sessions)
+      .set({ isActive: false, isExpired: true, logoutTime: new Date() })
+      .where(and(eq(sessions.userId, target.id), eq(sessions.isActive, true)))
+      .returning({ sessionId: sessions.sessionId });
+
+    // Clear any failed-attempt lockout as well: this is the locked-user rescue
+    // path, and leaving account_locks in place would reset the credential while
+    // the next sign-in still answered 423.
+    const lockCleared = await clearAccountLock(target.email);
+
     await logAudit({
       user: { id: admin.user.id, name: admin.user.name },
       req: { ip: getClientIp(request) ?? undefined },
@@ -271,13 +289,19 @@ export async function POST(
       action: 'USER_PASSWORD_RESET',
       resourceType: 'User',
       resourceId: target.id,
-      details: { targetEmail: target.email },
+      // No password material is recorded; the revoked session count is, because
+      // it is the evidence the lock-out actually happened.
+      details: { targetEmail: target.email, sessionsRevoked: revokedSessions.length, lockCleared },
       status: 'SUCCESS',
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Password reset. The user must sign in with the new credential.',
+      data: { sessionsRevoked: revokedSessions.length, lockCleared },
+      message:
+        revokedSessions.length > 0
+          ? `Password reset. ${revokedSessions.length} active session${revokedSessions.length === 1 ? '' : 's'} signed out — the user must sign in with the new credential.`
+          : 'Password reset. The user must sign in with the new credential.',
     });
   } catch (error) {
     return errorResponse(error, 'Failed to reset password', 'PASSWORD_RESET_FAILED');

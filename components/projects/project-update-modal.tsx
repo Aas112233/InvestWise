@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { TopSheet, ERPFormSection, ERPFormGrid, ERPFormField, AppDropdown, DropdownOption, Button } from "@/components/ui";
+import { TopSheet, ERPFormSection, ERPFormGrid, ERPFormField, ERPDatePicker, AppDropdown, DropdownOption, Button } from "@/components/ui";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { useLocale } from "@/lib/i18n";
+import { useTenantCurrency, useTenantDateFormat } from "@/lib/use-tenant-settings";
 import { Project } from "@/types";
 import { formatMoney, todayLocalIso } from "@/lib/formatters";
 import { intlLocaleFor, projectSectorLabel } from "./project-labels";
@@ -41,7 +42,10 @@ export function ProjectUpdateModal({
   projects = [],
 }: ProjectUpdateModalProps) {
   const { t, locale } = useLocale();
-  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
+  // Money on this screen is the tenant's money, so it carries the tenant's currency.
+  const tenantCurrency = useTenantCurrency();
+  const dateFormat = useTenantDateFormat();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, tenantCurrency, { locale: intlLocaleFor(locale) });
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>(project?.id || "");
   const [type, setType] = useState<"Earning" | "Expense">("Expense");
@@ -235,12 +239,13 @@ export function ProjectUpdateModal({
 
           <ERPFormGrid cols={2}>
             <ERPFormField label={t("common.date", { defaultValue: "Date *" })}>
-              <input
-                type="date"
-                value={date}
+              <ERPDatePicker
+                value={date || null}
+                onChange={(v) => setDate(v ?? "")}
+                displayFormat={dateFormat}
                 max={todayLocalIso()}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-mono bg-card border border-border/80 text-foreground rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors"
+                clearable={false}
+                placeholder={t("erp.datePicker.placeholder")}
               />
             </ERPFormField>
 

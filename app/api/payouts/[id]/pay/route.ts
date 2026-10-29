@@ -4,6 +4,7 @@ import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { ForbiddenError } from '@/lib/utils/errors';
 import { payPayoutInstallment } from '@/lib/member-payouts';
+import { apiError } from '@/lib/utils/api-error';
 
 /**
  * POST /api/payouts/[id]/pay — releases the oldest unpaid installment.
@@ -30,9 +31,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     return NextResponse.json({ success: true, data: result, message: 'Installment paid' });
   } catch (err: any) {
     console.error('[PAYOUT PAY ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to pay installment', code: err.code ?? 'PAYOUT_PAY_FAILED' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to pay installment');
   }
 }

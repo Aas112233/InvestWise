@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, members, funds, projects, users, systemSettings } from '@/db/schema/index';
@@ -6,7 +7,7 @@ import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-m
 import { eq, and, desc, sql, ilike, gte, lte, count, inArray } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
-import { normalizeRole } from '@/lib/roles';
+import { hasScreenPermission, hasAnyScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
 import { toCents, fromCents, parsePositiveAmount } from '@/lib/money';
@@ -14,6 +15,7 @@ import { dayRangeUtc } from '@/lib/tenant-time';
 import { getTenantTimezone } from '@/lib/tenant-time-db';
 import { inflowSqlPredicate, outflowSqlPredicate } from '@/lib/ledger-selectors';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
+import { escapeLikePattern } from '@/lib/utils/validation';
 
 // §12: single source of truth for the inflow/outflow classification — the GET
 // aggregates and the POST balance direction must never disagree. A type in
@@ -32,11 +34,18 @@ export async function GET(request: NextRequest) {
     // 403 instead of aggregating every tenant's inflow/outflow.
     const scopedTenantId = requireTenant(tenantId, user);
 
+    // The ledger is readable by whoever owns any of its views. This mirrors the
+    // gate on the /api/finance/transactions twin, which required it while this
+    // (live) route required only authentication.
+    if (!hasAnyScreenPermission(user, ['TRANSACTIONS', 'DEPOSITS', 'REQUEST_DEPOSIT'], 'READ')) {
+      throw new ForbiddenError('Read permission required for: TRANSACTIONS');
+    }
+
     const { searchParams } = new URL(request.url);
     // Clamp pagination at the boundary: an unbounded `limit` lets an
     // authenticated caller force a full-tenant scan across three LEFT JOINs
     // plus count/SUM aggregates, and a large `page` produces a huge OFFSET.
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const page = Math.min(1000, Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)); // page bounded: a huge `page` is an OFFSET walk Postgres still does
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const skip = (page - 1) * limit;
 
@@ -113,7 +122,7 @@ export async function GET(request: NextRequest) {
           // `"members"."name"` there fails with Postgres 42P01 (missing FROM-
           // clause entry) and 500s every non-UUID search. EXISTS is join-agnostic
           // and still asserts tenancy through the member link (§6).
-          const like = `%${term}%`;
+          const like = `%${escapeLikePattern(term)}%`;
           conditions.push(sql`(
             ${transactions.referenceNumber} ILIKE ${like}
             OR ${transactions.description} ILIKE ${like}
@@ -163,6 +172,7 @@ export async function GET(request: NextRequest) {
         .select({
           id: transactions.id,
           referenceNumber: transactions.referenceNumber,
+          docNumber: transactions.docNumber,
           transferGroupId: transactions.transferGroupId,
           date: transactions.date,
           type: transactions.type,
@@ -228,10 +238,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[TRANSACTIONS GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch transactions' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to fetch transactions');
   }
 }
 
@@ -246,8 +253,8 @@ export async function POST(request: NextRequest) {
     // project ids are rejected below.
     const scopedTenantId = requireTenant(tenantId, user);
 
-    if (normalizeRole(user.role) === 'Member') {
-      throw new ForbiddenError('Insufficient permissions to record transactions');
+    if (!hasScreenPermission(user, 'TRANSACTIONS', 'WRITE')) {
+      throw new ForbiddenError('Write permission required for: TRANSACTIONS');
     }
 
     const body = await readJsonBody(request);
@@ -424,9 +431,6 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   } catch (err: any) {
     console.error('[TRANSACTIONS POST ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to record transaction' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to record transaction');
   }
 }

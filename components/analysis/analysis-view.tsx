@@ -41,6 +41,7 @@ import { AnalysisData, Member } from "@/types";
 import { formatMoney, intlLocaleFor } from "@/lib/formatters";
 import { projectSectorLabel } from "@/components/projects/project-labels";
 import { useLocale } from "@/lib/i18n";
+import { useTenantCurrency } from "@/lib/use-tenant-settings";
 import { memberDisplayName } from "@/lib/member-display";
 import { fiscalMonthSequence, resolveFiscalBounds } from "@/lib/fiscal-periods";
 import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
@@ -111,7 +112,9 @@ export function AnalysisView({
   onMembersRetry,
 }: AnalysisViewProps) {
   const { t, locale } = useLocale();
-  const fm = (n: number | string | null | undefined) => formatMoney(n, "BDT", { locale: intlLocaleFor(locale) });
+  // Money on this screen is the tenant's money, so it carries the tenant's currency.
+  const tenantCurrency = useTenantCurrency();
+  const fm = (n: number | string | null | undefined) => formatMoney(n, tenantCurrency, { locale: intlLocaleFor(locale) });
   const [activeTab, setActiveTab] = useState<"overview" | "regularity" | "leaderboard">("overview");
 
   // FY label: the SERVER is authoritative (it bucketed the data with its own
@@ -679,6 +682,18 @@ export function AnalysisView({
               </span>
             </div>
           </div>
+
+          {data?.depositModel && !data.depositModel.obligationMeasured && (
+            // H9: an empty matrix here means "no deposit was ever owed", not "every
+            // deposit is missing" and not "collection is perfect". Saying so is the
+            // difference between an unmeasured value and a misleading one.
+            <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-border dark:bg-slate-800/60 dark:text-slate-300">
+              {t("analysis.depositModelNotMeasured", {
+                defaultValue:
+                  "This organisation uses flexible deposits — members have no monthly obligation, so punctuality and arrears are not measured. An empty grid below is expected, not a problem.",
+              })}
+            </p>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left border-collapse">

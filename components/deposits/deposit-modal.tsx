@@ -17,11 +17,19 @@ import { ApiError, apiClient } from "@/lib/api-client";
 import { memberDisplayName } from "@/lib/member-display";
 import { useLocale } from "@/lib/i18n";
 import { useFiscalPeriodOptions } from "@/lib/fiscal-period-options";
-import { useTenantShareValue, useTenantPaymentMethods } from "@/lib/use-tenant-settings";
+import { formatMoney } from "@/lib/formatters";
+import { useTenantCurrency, useTenantDateFormat, useTenantShareValue, useTenantPaymentMethods } from "@/lib/use-tenant-settings";
 import { PAYMENT_TYPE_LABEL_KEY, type PaymentType } from "@/lib/payment-methods";
-import { monthKeyOf, useFundOptions, useHasOpenFiscalPeriod, useMemberOptions, type DepositRow } from "./shared";
 import { DEPOSIT_FUND_TYPE } from "@/lib/deposit-fund";
-import { openPrintTab, releasePrintWindow, reservePrintWindow } from "@/lib/documents";
+import {
+  monthKeyOf,
+  useFundOptions,
+  useHasOpenFiscalPeriod,
+  useMemberDepositMonths,
+  useMemberOptions,
+  type DepositRow,
+} from "./shared";
+import { offerPrintDocument } from "@/lib/documents";
 
 const depositSchema = z.object({
   memberId: z.string().min(1),
@@ -45,6 +53,21 @@ type DepositForm = z.infer<typeof depositSchema>;
 const inputCls =
   "w-full px-3 py-2 rounded-xl border text-xs bg-card border-border/80 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/40 transition-colors";
 
+/**
+ * Period key of a date INPUT's value, or "" when it cannot be known.
+ *
+ * An ISO `YYYY-MM-DD` string is sliced rather than parsed: `new Date("2026-10-01")` is UTC midnight,
+ * so reading `getMonth()` in a negative-offset timezone would call it September and file the
+ * deposit in the wrong period. Only a non-ISO value falls back to `monthKeyOf`.
+ */
+function monthKeyFromDateInput(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}/.test(raw)) return raw.slice(0, 7);
+  // monthKeyOf already answers "" for an unusable value.
+  return monthKeyOf(raw);
+}
+
 export function DepositModal({
   open,
   onClose,
@@ -56,6 +79,8 @@ export function DepositModal({
 }) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
+  const currency = useTenantCurrency();
+  const dateFormat = useTenantDateFormat();
   const isEdit = !!initial;
   const tenantShareValue = useTenantShareValue();
   // Fiscal period options (Rule §8): the deposit month is an accounting
@@ -205,7 +230,86 @@ export function DepositModal({
   // Keeps the row's own period visible when editing a deposit that sits in a
   // closed or never-created fiscal year.
   const yearOptions = yearOptionsIncluding(effectiveFiscalYear || null);
-  const monthOptions = monthsFor(effectiveFiscalYear || null);
+
+  // Months this member already holds in the chosen fiscal year — the SAME
+  // server grid the single-member bulk collection uses, so a month greyed out
+  // here is exactly a month the write path would refuse. Enabled only once the
+  // member is chosen: the endpoint answers one member per call.
+  const monthGrid = useMemberDepositMonths(memberId || null, effectiveFiscalYear || null);
+
+  /**
+   * FLEXIBLE schedules: the month is ATTRIBUTION, not a decision with consequences.
+   *
+   * Under monthly the officer must choose it deliberately, because "paying June's instalment in
+   * July" is a real and common act and the choice drives compliance. Under flexible nothing is owed
+   * for any month, so making them pick one from a blank list adds a click and one way to be wrong:
+   * a `deposit_month` that disagrees with the collected date silently relocates the money between
+   * fiscal years and reports, and there is no obligation for it to disagree WITH.
+   *
+   * So the month follows the collected date the officer already typed (the server stamps
+   * `transactions.date` from that same field) and remains fully editable — visible in the picker,
+   * never hidden, and an explicit pick always wins. Monthly tenants get exactly the old behaviour:
+   * `derivedMonth` stays empty because `flexibleGrid` is false.
+   */
+  const flexibleGrid = monthGrid.data?.obligationEnforced === false;
+  const derivedMonth = flexibleGrid ? monthKeyFromDateInput(collectedDate) : "";
+  /**
+   * Only derive a month the picker can actually show. A deposit back-dated across a fiscal-year
+   * boundary would otherwise be posted into a period the officer never sees selected on screen —
+   * the opposite of the reason for deriving it. When that happens the field stays an explicit
+   * choice, exactly as it was before.
+   */
+  const canDeriveMonth =
+    derivedMonth !== "" && monthsFor(effectiveFiscalYear || null).some((o) => o.value === derivedMonth);
+  const effectiveMonth = depositMonth || (canDeriveMonth ? derivedMonth : "");
+  const occupiedMonths = useMemo(() => {
+    const taken = new Map<string, string | null>();
+    for (const cell of monthGrid.data?.months ?? []) if (cell.occupied) taken.set(cell.month, cell.amount);
+    return taken;
+  }, [monthGrid.data]);
+
+  /**
+   * H6 — periods that already hold settled money, for a FLEXIBLE member.
+   *
+   * `occupiedMonths` is empty on a flexible schedule (correctly: nothing is reserved), which would
+   * leave this picker offering a month the member has already paid into three times with no hint
+   * of it. Captions are figures only, because the existing "month taken" wording is precisely
+   * what is NOT true here. Monthly cells carry `depositCount: null`, so this map stays empty and
+   * the monthly picker is untouched.
+   */
+  const monthProgress = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const cell of monthGrid.data?.months ?? []) {
+      // `typeof` rather than a null check: a payload from a server predating the flexible model
+      // omits the field entirely, and that must mean "nothing to show", never "undefined".
+      if (typeof cell.depositCount !== "number" || cell.depositCount <= 0) continue;
+      seen.set(
+        cell.month,
+        `${cell.depositCount} · ${cell.periodTotal ? formatMoney(cell.periodTotal, currency) : ""}`.trim(),
+      );
+    }
+    return seen;
+  }, [monthGrid.data, currency]);
+
+  const monthOptions = useMemo(() => {
+    const options = monthsFor(effectiveFiscalYear || null);
+    if (!memberId) return options;
+    return options.map((option) => {
+      const amount = occupiedMonths.get(option.value);
+      if (amount === undefined) {
+        const progress = monthProgress.get(option.value);
+        return progress ? { ...option, caption: progress } : option;
+      }
+      return {
+        ...option,
+        // The month this row ALREADY sits in stays selectable: the occupancy
+        // grid includes the deposit being edited, so locking it would block an
+        // edit of the amount alone.
+        disabled: option.value !== effectiveMonth,
+        caption: `${t("erp.fiscalMonth.monthTaken")}${amount ? ` · ${formatMoney(amount, currency)}` : ""}`,
+      };
+    });
+  }, [monthsFor, effectiveFiscalYear, memberId, occupiedMonths, monthProgress, effectiveMonth, t, currency]);
 
   const close = () => {
     reset({
@@ -225,11 +329,22 @@ export function DepositModal({
   };
 
   const onSubmit = async (values: DepositForm) => {
-    if (!values.depositMonth) {
+    // The same rule the picker displays: an explicit pick always wins, otherwise a flexible
+    // schedule attributes the money to the period of its collected date — and only when that period
+    // is one the officer can actually see selected on screen.
+    const selectedMonth = values.depositMonth || (canDeriveMonth ? derivedMonth : "");
+    if (!selectedMonth) {
       toast.error(t("deposits.modal.selectMonth"));
       return;
     }
-    const selectedMonth = values.depositMonth;
+    // A month this member already holds is disabled in the picker; refuse it
+    // here too, so a keyboard path or a stale grid cannot post a duplicate.
+    // Re-saving the row's OWN month is the edit case and stays allowed.
+    const heldAmount = occupiedMonths.get(selectedMonth);
+    if (heldAmount !== undefined && selectedMonth !== (initial?.depositMonth || null)) {
+      toast.error(t("erp.fiscalMonth.monthTaken"));
+      return;
+    }
     try {
       if (isEdit && initial) {
         await apiClient<{ success: boolean; message?: string }>(`/finance/deposits/${initial.id}`, {
@@ -251,8 +366,16 @@ export function DepositModal({
         queryClient.invalidateQueries({ queryKey: ["analytics"] });
         toast.success(t("deposits.updatedToast"));
       } else {
-        reservePrintWindow();
-        const res = await apiClient<{ success: boolean; message?: string; data?: { id?: string } }>("/deposits", {
+        // No print window is opened here. This used to reserve a blank browser
+        // tab before the request so the receipt could be navigated into it
+        // afterwards, which meant pressing Save opened a tab for a result that
+        // had not been decided yet — and on a failed write the tab had to be
+        // closed again. Printing is now offered from the success toast instead.
+        const res = await apiClient<{
+          success: boolean;
+          message?: string;
+          data?: { id?: string; depositNumber?: string; referenceNumber?: string };
+        }>("/deposits", {
           method: "POST",
           body: JSON.stringify({
             memberId: values.memberId,
@@ -276,13 +399,25 @@ export function DepositModal({
         const memberName = memberDisplayName(matchedMember?.name, matchedMember?.status);
         // Localized copy is authoritative; the server `message` is an English
         // duplicate and would defeat ur/hi/bn.
-        toast.success(t("deposits.recordedToast", { amount: values.amount.trim(), member: memberName }));
-        if (res?.data?.id) openPrintTab("deposit", res.data.id);
-        else releasePrintWindow();
+        // One toast, carrying the print offer: the document becomes available
+        // only after the transaction succeeded, and the tab opens from this
+        // click rather than from the Save that started the request. If it is
+        // dismissed the receipt is still reachable from the row's Print action.
+        const recordedMessage = t("deposits.recordedToast", { amount: values.amount.trim(), member: memberName });
+        if (res?.data?.id) {
+          offerPrintDocument({
+            kind: "deposit",
+            id: res.data.id,
+            title: recordedMessage,
+            actionLabel: t("deposits.actions.print", { defaultValue: "Print Receipt" }),
+            reference: res.data.depositNumber ?? res.data.referenceNumber,
+          });
+        } else {
+          toast.success(recordedMessage);
+        }
       }
       close();
     } catch (err) {
-      releasePrintWindow();
       toast.error(err instanceof ApiError ? err.message : t("deposits.loadFailed"));
     }
   };
@@ -345,6 +480,7 @@ export function DepositModal({
                 <ERPDatePicker
                   value={collectedDate}
                   onChange={(v) => setValue("collectedDate", (v ?? "") as string, { shouldValidate: true })}
+                  displayFormat={dateFormat}
                   placeholder={t("erp.datePicker.placeholder")}
                 />
               </ERPFormField>
@@ -352,6 +488,7 @@ export function DepositModal({
                 <ERPDatePicker
                   value={submittedDate}
                   onChange={(v) => setValue("submittedDate", v)}
+                  displayFormat={dateFormat}
                   placeholder={t("deposits.modal.submittedDatePlaceholder")}
                 />
               </ERPFormField>
@@ -362,13 +499,16 @@ export function DepositModal({
               required
               value={{
                 fiscalYear: effectiveFiscalYear || null,
-                month: depositMonth || null,
+                // Shows the derived period rather than a blank field, so the attribution the
+                // server will store is the attribution the officer can see.
+                month: effectiveMonth || null,
               }}
               onChange={(v) => {
                 setValue("depositFiscalYear", v.fiscalYear ?? "");
                 setValue("depositMonth", v.month ?? "");
               }}
               monthLabel={t("deposits.modal.depositMonth")}
+              monthsLoading={monthGrid.isLoading}
             />
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("deposits.modal.reference")}>

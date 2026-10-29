@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { projects, projectUpdates, projectMembers, funds, transactions, members } from '@/db/schema/index';
@@ -277,9 +278,6 @@ export async function POST(
   } catch (err: unknown) {
     console.error('[PROJECT UPDATE POST ERROR]', err);
     const e = err as { message?: string; statusCode?: number };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to record project update' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to record project update');
   }
 }

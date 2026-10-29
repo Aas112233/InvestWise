@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { listMemberGovernanceStatuses } from '@/lib/governance/status-service';
+import { apiError } from '@/lib/utils/api-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,9 +56,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[GOVERNANCE MEMBERS GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch governance member status' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to fetch governance member status');
   }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, withDbRetry } from '@/db/index';
-import { users, tenants } from '@/db/schema/index';
+import { users, tenants, sessions } from '@/db/schema/index';
 import { desc, count, ilike, or, eq, and, type SQL } from 'drizzle-orm';
 import { AuthError, ForbiddenError, AppError, extractDbError, readJsonBody } from '@/lib/utils/errors';
 import { requireAuthUser, requireSuperAdmin } from '@/lib/admin-guard';
@@ -10,6 +10,7 @@ import { isPlatformOwnerEmail } from '@/lib/platform-owner';
 import { validatePasswordStrength, hashPassword } from '@/lib/utils/password';
 import { validateUserUpdateInput, validatePasswordResetInput } from '@/lib/admin/user-schema';
 import { logSuperAdminAction, deleteUserAccount } from '@/lib/superadmin-service';
+import { clearAccountLock } from '@/lib/account-lock';
 
 const MAX_LIMIT = 100;
 
@@ -28,7 +29,9 @@ export async function GET(request: NextRequest) {
     requireSuperAdmin(platformUser);
 
     const { searchParams } = new URL(request.url);
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    // page is clamped so `page=1000000` cannot force an unbounded OFFSET
+    // walk (Postgres still visits and discards every skipped row).
+    const page = Math.min(1000, Math.max(1, parseInt(searchParams.get('page') || '1', 10)));
     const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
     const skip = (page - 1) * limit;
     const search = (searchParams.get('search') || '').trim();
@@ -355,6 +358,28 @@ export async function POST(request: NextRequest) {
         .where(eq(users.id, userId))
     );
 
+    // End the target's live sessions. Without this the reset only changes the
+    // credential for the NEXT sign-in: every request is authorised from the
+    // `sessions` row (isActive/isExpired — lib/middleware/auth.ts
+    // isSessionTokenActive), never from the password, so an attacker already
+    // signed in keeps full access for up to the 24h absolute session cap, and
+    // background refreshes keep succeeding because the row is still active.
+    // That makes "reset the password to lock them out" silently ineffective.
+    // Same primitive as POST /api/auth/logout-all.
+    const revokedSessions = await withDbRetry(() =>
+      db
+        .update(sessions)
+        .set({ isActive: false, isExpired: true, logoutTime: new Date() })
+        .where(and(eq(sessions.userId, userId), eq(sessions.isActive, true)))
+        .returning({ sessionId: sessions.sessionId })
+    );
+
+    // Clear any failed-attempt lockout too. The common reason for reaching for
+    // this button is a user locked out by their own mistypes, and a reset that
+    // left account_locks in place would report success while the user still got
+    // 423 on the very next sign-in.
+    const lockCleared = await clearAccountLock(target.email);
+
     await logSuperAdminAction({
       context: {
         adminUserId: platformUser.id,
@@ -365,13 +390,18 @@ export async function POST(request: NextRequest) {
       targetType: 'User',
       targetId: userId,
       tenantId: target.tenantId,
-      // The password itself is deliberately never recorded.
-      details: { targetEmail: target.email },
+      // The password itself is deliberately never recorded. The revoked session
+      // count is: it is the evidence that the lock-out actually happened.
+      details: { targetEmail: target.email, sessionsRevoked: revokedSessions.length, lockCleared },
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Password reset. The user must sign in with the new credential.',
+      data: { sessionsRevoked: revokedSessions.length, lockCleared },
+      message:
+        revokedSessions.length > 0
+          ? `Password reset. ${revokedSessions.length} active session${revokedSessions.length === 1 ? '' : 's'} signed out — the user must sign in with the new credential.`
+          : 'Password reset. The user must sign in with the new credential.',
     });
   } catch (error: unknown) {
     console.error('[ADMIN USER PASSWORD RESET ERROR]', error);

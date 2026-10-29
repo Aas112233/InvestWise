@@ -1,10 +1,14 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { transactions, funds, members, systemSettings } from '@/db/schema/index';
 import { memberDisplayNameSql, assertMemberNotSuspended } from '@/lib/member-display';
 import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-methods';
-import { DEPOSIT_FUND_REQUIRED_MESSAGE, isDepositFund } from '@/lib/deposit-fund';
+import { DEPOSIT_CATEGORY, DEPOSIT_FUND_REQUIRED_MESSAGE, DEPOSIT_REQUEST_CATEGORY, isDepositFund } from '@/lib/deposit-fund';
 import { findDepositMonthOccupant, depositMonthConflictMessage } from '@/lib/deposit-month-limit';
+import { resolveDepositScheduleDetailed } from '@/lib/deposit-schedule/schedule';
+import { findNearDuplicateDeposits, nearDuplicateAdvisory } from '@/lib/deposit-duplicate-advisory';
+import { resolveFlexApprovalDecision } from '@/lib/deposit-schedule/approval-threshold';
 import { eq, and, asc, desc, sql, gte, lte, ilike, inArray } from 'drizzle-orm';
 import { SETTLED_DEPOSIT_STATUSES } from '@/lib/ledger-selectors';
 import { getAuthContext } from '@/lib/middleware/auth';
@@ -12,15 +16,16 @@ import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, LockedError, readJsonBody } from '@/lib/utils/errors';
-import { toCents, fromCents } from '@/lib/money';
+import { MAX_AMOUNT, toCents, fromCents } from '@/lib/money';
 import { endOfRangeUtc } from '@/lib/formatters';
 import { dayRangeUtc } from '@/lib/tenant-time';
 import { getTenantTimezone } from '@/lib/tenant-time-db';
 
 /** Single-deposit ceiling = the shared money-module maximum (10,000,000). */
-const MAX_AMOUNT_CENTS = 10_000_000 * 100;
+const MAX_AMOUNT_CENTS = MAX_AMOUNT * 100;
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
+import { escapeLikePattern } from '@/lib/utils/validation';
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,7 +47,7 @@ export async function GET(request: NextRequest) {
     // authenticated caller force a full-tenant scan across the member/fund
     // joins plus count/SUM aggregates, and a large `page` produces a huge
     // OFFSET that Postgres still walks. The UI needs ≤500 for its pickers.
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const page = Math.min(1000, Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)); // page bounded: a huge `page` is an OFFSET walk Postgres still does
     const limit = Math.min(500, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const skip = (page - 1) * limit;
     const memberId = searchParams.get('memberId');
@@ -151,7 +156,7 @@ export async function GET(request: NextRequest) {
         if (UUID_RE.test(term)) {
           conditions.push(sql`${transactions.id} = ${term}`);
         } else {
-          const like = `%${term}%`;
+          const like = `%${escapeLikePattern(term)}%`;
           conditions.push(sql`(
             ${transactions.referenceNumber} ILIKE ${like}
             OR ${transactions.description} ILIKE ${like}
@@ -202,6 +207,7 @@ export async function GET(request: NextRequest) {
       amount: transactions.amount,
       status: transactions.status,
       referenceNumber: transactions.referenceNumber,
+      docNumber: transactions.docNumber,
       memberName: members.name,
       fundName: funds.name,
     };
@@ -227,6 +233,7 @@ export async function GET(request: NextRequest) {
           description: transactions.description,
           category: transactions.category,
           referenceNumber: transactions.referenceNumber,
+          docNumber: transactions.docNumber,
           date: transactions.date,
           submittedDate: transactions.submittedDate,
           status: transactions.status,
@@ -270,10 +277,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[DEPOSITS GET ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch deposits' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to fetch deposits');
   }
 }
 
@@ -384,7 +388,7 @@ export async function POST(request: NextRequest) {
     // defense: the authoritative guard is the in-transaction re-check + ON
     // CONFLICT handling below, because two concurrent posts can both pass an
     // outside-the-tx check.
-    const [existingDeposit, [member], [fund], [pmSettings], monthOccupant] = await Promise.all([
+    const [existingDeposit, [member], [fund], [pmSettings]] = await Promise.all([
       // Duplicate reference number check (idempotency, tenant-scoped: a
       // global check leaks existence of other tenants' refs + lets one tenant
       // squat another's idempotency key).
@@ -412,23 +416,22 @@ export async function POST(request: NextRequest) {
         .from(funds)
         .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)))
         .limit(1),
-      // Tenant-configured payment methods — validates depositMethod below.
+      // Tenant-configured payment methods + deposit schedule — validates
+      // depositMethod and resolves the one-deposit-per-month rule below.
       db
-        .select({ paymentMethods: systemSettings.paymentMethods })
+        .select({
+          paymentMethods: systemSettings.paymentMethods,
+          depositSchedule: systemSettings.depositSchedule,
+          depositNearDuplicateWindowDays: systemSettings.depositNearDuplicateWindowDays,
+          depositFlexApprovalAbove: systemSettings.depositFlexApprovalAbove,
+        })
         .from(systemSettings)
         .where(eq(systemSettings.tenantId, scopedTenantId))
         .limit(1),
-      // One deposit per member per month (§12): the month this deposit is FOR
-      // must be free for this member (settled deposit or pending request
-      // occupies it; reverted/rejected rows do not). Fast-path only — the
-      // authoritative re-check runs inside the transaction below, where the
-      // member row is locked, so two concurrent posts for the same member and
-      // month can never both book it.
-      findDepositMonthOccupant(db, {
-        tenantId: scopedTenantId,
-        memberId,
-        depositMonthKey,
-      }),
+      // The month-occupancy check needs the member row resolved first, so it runs
+      // right after this group (see `depositSchedule` below). It was always only a
+      // fast path — the authoritative check is the in-transaction one, under the
+      // member FOR UPDATE lock.
     ]);
 
     if (existingDeposit.length > 0) {
@@ -444,17 +447,40 @@ export async function POST(request: NextRequest) {
       throw new NotFoundError('Fund');
     }
 
-    // One deposit per member per month (§12). The member has already
-    // deposited (or has a pending request) for the month this entry is FOR —
-    // posting a second one would double-count their contribution and the
-    // fund balance. Free the month first: reject/approve the pending request
-    // or revert the settled deposit.
-    if (monthOccupant) {
-      throw new ValidationError(depositMonthConflictMessage(depositMonthKey, monthOccupant));
+    // Deposit schedule for this member. 'monthly' enforces one deposit per member
+    // per month (§12); 'flexible' lets the member deposit any number of times, so
+    // no month is reserved. Resolved from the member row and the settings row
+    // already fetched above — zero extra queries.
+    const depositSchedule = resolveDepositScheduleDetailed({
+      tenantSchedule: pmSettings?.depositSchedule ?? null,
+      memberDepositFrequency: member.depositFrequency ?? null,
+    });
+
+    // One deposit per member per month (§12) — MONTHLY ONLY. The member has
+    // already deposited (or has a pending request) for the month this entry is
+    // FOR — posting a second one would double-count their contribution and the
+    // fund balance. Free the month first: reject/approve the pending request or
+    // revert the settled deposit.
+    if (depositSchedule.enforced) {
+      const monthOccupant = await findDepositMonthOccupant(db, {
+        tenantId: scopedTenantId,
+        memberId,
+        depositMonthKey,
+      });
+      if (monthOccupant) {
+        throw new ValidationError(depositMonthConflictMessage(depositMonthKey, monthOccupant));
+      }
     }
 
     if (!isDepositFund(fund)) {
       throw new ValidationError(DEPOSIT_FUND_REQUIRED_MESSAGE);
+    }
+
+    // POST /api/deposits/request has refused a non-active fund all along and
+    // this route never checked, so the same money could always be posted
+    // directly into a container the request path would have rejected.
+    if (fund.status !== 'ACTIVE') {
+      throw new ValidationError('Fund is not active');
     }
 
     // depositMethod must be a method this tenant configured (Settings →
@@ -474,7 +500,7 @@ export async function POST(request: NextRequest) {
     // and balance writes are atomic SQL arithmetic — a concurrent deposit,
     // transfer, or expense can never lose an update. The outer unlocked read
     // only serves the existence checks above. All math in integer cents (§12).
-    const { transactionId, newFundBalance, newMemberContributed } = await db.transaction(async (tx) => {
+    const { transactionId, docNumber, newFundBalance, newMemberContributed, postsAsPending, approvalThresholdCents } = await db.transaction(async (tx) => {
       await assertFiscalPeriodOpen(tx, scopedTenantId, depositDate);
       const [lockedFund] = await tx
         .select()
@@ -523,6 +549,10 @@ export async function POST(request: NextRequest) {
         tenantId: scopedTenantId,
         memberId,
         depositMonthKey,
+        // Flexible members reserve no month: the guard returns null before it
+        // queries, so this line is a no-op for them and the lock stays intact for
+        // every monthly member.
+        enforced: depositSchedule.enforced,
       });
       if (monthOccupant) {
         throw new ValidationError(depositMonthConflictMessage(depositMonthKey, monthOccupant));
@@ -530,27 +560,48 @@ export async function POST(request: NextRequest) {
 
       const fundBalanceCents = toCents(lockedFund.balance ?? '0');
       const memberContributedCents = toCents(lockedMember.totalContributed ?? '0');
-      const newFundBalanceCents = fundBalanceCents + amountCents;
-      const newMemberContributedCents = memberContributedCents + amountCents;
 
-      // Update fund balance (atomic — SQL reads the locked row's live value).
-      await tx
-        .update(funds)
-        .set({
-          balance: sql`(${funds.balance}::numeric + ${amountCents / 100})::numeric(15,2)`,
-          updatedAt: now,
-        })
-        .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)));
+      /**
+       * R2 — a large FLEXIBLE deposit is filed as a pending request instead of being
+       * posted as settled money, so a second officer confirms the figure before any
+       * balance moves. Monthly members are never rerouted (enforced short-circuits it
+       * inside the resolver), which is what keeps this feature a no-op for them.
+       */
+      const flexApproval = resolveFlexApprovalDecision({
+        enforced: depositSchedule.enforced,
+        approvalAbove: pmSettings?.depositFlexApprovalAbove,
+        amountCents,
+      });
+      const postsAsPending = flexApproval.postsAsPending;
 
-      await tx
-        .update(members)
-        .set({
-          totalContributed: sql`(${members.totalContributed}::numeric + ${amountCents / 100})::numeric(15,2)`,
-          lastDepositMonth: sql`GREATEST(COALESCE(${members.lastDepositMonth}, ''), ${depositMonthKey})`,
-          lastActive: now,
-          updatedAt: now,
-        })
-        .where(and(eq(members.id, memberId), eq(members.tenantId, scopedTenantId)));
+      // When it posts as settled, these are the live balances after credit. When it is
+      // filed pending, NOTHING has moved and they stay at their current values — the
+      // response must not claim a balance increase that the ledger does not have.
+      const newFundBalanceCents = postsAsPending ? fundBalanceCents : fundBalanceCents + amountCents;
+      const newMemberContributedCents = postsAsPending
+        ? memberContributedCents
+        : memberContributedCents + amountCents;
+
+      if (!postsAsPending) {
+        // Update fund balance (atomic — SQL reads the locked row's live value).
+        await tx
+          .update(funds)
+          .set({
+            balance: sql`(${funds.balance}::numeric + ${amountCents / 100})::numeric(15,2)`,
+            updatedAt: now,
+          })
+          .where(and(eq(funds.id, fundId), eq(funds.tenantId, scopedTenantId)));
+
+        await tx
+          .update(members)
+          .set({
+            totalContributed: sql`(${members.totalContributed}::numeric + ${amountCents / 100})::numeric(15,2)`,
+            lastDepositMonth: sql`GREATEST(COALESCE(${members.lastDepositMonth}, ''), ${depositMonthKey})`,
+            lastActive: now,
+            updatedAt: now,
+          })
+          .where(and(eq(members.id, memberId), eq(members.tenantId, scopedTenantId)));
+      }
 
       // Create deposit transaction — date = collected, submittedDate = recorded.
       // ON CONFLICT with NO named target: uq_trans_tenant_reference is a
@@ -567,11 +618,14 @@ export async function POST(request: NextRequest) {
           type: 'Deposit',
           amount: formattedAmount,
           description: description || 'Member deposit',
-          category: 'Deposit',
+          // R2: a rerouted deposit is written with the SAME shape the request form
+          // produces — request category + PENDING — so the existing approve, reject
+          // and revert paths handle it with no special casing anywhere downstream.
+          category: postsAsPending ? DEPOSIT_REQUEST_CATEGORY : DEPOSIT_CATEGORY,
           referenceNumber: refNumber,
           date: depositDate,
           submittedDate: submissionDate,
-          status: 'Completed',
+          status: postsAsPending ? 'PENDING' : 'Completed',
           memberId: memberId,
           fundId: fundId,
           handlingOfficer: user.name,
@@ -599,15 +653,27 @@ export async function POST(request: NextRequest) {
         // that tab only after this response lands, so the window never
         // appears for a request the server refused.
         transactionId: inserted.id,
+        // Assigned by trg_transactions_doc_number inside this same INSERT, so
+        // RETURNING already carries the final value. Surfaced as
+        // `depositNumber` in the response — that is the field the deposit
+        // modal's print action reads.
+        docNumber: inserted.docNumber,
         newFundBalance: fromCents(newFundBalanceCents),
         newMemberContributed: fromCents(newMemberContributedCents),
+        // Carried out of the tx so the audit action and the API response describe
+        // what actually happened, not what the caller asked for.
+        postsAsPending,
+        approvalThresholdCents: flexApproval.thresholdCents,
       };
     });
 
+    // The audit action records what HAPPENED. A rerouted deposit moved no money, so
+    // logging it as RECORD_DEPOSIT would leave the trail claiming a posting that the
+    // ledger does not contain.
     await logAudit({
       user: { id: user.id, name: user.name },
       tenantId,
-      action: 'RECORD_DEPOSIT',
+      action: postsAsPending ? 'REQUEST_DEPOSIT' : 'RECORD_DEPOSIT',
       resourceType: 'Transaction',
       resourceId: refNumber,
       details: {
@@ -621,14 +687,63 @@ export async function POST(request: NextRequest) {
         collectedDate: depositDate.toISOString(),
         submittedDate: submissionDate.toISOString(),
         depositMonth: depositMonthKey,
+        postedAsPending: postsAsPending,
+        ...(postsAsPending
+          ? {
+              reason: 'FLEX_APPROVAL_THRESHOLD_EXCEEDED',
+              approvalThreshold: approvalThresholdCents === null
+                ? null
+                : fromCents(approvalThresholdCents),
+            }
+          : {}),
       },
     });
+
+    // R1 near-duplicate advisory. Runs AFTER the deposit commits and never reverses
+    // it: under a flexible schedule a repeated same-amount payment is legitimate, so
+    // the control is visibility (a prompt plus an audit trail), not a gate. This is
+    // the deliberate replacement for the error ceiling the one-per-month rule used to
+    // provide by accident.
+    const nearMatches = await findNearDuplicateDeposits(db, {
+      tenantId: scopedTenantId,
+      memberId: member.id,
+      amountCents,
+      collectedDate: depositDate,
+      windowDays: pmSettings?.depositNearDuplicateWindowDays,
+      excludeId: transactionId,
+    });
+    const depositAdvisory = nearDuplicateAdvisory(nearMatches);
+    if (depositAdvisory) {
+      await logAudit({
+        user: { id: user.id, name: user.name },
+        tenantId,
+        action: 'RECORD_DEPOSIT',
+        resourceType: 'Transaction',
+        resourceId: refNumber,
+        details: {
+          advisory: 'NEAR_DUPLICATE_DEPOSIT',
+          message: depositAdvisory,
+          matchedTransactionIds: nearMatches.map((m) => m.id),
+          windowDays: pmSettings?.depositNearDuplicateWindowDays ?? null,
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,
       data: {
-        id: transactionId,
-        referenceNumber: refNumber,
+          id: transactionId,
+          // The printable reference the client shows. `referenceNumber` stays in
+          // the payload as the internal/idempotency value it has always been.
+          depositNumber: docNumber,
+          referenceNumber: refNumber,
+        // The row's true status. The client opens the printable receipt on success,
+        // so it must be able to tell a posted deposit from one awaiting approval.
+        status: postsAsPending ? 'PENDING' : 'Completed',
+        postedAsPending: postsAsPending,
+        // null in the normal case. Advisory text when a same-member, same-amount
+        // deposit landed inside the tenant window.
+        advisory: depositAdvisory,
         member: { id: member.id, name: member.name, newTotalContributed: newMemberContributed, shares: member.shares },
         fund: { id: fund.id, name: fund.name, newBalance: newFundBalance },
         amount: formattedAmount,
@@ -637,13 +752,14 @@ export async function POST(request: NextRequest) {
         submittedDate: submissionDate.toISOString(),
         depositMonth: depositMonthKey,
       },
-      message: 'Deposit recorded successfully',
+      // Honest wording: nothing was recorded against the balances on the pending
+      // path, so "recorded successfully" would be a false statement to the officer.
+      message: postsAsPending
+        ? 'Deposit filed for approval — the amount exceeds this organisation’s flexible-deposit approval limit. No balance has been updated yet.'
+        : 'Deposit recorded successfully',
     });
   } catch (err: any) {
     console.error('[DEPOSITS POST ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to record deposit' },
-      { status: err.statusCode || 500 }
-    );
+    return apiError(err, 'Failed to record deposit');
   }
 }

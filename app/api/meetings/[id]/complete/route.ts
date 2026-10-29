@@ -1,10 +1,11 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { meetings, meetingAttendees, members, memberPenalties, systemSettings } from '@/db/schema/index';
 import { memberDisplayNameSql } from '@/lib/member-display';
 import { eq, and, isNotNull } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
-import { normalizeRole } from '@/lib/roles';
+import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { NotFoundError, ForbiddenError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 
@@ -44,8 +45,8 @@ export async function POST(
     if ('error' in ctx) return ctx.error;
     const { user, tenantId } = ctx;
 
-    if (normalizeRole(user.role) === 'Member') {
-      throw new ForbiddenError('Insufficient permissions to complete a meeting');
+    if (!hasScreenPermission(user, 'MEETINGS', 'WRITE')) {
+      throw new ForbiddenError('Write permission required for: MEETINGS');
     }
 
     const { id } = await params;
@@ -192,9 +193,6 @@ export async function POST(
     });
   } catch (err: any) {
     console.error('[MEETING COMPLETE ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to finalize meeting' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to finalize meeting');
   }
 }

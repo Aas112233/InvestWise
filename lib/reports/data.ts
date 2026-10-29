@@ -17,6 +17,7 @@ import { aliasedTable, and, asc, count, desc, eq, gte, inArray, lt, lte, sql } f
 import { fromCents, toCents } from "@/lib/money";
 import { SETTLED_DEPOSIT_STATUSES } from "@/lib/ledger-selectors";
 import { memberDisplayNameSql } from "@/lib/member-display";
+import { ledgerRef } from "@/lib/doc-number";
 import {
   getReportDefinition,
   REPORT_MAX_ROWS,
@@ -360,6 +361,7 @@ async function fetchTransactionRows(opts: {
       expenseName: transactions.expenseName,
       description: transactions.description,
       referenceNumber: transactions.referenceNumber,
+      docNumber: transactions.docNumber,
       depositMonth: transactions.depositMonth,
       depositMethod: transactions.depositMethod,
        handlingOfficer: transactions.handlingOfficer,
@@ -424,7 +426,12 @@ async function fetchTransactionRows(opts: {
     return {
       dateIso: r.date ? new Date(r.date).toISOString() : "",
       depositMonth: r.depositMonth ?? "",
-      reference: r.referenceNumber ?? "",
+      // Every report column keyed "reference" across the ledger, deposits,
+      // expenses, dividends and FY statements reads from this one line, so this
+      // is where doc_number (DEP-2026-00042) replaced reference_number as the
+      // printed reference. Blank fallback preserved on purpose: an empty cell in
+      // a PDF/Excel export, not an em dash.
+      reference: ledgerRef(r, ""),
       type: r.type,
       memberId: r.memberId,
       member: emptyToBlank(r.memberName),

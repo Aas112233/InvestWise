@@ -103,11 +103,18 @@ export async function middleware(request: NextRequest) {
     return response;
   };
 
+  // Known static-asset extensions. A literal `pathname.includes('.')` let any
+  // dotted APP path (`/admin/x.html`, `/api/foo.json`) skip the edge fencing
+  // below; only real assets may bypass it (audit 07 L-7). Route handlers
+  // re-verify authz regardless — this is the edge fence only.
+  const STATIC_ASSET_RE =
+    /\.(?:js|mjs|cjs|css|map|txt|xml|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|eot|mp4|webm|wasm|webmanifest|manifest)$/i;
+
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/static') ||
     pathname.startsWith('/favicon') ||
-    pathname.includes('.')
+    STATIC_ASSET_RE.test(pathname)
   ) {
     return forward();
   }
@@ -141,9 +148,21 @@ export async function middleware(request: NextRequest) {
     return forward();
   }
 
-  // APIs: presence check only (historic behavior); route handlers verify.
+  // APIs: verify the token signature and expiry here, not just that a cookie is
+  // present. `request.cookies.has(ACCESS_COOKIE)` admitted any value — `Cookie:
+  // accessToken=x` reached every business handler on the platform, so the whole
+  // API's safety rested on each of 106 handlers remembering to call a guard.
+  // That convention is exactly what made the surface look "unauthenticated".
+  //
+  // This is still NOT the authorization boundary: the edge cannot see the token
+  // blacklist, account status, tenant suspension or the subscription gate, so
+  // getAuthContext()/requireSession() remain authoritative and re-verify per
+  // request. The gain is that a garbage, forged or expired token is rejected in
+  // one place for free, before it reaches any handler or opens a DB connection.
   if (pathname.startsWith('/api/')) {
-    if (request.cookies.has(ACCESS_COOKIE)) {
+    const apiToken = request.cookies.get(ACCESS_COOKIE)?.value;
+    const apiClaims = apiToken ? await verifyEdgeAccessToken(apiToken) : null;
+    if (apiClaims) {
       return forward();
     }
     return NextResponse.json(

@@ -1,3 +1,4 @@
+import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
 import { projects, projectUpdates, projectMembers, members, funds, systemSettings, transactions, goals } from '@/db/schema/index';
@@ -156,10 +157,7 @@ export async function GET(
   } catch (err: unknown) {
     console.error('[PROJECT GET ERROR]', err);
     const e = err as { message?: string; statusCode?: number };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to fetch project' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to fetch project');
   }
 }
 
@@ -421,10 +419,7 @@ export async function PUT(
   } catch (err: unknown) {
     console.error('[PROJECT UPDATE ERROR]', err);
     const e = err as { message?: string; statusCode?: number };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to update project' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to update project');
   }
 }
 
@@ -589,10 +584,7 @@ export async function DELETE(
   } catch (err: unknown) {
     console.error('[PROJECT DELETE ERROR]', err);
     const e = err as { message?: string; statusCode?: number };
-    return NextResponse.json(
-      { success: false, message: e.message || 'Failed to delete project' },
-      { status: e.statusCode || 500 },
-    );
+    return apiError(e, 'Failed to delete project');
   }
 }
 

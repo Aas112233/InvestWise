@@ -5,6 +5,7 @@ import { eq, and, gte, isNull, ne, or, gt } from 'drizzle-orm';
 import { verifyToken, generateTokenPair, blacklistToken } from '@/lib/utils/jwt';
 import { tokenHash } from '@/lib/middleware/auth';
 import { getTenantSubscriptionBlocked } from '@/lib/subscription-guard';
+import { guard } from '@/lib/guarded-route';
 import { setAuthCookies, COOKIE_NAMES } from '@/lib/utils/cookies';
 import { getTokenExpiry } from '@/lib/token-expiry';
 import {
@@ -17,9 +18,35 @@ import { AppError, AuthError } from '@/lib/utils/errors';
 import { normalizeRole } from '@/lib/roles';
 import crypto from 'node:crypto';
 
+// A presented-but-revoked refresh token (blacklist hit, unique-constraint
+// replay, or a session row that no longer matches) is treated as token-theft
+// evidence: every active session for that user is terminated so a
+// stolen-cookie rotation chain cannot persist past detection (audit 07 M-2).
+// Side effect: a client racing a legitimate rotation (second tab presenting
+// the just-rotated-away token) logs the user out entirely — the safe
+// direction for a finance app.
+async function revokeUserSessionFamily(db: ReturnType<typeof getDb>, userId: string): Promise<void> {
+  await db
+    .update(sessions)
+    .set({ isActive: false, isExpired: true, logoutTime: new Date(), updatedAt: new Date() })
+    .where(and(eq(sessions.userId, userId), eq(sessions.isActive, true)));
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const refreshToken = request.cookies.get(COOKIE_NAMES.REFRESH_TOKEN)?.value;
+    // This route is public by design (it is how a stale access token is
+    // exchanged for a fresh one) and was the only public endpoint with no abuse
+    // control. Each presentation costs ~6 round-trips and INSERTs a
+    // blacklisted_tokens row, so an unthrottled loop is a cheap way to grow the
+    // token table and hold the DB pool. Keyed on the IP plus the presented
+    // token, so a flood from one client cannot consume another's budget.
+    const presentedToken = request.cookies.get(COOKIE_NAMES.REFRESH_TOKEN)?.value;
+    const limited = await guard(request, 'auth', {
+      user: presentedToken ? tokenHash(presentedToken) : null,
+    });
+    if (limited) return limited;
+
+    const refreshToken = presentedToken;
 
     if (!refreshToken) {
       return NextResponse.json(
@@ -83,6 +110,7 @@ export async function POST(request: NextRequest) {
     ]);
 
     if (!sessionState || sessionState.blacklistId) {
+      await revokeUserSessionFamily(db, decoded.id);
       throw new AuthError('Refresh token or session has been revoked', 'TOKEN_REVOKED');
     }
 
@@ -149,6 +177,7 @@ export async function POST(request: NextRequest) {
           blacklistToken(refreshToken, expiry);
         } catch (insertError: any) {
           if (insertError?.code === '23505') {
+            await revokeUserSessionFamily(db, decoded.id);
             throw new AuthError('Token has been revoked or already rotated', 'TOKEN_REVOKED');
           }
           // A CHECK violation here (23514) means the DB constraint vocabulary

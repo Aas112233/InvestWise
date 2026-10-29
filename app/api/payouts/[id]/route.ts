@@ -4,6 +4,7 @@ import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { ForbiddenError } from '@/lib/utils/errors';
 import { getPayoutPlan } from '@/lib/member-payouts';
+import { apiError } from '@/lib/utils/api-error';
 
 export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -20,9 +21,6 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     return NextResponse.json({ success: true, data: await getPayoutPlan(scopedTenantId, id) });
   } catch (err: any) {
     console.error('[PAYOUT DETAIL ERROR]', err);
-    return NextResponse.json(
-      { success: false, message: err.message || 'Failed to fetch payout plan', code: err.code ?? 'PAYOUT_DETAIL_FAILED' },
-      { status: err.statusCode || 500 },
-    );
+    return apiError(err, 'Failed to fetch payout plan');
   }
 }
