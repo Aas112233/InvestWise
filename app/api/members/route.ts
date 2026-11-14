@@ -2,13 +2,15 @@ import { apiError } from '@/lib/utils/api-error';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { members } from '@/db/schema/index';
+import { members, projectMembers, projects } from '@/db/schema/index';
 import { and, eq, sql } from 'drizzle-orm';
+import { fromCents, toCents } from '@/lib/money';
+import { PROJECT_MEMBER_ROLE } from '@/lib/distribution-rules';
 import { getAuthContext, requirePermission } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { logAudit } from '@/lib/utils/audit';
 import { normalizeEmail } from '@/lib/utils/types';
-import { ConflictError, ForbiddenError, readJsonUnknown } from '@/lib/utils/errors';
+import { ConflictError, ForbiddenError, ValidationError, readJsonUnknown } from '@/lib/utils/errors';
 import { memberCreateSchema, memberFieldError } from '@/lib/member-schema';
 import { handleListMembers } from '@/server/modules/members/handlers';
 
@@ -64,11 +66,46 @@ export async function POST(request: NextRequest) {
     const phone = d.phone;
     // Absent role means the standard membership category; anything outside
     // the lib/member-roles vocabulary was rejected by the schema above.
-    const role = d.role ?? 'Member';
-    const shares = d.shares ?? 1;
+    const role = d.role ?? 'Shareholder Member';
+    // The exclusive Project Member category NEVER holds club shares (§3.2):
+    // the historical default of 1 would silently hand it a dividend-eligible
+    // club position. Its share number lives in project_members.sharesInvested.
+    const isProjectMember = role === PROJECT_MEMBER_ROLE;
+    const shares = isProjectMember ? 0 : (d.shares ?? 1);
     const status = d.status ?? 'active';
 
     const db = getDb();
+
+    // The schema already required cap + projectId for Project Members; this is
+    // the belt-and-braces re-check so a future schema relaxation can never
+    // store a cap-less Project Member (deposit-cap fails closed on that).
+    if (isProjectMember && (d.depositCap === null || d.depositCap === undefined || !d.projectId)) {
+      throw new ValidationError('A Project Member needs both a deposit cap and one bound project');
+    }
+    if (isProjectMember && d.projectId) {
+      const [boundProject] = await db
+        .select({ id: projects.id, isLocked: projects.isLocked, projectType: projects.projectType })
+        .from(projects)
+        .where(and(eq(projects.id, d.projectId), eq(projects.tenantId, tenantId)))
+        .limit(1);
+      if (!boundProject) {
+        throw new ValidationError("[Field 'projectId', Code: cross_tenant] Project does not exist in this tenant");
+      }
+      if (boundProject.isLocked) {
+        throw new ValidationError(
+          `[Field 'projectId', Code: PROJECT_LOCKED] That project is settled & closed — a ${PROJECT_MEMBER_ROLE} cannot be bound to it`,
+        );
+      }
+      // Project types (migration 0032): only an Extra Investor deal has a Project
+      // Level Member seat. Binding one to a Club Level project would create the
+      // exact roster the project form is not allowed to save (§5), so the binding
+      // door refuses it too — the picker filter is convenience, this is the rule.
+      if (boundProject.projectType !== 'extra_investor') {
+        throw new ValidationError(
+          `[Field 'projectId', Code: CLUB_PROJECT_TAKES_NO_PM] That is a Club Level project, which cannot include a ${PROJECT_MEMBER_ROLE}. Pick an Extra Investor project, or switch that project's type while it still has no transactions.`,
+        );
+      }
+    }
     // Duplicate check is TENANT-scoped and ignores soft-deleted rows: the old
     // global probe confirmed to any tenant whether ANOTHER tenant held an
     // address (cross-tenant existence oracle), and a removed member's email
@@ -88,6 +125,9 @@ export async function POST(request: NextRequest) {
       role,
       shares,
       status,
+      // decimal(15,2) string built through the integer-cents path (§12) — the
+      // schema already guaranteed positive and ≤2dp.
+      depositCap: isProjectMember ? fromCents(toCents(String(d.depositCap))) : null,
       // A member created already inactive is an admin choice; stamp the reason
       // so the governance sweep does not treat it as a deposit hold. (Create
       // only accepts active/inactive — suspension is a governance action.)
@@ -111,7 +151,21 @@ export async function POST(request: NextRequest) {
     let created;
     for (let attempt = 0; ; attempt += 1) {
       try {
-        [created] = await db.insert(members).values({ memberId, ...insertValues }).returning();
+        // Member row + its single project binding commit together: a binding
+        // without its member (or the reverse) would corrupt the one-project
+        // invariant's starting point. The code-clash retry wraps the whole unit.
+        created = await db.transaction(async (tx) => {
+          const [row] = await tx.insert(members).values({ memberId, ...insertValues }).returning();
+          if (isProjectMember && d.projectId && row) {
+            await tx.insert(projectMembers).values({
+              projectId: d.projectId,
+              memberId: row.id,
+              sharesInvested: 0,
+              ownershipPercentage: '0.00',
+            });
+          }
+          return row;
+        });
         break;
       } catch (e: unknown) {
         const err = e as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };

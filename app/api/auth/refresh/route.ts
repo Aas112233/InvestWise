@@ -176,7 +176,17 @@ export async function POST(request: NextRequest) {
           });
           blacklistToken(refreshToken, expiry);
         } catch (insertError: any) {
-          if (insertError?.code === '23505') {
+          // Drizzle wraps driver errors ("Failed query: …"), so the pg error
+          // code can sit on error.code OR error.cause.code depending on the
+          // driver version. The live rotation-race rehearsal (attack-replay,
+          // 2026-11) showed the top-level check miss and turn the losing twin
+          // of two concurrent refreshes into a 500 instead of the intended
+          // 401 TOKEN_REVOKED + family revoke. Match both locations, plus the
+          // message text as a last resort.
+          const pgCode: string | undefined =
+            insertError?.code ?? insertError?.cause?.code ??
+            (String(insertError?.message ?? '').includes('duplicate key') ? '23505' : undefined);
+          if (pgCode === '23505') {
             await revokeUserSessionFamily(db, decoded.id);
             throw new AuthError('Token has been revoked or already rotated', 'TOKEN_REVOKED');
           }

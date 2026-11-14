@@ -339,7 +339,20 @@ export function MembersListView() {
       render: (m) => (
         <div>
           <p className="font-medium text-slate-800 dark:text-slate-100">{memberDisplayName(m.name, m.status)}</p>
-          {m.role && <p className="text-[10px] text-slate-400">{memberRoleDisplay(m.role, t)}</p>}
+          {m.role && (
+            <p className="text-[10px] text-slate-400">
+              {memberRoleDisplay(m.role, t)}
+              {/* Project Level Member rows carry the percent their category
+                  actually carves on the bound project's returns (project
+                  override → club rule, resolved server-side). */}
+              {m.distributionPercent != null && (
+                <span className="font-mono text-slate-500 dark:text-slate-400">
+                  {" · "}
+                  {m.distributionPercent}%
+                </span>
+              )}
+            </p>
+          )}
         </div>
       ),
     },
@@ -599,6 +612,9 @@ export function MembersListView() {
           setEditing(null);
         }}
         onSaved={invalidate}
+        // The type-lock escape hatch is Admin-only (same audience rule as the
+        // hidden review columns — the server re-checks regardless).
+        canOverrideRoleLock={!!user && normalizeRole(user.role) === "Admin"}
       />
 
       <MemberDetailSheet

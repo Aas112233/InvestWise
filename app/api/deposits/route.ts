@@ -5,6 +5,7 @@ import { transactions, funds, members, systemSettings } from '@/db/schema/index'
 import { memberDisplayNameSql, assertMemberNotSuspended } from '@/lib/member-display';
 import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-methods';
 import { DEPOSIT_CATEGORY, DEPOSIT_FUND_REQUIRED_MESSAGE, DEPOSIT_REQUEST_CATEGORY, isDepositFund } from '@/lib/deposit-fund';
+import { assertDepositWithinCap } from '@/lib/deposit-cap';
 import { findDepositMonthOccupant, depositMonthConflictMessage } from '@/lib/deposit-month-limit';
 import { resolveDepositScheduleDetailed } from '@/lib/deposit-schedule/schedule';
 import { findNearDuplicateDeposits, nearDuplicateAdvisory } from '@/lib/deposit-duplicate-advisory';
@@ -583,6 +584,17 @@ export async function POST(request: NextRequest) {
         : memberContributedCents + amountCents;
 
       if (!postsAsPending) {
+        // Project-Member deposit cap (docs/MEMBER-TYPE-DISTRIBUTION_PLAN.md §3.2):
+        // lifetime cumulative settled deposits may not exceed the member's cap.
+        // Checked under the member lock already held, before any balance moves.
+        // Exempt (returns immediately) for every non-Project-Member.
+        await assertDepositWithinCap(tx, {
+          tenantId: scopedTenantId,
+          memberId,
+          newCents: amountCents,
+          context: 'recording a deposit',
+        });
+
         // Update fund balance (atomic — SQL reads the locked row's live value).
         await tx
           .update(funds)

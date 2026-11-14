@@ -7,11 +7,14 @@ import { eq, and, desc, ne, sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { logAudit } from '@/lib/utils/audit';
 import { LockedError, NotFoundError, ValidationError, readJsonBody } from '@/lib/utils/errors';
-import { projectUpdateSchema } from '@/lib/utils/validation';
-import { toCents, fromCents } from '@/lib/money';
+import { projectUpdateSchema, normalizeProjectMemberPercent } from '@/lib/utils/validation';
+import { isAllowedCategory, categoryRejectionMessage } from '@/lib/categories';
+import { getCategoryContext } from '@/lib/categories-db';
+import { toCents, fromCents, MoneyError } from '@/lib/money';
 import { investProjectCapital, refundProjectCapital } from '@/lib/project-capital';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import { requireProjectContext, zodMessage, assertFundInTenant } from '../_helpers';
+import { parseProjectType, assertProjectTypeRoster } from '@/lib/distribution-rules';
 
 export async function GET(
   request: NextRequest,
@@ -60,6 +63,9 @@ export async function GET(
           memberCode: members.memberId,
           memberPhone: members.phone,
           memberStatus: members.status,
+          // Membership category — the modal's returns preview needs it to
+          // mirror the server's per-category split (docs/MEMBER-TYPE-DISTRIBUTION_PLAN.md).
+          memberRole: members.role,
           sharesInvested: projectMembers.sharesInvested,
           ownershipPercentage: projectMembers.ownershipPercentage,
         })
@@ -184,6 +190,16 @@ export async function PUT(
     }
     const data = parsed.data;
 
+    // Same category gate as POST. Only checked when the field is actually being
+    // changed and differs from what is stored — an unrelated edit (e.g. renaming
+    // a project) must not fail because its legacy sector left the list.
+    if (data.category !== undefined) {
+      const { configured, history } = await getCategoryContext(tenantId, 'project');
+      if (!isAllowedCategory(data.category, configured, history)) {
+        throw new ValidationError(categoryRejectionMessage('category', configured));
+      }
+    }
+
     // `.partial()` keeps create's `default([])`, so an omitted `shareholders`
     // key still parses to `[]`. Detect presence from the RAW body, otherwise a
     // descriptive-only edit would read as "remove every shareholder".
@@ -194,6 +210,16 @@ export async function PUT(
     if (data.linkedFundId !== undefined) {
       await assertFundInTenant(data.linkedFundId, tenantId);
     }
+
+    // Per-project 'Project Level Member' contract (migrations 0030 → 0032):
+    // undefined = leave the column alone; null = clear it. The percent contract
+    // itself belongs to lib/distribution-rules; the v9 sum guard against the club
+    // rules is gone (plan D8) because a Project Level Member percentage no longer
+    // competes with the club categories — see docs/PROJECT-TYPES_PLAN.md §2.
+    const projectMemberPercent =
+      data.projectMemberPercent !== undefined
+        ? normalizeProjectMemberPercent(data.projectMemberPercent)
+        : undefined;
 
     const outcome = await db.transaction(async (tx) => {
       const [project] = await tx
@@ -211,6 +237,39 @@ export async function PUT(
         );
       }
 
+      /* ---- Project type (migration 0032, D5) --------------------------------
+       * The type decides which engine spends the money, so it cannot change once
+       * the ledger has anything to say about it: a project with any transaction
+       * (an investment leg included) has already been funded and/or split under
+       * its current rules, and re-typing it would leave those postings describing
+       * a deal nobody agreed to. Before the first transaction it is a free
+       * choice, and switching away from Extra Investor with Project Level Members
+       * still attached is refused below by the same roster gate create uses.
+       * --------------------------------------------------------------------- */
+      const projectType = parseProjectType(data.projectType ?? project.projectType);
+      if (data.projectType !== undefined && data.projectType !== project.projectType) {
+        const [anyTransaction] = await tx
+          .select({ id: transactions.id })
+          .from(transactions)
+          .where(and(
+            eq(transactions.projectId, id),
+            eq(transactions.tenantId, tenantId),
+            eq(transactions.isDeleted, false),
+          ))
+          .limit(1);
+        if (anyTransaction) {
+          throw new LockedError(
+            `[Field 'projectType', Code: PROJECT_TYPE_LOCKED] This project already has ledger entries, so its type can no longer be changed — the capital and returns were recorded under ${
+              project.projectType === 'extra_investor' ? 'Extra Investor' : 'Club Level'
+            } rules.`,
+          );
+        }
+      }
+      // Effective contract: an omitted key keeps the stored value, so a
+      // description-only edit cannot accidentally clear a PM contract.
+      const effectiveMemberPercent =
+        projectMemberPercent !== undefined ? projectMemberPercent : project.projectMemberPercent;
+
       // Map only validated, present fields (never raw client values).
       // `initialInvestment`, `currentFundBalance` and `totalShares` are derived
       // from the ledger and are written only by the reallocation below.
@@ -226,14 +285,27 @@ export async function PUT(
       if (data.completionDate !== undefined) updateFields.completionDate = data.completionDate ?? null;
       if (data.linkedFundId !== undefined) updateFields.linkedFundId = data.linkedFundId ?? null;
       if (data.projectFundHandler !== undefined) updateFields.projectFundHandler = data.projectFundHandler ?? null;
+      // Raw decimal strings ("12.50") on both sides of the §6 audit diff —
+      // formatPercentBp output matches the decimal(5,2) text the driver
+      // returns, so no money-field coercion is needed for a clean before/after.
+      if (data.projectType !== undefined && data.projectType !== project.projectType) {
+        updateFields.projectType = projectType;
+      }
+      if (data.projectMemberPercent !== undefined) {
+        updateFields.projectMemberPercent = projectMemberPercent ?? null;
+      }
 
-      // Current capital structure, read from the rows that define it.
+      // Current capital structure, read from the rows that define it. The
+      // membership category comes along because the project-type roster gate
+      // below needs it even when the capital is not being touched.
       const currentRows = await tx
         .select({
           memberId: projectMembers.memberId,
           sharesInvested: projectMembers.sharesInvested,
+          memberRole: members.role,
         })
         .from(projectMembers)
+        .leftJoin(members, and(eq(projectMembers.memberId, members.id), eq(members.tenantId, tenantId)))
         .where(eq(projectMembers.projectId, id));
       const legRows = await tx
         .select({
@@ -272,6 +344,22 @@ export async function PUT(
         ? signature(requested.map((s) => ({ memberId: s.memberId, shares: s.shares, sourceFundId: s.sourceFundId ?? null })))
         : currentSig;
       const capitalChanged = requested !== undefined && requestedSig !== currentSig;
+
+      if (!capitalChanged) {
+        // The capital engine is not about to run, so its roster gate is not about
+        // to fire — yet a type or contract edit still has to agree with the
+        // participants already attached. Same rule, same function (§5).
+        try {
+          assertProjectTypeRoster({
+            projectType,
+            projectMemberPercent: effectiveMemberPercent,
+            participantRoles: currentRows.map((r) => r.memberRole ?? 'Shareholder Member'),
+          });
+        } catch (err) {
+          if (err instanceof MoneyError) throw new ValidationError(err.message);
+          throw err;
+        }
+      }
 
       if (capitalChanged) {
         // Ledger lock: once the project has earnings, expenses or any other
@@ -326,6 +414,14 @@ export async function PUT(
           budgetCents: toCents(data.budget ?? Number(project.budget ?? 0)),
           shareholders: requested ?? [],
           now,
+          // The one-project guard for Project Members: bindings to THIS project
+          // are legitimate (re-capitalise), bindings elsewhere are refused.
+          currentProjectId: id,
+          // Type + contract: the engine refuses a PM row on a club project, a
+          // club percent, a PM row holding shares, and a roster whose PMs have no
+          // contract percentage (all through assertProjectTypeRoster).
+          projectType,
+          projectMemberPercent: effectiveMemberPercent,
         });
 
         await tx.delete(projectMembers).where(eq(projectMembers.projectId, id));
@@ -336,6 +432,8 @@ export async function PUT(
               memberId: ps.memberId,
               sharesInvested: ps.shares,
               ownershipPercentage: ps.ownershipPercentage,
+              // null on every club row (migration 0032).
+              pmCapital: ps.pmCapitalCents === null ? null : fromCents(ps.pmCapitalCents),
             })),
           );
 
@@ -345,7 +443,11 @@ export async function PUT(
               tenantId,
               type: 'Project Investment',
               amount: ps.investmentFormatted,
-              description: `Equity investment in project: ${project.title} (${ps.shares} ${ps.shares === 1 ? 'share' : 'shares'} @ ${shareValue.toFixed(2)})`,
+              description: `Equity investment in project: ${project.title} (${
+                ps.pmCapitalCents === null
+                  ? `${ps.shares} ${ps.shares === 1 ? 'share' : 'shares'} @ ${shareValue.toFixed(2)}`
+                  : `${ps.investmentFormatted} by Project Level Member contract`
+              })`,
               category: 'Investment',
               referenceNumber: `${runRef}-${(i + 1).toString().padStart(2, '0')}`,
               date: now,
@@ -538,6 +640,16 @@ export async function DELETE(
       }
 
       await tx.delete(projectMembers).where(eq(projectMembers.projectId, id));
+
+      // The delete gate above only inspects LIVE rows, so soft-deleted expenses,
+      // earnings and transfer legs still carry this project's id and would hit
+      // the NO ACTION FK below. Detach every remaining row (the soft-deleted
+      // ledger is retained for audit, exactly like the fund detach above).
+      await tx
+        .update(transactions)
+        .set({ projectId: null })
+        .where(and(eq(transactions.projectId, id), eq(transactions.tenantId, tenantId)));
+
       await tx.delete(projects).where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)));
 
       return {

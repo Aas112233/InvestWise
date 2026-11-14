@@ -13,7 +13,7 @@ import {
 } from "@/components/ui";
 import { formatMoney, formatDateOnly } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
-import { useTenantCurrency } from "@/lib/use-tenant-settings";
+import { useTenantCurrency, useTenantExpenseCategories } from "@/lib/use-tenant-settings";
 import { translateLedgerDescription } from "@/lib/ledger-description";
 import { usePermissions } from "@/lib/use-permissions";
 import { apiClient } from "@/lib/api-client";
@@ -111,15 +111,12 @@ export function ExpensesView() {
     label: f.name,
   }));
 
-  const categoryOptions: DropdownOption[] = [
-    { value: "Operational", label: t("expenses.categories.operational") },
-    { value: "Marketing", label: t("expenses.categories.marketing") },
-    { value: "Legal", label: t("expenses.categories.legal") },
-    { value: "Travel", label: t("expenses.categories.travel") },
-    { value: "Technology", label: t("expenses.categories.technology") },
-    { value: "Maintenance", label: t("expenses.categories.maintenance") },
-    { value: "Other", label: "Other" },
-  ];
+  // Filter options are the tenant's own categories, not a hardcoded list.
+  const expenseCategories = useTenantExpenseCategories();
+  const categoryOptions: DropdownOption[] = expenseCategories.map((label) => ({
+    value: label,
+    label,
+  }));
 
   const records = responseData?.data || [];
   const totalCount = responseData?.pagination?.total || 0;

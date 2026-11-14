@@ -40,6 +40,14 @@ import {
   type PaymentMethodConfig,
   type PaymentType,
 } from "@/lib/payment-methods";
+import { MEMBER_ROLES, memberRoleLabel } from "@/lib/member-roles";
+import {
+  MAX_DISTRIBUTION_RULES,
+  parseDistributionRules,
+  PROJECT_MEMBER_ROLE,
+  type DistributionRule,
+} from "@/lib/distribution-rules";
+import { MoneyError } from "@/lib/money";
 
 type SettingsTab = "organization" | "financial" | "governance" | "system";
 
@@ -80,6 +88,8 @@ interface SettingsResponse {
     withdrawalNoticeDays: number;
     maxWithdrawalPerRequest: number;
     statutoryReservePercent: number;
+    /** Per-category returns rules; [] when not configured (pro-rata split). */
+    distributionRules: { role: string; percent: number }[];
   };
   governance: {
     monthlyMeetingDay: number;
@@ -96,6 +106,9 @@ interface SettingsResponse {
     meetingTypes: string[];
     penaltyRules: PenaltyRule[];
     paymentMethods: PaymentMethodConfig[];
+    /** Tenant-defined category vocabularies (expense module / project module). */
+    expenseCategories: string[];
+    projectCategories: string[];
   };
   system: {
     language: string;
@@ -142,8 +155,101 @@ const MONTHS: { short: "jan" | "feb" | "mar" | "apr" | "may" | "jun" | "jul" | "
 const inputCls =
   "w-full px-3 py-2 rounded-lg border text-xs bg-card border-border/80 text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors disabled:opacity-60 disabled:bg-muted/50";
 
+/**
+ * Editable chip list shared by the meeting-type and category vocabularies.
+ * Extracted so the two new category sections do not copy the chip markup,
+ * remove-button and add-input a third and fourth time.
+ */
+function CategoryChipEditor({
+  items,
+  placeholder,
+  addLabel,
+  onChange,
+}: {
+  items: string[];
+  placeholder: string;
+  addLabel: string;
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+
+  const commit = () => {
+    const label = draft.trim().replace(/\s+/g, " ").slice(0, 60);
+    if (!label) return;
+    if (items.some((x) => x.toLowerCase() === label.toLowerCase())) {
+      setDraft("");
+      return;
+    }
+    onChange([...items, label]);
+    setDraft("");
+  };
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2 mb-3">
+        {items.length === 0 && (
+          <span className="text-xs text-muted-foreground italic">
+            No categories configured yet.
+          </span>
+        )}
+        {items.map((label) => (
+          <span
+            key={label}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/80 text-xs font-medium text-foreground bg-muted/40 shadow-xs"
+          >
+            {label}
+            <button
+              type="button"
+              aria-label={`Remove ${label}`}
+              onClick={() => onChange(items.filter((x) => x !== label))}
+              className="text-muted-foreground hover:text-rose-500 transition-colors p-0.5 rounded-full hover:bg-rose-50 dark:hover:bg-rose-950/30"
+            >
+              <X size={12} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={placeholder}
+          maxLength={60}
+          className={cn(inputCls, "flex-1")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            }
+          }}
+        />
+        <Button variant="outline" size="sm" icon={<Plus size={13} />} onClick={commit}>
+          {addLabel}
+        </Button>
+      </div>
+    </>
+  );
+}
+
 function errMsg(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback;
+}
+
+/**
+ * Trim, collapse inner whitespace, drop blanks and case-insensitive duplicates.
+ * Mirrors normalizeCategories in lib/categories.ts so the payload leaves the
+ * browser already clean; the server normalises again regardless.
+ */
+function normalizeLabels(list: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of list) {
+    const label = (raw ?? "").trim().replace(/\s+/g, " ").slice(0, 60);
+    if (!label || seen.has(label.toLowerCase())) continue;
+    seen.add(label.toLowerCase());
+    out.push(label);
+  }
+  return out;
 }
 
 export default function SettingsPage() {
@@ -203,7 +309,12 @@ export default function SettingsPage() {
     meetingTypes: [] as string[],
     penaltyRules: [] as PenaltyRule[],
     paymentMethods: [] as PaymentMethodConfig[],
+    expenseCategories: [] as string[],
+    projectCategories: [] as string[],
   });
+
+  const [newExpenseCategory, setNewExpenseCategory] = useState("");
+  const [newProjectCategory, setNewProjectCategory] = useState("");
 
   const [sys, setSys] = useState({
     language: "English",
@@ -216,6 +327,9 @@ export default function SettingsPage() {
 
   const [shareLocked, setShareLocked] = useState(false);
   const [newMeetingType, setNewMeetingType] = useState("");
+  // Returns-distribution rule rows (draft): percent kept as typed text so an
+  // empty box never silently becomes 0 (AGENTS.md §15 — no pre-selections).
+  const [distRules, setDistRules] = useState<{ role: string; percent: string }[]>([]);
 
   useEffect(() => {
     if (!data) return;
@@ -259,6 +373,8 @@ export default function SettingsPage() {
       meetingTypes: [...(data.governance?.meetingTypes ?? [])],
       penaltyRules: [...(data.governance?.penaltyRules ?? [])],
       paymentMethods: [...(data.governance?.paymentMethods ?? [])],
+      expenseCategories: [...(data.governance?.expenseCategories ?? [])],
+      projectCategories: [...(data.governance?.projectCategories ?? [])],
     });
     setSys({
       language: data.system?.language || "English",
@@ -269,6 +385,9 @@ export default function SettingsPage() {
       isMaintenanceMode: Boolean(data.system?.isMaintenanceMode),
     });
     setShareLocked(Boolean(data.financial?.isShareValueLocked));
+    setDistRules(
+      (data.financial?.distributionRules ?? []).map((r) => ({ role: r.role, percent: String(r.percent) })),
+    );
   }, [data]);
 
   const isGuest = !authLoading && !user;
@@ -298,6 +417,8 @@ export default function SettingsPage() {
         sys={sys}
         setSys={setSys}
         shareLocked={shareLocked}
+        distRules={distRules}
+        setDistRules={setDistRules}
         newMeetingType={newMeetingType}
         setNewMeetingType={setNewMeetingType}
         canWrite={canWrite}
@@ -340,6 +461,8 @@ interface BodyProps {
     string
   >;
   setFin: React.Dispatch<React.SetStateAction<BodyProps["fin"]>>;
+  distRules: { role: string; percent: string }[];
+  setDistRules: React.Dispatch<React.SetStateAction<BodyProps["distRules"]>>;
   gov: {
     monthlyMeetingDay: string;
     depositDueDate: string;
@@ -353,6 +476,8 @@ interface BodyProps {
     meetingTypes: string[];
     penaltyRules: PenaltyRule[];
     paymentMethods: PaymentMethodConfig[];
+    expenseCategories: string[];
+    projectCategories: string[];
   };
   setGov: React.Dispatch<React.SetStateAction<BodyProps["gov"]>>;
   sys: {
@@ -594,6 +719,8 @@ function FinancialTab({
   fin,
   setFin,
   shareLocked,
+  distRules,
+  setDistRules,
   save,
   pending,
 }: BodyProps & { save: (p: Record<string, unknown>) => void; pending: boolean }) {
@@ -631,8 +758,38 @@ function FinancialTab({
       ? [{ value: storedCurrency, label: storedCurrency }, ...CURRENCIES]
       : [...CURRENCIES];
 
+  // Client gate mirrors lib/distribution-rules.ts exactly — the PUT applies the
+  // same parser, so the form can never accept a list the server would refuse.
+  const parseRuleDrafts = (): DistributionRule[] | null => {
+    if (distRules.length === 0) return [];
+    for (const r of distRules) {
+      if (!r.role || r.percent.trim() === "") {
+        toast.error(t("settings.financial.returns.incomplete", { defaultValue: "Every returns rule needs a member category and a percentage — remove empty rows or complete them." }));
+        return null;
+      }
+    }
+    try {
+      return parseDistributionRules(
+        distRules.map((r) => ({ role: r.role, percent: r.percent.trim() })),
+      );
+    } catch (err) {
+      toast.error(err instanceof MoneyError ? err.message : String(err));
+      return null;
+    }
+  };
+
+  const configuredPercentDisplay = ((): string => {
+    const sum = distRules.reduce((acc, r) => {
+      const n = parseFloat(r.percent);
+      return acc + (Number.isFinite(n) ? Math.round(n * 100) : 0);
+    }, 0);
+    return (sum / 100).toFixed(2);
+  })();
+
   const onSave = () => {
     const baseCurr = fin.baseCurrency.trim().toUpperCase() || "BDT";
+    const rules = parseRuleDrafts();
+    if (rules === null) return;
     save({
       financial: {
         fiscalYearStart: fin.fiscalYearStart,
@@ -645,6 +802,7 @@ function FinancialTab({
         withdrawalNoticeDays: int(fin.withdrawalNoticeDays, 30),
         maxWithdrawalPerRequest: num(fin.maxWithdrawalPerRequest, 100000),
         statutoryReservePercent: num(fin.statutoryReservePercent, 10),
+        distributionRules: rules.map((r) => ({ role: r.role, percent: r.percent })),
       },
     });
   };
@@ -780,6 +938,93 @@ function FinancialTab({
             </ERPFormField>
           </ERPFormGrid>
         </ERPFormSection>
+
+        <ERPFormSection
+          title={t("settings.financial.returns.title", { defaultValue: "Returns distribution by member category" })}
+          description={t("settings.financial.returns.desc", { defaultValue: "These rules govern Club Level projects and club dividends. Each listed member category carves its percentage out of the member pool of every profit/loss run and dividend, then splits inside the category pro-rata by shares. Unlisted categories and any unclaimed balance split pro-rata by shares. With no rules everything splits pro-rata, exactly as before. Extra Investor projects ignore this list: their Project Level Members are paid by the contract percentage set on the project, and Board and Shareholders split what the contract leaves purely by share number." })}
+        >
+          {distRules.length === 0 ? (
+            <p className="text-xs text-muted-foreground mb-2">
+              {t("settings.financial.returns.empty", { defaultValue: "No category rules — member pools split pro-rata by shares." })}
+            </p>
+          ) : (
+            <div className="space-y-2 mb-3">
+              {distRules.map((rule, idx) => (
+                <div key={`${rule.role || "new"}-${idx}`} className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <AppDropdown
+                      options={MEMBER_ROLES.filter(
+                        (role) => role === rule.role || !distRules.some((x, i) => i !== idx && x.role === role),
+                      )
+                        // 'Project Level Member' is retired from the EDITOR
+                        // (migration 0032, D7): a club-wide PM carve-out has no
+                        // meaning any more, because a Club Level project cannot
+                        // hold PMs and an Extra Investor project pays them by
+                        // contract. A row that is ALREADY that role keeps
+                        // rendering its saved percent, so history still explains
+                        // itself and the untouched fields round-trip unchanged.
+                        .filter(
+                          (role) => role !== PROJECT_MEMBER_ROLE || role === rule.role,
+                        )
+                        .map((role) => ({ value: role, label: t(memberRoleLabel(role)) }))}
+                      value={rule.role || null}
+                      placeholder={t("settings.financial.returns.role", { defaultValue: "Member category" })}
+                      onChange={(v) =>
+                        setDistRules((p) => p.map((x, i) => (i === idx ? { ...x, role: v ?? "" } : x)))
+                      }
+                    />
+                  </div>
+                  <div className="w-32 shrink-0 flex items-center gap-1">
+                    <NumericInput
+                      type="number"
+                      min="0.01"
+                      max="100"
+                      step="0.01"
+                      value={rule.percent}
+                      onChange={(e) =>
+                        setDistRules((p) => p.map((x, i) => (i === idx ? { ...x, percent: e.target.value } : x)))
+                      }
+                      className={inputCls}
+                      aria-label={t("settings.financial.returns.percent", { defaultValue: "Category percent" })}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${rule.role || "returns rule"}`}
+                    onClick={() => setDistRules((p) => p.filter((_, i) => i !== idx))}
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<Plus size={13} />}
+              disabled={distRules.length >= MAX_DISTRIBUTION_RULES}
+              onClick={() => setDistRules((p) => [...p, { role: "", percent: "" }])}
+            >
+              {t("settings.financial.returns.add", { defaultValue: "Add category rule" })}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {t("settings.financial.returns.configured", {
+                percent: configuredPercentDisplay,
+                defaultValue: "Configured: {{percent}}% of the member pool",
+              })}
+            </span>
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+            {t("settings.financial.returns.projectOverrideNote", {
+              defaultValue:
+                "The Project Level Member percent here is the club-wide default — each project can set its own on its form (Projects → Edit). Club dividends never pay Project Level Members.",
+            })}
+          </p>
+        </ERPFormSection>
         <SaveBar pending={pending} onSave={onSave} />
       </ERPFormLayout>
     </div>
@@ -889,6 +1134,10 @@ function GovernanceTab({
             ? null
             : Math.max(0, Number(gov.depositFlexApprovalAbove) || 0),
         meetingTypes: gov.meetingTypes,
+        // Same trim/dedupe contract as paymentMethods below; the server
+        // normalises again (lib/categories.ts) so this is belt-and-braces.
+        expenseCategories: normalizeLabels(gov.expenseCategories),
+        projectCategories: normalizeLabels(gov.projectCategories),
         // Trimmed, deduped (case-insensitive), empty rows dropped — the Zod
         // schema server-side rejects duplicates too; this keeps the payload
         // honest before it ever leaves the browser.
@@ -1164,6 +1413,41 @@ function GovernanceTab({
               {t("settings.governance.addType")}
             </Button>
           </div>
+        </ERPFormSection>
+
+        {/* Expense Categories — the tenant's own vocabulary for the Expense
+            module. Replaces the hardcoded list that used to live in
+            components/expenses/*. Removing one hides it from the form but
+            historical expenses keep their stored label. */}
+        <ERPFormSection
+          title={t("settings.categories.expenseTitle", { defaultValue: "Expense categories" })}
+          description={t("settings.categories.expenseDescription", {
+            defaultValue:
+              "Categories available when posting an expense. Removing one hides it from the form; existing expenses keep their original label.",
+          })}
+        >
+          <CategoryChipEditor
+            items={gov.expenseCategories}
+            placeholder={t("settings.categories.placeholder", { defaultValue: "e.g. Utilities" })}
+            addLabel={t("settings.categories.add", { defaultValue: "Add" })}
+            onChange={(next) => setGov((p) => ({ ...p, expenseCategories: next }))}
+          />
+        </ERPFormSection>
+
+        {/* Project Categories — the tenant's own sector vocabulary for projects. */}
+        <ERPFormSection
+          title={t("settings.categories.projectTitle", { defaultValue: "Project categories" })}
+          description={t("settings.categories.projectDescription", {
+            defaultValue:
+              "Sectors available when creating a project. Removing one hides it from the form; existing projects keep their original sector.",
+          })}
+        >
+          <CategoryChipEditor
+            items={gov.projectCategories}
+            placeholder={t("settings.categories.placeholder", { defaultValue: "e.g. Logistics" })}
+            addLabel={t("settings.categories.add", { defaultValue: "Add" })}
+            onChange={(next) => setGov((p) => ({ ...p, projectCategories: next }))}
+          />
         </ERPFormSection>
 
         {/* Payment Methods — names the org sets, channel types it picks; the

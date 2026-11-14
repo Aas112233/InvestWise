@@ -10,6 +10,7 @@ import { apiClient } from "@/lib/api-client";
 import { formatDatePattern, formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
 import { memberDisplayName } from "@/lib/member-display";
+import { memberRoleDisplay } from "@/lib/member-roles";
 import { memberStatusReasonKey } from "@/lib/member-status-reason";
 import { useTenantCurrency, useTenantDateFormat } from "@/lib/use-tenant-settings";
 import type { Member } from "@/types";
@@ -139,6 +140,13 @@ export function MemberDetailSheet({
                 <StatusBadge tone={statusTone(member.status)}>
                   {t(`members.statusLabels.${member.status.toLowerCase()}`, { defaultValue: member.status })}
                 </StatusBadge>
+                {/* Membership category — 'Project Member' rows read as what
+                    they are at a glance of the header. */}
+                {member.role && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+                    {memberRoleDisplay(member.role, t)}
+                  </span>
+                )}
                 {(() => {
                   // WHY the member is inactive — a deposit hold is recoverable
                   // by depositing; equity transferred out / a manual hold is not.
@@ -192,7 +200,56 @@ export function MemberDetailSheet({
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("members.detail.performance")}</p>
                 <p className="text-lg font-semibold font-mono mt-0.5">{member.performanceScore ?? "—"}</p>
               </div>
+              {/* Project Member only: lifetime cap + ledger-used part of it —
+                  both fields come from the detail API (lib/deposit-cap.ts math). */}
+              {member.depositCap != null && (
+                <div className="p-3 rounded-lg border border-border/80 bg-muted/20">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {t("members.detail.depositCap", { defaultValue: "Deposit cap" })}
+                  </p>
+                  <p className="text-lg font-semibold font-mono mt-0.5">{formatMoney(member.depositCap, currency)}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {t("members.detail.capUsed", {
+                      deposited: formatMoney(member.cumulativeDeposits ?? "0.00", currency),
+                      defaultValue: "{{deposited}} deposited",
+                    })}
+                  </p>
+                </div>
+              )}
+              {/* Project Member only: the percent its category carves of the
+                  member pool on the bound project's returns — project
+                  override → club rule, resolved server-side
+                  (lib/distribution-rules.ts, migration 0030). */}
+              {member.distributionPercent !== undefined && (
+                <div className="p-3 rounded-lg border border-border/80 bg-muted/20">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {t("members.detail.categoryShare", { defaultValue: "Category share" })}
+                  </p>
+                  <p className="text-lg font-semibold font-mono mt-0.5">
+                    {member.distributionPercent !== null ? `${member.distributionPercent}%` : "—"}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {member.distributionPercentSource === "project"
+                      ? t("members.detail.categoryShareFromProject", {
+                          defaultValue: "Set on the bound project",
+                        })
+                      : member.distributionPercentSource === "club"
+                        ? t("members.detail.categoryShareFromClub", {
+                            defaultValue: "Club-wide category rule",
+                          })
+                        : t("members.detail.categoryShareNone", {
+                            defaultValue: "No carve-out — splits pro-rata",
+                          })}
+                  </p>
+                </div>
+              )}
             </div>
+            {member.boundProjects && member.boundProjects.length > 0 && (
+              <p className="text-[11px] text-muted-foreground mt-2">
+                {t("members.detail.boundProject", { defaultValue: "Bound project" })}:{" "}
+                <span className="text-foreground">{member.boundProjects.map((p) => p.title).join(", ")}</span>
+              </p>
+            )}
           </section>
 
           <section>

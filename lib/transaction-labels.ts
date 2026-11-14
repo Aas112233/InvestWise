@@ -61,11 +61,20 @@ const FUND_TYPE_KEYS: Record<string, string> = {
   "RESERVE": "enums.fundType.reserve",
 };
 
-/** Member roles (members.role) → enums.role.* keys. */
+/**
+ * Member roles (members.role) → enums.role.* keys. The six-category vocabulary
+ * (lib/member-roles.ts, migration 0029); the retired values stay mapped so any
+ * historical export or hand-edited row still labels instead of showing a key.
+ */
 const ROLE_KEYS: Record<string, string> = {
   "Admin": "enums.role.admin",
-  "Associate Member": "enums.role.associateMember",
+  "Manager": "enums.role.manager",
   "Board Member": "enums.role.boardMember",
+  "Shareholder Member": "enums.role.shareholderMember",
+  "Project Level Member": "enums.role.projectLevelMember",
+  "Auditor": "enums.role.auditor",
+  // Retired 2026-11-12 — kept for historical data only:
+  "Associate Member": "enums.role.associateMember",
   "Founding Member": "enums.role.foundingMember",
   "Investor": "enums.role.investor",
   "Member": "enums.role.member",

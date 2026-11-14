@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { PAYMENT_TYPES } from '@/lib/payment-methods';
 import { fiscalYearEndForStart } from '@/lib/fiscal-periods';
+import { parseProjectMemberOverrideBp, PROJECT_TYPES } from '@/lib/distribution-rules';
+import { MoneyError, formatPercentBp } from '@/lib/money';
+import { ValidationError } from '@/lib/utils/errors';
 
 export const loginSchema = z.object({
   email: z.string().email().transform((e: string) => e.toLowerCase().trim()),
@@ -15,7 +18,12 @@ export const PROJECT_HEALTHS = ['Stable', 'At Risk', 'Critical'] as const;
 
 export const projectShareholderSchema = z.object({
   memberId: z.string().uuid('Invalid member ID'),
-  shares: z.coerce.number().int().min(1, 'Shares must be at least 1'),
+  // 0 is legal for exactly one kind of row: a Project Level Member of an Extra
+  // Investor project funds the deal with its contract percentage and holds no
+  // shares. Every other row still needs ≥ 1 — that needs the member's role, so
+  // lib/project-capital.ts enforces it where the member rows are already locked
+  // (shape here, semantics where the facts are).
+  shares: z.coerce.number().int().min(0, 'Shares cannot be negative'),
   // Fund the invested capital is drawn FROM. Optional so legacy clients still
   // parse; the create route requires it whenever a shareholder is present,
   // because capital with no source fund is money created from nowhere (§12).
@@ -36,12 +44,31 @@ export const projectCreateSchema = z.object({
   expectedRoi: z.coerce.number().min(0).max(100, 'Expected ROI must be 0-100').default(0),
   status: z.enum(PROJECT_STATUSES).default('In Progress'),
   health: z.enum(PROJECT_HEALTHS).default('Stable'),
+  /**
+   * Project type (migration 0032). Deliberately OPTIONAL with no default rather
+   * than `.default('club_level')`: `projectUpdateSchema` is `partial()` of this
+   * schema, and a default here would resurrect the `shareholders` trap noted in
+   * the PUT handler — an omitted key would parse into a value and silently
+   * re-type a project on an unrelated edit. Absent means "leave it alone" on PUT
+   * and "club_level" (the DB default) on POST; the routes say so explicitly.
+   */
+  projectType: z.enum(PROJECT_TYPES).optional(),
   startDate: isoDate('Start date'),
   completionDate: isoDate('Completion date').nullable().optional(),
   linkedFundId: z.string().uuid().nullable().optional(),
   createNewFund: z.boolean().default(false).optional(),
   newFundName: z.string().trim().max(255).nullable().optional(),
   projectFundHandler: z.string().trim().max(255).nullable().optional(),
+  /**
+   * Per-project 'Project Level Member' carve-out override (migration 0030).
+   * Shape only — the semantic gate ((0, 100] percent at 2dp, plus Σ ≤ 100%
+   * against the club rules) lives in lib/distribution-rules.ts and runs in
+   * the project POST/PUT handlers, so every consumer shares one validator.
+   * `null` clears the override — the project falls back to the club rule.
+   */
+  projectMemberPercent: z
+    .union([z.coerce.number().gt(0).max(100), z.string().trim().min(1).max(8), z.null()])
+    .optional(),
   shareholders: z.array(projectShareholderSchema).max(1000, 'Too many shareholders in one project').default([]),
 });
 
@@ -49,6 +76,29 @@ export const projectCreateSchema = z.object({
 export const projectUpdateSchema = projectCreateSchema
   .partial()
   .refine((obj) => Object.keys(obj).length > 0, { message: 'No valid fields to update' });
+
+/**
+ * Route-side normalizer for the per-project 'Project Level Member' override
+ * (migration 0030): undefined stays undefined (leave the column alone on PUT),
+ * null/'' become null (clear → club rule), and a submitted percent becomes the
+ * exact 2dp decimal string for the column. The percent contract itself is
+ * owned by lib/distribution-rules; this only maps its MoneyError into the
+ * API's field-coded 400 (§11) instead of a 500.
+ */
+export function normalizeProjectMemberPercent(
+  value: string | number | null | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const bp = parseProjectMemberOverrideBp(value);
+    return bp === null ? null : formatPercentBp(bp);
+  } catch (err) {
+    if (err instanceof MoneyError) {
+      throw new ValidationError(`[Field 'projectMemberPercent', Code: ${err.code}] ${err.message}`);
+    }
+    throw err;
+  }
+}
 
 export const disbursementSchema = z.object({
   type: z.enum(['Earning', 'Expense']),
@@ -144,6 +194,20 @@ export const updateSettingsSchema = z.object({
       maxWithdrawalPerRequest: z.number().min(0).optional(),
       statutoryReservePercent: z.number().min(0).max(100).optional(),
       fiscalYearEnd: fiscalMonthName.optional(),
+      /**
+       * Shape only — the semantic gate (vocabulary membership, duplicates, 2dp
+       * percent, Σ ≤ 100%) is lib/distribution-rules.ts::parseDistributionRules,
+       * applied in the PUT handler so every consumer shares one validator.
+       */
+      distributionRules: z
+        .array(
+          z.object({
+            role: z.string().min(1).max(50),
+            percent: z.coerce.number().gt(0).max(100),
+          }),
+        )
+        .max(16)
+        .optional(),
     })
     .superRefine((financial, ctx) => {
       if (financial.fiscalYearStart && financial.fiscalYearEnd) {
@@ -248,6 +312,38 @@ export const updateSettingsSchema = z.object({
             const key = m.name.toLowerCase();
             if (seen.has(key)) {
               ctx.addIssue({ code: 'custom', message: `Duplicate payment method name: ${m.name}` });
+            }
+            seen.add(key);
+          }
+        })
+        .optional(),
+      /**
+       * Tenant-defined category vocabularies. Labels are free text the org
+       * sets; canonical defaults + validation live in lib/categories.ts.
+       */
+      expenseCategories: z
+        .array(z.string().trim().min(1, 'Category cannot be empty').max(60, 'Category label is too long'))
+        .max(100, 'At most 100 categories')
+        .superRefine((list, ctx) => {
+          const seen = new Set<string>();
+          for (const label of list) {
+            const key = label.toLowerCase();
+            if (seen.has(key)) {
+              ctx.addIssue({ code: 'custom', message: `Duplicate expense category: ${label}` });
+            }
+            seen.add(key);
+          }
+        })
+        .optional(),
+      projectCategories: z
+        .array(z.string().trim().min(1, 'Category cannot be empty').max(60, 'Category label is too long'))
+        .max(100, 'At most 100 categories')
+        .superRefine((list, ctx) => {
+          const seen = new Set<string>();
+          for (const label of list) {
+            const key = label.toLowerCase();
+            if (seen.has(key)) {
+              ctx.addIssue({ code: 'custom', message: `Duplicate project category: ${label}` });
             }
             seen.add(key);
           }

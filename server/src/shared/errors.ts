@@ -47,6 +47,10 @@ const PG_ERROR_MAP: Record<string, { status: number; message: string; code: stri
   '23502': { status: 400, message: 'A required field is missing (not-null violation).', code: 'NOT_NULL_VIOLATION' },
   '23514': { status: 400, message: 'The value provided does not meet the required constraints.', code: 'CHECK_VIOLATION' },
   '22003': { status: 400, message: 'A numeric value is out of range.', code: 'NUMERIC_OVERFLOW' },
+  // 22001 = string_data_right_truncation. Without this a value longer than a
+  // varchar(n) column surfaced as a raw 500 on any route that lacked its own
+  // length check. Every overflow now degrades to a 400 a client can show.
+  '22001': { status: 400, message: 'A value is too long for its field.', code: 'VALUE_TOO_LONG' },
   '40001': { status: 503, message: 'Database transaction conflict. Please retry.', code: 'TRANSACTION_CONFLICT' },
   '40P01': { status: 503, message: 'Deadlock detected. Please retry.', code: 'DEADLOCK' },
   '08006': { status: 503, message: 'Database connection lost. Please try again.', code: 'DB_CONNECTION_ERROR' },

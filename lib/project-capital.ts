@@ -1,9 +1,20 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
+
 import type { getDb } from '@/db/index';
-import { funds, members, transactions } from '@/db/schema/index';
-import { toCents, fromCents } from '@/lib/money';
+import { funds, members, projectMembers, transactions } from '@/db/schema/index';
+import { toCents, fromCents, formatPercentBp, MoneyError } from '@/lib/money';
+
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/utils/errors';
 import { assertMemberNotSuspended } from '@/lib/member-display';
+import {
+  PROJECT_MEMBER_ROLE,
+  assertProjectTypeRoster,
+  parseProjectMemberOverrideBp,
+  pmCapitalCents,
+  splitPmCapitalCents,
+  splitPmContractBp,
+  type ProjectType,
+} from '@/lib/distribution-rules';
 
 type DbTransaction = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
 
@@ -17,6 +28,11 @@ type DbTransaction = Parameters<Parameters<ReturnType<typeof getDb>['transaction
 
 export interface CapitalShareholder {
   memberId: string;
+  /**
+   * Share number. A Project Level Member row of an Extra Investor project holds
+   * NONE (its capital is the contract, derived from the project percentage), so
+   * 0 is legal for exactly those rows; every other row still needs ≥ 1.
+   */
   shares: number;
   sourceFundId?: string | null;
 }
@@ -31,6 +47,12 @@ export interface InvestedShareholder {
   memberEquityBefore: string;
   memberEquityAfter: string;
   sourceFundId: string | null;
+  /**
+   * Contracted capital on a Project Level Member row of an Extra Investor
+   * project (migration 0032): the amount that actually left the member's fund,
+   * which their share number does NOT describe. null on every club row.
+   */
+  pmCapitalCents: number | null;
 }
 
 interface FundLedgerRow {
@@ -47,6 +69,13 @@ export interface InvestResult {
   totalCents: number;
   totalShares: number;
   shareholders: InvestedShareholder[];
+  /**
+   * PM contract capital actually funded (0 on a club project or a roster with no
+   * PM row) and the club capital next to it: `club + contract === total`, which
+   * is the line the pre-save summary and the audit trail both quote.
+   */
+  contractCents: number;
+  clubCapitalCents: number;
 }
 
 /**
@@ -64,20 +93,41 @@ export async function investProjectCapital(
     budgetCents: number;
     shareholders: CapitalShareholder[];
     now: Date;
+    /**
+     * The project being (re-)capitalised, when it already exists. Omitted on
+     * create — the new project has no bindings yet, so ANY existing binding of
+     * a Project Member is a violation by definition.
+     */
+    currentProjectId?: string | null;
+    /**
+     * Project type (migration 0032). Drives WHO FUNDS BY WHAT:
+     *   club_level      every row is shares × share value; a Project Level
+     *                   Member row is refused outright.
+     *   extra_investor  every Project Level Member row funds its equal share of
+     *                   `floor(budget × projectMemberPercent)` and holds no
+     *                   shares; Board + Shareholder rows stay on shares and may
+     *                   together fund at most `budget − contract`.
+     * The amount is never taken from the client: the contract is one percentage
+     * per project, so the server derives every PM obligation from it (§6 server-first).
+     */
+    projectType: ProjectType;
+    /** `projects.project_member_percent` — the contract (extra investor only). */
+    projectMemberPercent?: unknown;
   },
 ): Promise<InvestResult> {
-  const { tenantId, shareValue, destinationFundId, budgetCents, shareholders, now } = opts;
+  const {
+    tenantId,
+    shareValue,
+    destinationFundId,
+    budgetCents,
+    shareholders,
+    now,
+    currentProjectId = null,
+    projectType,
+    projectMemberPercent = null,
+  } = opts;
 
   const totalShares = shareholders.reduce((acc, s) => acc + s.shares, 0);
-
-  // Capital that lands in no fund is capital that exists nowhere: the equity
-  // and source-fund debits below would have no counter-entry (§12).
-  const plannedCents = shareholders.reduce((acc, s) => acc + toCents(s.shares * shareValue), 0);
-  if (plannedCents > 0 && !destinationFundId) {
-    throw new ValidationError(
-      'Select a fund for the project capital — a project without a linked fund cannot hold an investment.',
-    );
-  }
 
   const seenMemberIds = new Set<string>();
   for (const s of shareholders) {
@@ -90,13 +140,105 @@ export async function investProjectCapital(
   const shareholderIds = shareholders.map((s) => s.memberId).sort();
   const lockedMembers = shareholderIds.length
     ? await tx
-         .select({ id: members.id, name: members.name, status: members.status, totalContributed: members.totalContributed })
+         .select({ id: members.id, name: members.name, status: members.status, role: members.role, totalContributed: members.totalContributed })
         .from(members)
         .where(and(inArray(members.id, shareholderIds), eq(members.tenantId, tenantId)))
         .orderBy(members.id)
         .for('update')
     : [];
   const memberById = new Map(lockedMembers.map((m) => [m.id, m]));
+
+  /* ---- Project type (migration 0032): who funds, and with what ------------
+   * Roles are trustworthy only here — the member rows are locked and
+   * tenant-scoped above — so the roster/type check lives in this one function
+   * and the create and re-capitalise paths cannot drift apart.
+   *
+   * The PM contract AMOUNT is never taken from the client: it is derived here
+   * from the project's budget and its one contract percentage, so a crafted
+   * payload cannot fund a Project Level Member with an amount the club never
+   * agreed (§6: the client only orchestrates UI state).
+   * ------------------------------------------------------------------------ */
+  try {
+    assertProjectTypeRoster({
+      projectType,
+      projectMemberPercent,
+      participantRoles: shareholders.map((s) => memberById.get(s.memberId)?.role ?? ''),
+    });
+  } catch (err) {
+    // The rule owner speaks MoneyError with the §11 field format already in the
+    // message; the API layer must see a 400, never a 500.
+    if (err instanceof MoneyError) throw new ValidationError(err.message);
+    throw err;
+  }
+
+  const pmIds = shareholders
+    .filter((s) => memberById.get(s.memberId)?.role === PROJECT_MEMBER_ROLE)
+    .map((s) => s.memberId)
+    .sort();
+  const pmBp = projectType === 'extra_investor' ? parseProjectMemberOverrideBp(projectMemberPercent) : null;
+  // A contract percentage with no PM row on this roster funds nothing — the
+  // ceiling below therefore always describes money that actually moves, and the
+  // run (not the Save) is what refuses to DISTRIBUTE an unpayable contract.
+  const contractCents = pmIds.length > 0 && pmBp !== null ? pmCapitalCents(budgetCents, pmBp) : 0;
+  const contractByPm = contractCents > 0 ? splitPmCapitalCents(contractCents, pmIds) : new Map<string, number>();
+  const contractBpByPm =
+    pmBp !== null && pmIds.length > 0 && contractCents > 0 ? splitPmContractBp(pmBp, pmIds) : new Map<string, number>();
+  const clubCeilingCents = budgetCents - contractCents;
+
+  // Shares mean one thing per side of the contract: a PM row funds by contract
+  // and holds none, everything else funds by shares and needs at least one.
+  for (const s of shareholders) {
+    const member = memberById.get(s.memberId);
+    if (member?.role === PROJECT_MEMBER_ROLE && s.shares !== 0) {
+      throw new ValidationError(
+        `[Field 'shareholders.shares', Code: PM_HOLDS_NO_SHARES] '${member.name}' is a ${PROJECT_MEMBER_ROLE} and funds this project with its contract percentage, not with shares. Set its shares to 0.`,
+      );
+    }
+    if (member?.role !== PROJECT_MEMBER_ROLE && s.shares < 1) {
+      throw new ValidationError(
+        `[Field 'shareholders.shares', Code: INVALID_SHARES] '${member?.name ?? s.memberId}' needs at least 1 share. Only a ${PROJECT_MEMBER_ROLE} may hold none.`,
+      );
+    }
+  }
+
+  // Capital that lands in no fund is capital that exists nowhere: the equity
+  // and source-fund debits below would have no counter-entry (§12). The contract
+  // counts here even though it buys no shares — it is real money into the fund.
+  const plannedCents =
+    shareholders.reduce((acc, s) => acc + toCents(s.shares * shareValue), 0) + contractCents;
+  if (plannedCents > 0 && !destinationFundId) {
+    throw new ValidationError(
+      'Select a fund for the project capital — a project without a linked fund cannot hold an investment.',
+    );
+  }
+
+  // One-project invariant (docs/MEMBER-TYPE-DISTRIBUTION_PLAN.md §3.2): a
+  // Project Member belongs to exactly one project and can never be invested
+  // into another. Create and re-capitalise BOTH funnel through this function,
+  // so this single check is the whole enforcement — project_members stays the
+  // source of truth (no extra column). Rows are locked above, so a concurrent
+  // second binding cannot slip between read and write.
+  const projectMemberIds = shareholderIds.filter(
+    (id) => memberById.get(id)?.role === PROJECT_MEMBER_ROLE,
+  );
+  if (projectMemberIds.length > 0) {
+    const foreignBindings = await tx
+      .select({ memberId: projectMembers.memberId, projectId: projectMembers.projectId })
+      .from(projectMembers)
+      .where(
+        currentProjectId
+          ? and(inArray(projectMembers.memberId, projectMemberIds), ne(projectMembers.projectId, currentProjectId))
+          : inArray(projectMembers.memberId, projectMemberIds),
+      )
+      .limit(1);
+    if (foreignBindings.length > 0) {
+      const violator = memberById.get(foreignBindings[0]!.memberId);
+      throw new ValidationError(
+        `'${violator?.name ?? foreignBindings[0]!.memberId}' is a ${PROJECT_MEMBER_ROLE} — it belongs to exactly ` +
+          `one project and cannot invest in another. Remove it from its current project first.`,
+      );
+    }
+  }
 
   // Invested capital must physically leave a deposit fund, otherwise the same
   // cash sits in the deposit fund AND the project fund and the treasury
@@ -159,7 +301,11 @@ export async function investProjectCapital(
     // deduction below would move a suspended member's money into the pool.
     assertMemberNotSuspended(member, 'investing in a project');
 
-    const requiredAmountCents = toCents(sh.shares * shareValue);
+    // A Project Level Member of an Extra Investor project funds its derived
+    // contract amount; everybody else buys shares. Both are integer cents, and
+    // both draw from a real fund below.
+    const contractForThisPm = contractByPm.get(member.id);
+    const requiredAmountCents = contractForThisPm ?? toCents(sh.shares * shareValue);
     totalCents += requiredAmountCents;
 
     const availableCents = toCents(member.totalContributed ?? '0');
@@ -206,16 +352,32 @@ export async function investProjectCapital(
       shares: sh.shares,
       investmentCents: requiredAmountCents,
       investmentFormatted: fromCents(requiredAmountCents),
-      ownershipPercentage: totalShares > 0 ? ((sh.shares / totalShares) * 100).toFixed(2) : '0.00',
+      // A PM's stake is its slice of the contract, not a share ratio — the two
+      // pots are different sizes, and one number must never describe both.
+      ownershipPercentage:
+        contractBpByPm.get(member.id) !== undefined
+          ? formatPercentBp(contractBpByPm.get(member.id)!)
+          : totalShares > 0
+            ? ((sh.shares / totalShares) * 100).toFixed(2)
+            : '0.00',
       memberEquityBefore: fromCents(availableCents),
       memberEquityAfter: fromCents(availableCents - requiredAmountCents),
       sourceFundId,
+      pmCapitalCents: contractForThisPm ?? null,
     });
   }
 
   // Budget is the ceiling on capital raised: members cannot subscribe more
-  // than the project declares.
+  // than the project declares. With a PM contract in play the same invariant
+  // reads "club shares may not exceed what the contract leaves" — say so,
+  // because "your shares are over budget" is misleading when the budget was
+  // already spoken for by the contract.
   if (totalCents > budgetCents) {
+    if (contractCents > 0) {
+      throw new ValidationError(
+        `Board and Shareholder capital (${fromCents(totalCents - contractCents)}) exceeds what the Project Level Member contract leaves of the budget (${fromCents(clubCeilingCents)}). Contract: ${fromCents(contractCents)} of ${fromCents(budgetCents)}.`,
+      );
+    }
     throw new ValidationError(
       `Total shareholder investment (${fromCents(totalCents)}) cannot exceed the project budget (${fromCents(budgetCents)}).`,
     );
@@ -260,7 +422,13 @@ export async function investProjectCapital(
       .where(and(eq(funds.id, destinationFundId), eq(funds.tenantId, tenantId)));
   }
 
-  return { totalCents, totalShares, shareholders: processed };
+  return {
+    totalCents,
+    totalShares,
+    shareholders: processed,
+    contractCents,
+    clubCapitalCents: totalCents - contractCents,
+  };
 }
 
 export interface RefundResult {

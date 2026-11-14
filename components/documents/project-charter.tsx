@@ -29,6 +29,8 @@ export interface ProjectCharterParticipant {
 
 export interface ProjectCharterData {
   id?: string;
+  /** PRJ-XXXX reference printed in the document header (migration 0031). */
+  projectCode?: string | null;
   title?: string;
   category?: string;
   description?: string;
@@ -83,8 +85,10 @@ export function ProjectCharter({ data, orgName, orgTagline }: { data: ProjectCha
     { label: t("documents.approvedBy", { defaultValue: "Approved By" }) },
   ];
 
+  // Reference is the human code where one exists — a UUID on a printed charter
+  // helps no one; data.id remains the fallback for legacy rows.
   return (
-    <DocumentFrame orgName={orgName} orgTagline={orgTagline} docType={title} reference={data.id} dateLabel={data.startDate ? formatDate(data.startDate) : undefined} signatures={signatures}>
+    <DocumentFrame orgName={orgName} orgTagline={orgTagline} docType={title} reference={data.projectCode || data.id} dateLabel={data.startDate ? formatDate(data.startDate) : undefined} signatures={signatures}>
       {/* is_locked is one-way, so a charter reprinted after settlement looked
           identical to one printed at inception — the moment a stakeholder most
           needs the difference visible. */}

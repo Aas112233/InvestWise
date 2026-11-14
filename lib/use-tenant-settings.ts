@@ -6,6 +6,8 @@ import { apiClient } from "./api-client";
 import { useAuth } from "./auth-context";
 import { formatMoney, formatDatePattern, formatDateOnly } from "./formatters";
 import { DEFAULT_PAYMENT_METHODS, type PaymentMethodConfig } from "./payment-methods";
+import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_PROJECT_CATEGORIES } from "./categories";
+import { sanitizeDistributionRules, type DistributionRule } from "./distribution-rules";
 
 export interface PenaltyRuleSetting {
   tier: number;
@@ -38,6 +40,8 @@ export interface TenantSettings {
     maxWithdrawalPerRequest?: number;
     statutoryReservePercent?: number | string | null;
     lastFiscalCloseDate?: string | null;
+    /** Per-member-category returns rules ([] = the historical pro-rata split). */
+    distributionRules?: { role: string; percent: number }[];
   };
   governance?: {
     monthlyMeetingDay?: number;
@@ -49,6 +53,10 @@ export interface TenantSettings {
     meetingTypes?: string[];
     penaltyRules?: PenaltyRuleSetting[];
     paymentMethods?: PaymentMethodConfig[];
+    /** Tenant-defined expense categories ([] / absent = platform defaults). */
+    expenseCategories?: string[];
+    /** Tenant-defined project sectors ([] / absent = platform defaults). */
+    projectCategories?: string[];
   };
   system?: {
     language?: string;
@@ -161,6 +169,37 @@ export function useTenantPaymentMethods(): PaymentMethodConfig[] {
   return data?.governance?.paymentMethods && data.governance.paymentMethods.length > 0
     ? data.governance.paymentMethods
     : DEFAULT_PAYMENT_METHODS;
+}
+
+/**
+ * Tenant-defined expense categories (Settings → Governance). Expense forms and
+ * the expense filter build their pickers from this; falls back to the platform
+ * defaults so a tenant that never configured any still gets a sane list.
+ */
+export function useTenantExpenseCategories(): string[] {
+  const { data } = useTenantSettings();
+  return data?.governance?.expenseCategories && data.governance.expenseCategories.length > 0
+    ? data.governance.expenseCategories
+    : DEFAULT_EXPENSE_CATEGORIES;
+}
+
+/** Tenant-defined project sectors (Settings → Governance). */
+export function useTenantProjectCategories(): string[] {
+  const { data } = useTenantSettings();
+  return data?.governance?.projectCategories && data.governance.projectCategories.length > 0
+    ? data.governance.projectCategories
+    : DEFAULT_PROJECT_CATEGORIES;
+}
+
+/**
+ * Per-member-category returns rules (Settings → Financial). The returns/dividend
+ * previews build their split from this — the SAME rules the run engines read —
+ * via the shared sanitize parser so the form and the money path can never
+ * disagree about what the configured list is. [] = historical pro-rata split.
+ */
+export function useTenantDistributionRules(): DistributionRule[] {
+  const { data } = useTenantSettings();
+  return sanitizeDistributionRules(data?.financial?.distributionRules);
 }
 
 /** Formats a numeric amount using the active tenant's base currency. */

@@ -95,7 +95,11 @@
       "boardMember": "बोर्ड सदस्य",
       "foundingMember": "संस्थापक सदस्य",
       "investor": "निवेशक",
-      "member": "सदस्य"
+      "member": "सदस्य",
+      "manager": "प्रबंधक",
+      "auditor": "लेखा परीकक्ष",
+      "shareholderMember": "शेयरहोल्डर सदस्य",
+      "projectLevelMember": "परयोजना-तर के सदस्य"
     },
     "penaltyType": {
       "fine": "जुर्माना",
@@ -836,6 +840,10 @@
     "membersCount": "{count} सदस्य",
     "sharesFounding": "संस्थापक",
     "sharesNormal": "सामान्य",
+
+    "sharesBoard": "बोर्ड",
+
+    "sharesShareholder": "शेयरहोल्डर",
     "ongoingProjects": "चालू परियोजनाएँ",
     "ongoingBudget": "निर्धारित बजट",
     "totalInvestments": "कुल निवेश",
@@ -985,6 +993,17 @@
       "selectRole": "भूमिका चुनें...",
       "shares": "शेयर",
       "sharesLockedNote": "शेयर लेनदेन इतिहास से लॉक हैं और सीधे बदले नहीं जा सकते।",
+      "projectCap": "जमा सीमा",
+      "projectCapHint": "इस सदस्य की जीवन-भर की अधकतम क्लब जमा",
+      "projectBinding": "बंधी परयोजना",
+      "selectProject": "परयोजना चुनें",
+      "roleLockedNote": "पहले लेनदेन के बाद सदस्य का प्रकार नहीं बदला जा सकता (शेयरों का नियम)",
+      "roleOverrideLabel": "एडमिन ओवरराइड: इस सदस्य का प्रकार बदलें",
+      "roleOverrideConfirm": "लॉक प्रकार बदलने के लिए एडमिन ओवरराइड चुनें।",
+      "roleOverrideReasonLabel": "बदलाव का कारण",
+      "roleOverrideReasonPlaceholder": "जैसे: श्रेणी गली का सुधार",
+      "roleOverrideReasonRequired": "ओवरराईड के लिये करण आवश्यक है।",
+      "projectBindingEditNote": "परयोजना क सदस्य-सूच से बंधती ह",
       "sharesEditableNote": "जब तक इस सदस्य का कोई लेनदेन नहीं है, यह संपादन योग्य है।",
       "nid": "पहचान पत्र/पासपोर्ट",
       "father": "पिता का नाम",
@@ -1003,12 +1022,21 @@
         "emailInvalid": "मान्य ईमेल पता दर्ज करें",
         "sharesRequired": "शेयर एक संख्या होनी चाहिए",
         "sharesWhole": "शेयर पूर्ण संख्या होनी चाहिए",
-        "sharesMin": "शेयर कम से कम 1 होना चाहिए"
+        "sharesMin": "शेयर कम से कम 1 होना चाहिए",
+        "projectCapRequired": "परयोजना-सदस्य के लए जमा-समा जरूर ह — सहेजने से पहले भरें",
+        "projectMemberProjectRequired": "परयोजना-सदस्य का एक परयोजना से बंधा होना जरूर ह"
       }
     },
     "detail": {
       "profile": "सदस्य प्रोफ़ाइल",
       "sharesTitle": "शेयर प्रमाणपत्र",
+      "depositCap": "जमा सीमा",
+      "capUsed": "{{deposited}} जमा हुआ",
+      "categoryShare": "श्रेणी हिससा",
+      "categoryShareFromProject": "बंदधे परियोजन में निर्धारित",
+      "categoryShareFromClub": "क्लब की श्रेणी नियम",
+      "categoryShareNone": "कोई आरक्षित हिससा नहीं — शेयर-अनूपत में बँटाव",
+      "boundProject": "बंधी परियोजना",
       "shares": "शेयर",
       "contributed": "कुल जमा",
       "joinDate": "शामिल होने की तिथि",
@@ -1132,7 +1160,10 @@
     "foundingPartner": "Founding Partner",
     "leadInvestor": "Lead Investor",
     "managingDirector": "Managing Director",
-    "boardMember": "Board Member"
+    "boardMember": "Board Member",
+    "shareholderMember": "शेयरहोल्डर सदस्य",
+
+    "projectLevelMember": "परयोजना-तर के सदस्य"
   },
   "projects": {
     "portfolio": "पॉर्टफोलियो",
@@ -1306,7 +1337,19 @@
       "newFundPlaceholder": "उदा. वाणिज्यिक प्लाजा फंड"
     },
     "timeline": "समयरेखा और तिथियाँ",
+    "pmPercentLabel": "परयोजना-तर के सदस्य: {{percent}}%",
+    "form": {
+      "pmPercentRange": "0 से अधिक और अधिकतम 100 तक का प्रतशत दर्ज करन (अधिकतम दो दशमलव)।",
+      "pmPercentOver": "क्लब श्रेणी नियमों के साथ मलकर यह सदस्य पूल का {{total}}% होत है — अधिकतम 100%। यह प्रतशत कम करन, या सेटिंग्स में क्लब नियम कम करन।",
+      "pmPercentMeter": "क्लब नियमों के साथ वतर्मन कुल: सदस्य पूल का {{total}}% (अधिकतम 100%)",
+      "pmPercent": "परयोजना-तर के सदस्य का हिस्सा (सदस्य पूल का प्रतिशत)",
+      "pmPercentPlaceholderClub": "क्लब नियम: {{percent}}%",
+      "pmPercentPlaceholderNone": "0.00",
+      "pmPercentHintClub": "केवल इस परियोजन के परयोजना-तर के सदस्य के लिए। खाली छोड़ने पर सेटिंग्स का क्लब नियम ({{percent}}%) लागू होगा।",
+      "pmPercentHintNone": "केवल इस परियोजन के परयोजना-तर के सदस्य के लिए। कोई क्लब नियम नहीं है, इसलिए खाली छोड़ने पर शेयर-अनूपাত से बँटावारा होगा।"
+    },
     "returns": {
+      "previewUnavailable": "पूरवावलोकन संभव नहीन",
       "memberPreviewWithFunds": "शेयरधारक भुगतान पूर्वदृश्य (शेष भाग)",
       "fundsSection": "निधियों में वितरण (केवल लाभ)",
       "fundsHint": "प्रत्येक चयनित निधि वितरण का एक प्रतिशत प्राप्त करती है; शेयरधारक शेष प्रतिशत का बँटवारा अपने परियोजना शेयर स्वामित्व के अनुपात में करते हैं।",
@@ -1319,6 +1362,9 @@
       "removeFund": "निधि हटाएँ",
       "toFunds": "निधियों में",
       "toMembers": "सदस्यों में (शेयर अनुपात)",
+      "categoryCol": "श्रेणी",
+      "categoryBreakdown": "श्रेणी-वाट",
+      "remainderProRata": "शेष राशि (शेयर-अनपात)",
       "balanceAfter": "वितरण के बाद परियोजना शेष",
       "fundPercentRequired": "प्रत्येक चयनित निधि के लिए एक प्रतिशत (0.01 – 100) दर्ज करें।",
       "fundPercentSumExceeded": "निधियों के प्रतिशत का योग 100% से अधिक नहीं हो सकता।",
@@ -1381,6 +1427,7 @@
       "fundNameRequired": "समर्पित निधि का नाम आवश्यक है।",
       "duplicateShareholder": "प्रत्येक सदस्य को केवल एक बार शेयरधारक के रूप में जोड़ा जा सकता है।",
       "invalidShares": "शेयर कम से कम 1 होने चाहिए।",
+      "pmPercentInvalid": "परयोजना-तर के सदस्य का प्रतिशत अमान्य है।",
       "capitalExceedsBudget": "कुल शेयरधारक निवेश ({invested}) परियोजना के बजट ({budget}) से अधिक नहीं हो सकता।",
       "selectProjectRequired": "कृपया लक्षित परियोजन चुनें।"
     },
@@ -2550,6 +2597,17 @@
       "withdrawalLimit": "निकासी सीमा (%)",
       "withdrawalNotice": "निकासी सूचना (दिन)",
       "maxWithdrawal": "प्रति अनुरोध अधिकतम निकासी",
+      "returns": {
+      "title": "सदस्य-श्रेणी के अनुरूप लाभ-हान का बंटवारा",
+      "desc": "चुनी गई सदस्य-श्रेणयां हर बंटवारे म अपन तय प्रततशत पाती ह; फिर उस श्रेणी के अंदर शेयरों के अनुपात म बांट होती ह। जो श्रेणयां इस सची म नहीं हैं और जो रकम बचती ह, वह भी शेयरों के अनुपात म बंटती ह। जब कोई नयम नहीं रखा जाता, तो पूरा बंटवारा पहले की तरह शेयरों के अनुपात म होता ह।",
+      "empty": "कोई श्रेणी-नियम नहीं — पूरा बंटवारा शेयरों के अनुपात म होता ह।",
+      "role": "सदस्य-श्रेणी",
+      "percent": "श्रेणी का प्रततशत",
+      "add": "श्रेणी-नियम जोड़ें",
+      "projectOverrideNote": "यहाँ परयोजना-तर के सदस्य का प्रतिशत पूरे क्लब का नियम है — हर परियोजना अपने फॉर्म (परियोजना → संपादन) में अलग प्रतिशत रख सकती है। क्लब का लाभंश परयोजना-तर के सदस्य को नहीं मिलत।",
+      "configured": "तय कुल: {{percent}}%",
+      "incomplete": "हर नियम में सदस्य-श्रेणी और प्रततशत दोनो जरूरी ह — खाली पंक्तयां भरें या हटाएं।"
+    },
       "statutoryReserve": "वैधानिक रिज़र्व (%)"
     },
     "governance": {

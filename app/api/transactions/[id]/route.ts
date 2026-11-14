@@ -10,7 +10,7 @@ import { logAudit } from '@/lib/utils/audit';
 import { LockedError, NotFoundError, ValidationError, ForbiddenError } from '@/lib/utils/errors';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import { toCents } from '@/lib/money';
-import { decideReversal, shouldRefundProjectExpenses, shouldRefundProjectEarnings } from '@/lib/transaction-reversal';
+import { decideReversal, isPayoutLegType, projectBalanceUnwindCents, shouldRefundProjectExpenses, shouldRefundProjectEarnings } from '@/lib/transaction-reversal';
 
 // A row carries three user references (authorizer, deleter) and two fund
 // references (receiving fund, source fund), so each extra join needs its own
@@ -281,9 +281,22 @@ export async function DELETE(
         amount: lockedExisting.amount,
       });
 
-      if (reversal.requiresRevertPath) {
-        throw new ValidationError(reversal.revertHint!);
-      }
+        if (reversal.requiresRevertPath) {
+          throw new ValidationError(reversal.revertHint!);
+        }
+
+        // Payout legs are refused here for the same reason settled deposits are,
+        // immediately above: a dividend run writes sibling reserve-sweep and
+        // Transfer Out legs and moves each member's totalContributed, so
+        // reversing one row alone leaves equity unsupported by the ledger. See
+        // isPayoutLegType in lib/transaction-reversal.ts. Guarded in both delete
+        // implementations because both are reachable from the client.
+        if (isPayoutLegType(lockedExisting.type)) {
+          throw new ValidationError(
+            `'${lockedExisting.type}' rows are legs of a payout and cannot be deleted individually: reversing one moves the fund without its sibling legs or the members' equity. Void the payout from its own screen, which unwinds the whole set.`,
+          );
+        }
+
 
       // Single fund-balance adjustment used for both the deleted leg and its
       // paired transfer leg below: row lock + integer-cents arithmetic in SQL
@@ -357,6 +370,36 @@ export async function DELETE(
                 updatedAt: now,
               })
               .where(and(eq(projects.id, lockedExisting.projectId), eq(projects.tenantId, tenantId)));
+          }
+
+          // Capital legs. The two blocks above already refund currentFundBalance
+          // for Expense and Earning, so those are excluded here to avoid counting
+          // the same movement twice. What was missing entirely is the invested
+          // capital leg: a `Project Investment` row credited the project's linked
+          // fund, so `decideReversal` above debits that fund on delete while
+          // projects.currentFundBalance stayed put — the project and its own
+          // linked fund then disagree permanently, which is exactly what
+          // reconcileFund's projectMismatch is meant to catch. Scope is kept to
+          // the capital-withdrawal types this covers rather than every type, so
+          // no transfer leg gains an adjustment it never had on the write side.
+          const CAPITAL_UNWIND_TYPES = ['Investment', 'Project Investment', 'Withdrawal'];
+          // Earning and Expense are absent from CAPITAL_UNWIND_TYPES by design —
+          // the two blocks above already refund their project balance, and listing
+          // them here would apply the same adjustment twice.
+          if (
+            lockedExisting.projectId &&
+            CAPITAL_UNWIND_TYPES.includes(lockedExisting.type)
+          ) {
+            const projectAdjCents = projectBalanceUnwindCents(lockedExisting, amountCents);
+            if (projectAdjCents !== 0) {
+              await tx
+                .update(projects)
+                .set({
+                  currentFundBalance: sql`(coalesce(${projects.currentFundBalance}, 0) + ${projectAdjCents / 100})::numeric(15,2)`,
+                  updatedAt: now,
+                })
+                .where(and(eq(projects.id, lockedExisting.projectId), eq(projects.tenantId, tenantId)));
+            }
           }
         }
       }

@@ -7,6 +7,7 @@ import { COOKIE_NAMES } from '@/lib/utils/cookies';
 import { AuthError, ForbiddenError } from '@/lib/utils/errors';
 
 import { getTenantSubscriptionBlocked } from '@/lib/subscription-guard';
+import { writeBudgetResponseOrNull } from '@/lib/write-budget';
 import { normalizeRole, isSuperAdminRole, type Role } from '@/lib/roles';
 import { hasScreenPermission } from '@/lib/permissions';
 import { moduleForApiPath, resolveModuleAccess } from '@/lib/tenant-modules';
@@ -319,6 +320,11 @@ export async function authenticateRequest(request: NextRequest): Promise<{
   }
   const cachedIdentity = authCache.get(hash);
   if (cachedIdentity && cachedIdentity.expiresAt > cacheNow) {
+    // Global write budget runs on the cache hit too — it is per-request, not
+    // per-identity-fetch, so skipping it here would exempt every warm session
+    // from the floor (the exact bypass a throttled attacker would exploit).
+    const budgetResponse = await writeBudgetResponseOrNull(request, cachedIdentity.user);
+    if (budgetResponse) return { user: null, tenant: null, error: budgetResponse };
     return { user: cachedIdentity.user, tenant: cachedIdentity.tenant };
   }
 
@@ -423,60 +429,74 @@ export async function authenticateRequest(request: NextRequest): Promise<{
       .limit(1);
 
     const tenantRow = tenantRows[0];
-    if (tenantRow) {
-      tenant = {
-        ...tenantRow,
-        moduleAccess:
-          typeof tenantRow.moduleAccess === 'object' && tenantRow.moduleAccess !== null
-            ? (tenantRow.moduleAccess as Record<string, unknown>)
-            : null,
+    // A tenant user without a tenant row is a corrupt state (deleted/drifted
+    // tenant). The suspended / maintenance / module-entitlement gates all live
+    // below, so skipping them here would let such a user through with every
+    // policy gate bypassed. Fail closed, matching requireTenant in
+    // server/src/middleware/api.ts (`TENANT_REQUIRED`).
+    if (!tenantRow) {
+      return {
+        user: null,
+        tenant: null,
+        error: NextResponse.json(
+          { success: false, message: 'Tenant context required', code: 'TENANT_REQUIRED' },
+          { status: 403 }
+        ),
       };
+    }
 
-      // Check tenant status
-      if (tenant.status === 'suspended') {
-        return {
-          user: null,
-          tenant: null,
-          error: NextResponse.json(
-            { success: false, message: 'Tenant is suspended', code: 'TENANT_SUSPENDED' },
-            { status: 403 }
-          ),
-        };
-      }
-      
-      if (tenant.isMaintenanceMode && !isSuperAdminRole(user.role)) {
-        return {
-          user: null,
-          tenant: null,
-          error: NextResponse.json(
-            { success: false, message: 'Tenant is in maintenance mode', code: 'TENANT_MAINTENANCE' },
-            { status: 503 }
-          ),
-        };
-      }
+    tenant = {
+      ...tenantRow,
+      moduleAccess:
+        typeof tenantRow.moduleAccess === 'object' && tenantRow.moduleAccess !== null
+          ? (tenantRow.moduleAccess as Record<string, unknown>)
+          : null,
+    };
 
-      // Module entitlement gate. A module the tenant is not licensed for is
-      // rejected at the API, not merely hidden in the sidebar — a hidden link
-      // is not an entitlement. Platform operators (SuperAdmin) bypass, matching
-      // the maintenance-mode rule above, so support can always reach a tenant.
-      if (!isSuperAdminRole(user.role)) {
-        const required = moduleForApiPath(request.nextUrl.pathname);
-        if (required) {
-          const access = resolveModuleAccess(tenant.moduleAccess);
-          if (access[required] === false) {
-            return {
-              user: null,
-              tenant: null,
-              error: NextResponse.json(
-                {
-                  success: false,
-                  message: `Module '${required}' is not enabled for this organisation`,
-                  code: 'MODULE_NOT_LICENSED',
-                },
-                { status: 403 }
-              ),
-            };
-          }
+    // Check tenant status
+    if (tenant.status === 'suspended') {
+      return {
+        user: null,
+        tenant: null,
+        error: NextResponse.json(
+          { success: false, message: 'Tenant is suspended', code: 'TENANT_SUSPENDED' },
+          { status: 403 }
+        ),
+      };
+    }
+
+    if (tenant.isMaintenanceMode && !isSuperAdminRole(user.role)) {
+      return {
+        user: null,
+        tenant: null,
+        error: NextResponse.json(
+          { success: false, message: 'Tenant is in maintenance mode', code: 'TENANT_MAINTENANCE' },
+          { status: 503 }
+        ),
+      };
+    }
+
+    // Module entitlement gate. A module the tenant is not licensed for is
+    // rejected at the API, not merely hidden in the sidebar — a hidden link
+    // is not an entitlement. Platform operators (SuperAdmin) bypass, matching
+    // the maintenance-mode rule above, so support can always reach a tenant.
+    if (!isSuperAdminRole(user.role)) {
+      const required = moduleForApiPath(request.nextUrl.pathname);
+      if (required) {
+        const access = resolveModuleAccess(tenant.moduleAccess);
+        if (access[required] === false) {
+          return {
+            user: null,
+            tenant: null,
+            error: NextResponse.json(
+              {
+                success: false,
+                message: `Module '${required}' is not enabled for this organisation`,
+                code: 'MODULE_NOT_LICENSED',
+              },
+              { status: 403 }
+            ),
+          };
         }
       }
     }
@@ -501,6 +521,9 @@ export async function authenticateRequest(request: NextRequest): Promise<{
   };
   // Fill the hot-path cache: next request with this token skips both SELECTs.
   authCache.set(hash, { user: authedUser, tenant, expiresAt: Date.now() + AUTH_CACHE_TTL_MS });
+  // Global write budget — same contract as on the cache-hit path above.
+  const budgetResponse = await writeBudgetResponseOrNull(request, authedUser);
+  if (budgetResponse) return { user: null, tenant: null, error: budgetResponse };
   return {
     user: authedUser,
     tenant,

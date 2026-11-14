@@ -138,12 +138,14 @@ export async function GET(request: NextRequest) {
           totalMembers: sql<number>`count(*)::int`,
           activeMembers: sql<number>`count(*) filter (where ${members.status} = 'active')::int`,
           totalContributed: sql<number>`coalesce(sum(${members.totalContributed}::numeric), 0)::float`,
-          // Founding vs normal split (members.role — 'Founding Member' is the
-          // canonical founding category, everything else groups as normal).
-          foundingShares: sql<number>`coalesce(sum(${members.shares}) filter (where ${members.role} = 'Founding Member'), 0)::int`,
-          normalShares: sql<number>`coalesce(sum(${members.shares}) filter (where coalesce(${members.role}, 'Member') <> 'Founding Member'), 0)::int`,
-          foundingMembers: sql<number>`count(*) filter (where ${members.role} = 'Founding Member')::int`,
-          normalMembers: sql<number>`count(*) filter (where coalesce(${members.role}, 'Member') <> 'Founding Member')::int`,
+          // Board vs shareholder split (members.role — 'Board Member' is
+          // category A of the six-category vocabulary, migration 0029; every
+          // other category groups as the shareholder side, so the two buckets
+          // stay exhaustive exactly like the founding/normal pair they replace).
+          boardShares: sql<number>`coalesce(sum(${members.shares}) filter (where ${members.role} = 'Board Member'), 0)::int`,
+          shareholderShares: sql<number>`coalesce(sum(${members.shares}) filter (where coalesce(${members.role}, 'Shareholder Member') <> 'Board Member'), 0)::int`,
+          boardMembers: sql<number>`count(*) filter (where ${members.role} = 'Board Member')::int`,
+          shareholderMembers: sql<number>`count(*) filter (where coalesce(${members.role}, 'Shareholder Member') <> 'Board Member')::int`,
         })
         .from(members)
         .where(memberCond),
@@ -294,10 +296,10 @@ export async function GET(request: NextRequest) {
     const ongoingBudget = projectAgg[0]?.ongoingBudget ?? 0;
     const totalMembers = memberAgg[0]?.totalMembers ?? 0;
     const activeMembers = memberAgg[0]?.activeMembers ?? 0;
-    const foundingShares = memberAgg[0]?.foundingShares ?? 0;
-    const normalShares = memberAgg[0]?.normalShares ?? 0;
-    const foundingMembers = memberAgg[0]?.foundingMembers ?? 0;
-    const normalMembers = memberAgg[0]?.normalMembers ?? 0;
+    const boardShares = memberAgg[0]?.boardShares ?? 0;
+    const shareholderShares = memberAgg[0]?.shareholderShares ?? 0;
+    const boardMembers = memberAgg[0]?.boardMembers ?? 0;
+    const shareholderMembers = memberAgg[0]?.shareholderMembers ?? 0;
     const totalExpenses = expenseLedgerAgg[0]?.totalExpenseLedger ?? 0;
     const totalIncome = incomeLedgerAgg[0]?.totalIncomeLedger ?? 0;
     const totalDeposits = txDepositAgg[0]?.totalDeposits ?? 0;
@@ -382,11 +384,11 @@ export async function GET(request: NextRequest) {
       totalIncome,
       totalExpenses,
       netReserveBalance: netReserves,
-      totalShares: foundingShares + normalShares,
-      foundingShares,
-      normalShares,
-      foundingMembers,
-      normalMembers,
+      totalShares: boardShares + shareholderShares,
+      boardShares,
+      shareholderShares,
+      boardMembers,
+      shareholderMembers,
       investmentsTotal,
       investmentsCount,
       monthlyDeposits,

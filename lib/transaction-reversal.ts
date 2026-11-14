@@ -127,3 +127,61 @@ export function shouldRefundProjectEarnings(tx: ReversalInput): boolean {
     tx.status != null && (SETTLED_STATUSES as readonly string[]).includes(tx.status);
   return tx.type === 'Earning' && settled;
 }
+
+/**
+ * Ledger types that are components of a payout rather than standalone entries.
+ *
+ * A dividend run writes a coordinated set: the `Statutory Reserve` and
+ * `Transfer Out` sweep legs added for issue #97, one `Dividend` row per member,
+ * and — on the distribution route — a reduction of each recipient's
+ * `totalContributed`. `Disbursement` rows are the per-installment payments of a
+ * member payout, which that screen voids as a unit.
+ *
+ * Deleting one of these alone reverses a single fund balance while its sibling
+ * legs and the members' equity stay exactly where they were, so equity ends up
+ * with no ledger behind it in either direction. That is strictly worse than
+ * refusing, for the same reason `requiresRevertPath` refuses settled deposits.
+ */
+export const PAYOUT_LEG_TYPES = [
+  "Dividend",
+  "Dividend Distribution",
+  "Statutory Reserve",
+  "Disbursement",
+] as const;
+
+export function isPayoutLegType(type: string): boolean {
+  return (PAYOUT_LEG_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * Signed adjustment to `projects.currentFundBalance` when a ledger row is
+ * deleted, in integer cents.
+ *
+ * A row attributed to a project moved that project's live balance under the same
+ * canonical classification that moved the fund, so the unwind is DERIVED from
+ * `classifyLedgerType` — exactly as `decideReversal` already derives the fund
+ * direction at #108 — rather than re-listed per type name. Both delete
+ * implementations call this so they cannot disagree.
+ *
+ * The hand-written chain this replaces tested `type === 'Investment'`, a value no
+ * project-bearing row has ever carried: project capital is written as
+ * `Project Investment`, while the rows that do use bare `Investment` all have
+ * `project_id` NULL and never reach that code. The branch was unreachable from
+ * both directions, so deleting an investment leg debited the fund and left the
+ * project balance untouched — cash vanished from the project's own books while
+ * its linked fund quietly disagreed with it, which is what reconcileFund's
+ * `projectMismatch` is meant to detect.
+ */
+export function projectBalanceUnwindCents(
+  tx: { type: string | null },
+  amountCents: number,
+): number {
+  const { debit, credit } = classifyLedgerType(tx.type ?? '');
+  // Credit-side money came INTO the project, so removing the row takes it back
+  // out; debit-side money left the project, so removing the row returns it.
+  if (credit === 1) return -amountCents;
+  if (debit === 1) return amountCents;
+  // 0/0 aggregates and unknown types are left alone rather than guessed at,
+  // matching decideReversal's stated policy above.
+  return 0;
+}

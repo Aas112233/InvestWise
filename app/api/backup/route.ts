@@ -7,15 +7,25 @@ import { guard } from '@/lib/guarded-route';
 import { logAudit } from '@/lib/utils/audit';
 import { AppError, AuthError, ForbiddenError } from '@/lib/utils/errors';
 
-// ponytail: export set is the minimum tenant-scoped business slice. Tables
-// holding credentials or unscoped secrets are deliberately absent: users
-// (bcrypt hashes), sessions (live ids), blacklisted_tokens (raw JWTs),
-// login_attempts (IPs), deleted_records and global_stats (no tenant_id
-// column — see DATA-029). Platform-wide backups go through the R2 pg_dump
-// workflow, never this endpoint.
+// ponytail: export set is the tenant-scoped business slice. Tables holding
+// credentials or unscoped secrets are deliberately absent: users (bcrypt
+// hashes), sessions (live ids), blacklisted_tokens (raw JWTs), login_attempts
+// (IPs), deleted_records and global_stats (no tenant_id column — see DATA-029).
+// Platform-wide backups go through the R2 pg_dump workflow, never this endpoint.
+// Governance/fiscal/arrears tables were added after the 2026-11 audit found a
+// restore would silently drop them; every one is verified tenant_id-scoped, so
+// the WHERE clause below covers them like any other row.
 const TABLES = [
   'members', 'transactions', 'projects', 'funds',
   'system_settings', 'audit_logs', 'goals',
+  // Governance
+  'meetings', 'meeting_attendees', 'member_penalties',
+  // Fiscal periods and the dividends booked against them
+  'fiscal_periods', 'profit_allocations',
+  // Project detail children (projects itself is above)
+  'project_updates', 'project_members',
+  // Arrears and payout schedules
+  'member_arrears', 'member_payout_plans', 'member_payout_installments',
 ] as const;
 
 async function performBackup(tenantId: string) {

@@ -1,5 +1,21 @@
 import { z } from 'zod';
 
+// Field ceilings mirror db/schema/funds.ts exactly. Without them a longer value
+// passes validation and dies inside the INSERT as Postgres 22001, which reaches
+// the client as a raw 500 instead of a field error.
+export const FUND_NAME_MAX = 255;
+export const FUND_DESCRIPTION_MAX = 2000;
+export const FUND_HANDLING_OFFICER_MAX = 255;
+export const FUND_ACCOUNT_NUMBER_MAX = 100;
+
+const fundName = (max: number) => z.string().trim().min(1, 'Fund name is required').max(max, `Fund name must be at most ${max} characters`);
+const optionalBounded = (max: number, label: string) =>
+  z
+    .string()
+    .max(max, `${label} must be at most ${max} characters`)
+    .nullable()
+    .optional();
+
 // An omitted/invalid code must stay undefined so the service can resolve the
 // tenant's own base currency. Defaulting to 'BDT' here silently relabelled
 // every fund a non-BDT tenant created or edited.
@@ -10,14 +26,14 @@ const normalizeCurrency = (val: string | null | undefined) =>
 // requires an active RESERVE fund, so a type the API would not accept made
 // distribution impossible to configure.
 export const createFundSchema = z.object({
-  name: z.string().min(1, 'Fund name is required'),
+  name: fundName(FUND_NAME_MAX),
   type: z.string().optional().transform((val) => {
     if (!val) return 'OTHER';
     const u = val.toUpperCase();
     if (['DEPOSIT', 'PRIMARY', 'PROJECT', 'RESERVE', 'EMERGENCY', 'OTHER'].includes(u)) return u;
     return 'OTHER';
   }),
-  description: z.string().nullable().optional(),
+  description: optionalBounded(FUND_DESCRIPTION_MAX, 'Description'),
   status: z.string().optional().transform((val) => {
     if (!val) return 'ACTIVE';
     const u = val.toUpperCase();
@@ -25,22 +41,22 @@ export const createFundSchema = z.object({
     return 'ACTIVE';
   }),
   currency: z.string().optional().transform(normalizeCurrency),
-  handlingOfficer: z.string().nullable().optional(),
-  accountNumber: z.string().nullable().optional(),
+  handlingOfficer: optionalBounded(FUND_HANDLING_OFFICER_MAX, 'Handling officer'),
+  accountNumber: optionalBounded(FUND_ACCOUNT_NUMBER_MAX, 'Account number'),
   initialBalance: z.union([z.number(), z.string().transform((v) => Number(v) || 0)]).optional(),
   minimumBalance: z.union([z.number(), z.string().transform((v) => Number(v) || 0)]).optional(),
   linkedProjectId: z.string().nullable().optional().transform((val) => (val && val.trim() !== '' ? val : null)),
 });
 
 export const updateFundSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: fundName(FUND_NAME_MAX).optional(),
   type: z.string().optional().transform((val) => {
     if (!val) return undefined;
     const u = val.toUpperCase();
     if (['DEPOSIT', 'PRIMARY', 'PROJECT', 'RESERVE', 'EMERGENCY', 'OTHER'].includes(u)) return u;
     return 'OTHER';
   }),
-  description: z.string().nullable().optional(),
+  description: optionalBounded(FUND_DESCRIPTION_MAX, 'Description'),
   status: z.string().optional().transform((val) => {
     if (!val) return undefined;
     const u = val.toUpperCase();
@@ -49,7 +65,7 @@ export const updateFundSchema = z.object({
   }),
   minimumBalance: z.union([z.number(), z.string().transform((v) => Number(v) || 0)]).optional(),
   currency: z.string().nullable().optional().transform(normalizeCurrency),
-  handlingOfficer: z.string().nullable().optional(),
-  accountNumber: z.string().nullable().optional(),
+  handlingOfficer: optionalBounded(FUND_HANDLING_OFFICER_MAX, 'Handling officer'),
+  accountNumber: optionalBounded(FUND_ACCOUNT_NUMBER_MAX, 'Account number'),
   linkedProjectId: z.string().nullable().optional().transform((val) => (val && val.trim() !== '' ? val : null)),
 });

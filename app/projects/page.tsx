@@ -11,6 +11,7 @@ import {
   DistributeReturnsModal,
 } from "@/components/projects";
 import { apiClient } from "@/lib/api-client";
+import { parseFieldError } from "@/lib/utils/errors";
 import { offerPrintDocument, openPrintTab } from "@/lib/documents";
 import { Project, Member, ProjectUpdateRecord } from "@/types";
 import { toast } from "sonner";
@@ -262,8 +263,15 @@ export default function ProjectsPage() {
       }
     },
     onError: (err: any) => {
+      // Field-coded rejections (§11) are anchored ON THE OFFENDING INPUT by
+      // the modal itself — inline error plus its banner — so toasting the
+      // same sentence again would only add noise. Everything else (network
+      // failures, unshapeable errors) keeps the plain toast, minus any raw
+      // "[Field ...]" bracket prefix the wire format carries.
+      const parsed = parseFieldError(err?.message ? String(err.message) : "");
+      if (parsed.field) return;
       toast.error(
-        err?.message ||
+        parsed.message ||
           t("common.errors.failedToCreateProject", { defaultValue: "Failed to save project" }),
       );
     },

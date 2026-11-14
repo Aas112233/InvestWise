@@ -95,7 +95,11 @@
       "boardMember": "Board Member",
       "foundingMember": "Founding Member",
       "investor": "Investor",
-      "member": "Member"
+      "member": "Member",
+      "manager": "Manager",
+      "auditor": "Auditor",
+      "shareholderMember": "Shareholder Member",
+      "projectLevelMember": "Project Level Member"
     },
     "penaltyType": {
       "fine": "Fine",
@@ -836,6 +840,10 @@
     "membersCount": "{count} members",
     "sharesFounding": "Founding",
     "sharesNormal": "Normal",
+
+    "sharesBoard": "Board",
+
+    "sharesShareholder": "Shareholder",
     "ongoingProjects": "Ongoing Projects",
     "ongoingBudget": "Committed budget",
     "totalInvestments": "Total Investments",
@@ -985,6 +993,17 @@
       "selectRole": "Select role...",
       "shares": "Shares",
       "sharesLockedNote": "Shares are locked by transaction history and cannot be changed directly.",
+      "projectCap": "Deposit cap",
+      "projectCapHint": "Lifetime maximum this member may deposit into the club",
+      "projectBinding": "Bound project",
+      "selectProject": "Select a project",
+      "roleLockedNote": "Type is locked once this member has transactions (like the share-number rule)",
+      "roleOverrideLabel": "Admin override: change this member’s locked type",
+      "roleOverrideConfirm": "Tick the Admin override to change a locked member type.",
+      "roleOverrideReasonLabel": "Reason for the change",
+      "roleOverrideReasonPlaceholder": "e.g. corrected a category mistake made at enrolment",
+      "roleOverrideReasonRequired": "A reason is required to override the locked member type.",
+      "projectBindingEditNote": "Managed from the project's shareholder list",
       "sharesEditableNote": "Editable while this member has no transactions.",
       "nid": "NID / Passport",
       "father": "Father's name",
@@ -1003,12 +1022,21 @@
         "emailInvalid": "Enter a valid email address",
         "sharesRequired": "Shares must be a number",
         "sharesWhole": "Shares must be a whole number",
-        "sharesMin": "Shares must be at least 1"
+        "sharesMin": "Shares must be at least 1",
+        "projectCapRequired": "A Project Member needs a deposit cap — set it before saving",
+        "projectMemberProjectRequired": "A Project Member must be bound to one project at creation"
       }
     },
     "detail": {
       "profile": "Member Profile",
       "sharesTitle": "Share Certificates",
+      "depositCap": "Deposit cap",
+      "capUsed": "{{deposited}} deposited",
+      "categoryShare": "Category share",
+      "categoryShareFromProject": "Set on the bound project",
+      "categoryShareFromClub": "Club-wide category rule",
+      "categoryShareNone": "No carve-out — splits pro-rata",
+      "boundProject": "Bound project",
       "shares": "Shares",
       "contributed": "Total Contributed",
       "joinDate": "Join Date",
@@ -1132,7 +1160,10 @@
     "foundingPartner": "Founding Partner",
     "leadInvestor": "Lead Investor",
     "managingDirector": "Managing Director",
-    "boardMember": "Board Member"
+    "boardMember": "Board Member",
+    "shareholderMember": "Shareholder Member",
+
+    "projectLevelMember": "Project Level Member"
   },
   "projects": {
     "portfolio": "Projects",
@@ -1306,7 +1337,19 @@
       "newFundPlaceholder": "e.g. Commercial Plaza Fund"
     },
     "timeline": "Timeline & Dates",
+    "pmPercentLabel": "Project level members: {{percent}}%",
+    "form": {
+      "pmPercentRange": "Enter a percentage above 0 and at most 100 (maximum two decimals).",
+      "pmPercentOver": "Together with the club category rules this totals {{total}}% of the member pool — 100% is the maximum. Lower this percentage, or reduce the club rules in Settings → Financial.",
+      "pmPercentMeter": "Running total with club rules: {{total}}% of the member pool (maximum 100%)",
+      "pmPercent": "Project Level Members share (% of member pool)",
+      "pmPercentPlaceholderClub": "Club rule: {{percent}}%",
+      "pmPercentPlaceholderNone": "0.00",
+      "pmPercentHintClub": "Applies to this project’s Project Level Members only. Leave blank to use the club-wide {{percent}}% rule from Settings.",
+      "pmPercentHintNone": "Applies to this project’s Project Level Members only. No club-wide rule is set, so blank means they split purely pro-rata."
+    },
     "returns": {
+      "previewUnavailable": "The distribution cannot be previewed — check the category percentages and shares.",
       "modalTitle": "Distribute Project Returns",
       "modalDesc": "Allocate project profits or losses pro-rata to shareholders based on equity ownership.",
       "projectSection": "Project",
@@ -1348,6 +1391,9 @@
       "removeFund": "Remove fund",
       "toFunds": "To Funds",
       "toMembers": "To Members (pro-rata by shares)",
+      "categoryCol": "Type",
+      "categoryBreakdown": "Category carve-outs",
+      "remainderProRata": "Pro-rata remainder",
       "balanceAfter": "Project Balance After",
       "fundPercentRequired": "Enter a percent (0.01 – 100) for each selected fund.",
       "fundPercentSumExceeded": "Fund percentages must not exceed 100% in total.",
@@ -1381,6 +1427,7 @@
       "fundNameRequired": "Dedicated fund name is required.",
       "duplicateShareholder": "Each member can only be added once as a shareholder.",
       "invalidShares": "Shares must be at least 1.",
+      "pmPercentInvalid": "Project Level Member percentage is invalid.",
       "capitalExceedsBudget": "Total shareholder investment ({invested}) cannot exceed the project budget ({budget}).",
       "selectProjectRequired": "Please select a target project."
     },
@@ -2550,6 +2597,17 @@
       "withdrawalLimit": "Withdrawal limit (%)",
       "withdrawalNotice": "Withdrawal notice (days)",
       "maxWithdrawal": "Max withdrawal per request",
+      "returns": {
+        "title": "Returns distribution by member category",
+        "desc": "Each listed member category carves its percentage out of the member pool of every profit/loss run and dividend, then splits inside the category pro-rata by shares. Unlisted categories and any unclaimed balance split pro-rata by shares. With no rules everything splits pro-rata, exactly as before.",
+        "empty": "No category rules — member pools split pro-rata by shares.",
+        "role": "Member category",
+        "percent": "Category percent",
+        "add": "Add category rule",
+        "projectOverrideNote": "The Project Level Member percent here is the club-wide default — each project can set its own on its form (Projects → Edit). Club dividends never pay Project Level Members.",
+        "configured": "Configured: {{percent}}% of the member pool",
+        "incomplete": "Every returns rule needs a member category and a percentage — remove empty rows or complete them."
+      },
       "statutoryReserve": "Statutory reserve (%)"
     },
     "governance": {

@@ -135,7 +135,7 @@ export function FundModal({
           <ERPFormSection title={isEdit ? t("funds.modal.titleEdit") : t("funds.modal.titleNew")}>
             <ERPFormGrid columns={2}>
               <ERPFormField label={t("funds.modal.name")} required error={errors.name?.message}>
-                <input type="text" placeholder={t("funds.modal.namePlaceholder")} {...register("name")} className={inputCls} />
+                <input type="text" maxLength={255} placeholder={t("funds.modal.namePlaceholder")} {...register("name")} className={inputCls} />
               </ERPFormField>
               <ERPFormField label={t("funds.modal.type")} required error={errors.type ? t("funds.modal.selectType") : undefined}>
                 <AppDropdown
@@ -147,7 +147,7 @@ export function FundModal({
               </ERPFormField>
             </ERPFormGrid>
             <ERPFormField label={t("funds.modal.description")}>
-              <input type="text" placeholder={t("funds.modal.descPlaceholder")} {...register("description")} className={inputCls} />
+              <input type="text" maxLength={2000} placeholder={t("funds.modal.descPlaceholder")} {...register("description")} className={inputCls} />
             </ERPFormField>
             <ERPFormGrid columns={isEdit ? 3 : 2}>
               <ERPFormField label={t("funds.modal.minBalance")} hint={t("funds.modal.minBalanceNote")}>

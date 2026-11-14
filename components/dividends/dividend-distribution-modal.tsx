@@ -19,6 +19,7 @@ import { ApiError, apiClient } from "@/lib/api-client";
 import { formatMoney } from "@/lib/formatters";
 import { useLocale } from "@/lib/i18n";
 import { useTenantCurrency, useTenantSettings } from "@/lib/use-tenant-settings";
+import { memberRoleLabel, type MemberRole } from "@/lib/member-roles";
 
 interface MemberBreakdownRow {
   /** Member uuid — stable key for the preview table. */
@@ -26,6 +27,8 @@ interface MemberBreakdownRow {
   /** Human-readable member code (MEM-0001). */
   memberIdStr: string;
   name: string;
+  /** Membership category — the split honors its configured percent. */
+  memberRole?: string;
   shares: number;
   grossAmount: string;
   ratePerShare: string;
@@ -39,6 +42,9 @@ interface CalculationResult {
   totalActiveShares: number;
   ratePerShare: string;
   memberBreakdown: MemberBreakdownRow[];
+  /** Present only when member-category rules are configured server-side. */
+  categoryAllocations?: { role: string; percent: string; amount: string }[];
+  remainderAmount?: string;
   recipientCount: number;
 }
 
@@ -329,6 +335,9 @@ export function DividendDistributionModal({
                         <th className="text-left px-3 py-2 font-semibold uppercase tracking-wider text-[10px] text-muted-foreground">
                           {t("dividends.recipient")}
                         </th>
+                        <th className="text-left px-3 py-2 font-semibold uppercase tracking-wider text-[10px] text-muted-foreground">
+                          {t("projects.returns.categoryCol", { defaultValue: "Type" })}
+                        </th>
                         <th className="text-center px-3 py-2 font-semibold uppercase tracking-wider text-[10px] text-muted-foreground">
                           {t("members.columns.shares")}
                         </th>
@@ -344,18 +353,45 @@ export function DividendDistributionModal({
                             {row.name}{" "}
                             <span className="text-muted-foreground font-mono text-[10px]">({row.memberIdStr})</span>
                           </td>
+                          <td className="px-3 py-2">
+                            <span className="px-1.5 py-0.5 rounded-md bg-muted/60 border border-border/70 text-[10px] whitespace-nowrap">
+                              {t(memberRoleLabel(((row.memberRole || "Shareholder Member") as MemberRole)))}
+                            </span>
+                          </td>
                           <td className="px-3 py-2 text-center font-mono">{row.shares}</td>
                           <td className="px-3 py-2 text-right font-mono text-emerald-700 dark:text-emerald-400">
                             {formatMoney(row.grossAmount, currency)}
                           </td>
                         </tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </ERPFormSection>
+                     </tbody>
+                   </table>
+                 </div>
+               )}
+               {/* Category carve-outs of the net pool — computed server-side by
+                   the SAME engine the payout posts, shown for transparency. */}
+               {calculation.categoryAllocations && calculation.categoryAllocations.length > 0 && (
+                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                     {t("projects.returns.categoryBreakdown", { defaultValue: "Category carve-outs" })}
+                   </span>
+                   {calculation.categoryAllocations.map((c) => (
+                     <span
+                       key={c.role}
+                       className="px-2 py-0.5 rounded-full bg-muted/60 border border-border/80 text-[10px] font-mono text-foreground"
+                     >
+                       {t(memberRoleLabel((c.role as MemberRole)))} {c.percent}% · {formatMoney(c.amount, currency)}
+                     </span>
+                   ))}
+                   {calculation.remainderAmount && (
+                     <span className="px-2 py-0.5 rounded-full bg-muted/40 border border-border/60 text-[10px] text-muted-foreground">
+                       {t("projects.returns.remainderProRata", { defaultValue: "Pro-rata remainder" })} · {formatMoney(calculation.remainderAmount, currency)}
+                     </span>
+                   )}
+                 </div>
+               )}
+             </div>
+           </ERPFormSection>
         ) : (
           <p className="text-xs text-muted-foreground py-4 text-center border border-dashed border-border/80 rounded-lg">
             {t("dividends.previewEmpty")}

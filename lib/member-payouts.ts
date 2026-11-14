@@ -267,7 +267,13 @@ export async function createPayoutPlan(input: CreatePayoutPlanInput) {
   } catch (err: any) {
     // The partial unique index on (member_id) WHERE status = 'ACTIVE' is the
     // race guard; translate its violation into the same 409 the pre-check gives.
-    if (err?.code === '23505') {
+    // Drizzle wraps driver errors, so the pg code may sit on err.code OR
+    // err.cause.code — match both plus the message text (see the refresh-route
+    // rotation-race fix from the 2026-11 live attack rehearsal).
+    const pgCode: string | undefined =
+      err?.code ?? err?.cause?.code ??
+      (String(err?.message ?? '').includes('duplicate key') ? '23505' : undefined);
+    if (pgCode === '23505') {
       throw new ConflictError('This member already has an open payout plan. Cancel it before creating another.');
     }
     throw err;

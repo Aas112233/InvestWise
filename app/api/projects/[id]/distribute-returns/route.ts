@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { projects, projectMembers, members, funds, transactions } from '@/db/schema/index';
+import { projects, projectMembers, members, funds, transactions, systemSettings } from '@/db/schema/index';
 import { memberDisplayNameSql } from '@/lib/member-display';
 import { eq, and, inArray, or, like, sql } from 'drizzle-orm';
 import { logAudit } from '@/lib/utils/audit';
@@ -9,12 +9,22 @@ import { projectReturnDistributionSchema } from '@/lib/utils/validation';
 import { requireProjectContext, zodMessage } from '../../_helpers';
 import {
   parsePositiveAmount,
-  splitDividendByShares,
   splitByPercent,
+  splitDividendByShares,
   parsePercentBp,
   toCents,
   fromCents,
+  clampLossToEquity,
 } from '@/lib/money';
+import {
+  distributionRulesToBp,
+  parseProjectType,
+  splitProjectPool,
+  assertProjectDistributionContract,
+  effectiveProjectMemberBp,
+  isProjectMemberRole,
+} from '@/lib/distribution-rules';
+import type { MemberRole } from '@/lib/member-roles';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
 import { apiError } from '@/lib/utils/api-error';
@@ -193,6 +203,7 @@ export async function POST(
         .select({
           memberId: projectMembers.memberId,
           memberName: memberDisplayNameSql,
+          memberRole: members.role,
           sharesInvested: projectMembers.sharesInvested,
           ownershipPercentage: projectMembers.ownershipPercentage,
         })
@@ -220,6 +231,56 @@ export async function POST(
       }
 
       const currentBalanceCents = toCents(project.currentFundBalance || '0');
+
+      // Per-category distribution rules (Settings → Financial → Returns
+      // distribution, docs/MEMBER-TYPE-DISTRIBUTION_PLAN.md). Read at RUN time
+      // — like fund balances, a run uses the rules as configured when it
+      // executes; editing rules never rewrites past runs. Empty = the exact
+      // historical pro-rata behavior. A corrupt stored config fails the run
+      // LOUDLY (the parser throws) rather than silently mis-splitting money.
+      const [settingsRow] = await tx
+        .select({ distributionRules: systemSettings.distributionRules })
+        .from(systemSettings)
+        .where(eq(systemSettings.tenantId, tenantId))
+        .limit(1);
+      // Project type (migration 0032, docs/PROJECT-TYPES_PLAN.md). The resolver
+      // owns the difference: club_level spends the category rules (with this
+      // project's PM override merged in, exactly as before), extra_investor
+      // carves the PM contract first and splits the remainder purely by share
+      // number — no category rules, so the v9 Σ>100 conflict cannot arise here.
+      let clubRulesBp: Map<MemberRole, number>;
+      let projectType: ReturnType<typeof parseProjectType>;
+      try {
+        clubRulesBp = distributionRulesToBp(settingsRow?.distributionRules ?? null);
+        projectType = parseProjectType(project.projectType);
+      } catch (err) {
+        throw new ValidationError(
+          'The category distribution rules in effect for this project are invalid — check Settings → Financial → Returns distribution and this project\u2019s Project Level Member percentage: ' +
+            (err instanceof Error ? err.message : ''),
+        );
+      }
+      // Category-weighted splits read each shareholder's membership category; a
+      // null role defaults to the standard 'Shareholder Member' category (the
+      // column default since the six-category vocabulary, migration 0029).
+      const splitMembers = shareholders.map((s) => ({
+        id: s.memberId,
+        shares: Number(s.sharesInvested || 0),
+        role: s.memberRole ?? 'Shareholder Member',
+      }));
+
+      // Fail EARLY and by name on a contract the project cannot honour (a club
+      // project holding PMs, or an extra-investor project with PMs and no
+      // percentage) — before any leg math, so the message is the admin's to fix
+      // rather than a split error mid-run.
+      try {
+        assertProjectDistributionContract({
+          projectType,
+          projectMemberPercent: project.projectMemberPercent,
+          members: splitMembers,
+        });
+      } catch (err) {
+        throw new ValidationError(err instanceof Error ? err.message : 'Invalid project distribution contract');
+      }
 
       const now = new Date();
       await assertFiscalPeriodOpen(tx, tenantId, now);
@@ -265,7 +326,21 @@ export async function POST(
       let fundsTotalCents = 0;
       let memberAppliedTotalCents = 0;
       let lossAppliedTotalCents = 0;
+      // Loss the shareholders' equity could not absorb. Reported in the result
+      // and the audit payload: without it the gap between a requested Loss and
+      // what reached `totalExpenses` is untraceable (§12 conservation).
+      let lossUnabsorbedCents = 0;
       const membersWithPayout = new Set<string>();
+      // Category carve-out traceability (docs/MEMBER-TYPE-DISTRIBUTION_PLAN.md):
+      // how much each member category claimed and the pro-rata remainder left
+      // outside the configured categories, summed across the run's legs. Only
+      // populated when rules are configured (an empty list is the old pro-rata).
+      const typeAllocationTotal = new Map<string, number>();
+      let typeRemainderTotalCents = 0;
+      // True whenever the split is not the plain pro-rata one: category rules are
+      // configured (club_level) or the project carries a PM contract
+      // (extra_investor, where the contract block is recorded even with no rules).
+      const categoryRulesActive = clubRulesBp.size > 0 || projectType === 'extra_investor';
       const distributionsList: Array<{
         memberId: string;
         memberName: string;
@@ -322,7 +397,17 @@ export async function POST(
           }
         }
 
-        // Member split of the remaining percentage.
+        // Member split of the remaining percentage, per project type
+        // (lib/distribution-rules::splitProjectPool — one resolver, so the
+        // preview and this run cannot disagree):
+        //   club_level      each configured member category carves its percent of
+        //                   this pool, then pro-rata by shares inside the
+        //                   category; the unclaimed remainder stays pro-rata
+        //                   across unconfigured members. No rules = the exact
+        //                   historical pro-rata split, byte-identical.
+        //   extra_investor  the PM contract is carved first (split equally
+        //                   between the PMs), then the remainder goes purely by
+        //                   share number across Board + Shareholder.
         let requestedMap = new Map<string, number>();
         let appliedMap = new Map<string, number>();
         if (membersTotalCents > 0) {
@@ -332,12 +417,21 @@ export async function POST(
             );
           }
           try {
-            const memberSplit = splitDividendByShares(
-              membersTotalCents,
-              shareholders.map((s) => ({ id: s.memberId, shares: Number(s.sharesInvested || 0) })),
-            );
-            requestedMap = new Map(memberSplit.map((s) => [s.id, s.payoutCents]));
+            const memberSplit = splitProjectPool({
+              projectType,
+              poolCents: membersTotalCents,
+              members: splitMembers,
+              clubRulesBp,
+              projectMemberPercent: project.projectMemberPercent,
+            });
+            requestedMap = new Map(memberSplit.payouts.map((s) => [s.id, s.payoutCents]));
             appliedMap = new Map(requestedMap);
+            if (categoryRulesActive) {
+              for (const block of memberSplit.typeBlocks) {
+                typeAllocationTotal.set(block.role, (typeAllocationTotal.get(block.role) ?? 0) + block.amountCents);
+              }
+              typeRemainderTotalCents += memberSplit.remainderCents;
+            }
           } catch (err) {
             throw new ValidationError(
               err instanceof Error
@@ -355,42 +449,48 @@ export async function POST(
         // is never clamped against equity.) The cap is the RUNNING equity, so
         // in a Both run it includes the profit just credited.
         if (!isProfit) {
-          const remainingEquity = new Map(equityRunning);
-          for (let pass = 0; pass < shareholders.length; pass++) {
-            const overCap = shareholders.filter(
-              (s) => (appliedMap.get(s.memberId) ?? 0) > (remainingEquity.get(s.memberId) ?? 0),
-            );
-            if (overCap.length === 0) break;
-            let shortfall = 0;
-            for (const sh of overCap) {
-              const cap = remainingEquity.get(sh.memberId) ?? 0;
-              shortfall += (appliedMap.get(sh.memberId) ?? 0) - cap;
-              appliedMap.set(sh.memberId, cap);
-              remainingEquity.set(sh.memberId, 0); // equity fully consumed
-            }
-            const candidates = shareholders.filter(
-              (s) => Number(s.sharesInvested || 0) > 0 && (remainingEquity.get(s.memberId) ?? 0) > 0,
-            );
-            if (candidates.length === 0) break; // equity exhausted; record actual debits only
-            const candidateShares = candidates.reduce((acc, s) => acc + Number(s.sharesInvested || 0), 0);
-            let reallocated = 0;
-            for (let i = 0; i < candidates.length; i++) {
-              const c = candidates[i];
-              if (!c) continue;
-              const add = i === candidates.length - 1
-                ? shortfall - reallocated
-                : Math.floor((shortfall * Number(c.sharesInvested || 0)) / candidateShares);
-              reallocated += add;
-              appliedMap.set(c.memberId, (appliedMap.get(c.memberId) ?? 0) + add);
-            }
-          }
-          // Applied debits can never exceed the equity available at this leg.
-          for (const sh of shareholders) {
-            const cap = equityRunning.get(sh.memberId) ?? 0;
-            if ((appliedMap.get(sh.memberId) ?? 0) > cap) {
-              appliedMap.set(sh.memberId, cap);
-            }
-          }
+          // The clamp itself is pure and tested independently
+          // (lib/money.ts::clampLossToEquity). The shortfall re-credit stays
+          // CATEGORY-WEIGHTED for a club project: the same engine re-splits it
+          // across only the members that still have equity left (each carries its
+          // own category, so blocks recompute within that subset).
+          const clamp = clampLossToEquity(
+            appliedMap,
+            equityRunning,
+            (shortfall, candidates) => {
+              const byId = new Map(shareholders.map((s) => [s.memberId, s]));
+              try {
+                if (projectType === 'extra_investor') {
+                  // No contract carve on a SHORTFALL: the PMs already took their
+                  // contract share of the requested loss, and a candidate set
+                  // with no PM could not pay a fresh carve-out at all — cents
+                  // may never go unbooked (§12). The shortfall follows shares.
+                  return splitDividendByShares(
+                    shortfall,
+                    candidates.map((c) => ({ id: c.id, shares: c.shares })),
+                  );
+                }
+                return splitProjectPool({
+                  projectType,
+                  poolCents: shortfall,
+                  members: candidates.map((c) => ({
+                    id: c.id,
+                    shares: c.shares,
+                    role: byId.get(c.id)?.memberRole ?? 'Shareholder Member',
+                  })),
+                  clubRulesBp,
+                  projectMemberPercent: project.projectMemberPercent,
+                }).payouts;
+              } catch (err) {
+                throw new ValidationError(
+                  `Cannot re-allocate the loss shortfall across shareholders: ${err instanceof Error ? err.message : 'split failed'}`,
+                );
+              }
+            },
+            new Map(shareholders.map((s) => [s.memberId, Number(s.sharesInvested || 0)])),
+          );
+          appliedMap = clamp.appliedCents;
+          lossUnabsorbedCents += clamp.unabsorbedCents;
         }
 
         const recipients = shareholders
@@ -436,7 +536,17 @@ export async function POST(
           const balBefore = toCents(fund.balance || '0');
           fundLedgerRows.push({
             tenantId,
-            type: 'Dividend',
+            // 'Transfer In', not 'Dividend'. This row records money ARRIVING in
+            // a recipient fund — its own balanceAfter below is balBefore +
+            // payout — while 'Dividend' is classified as an OUTFLOW by
+            // INFLOW_TYPES/OUTFLOW_TYPES everywhere else in the ledger. The
+            // mismatch made the double-entry unrepresentable: reconcileFund
+            // read a +3,000 receipt as a -3,000 payment and reported a 6,000
+            // discrepancy on correct books. 'Dividend' is kept on the
+            // per-shareholder rows below, where it genuinely is a payout.
+            // Mirrors the #97 paired-leg approach the general dividend route
+            // already uses.
+            type: 'Transfer In',
             amount: fromCents(payout),
             description: `Project profit return to ${fund.name} (${project.title}): ${description.trim()}`,
             category: 'Profit Distribution',
@@ -450,6 +560,36 @@ export async function POST(
             handlingOfficer: user.name,
             balanceBefore: fromCents(balBefore),
             balanceAfter: fromCents(balBefore + payout),
+            createdBy: user.id,
+          });
+        }
+
+        // Matching source leg. The linked fund is debited the whole profit leg
+        // (`legFundOutCents` below), but the per-member 'Dividend' rows booked
+        // against it only cover the shareholders' share, so the portion routed
+        // to other funds had no outflow leg on the fund that actually paid it —
+        // the same one-sided gap #97 fixed on the general dividend route with a
+        // reserve/Transfer-Out pair. Without this row the source fund's ledger
+        // and its balance disagree by exactly `legFundsCents`.
+        if (isProfit && legFundsCents > 0 && project.linkedFundId) {
+          const srcFund = fundById.get(project.linkedFundId);
+          const srcBalBefore = toCents(srcFund?.balance || '0');
+          fundLedgerRows.push({
+            tenantId,
+            type: 'Transfer Out',
+            amount: fromCents(legFundsCents),
+            description: `Project profit routed to other funds (${project.title}): ${description.trim()}`,
+            category: 'Profit Distribution',
+            referenceNumber: nextRef(),
+            date: now,
+            submittedDate: now,
+            status: 'Completed',
+            memberId: null,
+            projectId: id,
+            fundId: project.linkedFundId,
+            handlingOfficer: user.name,
+            balanceBefore: fromCents(srcBalBefore),
+            balanceAfter: fromCents(srcBalBefore - legFundsCents),
             createdBy: user.id,
           });
         }
@@ -497,11 +637,19 @@ export async function POST(
           runningBalanceCents -= legLossCents;
         }
         for (const r of recipients) equityRunning.set(r.sh.memberId, r.afterCents);
-        // The linked fund is debited the full requested leg amount (profit: the
-        // payout source; loss: existing mirror behavior — the fund carries the
-        // requested loss even if shareholders absorbed less). Recipient funds
-        // are credited their share.
-        fundDeltaCents.set(project.linkedFundId!, (fundDeltaCents.get(project.linkedFundId!) ?? 0) - requestedCents);
+        // The linked fund must go out by EXACTLY what moved elsewhere in this
+        // leg, or the money has no destination. On a profit leg that is the full
+        // requested amount, which is what gets split to shareholders and funds.
+        // On a loss leg it is `legLossCents` — what the shareholders actually
+        // absorbed — because the project balance and their equity are reduced by
+        // that capped figure two lines above, and the balance guard at :421
+        // already sizes the linked-fund requirement as `... + legLossCents`.
+        // Debiting `requestedCents` here instead made the fund pay out more than
+        // anyone received: whenever a member's shares could not absorb the full
+        // loss, the difference left the fund with no ledger behind it and the
+        // project silently diverged from its own linked fund.
+        const legFundOutCents = isProfit ? requestedCents : legLossCents;
+        fundDeltaCents.set(project.linkedFundId!, (fundDeltaCents.get(project.linkedFundId!) ?? 0) - legFundOutCents);
         for (const [fid, payout] of fundPayoutCents) {
           fundDeltaCents.set(fid, (fundDeltaCents.get(fid) ?? 0) + payout);
         }
@@ -588,6 +736,23 @@ export async function POST(
           amount: fromCents(payout),
         }));
 
+      // Category carve-out summary for the run (only when rules are active):
+      // what each member category claimed and what stayed in the pro-rata
+      // remainder — the paper trail the audit and the UI toast both quote.
+      // The PM row's percent is the project's effective contract (override →
+      // club rule), which on an Extra Investor project is the only percent the
+      // PM category ever spends.
+      const pmEffectiveBp = effectiveProjectMemberBp(clubRulesBp, project.projectMemberPercent);
+      const categoryAllocations = [...typeAllocationTotal.entries()]
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .map(([role, cents]) => ({
+          role,
+          percent: fromCents(
+            isProjectMemberRole(role) ? (pmEffectiveBp ?? 0) : (clubRulesBp.get(role as MemberRole) ?? 0),
+          ),
+          amount: fromCents(cents),
+        }));
+
       return {
         type: customType,
         requestedAmount: fromCents(profitLegCents + (customType === 'Both' ? lossLegCents : 0)),
@@ -601,11 +766,20 @@ export async function POST(
               lossAllocated: fromCents(lossAppliedTotalCents),
             }
           : {}),
+        // Present on every loss-bearing run (pure Loss, Both, and a settled
+        // Loss), not just Both: a pure Loss had no loss field at all, so the
+        // shortfall between requested and `totalExpenses` was unrecoverable.
+        ...(customType === 'Loss' || customType === 'Both'
+          ? { lossUnabsorbed: fromCents(lossUnabsorbedCents) }
+          : {}),
         ...(isSettle ? { settled: true, locked: true } : {}),
         shareholderCount: membersWithPayout.size,
         fundCount: fundDistributionsList.length,
         distributions: distributionsList,
         fundDistributions: fundDistributionsList,
+        ...(categoryRulesActive
+          ? { categoryAllocations, remainderAmount: fromCents(typeRemainderTotalCents) }
+          : {}),
       };
     });
 
@@ -622,19 +796,15 @@ export async function POST(
     } else if (type === 'Both') {
       const lossRequestedStr = fromCents(lossAmountCents as number);
       const lossAllocatedStr = distributionResult.lossAllocated ?? '0.00';
-      const lossShortfallCents = (lossAmountCents as number) - toCents(lossAllocatedStr);
       message =
-        lossShortfallCents > 0
+        toCents(distributionResult.lossUnabsorbed ?? '0.00') > 0
           ? `Project returns distribution executed: ${distributionResult.profitAmount} profit and ${lossAllocatedStr} of ${lossRequestedStr} loss applied; some shareholders had insufficient equity to absorb their loss share`
           : `Project returns distribution executed: ${distributionResult.profitAmount} profit and ${lossRequestedStr} loss across ${distributionResult.shareholderCount} shareholder${distributionResult.shareholderCount === 1 ? '' : 's'}${fundNote}`;
     } else {
-      const appliedTotalCents = toCents(distributionResult.totalToMembers);
-      const fundsTotalCentsResp = toCents(distributionResult.totalToFunds);
-      const shortfallCents = distributionAmountCents - (appliedTotalCents + fundsTotalCentsResp);
       message =
-        type === 'Loss' && shortfallCents > 0
+        type === 'Loss' && toCents(distributionResult.lossUnabsorbed ?? '0.00') > 0
           ? `Project loss distribution applied ${distributionResult.totalDistributed} of ${distributionResult.requestedAmount} requested; some shareholders had insufficient equity to absorb their share`
-           : `Project ${distributionResult.type.toLowerCase()} distribution executed successfully across ${distributionResult.shareholderCount} shareholder${distributionResult.shareholderCount === 1 ? '' : 's'}${fundNote}`;
+          : `Project ${distributionResult.type.toLowerCase()} distribution executed successfully across ${distributionResult.shareholderCount} shareholder${distributionResult.shareholderCount === 1 ? '' : 's'}${fundNote}`;
     }
 
     await logAudit({
@@ -656,8 +826,19 @@ export async function POST(
               lossAllocated: distributionResult.lossAllocated,
             }
           : {}),
+        ...(type === 'Loss' || type === 'Both'
+          ? { lossUnabsorbed: distributionResult.lossUnabsorbed ?? '0.00' }
+          : {}),
         shareholderCount: distributionResult.shareholderCount,
         fundCount: distributionResult.fundCount,
+        // Category carve-out only exists when the run used rules; absent
+        // otherwise, so historical audit rows keep their exact old shape.
+        ...('categoryAllocations' in distributionResult
+          ? {
+              categoryAllocations: distributionResult.categoryAllocations,
+              remainderAmount: distributionResult.remainderAmount,
+            }
+          : {}),
       },
     });
 

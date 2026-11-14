@@ -4,12 +4,16 @@ import { getDb } from '@/db/index';
 import { projects, projectMembers, funds, transactions, systemSettings } from '@/db/schema/index';
 import { eq, and, desc, ilike, or, count, type SQL } from 'drizzle-orm';
 import { logAudit } from '@/lib/utils/audit';
-import { projectCreateSchema } from '@/lib/utils/validation';
+import { projectCreateSchema, normalizeProjectMemberPercent } from '@/lib/utils/validation';
+import { isAllowedCategory, categoryRejectionMessage } from '@/lib/categories';
+import { getCategoryContext } from '@/lib/categories-db';
 import { requireProjectContext, zodMessage } from './_helpers';
+import { parseProjectType, isProjectType, type ProjectType } from '@/lib/distribution-rules';
 import { toCents, fromCents } from '@/lib/money';
 import { investProjectCapital } from '@/lib/project-capital';
 import crypto from 'node:crypto';
-import { ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
+import { ValidationError, ForbiddenError, ConflictError, readJsonBody } from '@/lib/utils/errors';
+import { generateProjectCode, isProjectCodeClash } from '@/lib/project-code';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +38,24 @@ export async function GET(request: NextRequest) {
     const status = url.searchParams.get('status') || undefined;
     const fundId = url.searchParams.get('fundId') || undefined;
     const search = url.searchParams.get('search') || undefined;
+    // Type filter (migration 0032) — the Extra Investor-only project picker on the
+    // member form. An unknown value is a 400 rather than "ignored", because a
+    // silently dropped filter would offer club projects to a Project Member
+    // binding, which is exactly what the filter exists to prevent.
+    const rawType = url.searchParams.get('projectType');
+    let projectTypeFilter: ProjectType | undefined;
+    if (rawType) {
+      if (!isProjectType(rawType)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `[Field 'projectType', Code: INVALID_PROJECT_TYPE] Unknown project type: ${rawType}`,
+          },
+          { status: 400 },
+        );
+      }
+      projectTypeFilter = rawType;
+    }
     const page = Math.min(1000, Math.max(1, Number(url.searchParams.get('page')) || 1)); // page bounded: a huge `page` is an OFFSET walk Postgres still does
     const pageSize = Math.min(
       MAX_PAGE_SIZE,
@@ -43,9 +65,11 @@ export async function GET(request: NextRequest) {
     const conditions: SQL[] = [eq(projects.tenantId, tenantId)];
     if (status) conditions.push(eq(projects.status, status));
     if (fundId) conditions.push(eq(projects.linkedFundId, fundId));
+    if (projectTypeFilter) conditions.push(eq(projects.projectType, projectTypeFilter));
     if (search) {
       const like = `%${search}%`;
       const searchCondition = or(
+        ilike(projects.projectCode, like), // "prj-3" finds PRJ-0003 (member-code behavior)
         ilike(projects.title, like),
         ilike(projects.category, like),
         ilike(projects.description, like),
@@ -99,7 +123,34 @@ export async function POST(request: NextRequest) {
     const data = parsed.data;
     const db = getDb();
 
-    const createdProject = await db.transaction(async (tx) => {
+    // Category must be one the tenant configured in Settings (or one historical
+    // projects already carry, so removing a sector never invalidates old rows).
+    // projects.category is a plain varchar, so nothing else constrained it.
+    {
+      const { configured, history } = await getCategoryContext(tenantId, 'project');
+      if (!isAllowedCategory(data.category, configured, history)) {
+        throw new ValidationError(categoryRejectionMessage('category', configured));
+      }
+    }
+
+    // Per-project 'Project Level Member' contract (migrations 0030 → 0032): the
+    // percent contract is owned by lib/distribution-rules. Its old save-time Σ
+    // guard against the CLUB rules is gone on purpose (plan D8): a Project Level
+    // Member percentage no longer competes with the club categories — club
+    // projects cannot have PMs at all, and an Extra Investor project splits its
+    // remainder by share number, so the two sets are never added together.
+    const projectMemberPercent = normalizeProjectMemberPercent(data.projectMemberPercent);
+    // Absent means a club project (the migration 0032 default): every caller that
+    // predates project types creates exactly that, unchanged.
+    const projectType = parseProjectType(data.projectType);
+
+    // Sequential PRJ-XXXX code (lib/project-code.ts), member-style. A
+    // concurrent create can read the same MAX+1: the loser's transaction
+    // rolls back ATOMICALLY (fund insert, capital postings, project_members —
+    // nothing commits twice) and retries ONCE with a recomputed, strictly
+    // higher code. Any other unique violation surfaces unchanged.
+    let projectCode = await generateProjectCode(db, tenantId);
+    const runProjectCreate = (code: string) => db.transaction(async (tx) => {
       const now = new Date();
       if ((data.shareholders || []).length > 0) {
         await assertFiscalPeriodOpen(tx, tenantId, now);
@@ -171,6 +222,8 @@ export async function POST(request: NextRequest) {
         budgetCents: toCents(data.budget),
         shareholders: rawShareholders,
         now,
+        projectType,
+        projectMemberPercent,
       });
 
       const processedShareholders = capital.shareholders;
@@ -184,6 +237,7 @@ export async function POST(request: NextRequest) {
         .insert(projects)
         .values({
           tenantId,
+          projectCode: code,
           title: data.title,
           category: data.category,
           description: data.description,
@@ -197,6 +251,8 @@ export async function POST(request: NextRequest) {
           completionDate: data.completionDate ?? null,
           linkedFundId: targetFundId,
           projectFundHandler: data.projectFundHandler ?? null,
+          projectType,
+          projectMemberPercent: projectMemberPercent ?? null,
           currentFundBalance: startingProjectBalanceStr,
           totalEarnings: '0',
           totalExpenses: '0',
@@ -223,6 +279,9 @@ export async function POST(request: NextRequest) {
             memberId: ps.memberId,
             sharesInvested: ps.shares,
             ownershipPercentage: ps.ownershipPercentage,
+            // null on every club row: the column only ever describes a contract
+            // amount that was actually posted (migration 0032).
+            pmCapital: ps.pmCapitalCents === null ? null : fromCents(ps.pmCapitalCents),
           })),
         );
       }
@@ -235,7 +294,11 @@ export async function POST(request: NextRequest) {
             tenantId,
             type: 'Project Investment',
             amount: ps.investmentFormatted,
-            description: `Equity investment in project: ${project.title} (${ps.shares} ${ps.shares === 1 ? 'share' : 'shares'} @ ${shareValue.toFixed(2)})`,
+            description: `Equity investment in project: ${project.title} (${
+              ps.pmCapitalCents === null
+                ? `${ps.shares} ${ps.shares === 1 ? 'share' : 'shares'} @ ${shareValue.toFixed(2)}`
+                : `${ps.investmentFormatted} by Project Level Member contract`
+            })`,
             category: 'Investment',
             referenceNumber: `${runRef}-${(i + 1).toString().padStart(2, '0')}`,
             date: now,
@@ -261,6 +324,20 @@ export async function POST(request: NextRequest) {
       };
     });
 
+    let createdProject;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        createdProject = await runProjectCreate(projectCode);
+        break;
+      } catch (e: unknown) {
+        if (!isProjectCodeClash(e)) throw e;
+        if (attempt >= 1) {
+          throw new ConflictError('Could not allocate a project code — please retry.');
+        }
+        projectCode = await generateProjectCode(db, tenantId);
+      }
+    }
+
     await logAudit({
       user: { id: user.id, name: user.name },
       tenantId,
@@ -269,6 +346,7 @@ export async function POST(request: NextRequest) {
       resourceId: createdProject.id,
       details: {
         title: createdProject.title,
+        projectCode: createdProject.projectCode,
         budget: createdProject.budget,
         totalShares: createdProject.totalShares,
         shareholderCount: createdProject.shareholders.length,

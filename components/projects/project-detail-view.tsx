@@ -23,6 +23,7 @@ import {
   FileText,
 } from "lucide-react";
 import { Project, ProjectUpdateRecord, ProjectMemberParticipation } from "@/types";
+import { PROJECT_MEMBER_ROLE } from "@/lib/distribution-rules";
 import {
   ERPMetricCard,
   StatusBadge,
@@ -99,13 +100,15 @@ export function ProjectDetailView({
   const shareholders = project.involvedMembers || [];
   const tenantShareValue = project.tenantShareValue || 1000;
 
-  // Query transactions for Tab 3 (Timeline & Ledger)
+  // Query transactions for Tab 3 (Timeline & Ledger). The endpoint pages;
+  // request the largest page it serves so the client-side table keeps its
+  // honest count instead of silently truncating at the 200 default.
   const { data: transactionsData = [], isLoading: isLoadingTransactions } = useQuery<ProjectTransaction[]>({
-    queryKey: ["transactions", { projectId: project.id }],
+    queryKey: ["transactions", { projectId: project.id, scope: "project-ledger" }],
     queryFn: async () => {
       try {
         const res = await apiClient<{ data: ProjectTransaction[] } | ProjectTransaction[]>(
-          `/projects/${project.id}/transactions`
+          `/projects/${project.id}/transactions?pageSize=500`
         );
         return Array.isArray(res) ? res : res?.data || [];
       } catch {
@@ -156,11 +159,24 @@ export function ProjectDetailView({
       header: t("projects.sharesLabel", { defaultValue: "SHARES" }),
       align: "center",
       sortable: true,
-      render: (m) => (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-muted text-foreground">
-          {m.sharesInvested} {m.sharesInvested === 1 ? "share" : "shares"}
-        </span>
-      ),
+      render: (m) =>
+        m.memberRole === PROJECT_MEMBER_ROLE ? (
+          // A Project Level Member of an Extra Investor deal funds a contract and
+          // holds no shares; printing "0 shares" would read as a member who put
+          // in nothing, when their row is often the largest leg on the page.
+          <span
+            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono text-muted-foreground"
+            title={t("projects.form.pmNoSharesHint", {
+              defaultValue: "Funds by contract percentage, not by shares",
+            })}
+          >
+            {t("projects.form.noShares", { defaultValue: "—" })}
+          </span>
+        ) : (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-muted text-foreground">
+            {m.sharesInvested} {m.sharesInvested === 1 ? "share" : "shares"}
+          </span>
+        ),
     },
     {
       key: "tenantShareValue",
@@ -408,11 +424,27 @@ export function ProjectDetailView({
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 {projectSectorLabel(t, project.category)}
               </span>
+              {/* Human reference code (migration 0031) — quoted on receipts,
+                  audit rows and officer conversations. */}
+              {project.projectCode ? (
+                <span className="font-mono text-xs font-bold text-muted-foreground">
+                  {project.projectCode}
+                </span>
+              ) : null}
               <StatusBadge tone={mapStatusTone(project.status)} label={projectStatusLabel(t, project.status)} />
               <StatusBadge
                 tone={project.health === "Stable" ? "emerald" : "amber"}
                 label={projectHealthLabel(t, project.health)}
               />
+              {/* Project type (migration 0032). Named in full here, unlike the
+                  list where only Extra Investor is badged: on the detail screen
+                  the type explains the capital and distribution rows below it,
+                  so stating it explicitly beats leaving one case implied. */}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-muted/60 border border-border/70 text-muted-foreground">
+                {project.projectType === "extra_investor"
+                  ? t("projects.form.typeExtra", { defaultValue: "Extra Investor" })
+                  : t("projects.form.typeClub", { defaultValue: "Club Level" })}
+              </span>
               {project.linkedFundName && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300">
                   <Landmark className="w-3 h-3" />
@@ -440,6 +472,24 @@ export function ProjectDetailView({
             {project.projectFundHandler && (
               <span className="font-mono text-[11px]">
                 {t("projects.handlerLabel", { name: project.projectFundHandler, defaultValue: `Handler: ${project.projectFundHandler}` })}
+              </span>
+            )}
+            {/* The Project Level Member CONTRACT (migrations 0030 → 0032). On an
+                Extra Investor project this is the deal itself — a slice OF THE
+                BUDGET, not of the member pool — so it is labelled per type; the
+                club-wide percentage nobody contracted for is never shown as if it
+                were. Absent on a club project means there is no contract at all. */}
+            {project.projectMemberPercent != null && project.projectMemberPercent !== "" && (
+              <span className="font-mono text-[11px]">
+                {project.projectType === "extra_investor"
+                  ? t("projects.pmContractLabel", {
+                      percent: String(project.projectMemberPercent),
+                      defaultValue: `Project Level Members contract: ${project.projectMemberPercent}% of budget`,
+                    })
+                  : t("projects.pmPercentLabel", {
+                      percent: String(project.projectMemberPercent),
+                      defaultValue: `Project level members: ${project.projectMemberPercent}%`,
+                    })}
               </span>
             )}
             <div className="flex items-center gap-2 text-[11px] font-mono">

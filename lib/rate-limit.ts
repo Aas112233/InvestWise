@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import { getDb, withDbRetry } from '@/db/index';
 import { rateLimitBuckets } from '@/db/schema/index';
 
@@ -94,4 +94,32 @@ export async function pruneRateLimitBuckets(): Promise<number> {
       .returning({ bucketKey: rateLimitBuckets.bucketKey }),
   );
   return deleted.length;
+}
+
+/**
+ * Read a bucket WITHOUT consuming it — for pre-checks that must deny on an
+ * already-tripped alarm but whose own traffic (including successes) should not
+ * advance the counter. Same window arithmetic as consumeBucket, so the verdict
+ * matches exactly what a consume would compute.
+ */
+export async function peekBucket(key: string, limit: number, windowSecs: number): Promise<BucketOutcome> {
+  const db = getDb();
+  const [row] = await withDbRetry(() =>
+    db
+      .select({ count: rateLimitBuckets.count, windowStartedAt: rateLimitBuckets.windowStartedAt })
+      .from(rateLimitBuckets)
+      .where(eq(rateLimitBuckets.bucketKey, key))
+      .limit(1),
+  );
+  const now = Date.now();
+  const windowStart = row?.windowStartedAt ? new Date(row.windowStartedAt).getTime() : null;
+  const expired = windowStart === null || now - windowStart > windowSecs * 1000;
+  const count = expired ? 0 : Number(row?.count ?? 0);
+  return {
+    ok: count < limit,
+    count,
+    limit,
+    windowSecs,
+    retryAfterSec: count < limit ? 0 : Math.max(1, Math.ceil((windowStart! + windowSecs * 1000 - now) / 1000)),
+  };
 }

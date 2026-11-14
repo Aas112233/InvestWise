@@ -14,13 +14,22 @@ import {
 } from "@/components/ui";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { useLocale } from "@/lib/i18n";
-import { useTenantCurrency } from "@/lib/use-tenant-settings";
+import { useTenantCurrency, useTenantDistributionRules } from "@/lib/use-tenant-settings";
+import { memberRoleLabel, type MemberRole } from "@/lib/member-roles";
+import {
+  splitProjectPool,
+  isProjectType,
+  isProjectMemberRole,
+  parseProjectMemberOverrideBp,
+  DEFAULT_PROJECT_TYPE,
+  type ProjectType,
+} from "@/lib/distribution-rules";
 import { Project, ProjectMemberParticipation } from "@/types";
 import { formatMoney } from "@/lib/formatters";
 import { intlLocaleFor } from "./project-labels";
 import { apiClient } from "@/lib/api-client";
 import { newIdempotencyRef } from "@/lib/idempotency";
-import { toCents, splitByPercent, splitDividendByShares, parsePercentBp } from "@/lib/money";
+import { toCents, splitByPercent, parsePercentBp, MoneyError } from "@/lib/money";
 import { AlertCircle, ArrowUpRight, ArrowDownLeft, ArrowLeftRight, Lock, Users, Plus, X, Landmark } from "lucide-react";
 
 export interface DistributeFundOption {
@@ -82,6 +91,11 @@ interface PreviewState {
   lossTotalCents: number;
   /** Pro-rata loss split per shareholder (display only; the server caps it at equity). */
   lossMemberPayouts: Map<string, number>;
+  /** Category carve-outs of the previewed member pool — [] when no rules are
+   *  configured (then the whole pool splits pro-rata, as the strip explains). */
+  memberTypeBlocks: Array<{ role: string; bp: number; amountCents: number; memberCount: number }>;
+  /** What the no-category pro-rata carve-out distributed. */
+  memberRemainderCents: number;
 }
 
 export function DistributeReturnsModal({
@@ -96,6 +110,12 @@ export function DistributeReturnsModal({
   // Money on this screen is the tenant's money, so it carries the tenant's currency.
   const tenantCurrency = useTenantCurrency();
   const fm = (n: number | string | null | undefined) => formatMoney(n, tenantCurrency, { locale: intlLocaleFor(locale) });
+
+  // Per-member-category returns rules from the shared settings cache — the SAME
+  // list the server run reads. Converting to basis points once lets the preview
+  // call the identical resolver, so the table never drifts from what the run
+  // posts. [] => the historical pro-rata split.
+  const distributionRules = useTenantDistributionRules();
 
   // Distribution mode: "custom" (the user picks type + amounts) or "settle"
   // (Distribute Complete Project — the server pays the ENTIRE remaining
@@ -122,6 +142,31 @@ export function DistributeReturnsModal({
   // inside the modal. Nothing renders below until one of them exists.
   const activeProject = project ?? fetchedProject;
 
+  // The tenant's CLUB rules only (migration 0030/0032): the resolver merges this
+  // project's PM override itself, and for an Extra Investor project it ignores
+  // the rules entirely, so preview and payout can never disagree about the mode.
+  const clubBp = useMemo(() => {
+    const club = new Map<MemberRole, number>();
+    for (const r of distributionRules) {
+      try {
+        club.set(r.role, parsePercentBp(r.percent));
+      } catch {
+        /* sanitizeDistributionRules already guaranteed a valid percent */
+      }
+    }
+    return club;
+  }, [distributionRules]);
+
+  // Project type drives the split shape (docs/PROJECT-TYPES_PLAN.md). A list row
+  // or a cached response from before migration 0032 carries no type — those are
+  // club projects, which is exactly the DB default.
+  const projectType: ProjectType = isProjectType(activeProject?.projectType)
+    ? activeProject.projectType
+    : DEFAULT_PROJECT_TYPE;
+  // Hoisted so the preview memo depends on the VALUE, not on `activeProject`
+  // (the compiled memo compares the listed dependencies literally).
+  const projectMemberPercent = activeProject?.projectMemberPercent ?? null;
+
   useEffect(() => {
     // Prefixed ref: persisted as the ledger reference number (profit/loss
     // return), so it must read like `PRJ-RET-…`, never a bare UUID.
@@ -147,6 +192,21 @@ export function DistributeReturnsModal({
     [activeProject],
   );
   const totalShares = Number(activeProject?.totalShares || 0);
+  /* The two pots the resolver splits (docs/PROJECT-TYPES_PLAN.md §4), read out
+   * here only to LABEL the table. The amounts always come from `preview` — i.e.
+   * from splitProjectPool itself — so nothing here can compute a payout. */
+  const pmCount = shareholders.filter((s) => isProjectMemberRole(s.memberRole ?? "")).length;
+  const clubShares = shareholders
+    .filter((s) => !isProjectMemberRole(s.memberRole ?? ""))
+    .reduce((acc, s) => acc + Number(s.sharesInvested || 0), 0);
+  let pmContractBp: number | null = null;
+  try {
+    pmContractBp = parseProjectMemberOverrideBp(projectMemberPercent);
+  } catch {
+    // A malformed stored percent is the server's complaint to make, and
+    // splitProjectPool already raises it while building the preview.
+    pmContractBp = null;
+  }
   const currentBalance = Number(activeProject?.currentFundBalance || 0);
   const numAmount = parseFloat(amount) || 0;
   const numLoss = parseFloat(lossAmount) || 0;
@@ -165,7 +225,9 @@ export function DistributeReturnsModal({
     () =>
       (projects || []).map((p) => ({
         value: p.id,
-        label: p.title,
+        // Code first: same-titled projects must be tellable apart before
+        // money moves (migration 0031).
+        label: `${p.projectCode ? `${p.projectCode} — ` : ""}${p.title}`,
         caption: p.status,
       })),
     [projects],
@@ -229,21 +291,55 @@ export function DistributeReturnsModal({
       memberPayouts: new Map(),
       lossTotalCents: 0,
       lossMemberPayouts: new Map(),
+      memberTypeBlocks: [],
+      memberRemainderCents: 0,
     };
 
     const shareSeeds = shareholders.map((s) => ({
       id: s.memberId,
       shares: Number(s.sharesInvested || 0),
+      role: s.memberRole ?? "Shareholder Member",
     }));
-    const splitToMembers = (cents: number, target: Map<string, number>): boolean => {
+    // The SAME resolver the run uses (lib/distribution-rules::splitProjectPool):
+    // club_level = category rules (or byte-identical pro-rata with none),
+    // extra_investor = PM contract carved first, remainder by share number.
+    // `recordTypes` captures the carve-outs for the strip.
+    const splitToMembers = (
+      cents: number,
+      target: Map<string, number>,
+      recordTypes?: boolean,
+    ): boolean => {
       if (cents <= 0) return true;
       try {
-        for (const s of splitDividendByShares(cents, shareSeeds)) {
-          target.set(s.id, s.payoutCents);
+        const outcome = splitProjectPool({
+          projectType,
+          poolCents: cents,
+          members: shareSeeds,
+          clubRulesBp: clubBp,
+          projectMemberPercent,
+        });
+        for (const s of outcome.payouts) target.set(s.id, s.payoutCents);
+        if (recordTypes) {
+          res.memberTypeBlocks = outcome.typeBlocks;
+          res.memberRemainderCents = outcome.remainderCents;
         }
         return true;
-      } catch {
-        return false; // no shares — leave payouts empty; table shows ownership %
+      } catch (e) {
+        // NO_SHARES keeps the historical empty-table behavior (the ownership %
+        // column still renders, and submit has its own shares check). EVERY
+        // other engine error becomes a visible message — a silent catch here
+        // once showed rows of +BDT 0.00 under a "100% · BDT 273,069.00" chip
+        // while the real failure (category percents over 100% with a project
+        // PM override) was thrown away. The run refuses the same split loudly;
+        // the preview must never disagree with the run about FAILURE too.
+        if (e instanceof MoneyError && e.code === "NO_SHARES") return false;
+        res.error =
+          e instanceof Error && e.message
+            ? e.message
+            : t("projects.returns.previewUnavailable", {
+                defaultValue: "The distribution cannot be previewed — check the category percentages and shares.",
+              });
+        return false;
       }
     };
 
@@ -266,7 +362,7 @@ export function DistributeReturnsModal({
         if (!showFunds || fundPicks.length === 0) {
           // No funds: members take the whole profit leg, as before.
           res.membersTotalCents = profitCents;
-          splitToMembers(profitCents, res.memberPayouts);
+          splitToMembers(profitCents, res.memberPayouts, true);
         } else {
           // Parse every fund percent into basis points.
           const entries: Array<{ id: string; bp: number }> = [];
@@ -302,7 +398,7 @@ export function DistributeReturnsModal({
           res.membersTotalCents = profitCents - res.fundsTotalCents;
 
           if (res.membersTotalCents > 0) {
-            if (!splitToMembers(res.membersTotalCents, res.memberPayouts)) {
+            if (!splitToMembers(res.membersTotalCents, res.memberPayouts, true)) {
               res.error = t("projects.returns.noSharesForMemberPortion", {
                 defaultValue: "The remaining percentage cannot be split — this project has no shareholders with shares. Give the remainder to funds (up to 100%).",
               });
@@ -327,11 +423,13 @@ export function DistributeReturnsModal({
       if (Number.isFinite(lossCents) && lossCents > 0) {
         res.lossTotalCents = lossCents;
         res.totalCents += lossCents;
-        splitToMembers(lossCents, res.lossMemberPayouts);
+        // Record carve-outs only for a LOSS-only run (in Both the strip
+        // describes the profit pool — the leg the categories are quoted on).
+        splitToMembers(lossCents, res.lossMemberPayouts, effectiveType === "Loss");
       }
     }
     return res;
-  }, [amount, lossAmount, type, fundPicks, shareholders, showFunds, t, isSettle, currentBalance, effectiveType]);
+  }, [amount, lossAmount, type, fundPicks, shareholders, showFunds, t, isSettle, currentBalance, effectiveType, clubBp, projectType, projectMemberPercent]);
 
   // Fund/member percents are relative to the PROFIT leg (in a Both run the
   // loss leg is settled separately and must not skew them).
@@ -408,13 +506,15 @@ export function DistributeReturnsModal({
       }
     }
 
-    // Fund allocations (profit leg): percents must be complete and <= 100%.
-    if (showFunds && fundPicks.length > 0) {
-      if (preview.error) {
-        setErrorMessage(preview.error);
-        return;
-      }
-    } else if (showFunds && fundPicks.length === 0) {
+    // An unpreviewable split is never submittable: preview.error carries both
+    // fund-percent validation and engine refusals (e.g. category percentages
+    // over 100% with a project's PM override). The server runs the identical
+    // engine and rejects the same way — submitting would be guessing (§12).
+    if (preview.error) {
+      setErrorMessage(preview.error);
+      return;
+    }
+    if (showFunds && fundPicks.length === 0) {
       // No funds selected — members-only distribution, as before. A settle
       // run with no funds needs shareholders to receive the balance.
       if (shareholders.length === 0 || totalShares <= 0) {
@@ -787,12 +887,6 @@ export function DistributeReturnsModal({
                 </div>
               </div>
             )}
-            {preview.error && (
-              <p className="mt-2 text-[11px] text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                {preview.error}
-              </p>
-            )}
           </ERPFormSection>
         )}
 
@@ -804,6 +898,16 @@ export function DistributeReturnsModal({
               : t("projects.returns.preview", { defaultValue: "Pro-Rata Shareholder Payout Preview" })
           }
         >
+          {/* Engine refusals (e.g. category percents over 100% with a project
+              PM override) render HERE, not inside the funds-only section — a
+              Loss run shows this table but not the funds chips, and an error
+              the user cannot see reads as zero payouts instead of no split. */}
+          {preview.error && (
+            <p className="mb-2 text-[11px] text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              {preview.error}
+            </p>
+          )}
           {shareholders.length === 0 ? (
             <div className="p-4 border border-dashed border-border/80 rounded-xl text-center text-xs text-muted-foreground">
               {t("projects.shareholders.noShareholders", { defaultValue: "No shareholders registered." })}
@@ -815,6 +919,7 @@ export function DistributeReturnsModal({
                   <thead className="bg-muted/50 border-b border-border text-muted-foreground font-semibold uppercase text-[10px] tracking-wider">
                     <tr>
                       <th className="px-3 py-2">{t("projects.memberLabel", { defaultValue: "Member" })}</th>
+                      <th className="px-3 py-2">{t("projects.returns.categoryCol", { defaultValue: "Type" })}</th>
                       <th className="px-3 py-2 text-center">{t("projects.sharesLabel", { defaultValue: "Shares" })}</th>
                       <th className="px-3 py-2 text-center">{t("projects.shareholders.ownership", { defaultValue: "Ownership %" })}</th>
                       {isBoth ? (
@@ -830,7 +935,25 @@ export function DistributeReturnsModal({
                   <tbody className="divide-y divide-border/60">
                     {shareholders.map((sh, idx) => {
                       const shares = Number(sh.sharesInvested || 0);
-                      const memberPct = totalShares > 0 ? shares / totalShares : 0;
+                      const isPmRow = isProjectMemberRole(sh.memberRole ?? "");
+                      /* Percentage of the MEMBER POOL, derived the way the run
+                       * derives it — not `shares / totalShares`, which is wrong
+                       * twice over on an Extra Investor project: the PM holds no
+                       * shares at all (its stake is the contract), and the club
+                       * members split what the contract leaves, not the pool.
+                       * For a club project the pro-rata reading is unchanged. */
+                      const memberPct =
+                        projectType === "extra_investor"
+                          ? isPmRow
+                            ? pmCount > 0
+                              ? (pmContractBp ?? 0) / pmCount / 10_000
+                              : 0
+                            : clubShares > 0
+                              ? (shares / clubShares) * (1 - (pmContractBp ?? 0) / 10_000)
+                              : 0
+                          : totalShares > 0
+                            ? shares / totalShares
+                            : 0;
                       const profitShare = (preview.memberPayouts.get(sh.memberId) ?? 0) / 100;
                       const lossShare = (preview.lossMemberPayouts.get(sh.memberId) ?? 0) / 100;
 
@@ -844,7 +967,19 @@ export function DistributeReturnsModal({
                               </span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-center font-mono">{shares}</td>
+                          <td className="px-3 py-2">
+                            <span className="px-1.5 py-0.5 rounded-md bg-muted/60 border border-border/70 text-[10px] whitespace-nowrap">
+                              {t(memberRoleLabel(((sh.memberRole || "Shareholder Member") as MemberRole)))}
+                            </span>
+                          </td>
+                          {/* A Project Level Member holds no shares: its stake is
+                              the contract, and a 0 here would read as "funded
+                              nothing" on a row that funded the largest leg. */}
+                          <td className="px-3 py-2 text-center font-mono">
+                            {projectType === "extra_investor" && isPmRow
+                              ? t("projects.returns.noShares", { defaultValue: "—" })
+                              : shares}
+                          </td>
                           <td className="px-3 py-2 text-center font-mono">
                             {(memberPct * 100).toFixed(1)}%
                           </td>
@@ -877,6 +1012,29 @@ export function DistributeReturnsModal({
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+          {shareholders.length > 0 && preview.memberTypeBlocks.length > 0 && (
+            // The configured member categories carve their percent off the
+            // member pool before the pro-rata inside each one — the same
+            // engine the server run uses, so these numbers are the run's.
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                {t("projects.returns.categoryBreakdown", { defaultValue: "Category carve-outs" })}
+              </span>
+              {preview.memberTypeBlocks.map((b) => (
+                <span
+                  key={b.role}
+                  className="px-2 py-0.5 rounded-full bg-muted/60 border border-border/80 text-[10px] font-mono text-foreground"
+                >
+                  {t(memberRoleLabel(b.role as MemberRole))} {(b.bp / 100).toFixed(2)}% · {fm(b.amountCents / 100)}
+                </span>
+              ))}
+              {preview.memberRemainderCents > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-muted/40 border border-border/60 text-[10px] text-muted-foreground">
+                  {t("projects.returns.remainderProRata", { defaultValue: "Pro-rata remainder" })} · {fm(preview.memberRemainderCents / 100)}
+                </span>
+              )}
             </div>
           )}
           {effectiveType !== "Profit" && shareholders.length > 0 && (

@@ -8,13 +8,14 @@ import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, LockedError, readJsonBody } from '@/lib/utils/errors';
-import { toCents, fromCents } from '@/lib/money';
+import { toCents, fromCents, MAX_AMOUNT } from '@/lib/money';
 import { isSuperAdminRole, normalizeRole } from '@/lib/roles';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import { findDepositMonthOccupant, depositMonthConflictMessage } from '@/lib/deposit-month-limit';
 import { loadMemberDepositSchedule } from '@/lib/deposit-schedule/lookup';
 import { assertMemberNotSuspended } from '@/lib/member-display';
 import { DEPOSIT_CATEGORY } from '@/lib/deposit-fund';
+import { assertDepositWithinCap } from '@/lib/deposit-cap';
 import crypto from 'node:crypto';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
@@ -120,6 +121,17 @@ export async function POST(
     assertMemberNotSuspended(member, 'approving a deposit');
 
     const amountCents = toCents(deposit.amount);
+    // Defence in depth, not a restatement of the request-side check. The single
+    // request route refuses >MAX_AMOUNT, but the BULK request route historically
+    // did not, so an over-ceiling request could already exist on this tenant's
+    // books from before that gap was closed. Approving is the last moment the
+    // amount is still rejectable before it becomes settled ledger money, so the
+    // ceiling is asserted here too rather than trusting how the row was created.
+    if (amountCents > MAX_AMOUNT * 100) {
+      throw new ValidationError(
+        `Requested deposit amount may not exceed ${fromCents(MAX_AMOUNT * 100)} — reject this request and re-enter it within the module limit`,
+      );
+    }
     const formattedAmount = fromCents(amountCents);
     const now = new Date();
     // Deposit month: the explicitly selected month stored on the row wins —
@@ -193,6 +205,17 @@ export async function POST(
       if (monthOccupant) {
         throw new ValidationError(depositMonthConflictMessage(depositMonthKey, monthOccupant));
       }
+
+      // Project-Member deposit cap: this approval is where a filed request
+      // becomes settled money, so the lifetime cumulative check runs here —
+      // under the member lock, before any balance moves. The row being approved
+      // is still PENDING, so the ledger sum excludes it and newCents adds it.
+      await assertDepositWithinCap(tx, {
+        tenantId: scopedTenantId,
+        memberId: sourceMemberId,
+        newCents: amountCents,
+        context: 'approving this deposit',
+      });
 
       const fundBalanceCents = toCents(lockedFund.balance ?? '0');
       const memberContributedCents = toCents(lockedMember.totalContributed ?? '0');

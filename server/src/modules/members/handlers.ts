@@ -11,7 +11,7 @@ import {
 } from '@/server/middleware/api';
 import { listMembers } from './service';
 import * as fundsService from '../funds/service';
-import { updateFundSchema } from '../funds/validation';
+import { createFundSchema, updateFundSchema } from '../funds/validation';
 import { z } from 'zod';
 
 /** Read-side handlers: /api/members, /api/funds. */
@@ -71,24 +71,20 @@ export async function handleCreateFund(request: NextRequest) {
   try {
     const user = await requirePermission('FUNDS_MANAGEMENT', 'WRITE');
     const tenantId = requireTenant(user);
-    const body = await readJsonObject(request);
-    const name = String(body.name || '').trim();
-    if (!name) {
-      return Response.json(
-        { success: false, message: "[Field 'name', Code: REQUIRED] Fund name is required", code: 'VALIDATION_ERROR' },
-        { status: 400 },
-      );
-    }
+    // Parse with the shared schema — the hand-rolled version accepted any
+    // length for name/description/handlingOfficer/accountNumber, so an
+    // oversized value reached Postgres as 22001 (a 500, not a field error).
+    const body = await validateBody(request, createFundSchema);
     const fund = await fundsService.createFund(
       {
-        name,
-        type: (body.type as 'DEPOSIT' | 'PRIMARY' | 'PROJECT' | 'RESERVE' | 'OTHER') || 'OTHER',
-        description: body.description ? String(body.description) : undefined,
-        currency: body.currency ? String(body.currency) : undefined,
-        handlingOfficer: body.handlingOfficer ? String(body.handlingOfficer) : undefined,
-        accountNumber: body.accountNumber ? String(body.accountNumber) : undefined,
-        initialBalance: body.initialBalance !== undefined && body.initialBalance !== '' ? Number(body.initialBalance) : undefined,
-        minimumBalance: body.minimumBalance !== undefined && body.minimumBalance !== '' ? Number(body.minimumBalance) : undefined,
+        name: body.name,
+        type: body.type as 'DEPOSIT' | 'PRIMARY' | 'PROJECT' | 'RESERVE' | 'OTHER',
+        description: body.description ?? undefined,
+        currency: body.currency,
+        handlingOfficer: body.handlingOfficer ?? undefined,
+        accountNumber: body.accountNumber ?? undefined,
+        initialBalance: body.initialBalance,
+        minimumBalance: body.minimumBalance,
       },
       user,
       tenantId,

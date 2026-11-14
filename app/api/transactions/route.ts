@@ -4,6 +4,7 @@ import { getDb } from '@/db/index';
 import { transactions, members, funds, projects, users, systemSettings } from '@/db/schema/index';
 import { memberDisplayNameSql } from '@/lib/member-display';
 import { normalizePaymentMethods, isAllowedDepositMethod } from '@/lib/payment-methods';
+import { assertMemberNotSuspended } from '@/lib/member-display';
 import { eq, and, desc, sql, ilike, gte, lte, count, inArray } from 'drizzle-orm';
 import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
@@ -297,6 +298,29 @@ export async function POST(request: NextRequest) {
       throw new ValidationError(`[Field 'type', Code: invalid_enum] Unknown transaction type — must be one of: ${[...INFLOW_TYPES, ...OUTFLOW_TYPES].join(', ')}`);
     }
 
+    // A generic ledger writer cannot be made safe for a type that already owns a
+    // guarded path. This route posts whatever it is handed as
+    // `status: 'Completed'` with no deposit-fund check, no one-per-month rule,
+    // no suspension check, no `members.totalContributed` update and no
+    // idempotency key — `referenceNumber` falls back to a random
+    // `TXN-<ts>-<rand>` below, so a retry is a second posting rather than a
+    // duplicate rejection. A `Deposit` posted through here credits the fund and
+    // moves nothing on the member, silently breaking the equity identity that
+    // the whole deposit-month guard exists to protect.
+    //
+    // So the list below is an allow-list of the residue — the types with no
+    // dedicated writer in either tree. It is exactly what this endpoint has
+    // produced in real data (Investment, Withdrawal, Adjustment) and nothing
+    // more. Nothing in the client posts here at all: app/transactions/page.tsx
+    // and dividends-view only GET this route, so refusing the guarded types
+    // removes an attack surface rather than a feature.
+    const GENERIC_WRITE_TYPES = new Set(['Investment', 'Withdrawal', 'Adjustment']);
+    if (!GENERIC_WRITE_TYPES.has(type)) {
+      throw new ValidationError(
+        `[Field 'type', Code: guarded_type] '${type}' cannot be posted through the generic ledger writer. Use the endpoint that enforces the fund, closed-period, suspension, month-limit and member-equity guards this route does not.`,
+      );
+    }
+
     // §12: a ledger post without a fund can never produce balanceBefore/
     // balanceAfter or move funds.balance — reject instead of inserting an
     // orphan row.
@@ -371,6 +395,33 @@ export async function POST(request: NextRequest) {
       // arithmetic in integer cents (§12).
       const deltaCents = isInflow ? amountCents : -amountCents;
       const newFundBalanceCents = fundBalanceCents + deltaCents;
+
+      // Two guards this route never had, both of which the guarded writers do:
+      //
+      // 1. Reserve floor. A Withdrawal or Adjustment routed here could drain a
+      //    fund the tenant explicitly protected, whereas the project-update
+      //    writer enforces lockedFund.minimumBalance before every debit. Read
+      //    from the locked row, so the floor cannot be raced past.
+      const reserveFloorCents = toCents(lockedFund.minimumBalance ?? '0');
+      if (newFundBalanceCents < reserveFloorCents) {
+        throw new ValidationError(
+          `[Field 'amount', Code: below_minimum_reserve] This would take "${lockedFund.name}" below its protected reserve of ${fromCents(reserveFloorCents)}.`,
+        );
+      }
+
+      // 2. Suspension. Money must not be booked against a member who has been
+      //    suspended; addDeposit/revertDeposit and both approval paths all call
+      //    assertMemberNotSuspended and this route called nothing.
+      if (memberId) {
+        const [target] = await tx
+          .select()
+          .from(members)
+          .where(and(eq(members.id, memberId), eq(members.tenantId, scopedTenantId)))
+          .for('update')
+          .limit(1);
+        if (!target) throw new ValidationError('Member does not belong to this organization');
+        assertMemberNotSuspended(target, 'recording a transaction');
+      }
 
       // Move the fund balance (atomic — SQL reads the locked row's live value).
       await tx

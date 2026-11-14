@@ -33,6 +33,7 @@ export interface TransactionRecord {
   fundName?: string;
   projectId?: string;
   projectName?: string;
+  projectCode?: string;
   handlingOfficer?: string;
   depositMethod?: string;
   isDeleted?: boolean;
@@ -143,9 +144,11 @@ export function TransactionsListView({
           <span className="font-medium text-slate-900 dark:text-slate-100 block">
             {row.memberName || row.projectName || row.fundName || t("transactions.generalTreasury", { defaultValue: "General Treasury" })}
           </span>
-          {row.memberCode && (
+          {/* MEM-XXXX for member rows; PRJ-XXXX for project-owned ledger
+              rows (income/expense on a project) — migration 0031. */}
+          {(row.memberCode || row.projectCode) && (
             <span className="text-[11px] text-slate-400 font-mono">
-              {row.memberCode}
+              {row.memberCode || row.projectCode}
             </span>
           )}
         </div>

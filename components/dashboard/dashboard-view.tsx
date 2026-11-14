@@ -66,8 +66,8 @@ const DEPOSIT_BAR = "#10b981";
 const RATE_LINE = "#6366f1";
 const INCOME_BAR = "#10b981";
 const EXPENSE_BAR = "#f43f5e";
-const FOUNDING_COLOR = "indigo" as const;
-const NORMAL_COLOR = "slate" as const;
+const BOARD_COLOR = "indigo" as const;
+const SHAREHOLDER_COLOR = "slate" as const;
 
 /** Funds health status → dot/bar color + i18n status label key. */
 const FUNDS_HEALTH_TONE: Record<
@@ -117,10 +117,10 @@ export function DashboardView({
   const activeProjects = stats?.activeProjects ?? projects.length;
   const ongoingBudget = stats?.ongoingBudget ?? 0;
   const totalShares = stats?.totalShares ?? 0;
-  const foundingShares = stats?.foundingShares ?? 0;
-  const normalShares = stats?.normalShares ?? 0;
-  const foundingMembers = stats?.foundingMembers ?? 0;
-  const normalMembers = stats?.normalMembers ?? 0;
+  const boardShares = stats?.boardShares ?? 0;
+  const shareholderShares = stats?.shareholderShares ?? 0;
+  const boardMembers = stats?.boardMembers ?? 0;
+  const shareholderMembers = stats?.shareholderMembers ?? 0;
   const investmentsTotal = stats?.investmentsTotal ?? 0;
   const investmentsCount = stats?.investmentsCount ?? 0;
   const monthlyDeposits = useMemo(() => stats?.monthlyDeposits ?? [], [stats?.monthlyDeposits]);
@@ -204,7 +204,7 @@ export function DashboardView({
       peak: peak && peak.amount > 0 ? peak : null,
     };
   }, [monthlyDeposits]);
-  const sharesSplitTotal = foundingShares + normalShares;
+  const sharesSplitTotal = boardShares + shareholderShares;
   const healthTone = fundsHealth ? FUNDS_HEALTH_TONE[fundsHealth.status] ?? FUNDS_HEALTH_TONE.Stable : null;
   const runwayPct =
     fundsHealth?.runwayMonths != null
@@ -277,16 +277,16 @@ export function DashboardView({
           helperText={t("dashboard.membersCount", { count: totalMembers, defaultValue: `${totalMembers} members` })}
           breakdowns={[
             {
-              label: t("dashboard.sharesFounding", { defaultValue: "Founding" }),
-              count: formatCompactNumber(foundingShares),
-              color: FOUNDING_COLOR,
-              percentage: sharesSplitTotal > 0 ? (foundingShares / sharesSplitTotal) * 100 : 0,
+              label: t("dashboard.sharesBoard", { defaultValue: "Board" }),
+              count: formatCompactNumber(boardShares),
+              color: BOARD_COLOR,
+              percentage: sharesSplitTotal > 0 ? (boardShares / sharesSplitTotal) * 100 : 0,
             },
             {
-              label: t("dashboard.sharesNormal", { defaultValue: "Normal" }),
-              count: formatCompactNumber(normalShares),
-              color: NORMAL_COLOR,
-              percentage: sharesSplitTotal > 0 ? (normalShares / sharesSplitTotal) * 100 : 0,
+              label: t("dashboard.sharesShareholder", { defaultValue: "Shareholder" }),
+              count: formatCompactNumber(shareholderShares),
+              color: SHAREHOLDER_COLOR,
+              percentage: sharesSplitTotal > 0 ? (shareholderShares / sharesSplitTotal) * 100 : 0,
             },
           ]}
           footer={
@@ -347,7 +347,7 @@ export function DashboardView({
           value={totalMembers}
           icon={Users}
           tone="slate"
-          helperText={`${t("dashboard.sharesFounding", { defaultValue: "Founding" })}: ${foundingMembers} · ${t("dashboard.sharesNormal", { defaultValue: "Normal" })}: ${normalMembers}`}
+          helperText={`${t("dashboard.sharesBoard", { defaultValue: "Board" })}: ${boardMembers} · ${t("dashboard.sharesShareholder", { defaultValue: "Shareholder" })}: ${shareholderMembers}`}
           footer={
             <FooterLink label={t("dashboard.membersLink", { defaultValue: "Members" })} onClick={() => onNavigate("/members")} />
           }

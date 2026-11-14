@@ -214,18 +214,33 @@ export function Sidebar({ companyName, collapsed: externalCollapsed, onToggle: e
           )}
         </Link>
 
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label={collapsed ? t("layout.expandSidebar", { defaultValue: "Expand sidebar" }) : t("layout.collapseSidebar", { defaultValue: "Collapse sidebar" })}
-          className={cn(
-            "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-sidebar-border text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors",
-            collapsed && "absolute -right-3.5 top-1/2 -translate-y-1/2 rounded-full bg-sidebar shadow-sm",
-          )}
-        >
-          <ChevronLeft className={cn("h-4 w-4 transition-transform", collapsed && "rotate-180")} />
-        </button>
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={t("layout.collapseSidebar", { defaultValue: "Collapse sidebar" })}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-sidebar-border text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+        )}
       </div>
+
+      {/* Collapsed state: the toggle stays INSIDE the sidebar as its own row
+          under the brand header. It must never float onto the header line —
+          the sidebar owns exactly one collapse/expand control. */}
+      {collapsed && (
+        <div className="flex justify-center px-2 pt-2">
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={t("layout.expandSidebar", { defaultValue: "Expand sidebar" })}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-sidebar-border text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4 rotate-180" />
+          </button>
+        </div>
+      )}
 
       {/* Search Input (Pathshala-Pro quick command filter) */}
       {!collapsed && (

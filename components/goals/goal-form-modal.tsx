@@ -127,6 +127,7 @@ export function GoalFormModal({
             <ERPFormField label={t("goals.form.title", { defaultValue: "Goal Title" })}>
               <input
                 type="text"
+                maxLength={200}
                 placeholder={t("goals.titlePlaceholder", { defaultValue: "e.g. 2026 Real Estate Acquisition Reserve" })}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -147,6 +148,7 @@ export function GoalFormModal({
           <ERPFormField label={t("goals.form.description", { defaultValue: "Description" })}>
             <textarea
               rows={3}
+              maxLength={10000}
               placeholder={t("goals.descriptionPlaceholder", {
                 defaultValue: "Outline target milestones and timeline expectations...",
               })}

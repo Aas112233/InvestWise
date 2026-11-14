@@ -62,41 +62,6 @@ export async function POST(
       postingDate = d;
     }
 
-    // #107: optional "handled by" project associate member. Name entry only —
-    // the member is recorded on the ledger row (handlingOfficer + memberId)
-    // but no balance anywhere moves for them: member equity derives from
-    // Deposit/Dividend rows, and this writes Earning/Expense.
-    let handledBy: { id: string; name: string } | null = null;
-    if (parsed.data.handledByMemberId) {
-      const db0 = getDb();
-      const [memberRow] = await db0
-        .select({ id: members.id, name: members.name })
-        .from(members)
-        .where(
-          and(
-            eq(members.id, parsed.data.handledByMemberId),
-            eq(members.tenantId, tenantId),
-            eq(members.isDeleted, false),
-          ),
-        )
-        .limit(1);
-      if (!memberRow) throw new ValidationError('handledByMemberId does not match a member of this tenant');
-      const [association] = await db0
-        .select({ memberId: projectMembers.memberId })
-        .from(projectMembers)
-        .where(
-          and(
-            eq(projectMembers.projectId, id),
-            eq(projectMembers.memberId, memberRow.id),
-          ),
-        )
-        .limit(1);
-      if (!association) {
-        throw new ValidationError('handledByMemberId must be a member associated with this project');
-      }
-      handledBy = memberRow;
-    }
-
     // §12 idempotency: the ledger reference doubles as the retry key. A
     // client-supplied reference is dup-checked inside the transaction; a
     // generated one is date + uuid-suffixed (same shape as dividend runs).
@@ -139,6 +104,80 @@ export async function POST(
         throw new ValidationError(
           'This project has no linked fund, so its earnings and expenses cannot be posted. Link an existing fund or create its dedicated fund first.',
         );
+      }
+
+      // §12 fund guard: the treasury movement below debits/credits the linked
+      // fund directly, so it must be postable. Without this, an expense could
+      // drain a CLOSED or SUSPENDED fund — the same fund the capital-investment
+      // path (lib/project-capital.ts) already refuses to touch. An Earning adds
+      // money and is always allowed; only a debit needs the reserve check.
+      const [linkedFund] = await tx
+        .select({
+          id: funds.id,
+          name: funds.name,
+          status: funds.status,
+          balance: funds.balance,
+          minimumBalance: funds.minimumBalance,
+        })
+        .from(funds)
+        .where(and(eq(funds.id, project.linkedFundId), eq(funds.tenantId, tenantId)))
+        .for('update')
+        .limit(1);
+      if (!linkedFund) {
+        throw new ValidationError('The linked fund for this project no longer exists — relink a fund before posting.');
+      }
+      if ((linkedFund.status ?? '').toUpperCase() !== 'ACTIVE') {
+        throw new ValidationError(
+          `Fund '${linkedFund.name}' is not active — its balance cannot be changed while it is ${linkedFund.status}.`,
+        );
+      }
+      if (type === 'Expense') {
+        const fundCents = toCents(linkedFund.balance ?? '0');
+        const minimumCents = toCents(linkedFund.minimumBalance ?? '0');
+        if (fundCents - amountCents < minimumCents) {
+          throw new ValidationError(
+            `Insufficient balance in '${linkedFund.name}' for this expense (Available: ${fromCents(fundCents)}, Required: ${fromCents(amountCents)}, Minimum reserve: ${fromCents(minimumCents)})`,
+          );
+        }
+      }
+
+      // #107: optional "handled by" project associate member. Name entry only —
+      // the member is recorded on the ledger row (handlingOfficer + memberId)
+      // but no balance anywhere moves for them: member equity derives from
+      // Deposit/Dividend rows, and this writes Earning/Expense.
+      //
+      // Resolved INSIDE this transaction against a locked project row: reading
+      // it beforehand left a window where the member could be removed from the
+      // project (or soft-deleted) between the check and the insert, stamping the
+      // ledger with an association that no longer existed.
+      let handledBy: { id: string; name: string } | null = null;
+      if (parsed.data.handledByMemberId) {
+        const [memberRow] = await tx
+          .select({ id: members.id, name: members.name })
+          .from(members)
+          .where(
+            and(
+              eq(members.id, parsed.data.handledByMemberId),
+              eq(members.tenantId, tenantId),
+              eq(members.isDeleted, false),
+            ),
+          )
+          .limit(1);
+        if (!memberRow) throw new ValidationError('handledByMemberId does not match a member of this tenant');
+        const [association] = await tx
+          .select({ memberId: projectMembers.memberId })
+          .from(projectMembers)
+          .where(
+            and(
+              eq(projectMembers.projectId, id),
+              eq(projectMembers.memberId, memberRow.id),
+            ),
+          )
+          .limit(1);
+        if (!association) {
+          throw new ValidationError('handledByMemberId must be a member associated with this project');
+        }
+        handledBy = memberRow;
       }
 
       // §12 idempotency: a retry with the same reference must not post twice.
@@ -252,8 +291,9 @@ export async function POST(
       }
 
       // The update record carries the ledger link; the client opens the
-      // printable receipt on the transaction id.
-      return { ...updateRecord, transactionId: createdTx?.id };
+      // printable receipt on the transaction id. `handledByMemberId` rides out
+      // with it so the audit diff below can report the resolved member.
+      return { ...updateRecord, transactionId: createdTx?.id, handledByMemberId: handledBy?.id ?? null };
     });
 
     await logAudit({
@@ -267,7 +307,7 @@ export async function POST(
         amount: fromCents(amountCents),
         description,
         date: postingDate.toISOString(),
-        handledByMemberId: handledBy?.id ?? null,
+        handledByMemberId: result.handledByMemberId,
       },
     });
 

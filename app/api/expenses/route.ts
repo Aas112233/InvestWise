@@ -15,6 +15,8 @@ import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import crypto from 'node:crypto';
 import { escapeLikePattern } from '@/lib/utils/validation';
+import { isAllowedCategory, categoryRejectionMessage } from '@/lib/categories';
+import { getCategoryContext } from '@/lib/categories-db';
 
 // Screen permissions: shared RBAC evaluator (lib/permissions.ts).
 
@@ -206,6 +208,17 @@ export async function POST(request: NextRequest) {
 
     if (!category) {
       throw new ValidationError('category is required');
+    }
+
+    // The category must be one the tenant configured in Settings, or one that
+    // historical rows already carry (deletion must not invalidate the ledger).
+    // Without this the client's dropdown was decorative: any string the caller
+    // passed was written straight to transactions.category.
+    {
+      const { configured, history } = await getCategoryContext(scopedTenantId, 'expense');
+      if (!isAllowedCategory(category, configured, history)) {
+        throw new ValidationError(categoryRejectionMessage('category', configured));
+      }
     }
 
     // Expenses module spec: an expense carries a distinct name and is

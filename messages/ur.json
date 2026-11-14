@@ -95,7 +95,11 @@
       "boardMember": "بورڈ ممبر",
       "foundingMember": "بانی ممبر",
       "investor": "سرمایہ کار",
-      "member": "ممبر"
+      "member": "ممبر",
+      "manager": "منیجر",
+      "auditor": "آڈیٹر",
+      "shareholderMember": "شیئر ہولڈر رکن",
+      "projectLevelMember": "پروجیکٹ سطح کا رکن"
     },
     "penaltyType": {
       "fine": "جرمانہ",
@@ -836,6 +840,10 @@
     "membersCount": "{count} ممبران",
     "sharesFounding": "بانی",
     "sharesNormal": "عام",
+
+    "sharesBoard": "بورڈ",
+
+    "sharesShareholder": "شیئر ہولڈر",
     "ongoingProjects": "جاری منصوبے",
     "ongoingBudget": "مختص بجٹ",
     "totalInvestments": "کل سرمایہ کاری",
@@ -985,6 +993,17 @@
       "selectRole": "کردار منتخب کریں...",
       "shares": "شیئرز",
       "sharesLockedNote": "شیئرز لین دین کی تاریخ سے لاک ہیں اور براہ راست تبدیل نہیں ہو سکتے۔",
+      "projectCap": "جمع کی حد",
+      "projectCapHint": "اس رکن کی زندگی بھر کی زیادہ سے زیادہ کلب جمع رقم",
+      "projectBinding": "بندھا ہوا پروجیکٹ",
+      "selectProject": "پروجیکٹ منتخب کریں",
+      "roleLockedNote": "پہلے لین دین کے بعد رکن کی قسم نہیں بدلی جا سکتی (شیئرز والا قاعدہ)",
+      "roleOverrideLabel": "ایڈمن اوور رائیڈ: اس رکن کی قسم بدلیں",
+      "roleOverrideConfirm": "مقفل قسم بدلنے کے لیے ایڈمن اوور رائیڈ منتخب کریں۔",
+      "roleOverrideReasonLabel": "تبدیلی کی وجہ",
+      "roleOverrideReasonPlaceholder": "مثلاً: زمرے کی غلطی کی اصلاح",
+      "roleOverrideReasonRequired": "اوور رائیڈ کے لیے وجہ لازم ہے۔",
+      "projectBindingEditNote": "پروجیکٹ ک شیئرہر فہرست سے منظم",
       "sharesEditableNote": "جب تک اس رکن کا کوئی لین دین نہیں، یہ قابلِ ترمیم ہے۔",
       "nid": "شناختی کارڈ/پاسپورٹ",
       "father": "والد کا نام",
@@ -1003,12 +1022,21 @@
         "emailInvalid": "درست ای میل پتہ درج کریں",
         "sharesRequired": "حصص ایک عدد ہونا چاہیے",
         "sharesWhole": "حصص مکمل عدد ہونا چاہیے",
-        "sharesMin": "حصص کم از کم 1 ہونے چاہیے"
+        "sharesMin": "حصص کم از کم 1 ہونے چاہیے",
+        "projectCapRequired": "پروجیکٹ ممبر کے لے جمع ک حد ضرور ہ — محفوظ کرنے سے پہل دین",
+        "projectMemberProjectRequired": "پروجیکٹ ممبر کا ایک پروجیکٹ سے بندھا ہونا لازما ہ"
       }
     },
     "detail": {
       "profile": "ممبر پروفائل",
       "sharesTitle": "شیئر سرٹیفکیٹ",
+      "depositCap": "جمع کی حد",
+      "capUsed": "{{deposited}} جمع ہوئی",
+      "categoryShare": "زمرے کا حصہ",
+      "categoryShareFromProject": "اس پروجیکٹ میں طے شدہ",
+      "categoryShareFromClub": "کلب کا زمرہ قاعدہ",
+      "categoryShareNone": "کوئی مختص حصہ نہیں — شیئرز کے تناسب سے تقسیم",
+      "boundProject": "بندھا ہوا پروجیکٹ",
       "shares": "شیئرز",
       "contributed": "کل جمع شدہ",
       "joinDate": "شمولیت کی تاریخ",
@@ -1132,7 +1160,10 @@
     "foundingPartner": "Founding Partner",
     "leadInvestor": "Lead Investor",
     "managingDirector": "Managing Director",
-    "boardMember": "Board Member"
+    "boardMember": "Board Member",
+    "shareholderMember": "شیئر ہولڈر رکن",
+
+    "projectLevelMember": "پروجیکٹ سطح کا رکن"
   },
   "projects": {
     "portfolio": "پورٹ فولیو",
@@ -1306,7 +1337,19 @@
       "newFundPlaceholder": "مثال: کمرشل پلازہ فنڈ"
     },
     "timeline": "ٹائم لائن اور تاریخیں",
+    "pmPercentLabel": "پروجیکٹ سطح کا رکن: {{percent}}%",
+    "form": {
+      "pmPercentRange": "0 سے زیادہ اور زیادہ سے زیادہ 100 تک کا فیصد درج کریں (زیادہ سے زیادہ دو اعشاریے)۔",
+      "pmPercentOver": "کلب کے زمروں کے قواعد کے ساتھ مل کر یہ رکن پول کا {{total}}% بنتا ہے — زیادہ سے زیادہ 100%۔ یہ فیصد کم کریں، یا سیٹنگز میں کلب کے قواعد کم کریں۔",
+      "pmPercentMeter": "کلب قواعد کے ساتھ جاری کل: رکن پول کا {{total}}% (زیادہ سے زیادہ 100%)",
+      "pmPercent": "پروجیکٹ سطح کا رکن کا حصہ (رکن پول کا فیصد)",
+      "pmPercentPlaceholderClub": "کلب کا قاعدہ: {{percent}}%",
+      "pmPercentPlaceholderNone": "0.00",
+      "pmPercentHintClub": "صرف اسی پروجیکٹ کے پروجیکٹ سطح کا رکن کے لیے۔ خالی چھوڑنے پر سیٹنگز کا کلب قاعدہ ({{percent}}%) لاگو ہوگا۔",
+      "pmPercentHintNone": "صرف اسی پروجیکٹ کے پروجیکٹ سطح کا رکن کے لیے۔ کوئی کلب قاعدہ نہیں، اس لیے خالی چھوڑنے پر سب کے شیئرز کے تناسب سے تقسیم ہوگا۔"
+    },
     "returns": {
+      "previewUnavailable": "پیش منظر ممکن نहीں",
       "memberPreviewWithFunds": "شیئر ہولڈر ادائیگی کا جائزہ (باقی حصہ)",
       "fundsSection": "فنڈز میں تقسیم (صرف منافع)",
       "fundsHint": "ہر منتخب فنڈ تقسیم کا ایک فیصد حاصل کرتا ہے؛ شیئر ہولڈرز باقی فیصد کی تقسیم اپنے پروجیکٹ شیئر ملکیت کے تناسب سے کرتے ہیں۔",
@@ -1319,6 +1362,9 @@
       "removeFund": "فنڈ ہٹائیں",
       "toFunds": "فنڈز میں",
       "toMembers": "سہ ماہیوں میں (شیئر کے تناسب سے)",
+      "categoryCol": "زمرہ",
+      "categoryBreakdown": "زمرہ وار حصہ",
+      "remainderProRata": "باقی رقم (شیئر تناسب)",
       "balanceAfter": "تقسیم کے بعد پروجیکٹ بیلنس",
       "fundPercentRequired": "ہر منتخب فنڈ کے لیے فیصد (0.01 – 100) درج کریں۔",
       "fundPercentSumExceeded": "فنڈز کے فیصد کا مجموعہ 100% سے زیادہ نہیں ہو سکتا۔",
@@ -1381,6 +1427,7 @@
       "fundNameRequired": "مقررہ فنڈ کا نام درکار ہے۔",
       "duplicateShareholder": "ہر رکن کو صرف ایک بار شیئر ہولڈر کے طور پر شامل کیا جا سکتا ہے۔",
       "invalidShares": "شیئرز کم از کم 1 ہونے چاہییں۔",
+      "pmPercentInvalid": "پروجیکٹ سطح کا رکن کا فیصد غلط ہے۔",
       "capitalExceedsBudget": "کل شیئر ہولڈر سرمایہ کاری ({invested}) پروجیکٹ کے بجٹ ({budget}) سے زیادہ نہیں ہو سکتی۔",
       "selectProjectRequired": "براہ کرم ہدف منصوبہ منتخب کریں۔"
     },
@@ -2550,6 +2597,17 @@
       "withdrawalLimit": "ودڈرال حد (%)",
       "withdrawalNotice": "ودڈرال نوٹس (دن)",
       "maxWithdrawal": "فی درخواست زیادہ سے زیادہ ودڈرال",
+      "returns": {
+        "title": "رکنوں کے زمرے کے مطابق منافع کی تقسیم",
+        "desc": "منافع و نقصان اور ڈیویڈنڈ کی ہر تقسیم میں منتخبہ رکن زمرہ اپنا مقررہ فیصد لیتا ہے، پھر اسی زمرے کے اندر شیئرز کے تناسب میں تقسیم ہوتی ہے۔ جو زمرے فہرست میں نہیں اور بچی ہوئی رقم بھی شیئرز کے تناسب ہی میں تقسیم ہوتی ہے۔ جب کوئی اصول نہیں تو سب کچھ پہلے کی طرح شیئرز کے تناسب میں تقسیم ہوتا ہے۔",
+        "empty": "کوئی زمرہ اصول نہیں — رکنوں کا مجموعہ شیئرز کے تناسب سے تقسیم ہوتا ہے۔",
+        "role": "رکن کا زمرہ",
+        "percent": "زمرے کا فیصد",
+        "add": "زمرہ اصول شامل کریں",
+        "projectOverrideNote": "یہاں پروجیکٹ سطح کا رکن کا فیصد پورے کلب کے لیے ڈیفالٹ ہے — ہر پروجیکٹ اپنے فارم (پروجیکٹس → ترمیم) میں الگ فیصد رکھ سکتا ہے۔ کلب کے منافع پروجیکٹ سطح کا رکن کو نہیں ملتے۔",
+        "configured": "مقررہ: رکنوں کے مجموعے کا {{percent}}%",
+        "incomplete": "ہر اصول کے لیے رکن کا زمرہ اور فیصد دونوں ضروری ہیں — خالی قاطر میں ہٹا دیں یا پر کریں۔"
+      },
       "statutoryReserve": "قانونی ریزرو (%)"
     },
     "governance": {

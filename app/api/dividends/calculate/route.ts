@@ -4,7 +4,7 @@ import { getAuthContext } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { guard } from '@/lib/guarded-route';
 import { hasScreenPermission } from '@/lib/permissions';
-import { MoneyError } from '@/lib/money';
+import { fromCents, MoneyError } from '@/lib/money';
 import { planDividendRun } from '@/server/modules/finance/dividend-engine';
 import { ValidationError, ForbiddenError, readJsonBody } from '@/lib/utils/errors';
 import { apiError } from '@/lib/utils/api-error';
@@ -77,10 +77,23 @@ export async function POST(request: NextRequest) {
           memberId: p.id,
           memberIdStr: p.memberId,
           name: p.name,
+          memberRole: p.role,
           shares: p.shares,
           grossAmount: p.grossAmount,
           ratePerShare: p.ratePerShare,
         })),
+        // Category carve-outs of the net pool — present only when member-
+        // category rules are configured (else the run is pure pro-rata).
+        ...(plan.typeBlocks.length > 0
+          ? {
+              categoryAllocations: plan.typeBlocks.map((b) => ({
+                role: b.role,
+                percent: fromCents(b.bp),
+                amount: fromCents(b.amountCents),
+              })),
+              remainderAmount: fromCents(plan.remainderCents),
+            }
+          : {}),
         recipientCount: plan.recipientCount,
         fiscalPeriodId: fiscalPeriodId || null,
         isSimulation: true,

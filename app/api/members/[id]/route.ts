@@ -1,12 +1,23 @@
 import { apiError } from '@/lib/utils/api-error';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/db/index';
-import { members, transactions, users } from '@/db/schema/index';
+import { members, projectMembers, projects, systemSettings, transactions, users } from '@/db/schema/index';
+import { cumulativeCreditedDepositsCents } from '@/lib/deposit-cap';
 import { eq, and, desc, sql, or } from 'drizzle-orm';
 import { getAuthContext, requirePermission, type AuthenticatedUser } from '@/lib/middleware/auth';
 import { requireTenant } from '@/lib/tenant';
 import { canViewMemberPII, maskMemberPII, canViewMemberReviewData, maskMemberReviewData } from '@/lib/member-privacy';
 import { memberUpdateSchema, memberFieldError } from '@/lib/member-schema';
+import {
+  PROJECT_MEMBER_ROLE,
+  distributionRulesToBp,
+  effectiveProjectMemberBp,
+  parseProjectMemberOverrideBp,
+} from '@/lib/distribution-rules';
+import { type MemberRole } from '@/lib/member-roles';
+import { decideRoleLock } from '@/lib/member-role-lock';
+import { normalizeRole } from '@/lib/roles';
+import { formatPercentBp, fromCents, toCents } from '@/lib/money';
 import { logAudit } from '@/lib/utils/audit';
 import { normalizeEmail } from '@/lib/utils/types';
 import { NotFoundError, ValidationError, ConflictError, ForbiddenError, LockedError, readJsonUnknown } from '@/lib/utils/errors';
@@ -81,6 +92,59 @@ export async function GET(
       .orderBy(desc(transactions.createdAt), desc(transactions.date), desc(transactions.id))
       .limit(20);
 
+    // Project Member extras for the detail sheet (docs/MEMBER-TYPE-DISTRIBUTION_PLAN.md
+    // §3.2): how much of the lifetime deposit cap the ledger has already used
+    // (derived by the ONE owner of that SUM, lib/deposit-cap.ts) and the single
+    // bound project (project_members stays the source of truth). Other
+    // categories pay for neither — their payloads stay exactly as before.
+    let projectMemberExtras: Record<string, unknown> = {};
+    if (member.role === PROJECT_MEMBER_ROLE) {
+      const usedCents = await cumulativeCreditedDepositsCents(db, {
+        tenantId: requireTenant(user.tenantId, user),
+        memberId: member.id,
+      });
+      const bindings = await db
+        .select({
+          id: projects.id,
+          title: projects.title,
+          isLocked: projects.isLocked,
+          projectMemberPercent: projects.projectMemberPercent,
+        })
+        .from(projectMembers)
+        .innerJoin(projects, eq(projects.id, projectMembers.projectId))
+        .where(eq(projectMembers.memberId, member.id))
+        .limit(2);
+      // Effective category percent for the detail sheet (migration 0030):
+      // the bound project's override wins, else the club rule, else none.
+      // Display path, so a corrupt club config reads as "no carve-out" here
+      // instead of breaking the sheet — the run engine fails on it loudly.
+      const [settingsRow] = await db
+        .select({ distributionRules: systemSettings.distributionRules })
+        .from(systemSettings)
+        .where(eq(systemSettings.tenantId, requireTenant(user.tenantId, user)))
+        .limit(1);
+      let clubRulesBp = new Map<MemberRole, number>();
+      try {
+        clubRulesBp = distributionRulesToBp(settingsRow?.distributionRules ?? null);
+      } catch {
+        clubRulesBp = new Map();
+      }
+      const storedOverride = bindings[0]?.projectMemberPercent ?? null;
+      const pctBp = effectiveProjectMemberBp(clubRulesBp, storedOverride);
+      let overrideBp: number | null = null;
+      try {
+        overrideBp = parseProjectMemberOverrideBp(storedOverride);
+      } catch {
+        overrideBp = null;
+      }
+      projectMemberExtras = {
+        cumulativeDeposits: fromCents(usedCents),
+        boundProjects: bindings.map((b) => ({ id: b.id, title: b.title, isLocked: b.isLocked })),
+        distributionPercent: pctBp === null ? null : formatPercentBp(pctBp),
+        distributionPercentSource: overrideBp !== null ? 'project' : pctBp !== null ? 'club' : null,
+      };
+    }
+
     return NextResponse.json({
       success: true,
       // Review metrics follow the same rule as the directory's hidden
@@ -88,6 +152,7 @@ export async function GET(
       data: {
         ...maskMemberReviewData(maskMemberPII(member, canView), canViewMemberReviewData(user.role)),
         deposits,
+        ...projectMemberExtras,
       },
     });
   } catch (err: unknown) {
@@ -133,6 +198,25 @@ export async function PUT(
     }
     const d = parsed.data;
 
+    // Member TYPE lock (lib/member-role-lock.ts): once this member has any
+    // transaction, a change involving a money category is refused — the same
+    // discipline that locks share numbers, because the category decides which
+    // percentage of every member pool is carved (the last movable money lever
+    // between runs). Access titles (Admin/Manager/Auditor) swap freely. An
+    // authz Admin may override WITH A REASON, which lands in the audit trail;
+    // the transaction-exists evidence is checked under the member row lock at
+    // write time, mirroring the shares guard exactly.
+    const roleLock = decideRoleLock(existing.role, d.role);
+    let roleLockOverride: string | null = null;
+    if (roleLock.kind === 'lock-required' && d.roleOverrideReason !== undefined) {
+      if (normalizeRole(user.role) !== 'Admin') {
+        throw new ForbiddenError(
+          "[Field 'roleOverrideReason', Code: OVERRIDE_ADMIN_ONLY] Only an Admin can change a locked member type",
+        );
+      }
+      roleLockOverride = d.roleOverrideReason;
+    }
+
     const patch: Partial<typeof members.$inferInsert> = {};
     let sharesUpdated = false;
     if (d.name !== undefined) patch.name = d.name;
@@ -151,6 +235,57 @@ export async function PUT(
     }
     if (d.phone !== undefined) patch.phone = d.phone;
     if (d.role !== undefined) patch.role = d.role;
+    // Project Member category rules (docs/MEMBER-TYPE-DISTRIBUTION_PLAN.md §3.2)
+    // Checked against the MERGED row (payload + stored), never the payload alone —
+    // a patch that only moves one of role/cap must not break the invariant.
+    const mergedRole = d.role ?? existing.role;
+    const isProjectMember = mergedRole === PROJECT_MEMBER_ROLE;
+    if (d.depositCap !== undefined && d.depositCap !== null && !isProjectMember) {
+      throw new ValidationError(
+        `[Field 'depositCap', Code: invalid_for_role] A deposit cap applies only to ${PROJECT_MEMBER_ROLE}s`,
+      );
+    }
+    if (isProjectMember) {
+      // Exclusive: a Project Member never holds club shares. Converting a
+      // share-holding member into one is refused, not silently zeroed — the
+      // shares they hold are locked equity once transactions exist (§12).
+      if (existing.shares > 0) {
+        throw new ValidationError(
+          `[Field 'role', Code: HAS_CLUB_SHARES] ${existing.name} holds ${existing.shares} club share(s); ` +
+            `a ${PROJECT_MEMBER_ROLE} holds none. A share-holding member cannot take this category.`,
+        );
+      }
+      const effectiveCap = d.depositCap !== undefined ? d.depositCap : existing.depositCap;
+      if (effectiveCap === null || effectiveCap === undefined) {
+        throw new ValidationError(
+          `[Field 'depositCap', Code: required] A ${PROJECT_MEMBER_ROLE} needs a deposit cap before it saves`,
+        );
+      }
+      // Converting INTO the exclusive category: the member must not already be
+      // bound to more than one project (zero bindings stays legal — they can
+      // be added to exactly one project later).
+      if (d.role === PROJECT_MEMBER_ROLE && existing.role !== PROJECT_MEMBER_ROLE) {
+        // project_members has no tenant_id column; filtering by this tenant's
+        // member id (a DB-unique uuid, already scope-verified above) is the same
+        // scoping the shares-lock check at the foot of this handler relies on.
+        const [bindingCount] = await db
+          .select({ total: sql<number>`count(*)::int` })
+          .from(projectMembers)
+          .where(eq(projectMembers.memberId, existing.id));
+        if ((bindingCount?.total ?? 0) > 1) {
+          throw new ValidationError(
+            `[Field 'role', Code: MULTI_PROJECT_BIND] ${existing.name} is a shareholder of ` +
+              `${bindingCount?.total} projects; a ${PROJECT_MEMBER_ROLE} belongs to exactly one. ` +
+              `Remove the extra memberships first.`,
+          );
+        }
+      }
+      patch.depositCap = fromCents(toCents(String(effectiveCap)));
+    } else if (existing.role === PROJECT_MEMBER_ROLE && d.role !== undefined) {
+      // Leaving the exclusive category: the cap loses its subject — clear it so
+      // the column only ever describes a live Project Member.
+      patch.depositCap = null;
+    }
     if (d.status !== undefined) {
       patch.status = d.status;
       // A status set by hand from the directory is an admin decision, never a
@@ -200,11 +335,34 @@ export async function PUT(
       return NextResponse.json({ success: true, data: current });
     }
 
-    const [updated] = await db
-      .update(members)
-      .set({ ...patch, updatedAt: new Date() })
-      .where(and(eq(members.id, existing.id), eq(members.tenantId, requireTenant(user.tenantId, user))))
-      .returning();
+    // When a lock-eligible type change is in play, the count-then-write runs
+    // under the member row's FOR UPDATE — the same technique as the shares
+    // guard: a first deposit approved concurrently updates the same row, so it
+    // serialises against us and can never slip between count and write.
+    const enforceRoleLock = roleLock.kind === 'lock-required' && roleLockOverride === null;
+    const [updated] = enforceRoleLock
+      ? await db.transaction(async (tx) => {
+          await tx.execute(sql`SELECT id FROM members WHERE id = ${existing.id} FOR UPDATE`);
+          const [txnCount] = await tx
+            .select({ total: sql<number>`count(*)::int` })
+            .from(transactions)
+            .where(eq(transactions.memberId, existing.id));
+          if ((txnCount?.total ?? 0) > 0) {
+            throw new LockedError(
+              `[Field 'role', Code: ROLE_LOCKED] ${existing.name}'s member type is locked once this member has transactions (like share numbers). An Admin can change it with a written reason.`,
+            );
+          }
+          return tx
+            .update(members)
+            .set({ ...patch, updatedAt: new Date() })
+            .where(and(eq(members.id, existing.id), eq(members.tenantId, requireTenant(user.tenantId, user))))
+            .returning();
+        })
+      : await db
+          .update(members)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(and(eq(members.id, existing.id), eq(members.tenantId, requireTenant(user.tenantId, user))))
+          .returning();
 
     await logAudit({
       user: { id: user.id, name: user.name },
@@ -212,7 +370,12 @@ export async function PUT(
       action: 'UPDATE_MEMBER',
       resourceType: 'Member',
       resourceId: existing.id,
-      details: { fields: d.shares !== undefined ? [...Object.keys(patch), 'shares'] : Object.keys(patch) },
+      details: {
+        fields: d.shares !== undefined ? [...Object.keys(patch), 'shares'] : Object.keys(patch),
+        // A locked-type override must be explainable after the fact: the
+        // reason rides in the audit row next to the before/after snapshot.
+        ...(roleLockOverride ? { roleOverrideReason: roleLockOverride } : {}),
+      },
       // Zero extra queries: `existing` was fetched for the uniqueness guards
       // above; `updated` is the UPDATE's .returning() row.
       before: existing,

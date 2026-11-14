@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, type SQL } from 'drizzle-orm';
+import { eq, and, or, desc, asc, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '../../lib/db';
 import { funds, transactions, projects, systemSettings } from '../../db/schema/index';
 import { getPaginationParams, formatPaginatedResponse, type SessionUser } from '../../middleware/api';
@@ -244,6 +244,35 @@ export async function updateFund(id: string, data: UpdateFundData, tenantId: str
 
   if (data.type === 'PROJECT' && existing.type !== 'PROJECT') {
     throw new AppError('A fund cannot be changed to PROJECT type manually — project funds are created automatically when a project is initialized.', 400, 'PROJECT_FUND_NOT_ALLOWED');
+  }
+
+  // Currency is a property of a fund's history, not only of its row. Every amount
+  // stored against the fund — its balance and each ledger row's amount,
+  // balanceBefore and balanceAfter — is an undenominated numeric, so re-labelling
+  // the currency in place silently redefines all of them without changing any.
+  // reconcileFund would then compare a recalculated total against a balance
+  // recorded under a different label and call correct books a discrepancy. A fund
+  // with no history may still be fixed, which is the only legitimate reason to
+  // edit this field at all.
+  if (data.currency !== undefined && (data.currency ?? '') !== (existing.currency ?? '')) {
+    const [prior] = await db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.tenantId, tenantId),
+          eq(transactions.isDeleted, false),
+          or(eq(transactions.fundId, id), eq(transactions.sourceFundId, id)),
+        ),
+      )
+      .limit(1);
+    if (prior) {
+      throw new AppError(
+        "Cannot change a fund's currency once it has ledger history — stored amounts are undenominated and would be silently redefined. Close this fund and open a new one in the correct currency.",
+        409,
+        'CURRENCY_LOCKED_BY_HISTORY',
+      );
+    }
   }
 
   // A dividend run needs one reachable active RESERVE fund, so refuse to strand

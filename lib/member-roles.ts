@@ -14,15 +14,28 @@
  * so they are gone rather than mapped.
  */
 
+/**
+ * 2026-11-12 vocabulary revision (user decision, "those only"): the member
+ * categories are exactly the six below. `Investor`, `Associate Member`,
+ * `Founding Member` and `Member` were folded into `Shareholder Member` —
+ * migration 0029_member_role_vocabulary.sql rewrites every stored row, so no
+ * member keeps a retired value. The picker, the create/update endpoints, the
+ * settings rule rows and both distribution engines all read THIS list, so a
+ * value one of them accepts cannot be rejected by another.
+ */
 export const MEMBER_ROLES = [
   'Admin',
   'Manager',
-  'Auditor',
-  'Investor',
-  'Associate Member',
-  'Founding Member',
   'Board Member',
-  'Member',
+  'Shareholder Member',
+  /**
+   * Exclusive project-scoped category (docs/MEMBER-TYPE-DISTRIBUTION_PLAN.md):
+   * holds no club shares, never appears in club dividend runs, is bound to
+   * exactly one project, and carries a mandatory cumulative deposit cap.
+   * Still a membership category, not a login role — authorization never reads it.
+   */
+  'Project Level Member',
+  'Auditor',
 ] as const;
 
 export type MemberRole = (typeof MEMBER_ROLES)[number];
@@ -30,12 +43,10 @@ export type MemberRole = (typeof MEMBER_ROLES)[number];
 const LABEL_KEY: Record<MemberRole, string> = {
   Admin: 'members.adminRole',
   Manager: 'members.managerRole',
-  Auditor: 'members.auditRole',
-  Investor: 'members.investorRole',
-  'Associate Member': 'roles.associateMember',
-  'Founding Member': 'roles.foundingMember',
   'Board Member': 'roles.boardMember',
-  Member: 'members.memberRole',
+  'Shareholder Member': 'roles.shareholderMember',
+  'Project Level Member': 'roles.projectLevelMember',
+  Auditor: 'members.auditRole',
 };
 
 export function isMemberRole(value: unknown): value is MemberRole {

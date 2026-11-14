@@ -60,6 +60,23 @@ export class ServiceUnavailableError extends AppError {
 }
 
 /**
+ * The inverse of the AGENTS.md §11 producer shape `[Field '<field>', Code: <code>] <message>`
+ * — producers are scattered across the routes, this parser is the ONE place the
+ * UI reads the wire format back apart, so a field-coded server rejection can be
+ * anchored to its input as a clean human sentence instead of dumping the raw
+ * bracket text into a generic banner. Anything that does not match the shape
+ * passes through untouched as `message` (a server error must never be lost to
+ * a parsing miss).
+ */
+export function parseFieldError(
+  raw: string,
+): { field: string | null; code: string | null; message: string } {
+  const m = /^\[Field '([^']+)', Code: ([^\]]+)\]\s*([\s\S]*)$/.exec(String(raw ?? '').trim());
+  if (!m) return { field: null, code: null, message: String(raw ?? '') };
+  return { field: m[1] ?? null, code: (m[2] ?? '').trim() || null, message: (m[3] ?? '').trim() || String(raw) };
+}
+
+/**
  * Drizzle rethrows the driver (Postgres) error as a "Failed query: ..." wrapper
  * and parks the real SQLSTATE code + message on the nested `cause`, not the
  * thrown object. Callers that read `error.code` see `undefined` and lose the
@@ -95,11 +112,30 @@ export function extractDbError(error: unknown): { code?: string; message?: strin
  * sites keeps compiling exactly as before while the failure mode changes from
  * 500 to 400.
  */
-export async function readJsonBody(request: Request): Promise<any> {
+export async function readJsonBody(
+  request: Request,
+  options?: { maxBytes?: number },
+): Promise<any> {
+  // Size cap (audit 2026-11: readJsonBody had none — request.json() buffers the
+  // whole body before parsing, and parsed JSON can expand several-fold, so an
+  // authenticated caller could exhaust function memory through any of the ~39
+  // routes that funnel here). The server-stack validateBody already enforces
+  // per-route caps; this is the floor for the modern stack. 1MB is generous for
+  // every existing caller (largest legitimate payloads: bulk deposit requests
+  // and CSV exports, both well under it — the server stack caps bulk at a
+  // smaller value than this).
+  const maxBytes = options?.maxBytes ?? 1_000_000;
   let raw: unknown;
   try {
-    raw = await request.json();
-  } catch {
+    const text = await request.text();
+    if (new TextEncoder().encode(text).length > maxBytes) {
+      // 413 mirrors the server-stack validateBody cap (AppError, not a
+      // subclass) so the client sees PAYLOAD_TOO_LARGE, not a generic 400.
+      throw new AppError('Request body is too large', 413, 'PAYLOAD_TOO_LARGE');
+    }
+    raw = JSON.parse(text);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
     throw new ValidationError('Request body must be valid JSON');
   }
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -114,10 +150,20 @@ export async function readJsonBody(request: Request): Promise<any> {
  * still become a 400 instead of escaping as a 500. Zod `safeParse` accepts
  * `unknown`, so the return type stays `unknown` here.
  */
-export async function readJsonUnknown(request: Request): Promise<unknown> {
+export async function readJsonUnknown(
+  request: Request,
+  options?: { maxBytes?: number },
+): Promise<unknown> {
+  // Same 1MB floor as readJsonBody (audit 2026-11).
+  const maxBytes = options?.maxBytes ?? 1_000_000;
   try {
-    return await request.json();
-  } catch {
+    const text = await request.text();
+    if (new TextEncoder().encode(text).length > maxBytes) {
+      throw new AppError('Request body is too large', 413, 'PAYLOAD_TOO_LARGE');
+    }
+    return JSON.parse(text);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
     throw new ValidationError('Request body must be valid JSON');
   }
 }

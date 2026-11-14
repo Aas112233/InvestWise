@@ -1,9 +1,16 @@
 import { eq, and, ilike, or, sql, desc, asc, type SQL, type SQLWrapper } from 'drizzle-orm';
 import { getDb } from '../../lib/db';
-import { members, transactions, profitAllocations, fiscalPeriods } from '../../db/schema/index';
+import { members, transactions, profitAllocations, fiscalPeriods, systemSettings } from '../../db/schema/index';
 import { getPaginationParams, formatPaginatedResponse } from '../../middleware/api';
 import { AppError } from '../../shared/errors';
 import { canViewMemberPII, maskMemberPII, canViewMemberReviewData, maskMemberReviewData } from '@/lib/member-privacy';
+import {
+  PROJECT_MEMBER_ROLE,
+  distributionRulesToBp,
+  effectiveProjectMemberBp,
+} from '@/lib/distribution-rules';
+import { type MemberRole } from '@/lib/member-roles';
+import { formatPercentBp } from '@/lib/money';
 
 /** Member directory — paginated list with contributed totals + masking. */
 
@@ -32,6 +39,9 @@ const MEMBER_FIELDS = {
   role: members.role,
   shares: members.shares,
   totalContributed: members.totalContributed,
+  // Lifetime deposit ceiling — non-null only for the 'Project Member' category
+  // (lib/deposit-cap.ts). Carried on the row so list and detail payloads agree.
+  depositCap: members.depositCap,
   status: members.status,
   // WHY the member is not active — the directory renders it next to the badge.
   statusReason: members.statusReason,
@@ -173,6 +183,24 @@ export async function listMembers(
   const rate = aggregates ? await latestDeclaredRate(db, tenantId) : null;
   const expectedDividend: SQL = rate !== null ? expectedDividendExpr(rate) : sql`NULL`;
 
+  // Club-wide category rules (Settings → Financial) for the directory's PM
+  // percent display. A corrupt stored config must not 500 the directory —
+  // the column then reads "no carve-out" while the RUN engine fails loudly
+  // (Settings → Financial is where the repair happens).
+  let clubRulesBp: Map<MemberRole, number> = new Map();
+  if (aggregates) {
+    const [settingsRow] = await db
+      .select({ distributionRules: systemSettings.distributionRules })
+      .from(systemSettings)
+      .where(eq(systemSettings.tenantId, tenantId))
+      .limit(1);
+    try {
+      clubRulesBp = distributionRulesToBp(settingsRow?.distributionRules ?? null);
+    } catch {
+      clubRulesBp = new Map();
+    }
+  }
+
   // Derived columns sort by their ledger expression; everything else by its
   // stored column. NULL is emitted (not a subquery) when aggregates are off,
   // so the response shape stays stable for callers.
@@ -208,6 +236,14 @@ export async function listMembers(
       // lags after a ledger correction or reversal.
       lastDepositMonth: (aggregates ? lastDepositMonthExpr : sql`NULL`) as SQL<string | null>,
       expectedDividend: expectedDividend as SQL<string | null>,
+      // Raw per-project 'Project Level Member' percent (migration 0030) from
+      // the member's bound project — resolved into `distributionPercent` in
+      // the row map below. LITERAL quoted outer reference again (the
+      // `totalDepositedExpr` lesson), and LIMIT 1 is the one-project
+      // invariant (lib/project-capital.ts), not just a cost guard.
+      projectMemberPercentOverride: (aggregates
+        ? sql`(SELECT p.project_member_percent FROM project_members pm JOIN projects p ON p.id = pm.project_id WHERE pm.member_id = "members"."id" LIMIT 1)`
+        : sql`NULL`) as SQL<string | null>,
     })
     .from(members)
     .where(whereClause)
@@ -223,9 +259,23 @@ export async function listMembers(
   // performance) are Admin/Manager-only on top of that — the directory hides
   // the column, and now the payload does too.
   const canReview = canViewMemberReviewData(userRole);
-  const data = rows.map(({ totalCount: _totalCount, ...rest }) =>
-    maskMemberReviewData(maskMemberPII(rest, canViewMemberPII(userRole, rest.userId, userId)), canReview),
-  );
+  const data = rows.map(({ totalCount: _totalCount, projectMemberPercentOverride, ...rest }) => {
+    // The percent the PM category actually carves on this member's bound
+    // project: project override → club rule → none (pure pro-rata). ONE
+    // resolver (lib/distribution-rules.ts) — the directory and the run
+    // engine cannot disagree about what a Project Level Member gets.
+    const pctBp =
+      aggregates && rest.role === PROJECT_MEMBER_ROLE
+        ? effectiveProjectMemberBp(clubRulesBp, projectMemberPercentOverride)
+        : null;
+    return maskMemberReviewData(
+      maskMemberPII(
+        { ...rest, distributionPercent: pctBp === null ? null : formatPercentBp(pctBp) },
+        canViewMemberPII(userRole, rest.userId, userId),
+      ),
+      canReview,
+    );
+  });
 
   return formatPaginatedResponse(data, page, limit, totalCount);
 }

@@ -2,7 +2,8 @@ import { and, eq, sql } from 'drizzle-orm';
 import { AppError } from '../../shared/errors';
 import { getDb } from '../../lib/db';
 import { funds, members, systemSettings } from '../../db/schema/index';
-import { fromCents, parsePositiveAmount, splitDividendByShares, toCents } from '@/lib/money';
+import { fromCents, parsePositiveAmount, splitByTypeAndShares, toCents } from '@/lib/money';
+import { distributionRulesToBp, PROJECT_MEMBER_ROLE } from '@/lib/distribution-rules';
 
 /**
  * Statutory-reserve and payout math for a dividend run.
@@ -29,6 +30,9 @@ interface DividendMemberSeed {
   memberId: string;
   name: string;
   shares: number;
+  /** Membership category (lib/member-roles vocabulary); absent/null = the
+   *  standard 'Shareholder Member' category (the members.role column default). */
+  role?: string | null;
 }
 
 interface DividendPayout {
@@ -36,6 +40,8 @@ interface DividendPayout {
   memberId: string;
   name: string;
   shares: number;
+  /** The member's category — carried through for the preview's Type column. */
+  role: string;
   payoutCents: number;
   /** decimal(15,2) string. */
   grossAmount: string;
@@ -58,6 +64,14 @@ interface DividendPlan {
   payouts: DividendPayout[];
   recipientCount: number;
   totalDistributedCents: number;
+  /**
+   * Per-category carve-outs of the net pool when the tenant configured
+   * member-category rules (docs/MEMBER-TYPE-DISTRIBUTION_PLAN.md). Empty when
+   * no rules apply — the split then matches the historical pure pro-rata.
+   */
+  typeBlocks: Array<{ role: string; bp: number; amountCents: number; memberCount: number }>;
+  /** What the no-category pro-rata carve-out distributed. */
+  remainderCents: number;
 }
 
 /** Format integer micro-currency units as a fixed 6-decimal string. */
@@ -87,6 +101,11 @@ export function computeDividendPlan(input: {
   grossEarnings: string | number;
   statutoryReservePercent: string | number;
   members: DividendMemberSeed[];
+  /**
+   * Member-category weights (basis points) from lib/distribution-rules.ts.
+   * Absent/empty keeps the run byte-identical to the historical pro-rata.
+   */
+  rulesBp?: Map<string, number>;
 }): DividendPlan {
   const grossCents = parsePositiveAmount(input.grossEarnings, {
     maxCents: MAX_GROSS_CENTS,
@@ -117,10 +136,23 @@ export function computeDividendPlan(input: {
     throw new AppError('No active members with shares found, so the dividend cannot be distributed. Add active members with shares in the Members screen first.', 400, 'NO_ELIGIBLE_MEMBERS');
   }
 
-  // A 100% reserve leaves nothing to split; splitDividendByShares rejects a
+  // A 100% reserve leaves nothing to split; the split engine rejects a
   // non-positive total, so the empty payout set is the correct plan here.
-  const splits = netCents > 0 ? splitDividendByShares(netCents, eligible) : [];
-  const payoutById = new Map(splits.map((s) => [s.id, s.payoutCents]));
+  // splitByTypeAndShares carves each configured member category its percent of
+  // the NET pool (pro-rata by shares inside the category, remainder pro-rata
+  // outside) — and reduces to the historical splitDividendByShares exactly when
+  // no rules are configured. The modal preview posts the SAME plan (this
+  // function is shared), so what is shown is what is paid.
+  const rulesBp = input.rulesBp ?? new Map<string, number>();
+  const outcome =
+    netCents > 0
+      ? splitByTypeAndShares(
+          netCents,
+          eligible.map((m) => ({ id: m.id, shares: m.shares, role: m.role ?? 'Shareholder Member' })),
+          rulesBp,
+        )
+      : null;
+  const payoutById = new Map((outcome?.payouts ?? []).map((s) => [s.id, s.payoutCents]));
 
   const payouts: DividendPayout[] = eligible.map((m) => {
     const payoutCents = payoutById.get(m.id) ?? 0;
@@ -129,6 +161,7 @@ export function computeDividendPlan(input: {
       memberId: m.memberId,
       name: m.name,
       shares: m.shares,
+      role: m.role ?? 'Shareholder Member',
       payoutCents,
       grossAmount: fromCents(payoutCents),
       ratePerShare: fromMicros(rateMicros(payoutCents, m.shares)),
@@ -160,6 +193,8 @@ export function computeDividendPlan(input: {
     payouts,
     recipientCount,
     totalDistributedCents,
+    typeBlocks: outcome?.typeBlocks ?? [],
+    remainderCents: outcome?.remainderCents ?? 0,
   };
 }
 
@@ -209,6 +244,21 @@ export async function planDividendRun(
       ? input.statutoryReservePercent
       : settings?.statutoryReservePercent ?? '10';
 
+  // Member-category rules from Settings → Financial — the SAME stored list the
+  // project-returns run reads. A corrupt config fails the run loudly (400)
+  // rather than silently mis-splitting the net pool.
+  let rulesBp: Map<string, number>;
+  try {
+    rulesBp = new Map(distributionRulesToBp(settings?.distributionRules ?? null));
+  } catch (err) {
+    throw new AppError(
+      'The configured category distribution rules are invalid — fix Settings → Financial → Returns distribution: ' +
+        (err instanceof Error ? err.message : String(err)),
+      400,
+      'INVALID_DISTRIBUTION_RULES',
+    );
+  }
+
   const [distributableFund] = await db
     .select()
     .from(funds)
@@ -241,11 +291,12 @@ export async function planDividendRun(
     throw new AppError('The selected reserve fund must be a RESERVE type fund', 400, 'INVALID_RESERVE_FUND');
   }
 
-  const memberSeeds: DividendMemberSeed[] = await db
+  const memberRows = await db
     .select({
       id: members.id,
       memberId: members.memberId,
       name: members.name,
+      role: members.role,
       shares: members.shares,
     })
     .from(members)
@@ -261,10 +312,19 @@ export async function planDividendRun(
     )
     .orderBy(members.name);
 
+  // The exclusive 'Project Member' category never receives club dividends —
+  // it is paid only by the project it belongs to (§3.2). Its forced 0 club
+  // shares already exclude it via `shares > 0` above; this explicit guard
+  // keeps that promise true even if a hand-edited row ever carries shares.
+  const memberSeeds: DividendMemberSeed[] = memberRows.filter(
+    (m) => (m.role ?? '') !== PROJECT_MEMBER_ROLE,
+  );
+
   const plan = computeDividendPlan({
     grossEarnings: input.grossEarnings,
     statutoryReservePercent: reservePercent,
     members: memberSeeds,
+    rulesBp,
   });
 
   const distributableBalanceCents = toCents(distributableFund.balance ?? '0');

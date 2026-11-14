@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { useLocale } from "@/lib/i18n";
 import { memberDisplayName } from "@/lib/member-display";
 import { formatMoney, todayLocalIso } from "@/lib/formatters";
-import { useTenantCurrency, useTenantDateFormat } from "@/lib/use-tenant-settings";
+import { useTenantCurrency, useTenantDateFormat, useTenantExpenseCategories } from "@/lib/use-tenant-settings";
 import { Plus, Loader2 } from "lucide-react";
 
 interface FundOption {
@@ -153,15 +153,13 @@ export function ExpenseModal({ isOpen, onClose, currency }: ExpenseModalProps) {
       label: u.role ? `${u.name} (${u.role})` : u.name,
     }));
 
-  const categoryOptions: DropdownOption[] = [
-    { value: "Operational", label: t("expenses.categories.operational") },
-    { value: "Marketing", label: t("expenses.categories.marketing") },
-    { value: "Legal", label: t("expenses.categories.legal") },
-    { value: "Travel", label: t("expenses.categories.travel") },
-    { value: "Technology", label: t("expenses.categories.technology") },
-    { value: "Maintenance", label: t("expenses.categories.maintenance") },
-    { value: "Other", label: "Other" },
-  ];
+  // Categories this tenant defined in Settings (server validates them too, so
+  // an arbitrary string can no longer be posted through this form).
+  const expenseCategories = useTenantExpenseCategories();
+  const categoryOptions: DropdownOption[] = expenseCategories.map((label) => ({
+    value: label,
+    label,
+  }));
 
   const createExpenseMutation = useMutation({
     mutationFn: async () => {

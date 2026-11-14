@@ -3,6 +3,12 @@
  * Shared across Next.js App Router components and actions.
  */
 
+// The project-type vocabulary has ONE owner (lib/distribution-rules) — the same
+// module the DB CHECK constraint, the API validation and the split resolver use.
+import type { ProjectType } from "@/lib/distribution-rules";
+
+export type { ProjectType };
+
 
 export interface Member {
   id: string;
@@ -18,6 +24,23 @@ export interface Member {
   /** Deposits only, summed from the ledger by the list service. Null when the
    *  caller did not ask for aggregates (`withTotals`). */
   totalDeposited?: string | null;
+  /** Lifetime deposit ceiling — set only for the exclusive 'Project Member'
+   *  category (lib/deposit-cap.ts owns the enforcement). Null = no cap. */
+  depositCap?: string | null;
+  /** Project Member only (detail payload): cumulative credited deposits,
+   *  derived from the ledger — the used part of `depositCap`. */
+  cumulativeDeposits?: string | null;
+  /** Project Member only (detail payload): the single bound project. */
+  boundProjects?: { id: string; title: string; isLocked?: boolean }[];
+  /**
+   * Project Level Member only: the percent of the member pool this member's
+   * category carves on its bound project's returns — the project override if
+   * set, else the club-wide rule (lib/distribution-rules.ts resolution).
+   * Null = no carve-out configured anywhere (pure pro-rata).
+   */
+  distributionPercent?: string | null;
+  /** Which source produced `distributionPercent` (detail payload). */
+  distributionPercentSource?: "project" | "club" | null;
   /** YYYY-MM of the latest completed deposit, derived from the ledger. */
   lastDepositMonth?: string | null;
   /** shares x the last declared per-share rate. Null until a dividend run. */
@@ -67,6 +90,8 @@ export interface ProjectMemberParticipation {
   memberCode?: string;
   memberPhone?: string;
   memberStatus?: string;
+  /** Membership category — drives the per-category returns preview split. */
+  memberRole?: string;
   sharesInvested: number;
   ownershipPercentage?: number;
   tenantShareValue?: number;
@@ -103,6 +128,20 @@ export interface Project {
   startDate: string;
   completionDate?: string;
   projectFundHandler?: string;
+  /** Human reference code PRJ-XXXX per tenant (migration 0031). Immutable, server-assigned. */
+  projectCode?: string | null;
+  /**
+   * Per-project 'Project Level Member' carve-out override (migration 0030).
+   * String decimal ("12.50"); null/absent = the club-wide rule applies.
+   */
+  projectMemberPercent?: string | null;
+  /**
+   * Project type (migration 0032, docs/PROJECT-TYPES_PLAN.md):
+   * 'club_level' (Board + Shareholder only, category rules) or
+   * 'extra_investor' (adds Project Level Members on a contract percentage).
+   * Absent on rows loaded before the migration — treated as club_level.
+   */
+  projectType?: ProjectType;
   manager?: string;
   linkedFundId?: string;
   linkedFundName?: string;
@@ -285,10 +324,11 @@ export interface AnalyticsStats {
   netReserveBalance: number;
   /** Total shares distributed across members, split founding vs normal (members.role). */
   totalShares: number;
-  foundingShares: number;
-  normalShares: number;
-  foundingMembers: number;
-  normalMembers: number;
+  /** Board Member (category A) vs every other category — exhaustive pair. */
+  boardShares: number;
+  shareholderShares: number;
+  boardMembers: number;
+  shareholderMembers: number;
   /** SUM(projects.initialInvestment) across all projects + project count. */
   investmentsTotal: number;
   investmentsCount: number;

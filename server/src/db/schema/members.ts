@@ -14,9 +14,16 @@ export const members = pgTable('members', {
   name: varchar('name', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }).notNull(),
   phone: varchar('phone', { length: 50 }).notNull(),
-  role: varchar('role', { length: 50 }).default('Member'),
+  role: varchar('role', { length: 50 }).default('Shareholder Member'),
   shares: integer('shares').default(0).notNull(),
   totalContributed: decimal('total_contributed', { precision: 15, scale: 2 }).default('0'),
+  /**
+   * Lifetime deposit ceiling for the exclusive 'Project Member' category
+   * (migration 0028): the cumulative sum of settled deposit rows may never
+   * exceed it. Semantics live in lib/deposit-cap.ts. NULL = no cap — only
+   * meaningful (and required) for Project Members, never set for others.
+   */
+  depositCap: decimal('deposit_cap', { precision: 15, scale: 2 }),
   status: varchar('status', { length: 50 }).default('active'),
   // WHY the member is not active (lib/governance/status-rules.ts
   // MEMBER_STATUS_REASON): DEPOSIT_NON_COMPLIANCE | EQUITY_TRANSFERRED_OUT |

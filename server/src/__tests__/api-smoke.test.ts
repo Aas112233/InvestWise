@@ -107,7 +107,7 @@ try {
     name: 'Test Member ' + Date.now().toString().slice(-4),
     email: `test${Date.now()}@test.com`,
     phone: '01712345678',
-    role: 'Associate Member',
+    role: 'Shareholder Member',
     shares: 10,
     status: 'active',
   });

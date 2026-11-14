@@ -8,6 +8,7 @@ import { normalizeRole } from '@/lib/roles';
 import { logAudit } from '@/lib/utils/audit';
 import { NotFoundError, ForbiddenError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { toCents, fromCents, parsePositiveAmount, MoneyError } from '@/lib/money';
+import { GOAL_TITLE_MAX, assertGoalDescription } from '@/lib/goal-text';
 
 /** §6 guard: tenant business route — resolve tenantId or fail closed. */
 async function requireTenantContext(request: NextRequest) {
@@ -99,8 +100,17 @@ export async function PUT(
       updatedAt: new Date(),
     };
 
-    if (body.title !== undefined) updateFields.title = body.title.trim();
-    if (body.description !== undefined) updateFields.description = body.description ? body.description.trim() : null;
+    // Same ceilings as POST — an edit must not be a way around them.
+    if (body.title !== undefined) {
+      if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.trim().length > GOAL_TITLE_MAX) {
+        throw new ValidationError(`title must be a string of 1-${GOAL_TITLE_MAX} characters`);
+      }
+      updateFields.title = body.title.trim();
+    }
+    if (body.description !== undefined) {
+      assertGoalDescription(body.description);
+      updateFields.description = body.description ? body.description.trim() : null;
+    }
     // §12 money rule (audit 07 M-5): cents parsing, never `String(Number(x))`.
     if (body.targetAmount !== undefined) {
       updateFields.targetAmount = fromCents(parsePositiveAmount(body.targetAmount, { field: 'targetAmount' }));

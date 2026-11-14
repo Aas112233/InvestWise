@@ -15,6 +15,17 @@ describe("member role vocabulary", () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 
+  it("is exactly the six-category vocabulary", () => {
+    expect(MEMBER_ROLES).toEqual([
+      "Admin",
+      "Manager",
+      "Board Member",
+      "Shareholder Member",
+      "Project Level Member",
+      "Auditor",
+    ]);
+  });
+
   it("drops the stale synonyms in favour of the canonical spellings", () => {
     expect(isMemberRole("Administrator")).toBe(false);
     expect(isMemberRole("Audit")).toBe(false);
@@ -22,11 +33,11 @@ describe("member role vocabulary", () => {
     expect(isMemberRole("Auditor")).toBe(true);
   });
 
-  it("accepts every category actually present in member data", () => {
-    // Seeded rows hold these; if the picker rejected them, editing such a
-    // member would either fail or quietly change their category.
-    for (const role of ["Investor", "Associate Member", "Founding Member", "Board Member"]) {
-      expect(isMemberRole(role)).toBe(true);
+  it("retires the folded categories (migration 0029 rewrote every row)", () => {
+    // Kept out of the vocabulary on purpose: a retired value in the picker
+    // would offer a category the settings/rules UI no longer accounts for.
+    for (const role of ["Member", "Investor", "Associate Member", "Founding Member", "Project Member"]) {
+      expect(isMemberRole(role)).toBe(false);
     }
   });
 
@@ -41,8 +52,11 @@ describe("member role vocabulary", () => {
   it("shows an out-of-vocabulary stored value as itself, not as Member", () => {
     const t = vi.fn((key: string) => `t:${key}`);
     expect(memberRoleDisplay("Chairman", t)).toBe("Chairman");
+    expect(memberRoleDisplay("Founding Member", t)).toBe("Founding Member");
+    // t called only for the in-vocabulary role below (the retired value above
+    // must render its stored text, never a key lookup).
     expect(t).not.toHaveBeenCalled();
-    expect(memberRoleDisplay("Investor", t)).toBe(`t:${memberRoleLabel("Investor")}`);
+    expect(memberRoleDisplay("Shareholder Member", t)).toBe(`t:${memberRoleLabel("Shareholder Member")}`);
     expect(memberRoleDisplay(null, t)).toBe("");
   });
 });

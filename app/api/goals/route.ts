@@ -9,6 +9,7 @@ import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
 import { toCents, fromCents, parsePositiveAmount, MoneyError } from '@/lib/money';
 import { escapeLikePattern } from '@/lib/utils/validation';
+import { assertGoalText } from '@/lib/goal-text';
 
 export async function GET(request: NextRequest) {
   try {
@@ -91,9 +92,7 @@ export async function POST(request: NextRequest) {
     if (!title || targetAmount === undefined) {
       throw new ValidationError('title and targetAmount are required');
     }
-    if (typeof title !== 'string' || title.trim().length === 0 || title.trim().length > 200) {
-      throw new ValidationError('title must be a string of 1-200 characters');
-    }
+    assertGoalText(title, description);
 
     // §12 money rule (audit 07 M-5): cents parsing with the shared ceiling —
     // never `String(Number(x))`, which passes "NaN" and loses precision.

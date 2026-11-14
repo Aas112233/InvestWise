@@ -16,7 +16,7 @@ import { requireTenant } from '@/lib/tenant';
 import { hasScreenPermission } from '@/lib/permissions';
 import { logAudit } from '@/lib/utils/audit';
 import { ValidationError, ForbiddenError, NotFoundError, readJsonBody } from '@/lib/utils/errors';
-import { toCents, fromCents } from '@/lib/money';
+import { toCents, fromCents, MAX_AMOUNT } from '@/lib/money';
 import crypto from 'node:crypto';
 import { apiError } from '@/lib/utils/api-error';
 
@@ -73,9 +73,10 @@ export async function POST(request: NextRequest) {
     // is enforced against this key so a month-less client cannot sidestep it.
     const effectiveMonthKey = depositMonthKey ?? new Date().toISOString().slice(0, 7);
 
-    // Per-row validation with the single route's amount semantics (integer
-    // cents, 2dp ceiling, positive). Errors name the row so the user can fix
-    // exactly the offending entry.
+    // Per-row validation. NOTE: this previously claimed "the single route's
+    // amount semantics" while omitting that route's MAX_AMOUNT ceiling — the
+    // comment described a parity the code did not have. It is now genuine.
+    // Errors name the row so the user can fix exactly the offending entry.
     const rows = deposits.map((row: any, i: number) => {
       const rowNo = i + 1;
       const memberId = typeof row?.memberId === 'string' ? row.memberId : '';
@@ -102,6 +103,20 @@ export async function POST(request: NextRequest) {
       }
       if (amountCents <= 0) {
         throw new ValidationError(`Row ${rowNo}: Deposit amount must be a positive number`);
+      }
+      // The module ceiling. app/api/deposits/request/route.ts:93 has carried
+      // this since the incident money.ts:14-20 documents, and that route's
+      // comment explains why it matters: approval copies the requested amount
+      // onto the settled Deposit row WITHOUT re-checking it. Bulk had no
+      // ceiling, so `amount: "999999999.00"` filed here sailed through approve
+      // and landed in the ledger while the identical amount typed into the
+      // single form was refused. Approve now re-asserts this too as defence in
+      // depth, because over-ceiling requests may already exist on a tenant's
+      // books from before this line existed.
+      if (amountCents > MAX_AMOUNT * 100) {
+        throw new ValidationError(
+          `Row ${rowNo}: deposit amount may not exceed ${fromCents(MAX_AMOUNT * 100)}`,
+        );
       }
       return { memberId, trxId, amount: fromCents(amountCents) };
     });

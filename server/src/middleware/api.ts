@@ -15,6 +15,7 @@ import { tenants } from '../db/schema/index';
 import { getTenantSubscriptionBlocked } from '@/lib/subscription-guard';
 import { moduleForApiPath, resolveModuleAccess } from '@/lib/tenant-modules';
 import { getMaintenanceFlags } from '@/lib/middleware/auth';
+import { consumeWriteBudget } from '@/lib/write-budget';
 
 /**
  * Route kernel for the financial API: session extraction, Zod body/query
@@ -125,10 +126,19 @@ export function jsonError(message: string, statusCode: number, code: string): Ne
  * non-object body — never lets a client error surface as a 500.
  */
 export async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
+  // Same 1MB floor as the modern-stack readJsonBody (audit 2026-11): never
+  // buffer an unbounded body before parsing. Callers with larger legitimate
+  // payloads should use validateBody with an explicit maxBytes instead.
+  const maxBytes = 1_000_000;
   let raw: unknown;
   try {
-    raw = await request.json();
-  } catch {
+    const text = await request.text();
+    if (new TextEncoder().encode(text).length > maxBytes) {
+      throw new AppError('Request body is too large', 413, 'PAYLOAD_TOO_LARGE');
+    }
+    raw = JSON.parse(text);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
     throw new AppError('Request body must be valid JSON', 400, 'INVALID_JSON');
   }
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -320,6 +330,10 @@ export async function requirePermission(
   level: PermissionLevel = 'WRITE',
 ): Promise<SessionUser> {
   const user = await requireSession();
+  // Global write budget floor (audit 2026-11): every non-READ grant is a write
+  // intent, so it spends the budget before the per-screen check — the same
+  // consume/429/503 contract as the modern stack's getAuthContext wire point.
+  if (level !== 'READ') await enforceGlobalWriteBudget(user);
   if (!hasScreenPermission(user, screen, level)) {
     throw new AppError(
       `${level === 'WRITE' ? 'Write' : level === 'MANAGE' ? 'Manage' : 'Read'} permission required for: ${screen}`,
@@ -336,6 +350,8 @@ export async function requireAnyPermission(
   level: PermissionLevel = 'WRITE',
 ): Promise<SessionUser> {
   const user = await requireSession();
+  // Same global write budget floor as requirePermission above.
+  if (level !== 'READ') await enforceGlobalWriteBudget(user);
   if (!hasAnyScreenPermission(user, screens, level)) {
     throw new AppError(
       `${level === 'WRITE' ? 'Write' : level === 'MANAGE' ? 'Manage' : 'Read'} permission required for: ${screens.join(' or ')}`,
@@ -352,6 +368,8 @@ export async function requireAnyPermission(
  */
 export async function requireDepositWritePermission(status?: string): Promise<SessionUser> {
   const user = await requireSession();
+  // Deposit-desk writes always consume the global budget floor.
+  await enforceGlobalWriteBudget(user);
   const isPendingRequest = String(status || '').toLowerCase() === 'pending';
   const allowed = isPendingRequest
     ? hasAnyScreenPermission(user, ['REQUEST_DEPOSIT', 'DEPOSITS'], 'WRITE')
@@ -366,6 +384,33 @@ export async function requireDepositWritePermission(status?: string): Promise<Se
     );
   }
   return user;
+}
+
+/**
+ * Global write budget floor (audit 2026-11) — server-stack counterpart of the
+ * modern stack's getAuthContext wire point. Consumes the shared Postgres
+ * buckets; throws 429 RATE_LIMITED / 503 RATE_LIMIT_UNAVAILABLE, the same
+ * contract the finance handlers' enforceRateLimit uses, so handler catches map
+ * it without changes.
+ */
+async function enforceGlobalWriteBudget(user: SessionUser): Promise<void> {
+  try {
+    const outcome = await consumeWriteBudget(user);
+    if (outcome.ok) return;
+    throw new AppError(
+      'Too many write requests. Please slow down and try again shortly.',
+      429,
+      'RATE_LIMITED',
+      outcome.retryAfterSec,
+    );
+  } catch (err) {
+    if (err instanceof AppError && err.code === 'RATE_LIMITED') throw err;
+    throw new AppError(
+      'Request throttling is temporarily unavailable. Please try again shortly.',
+      503,
+      'RATE_LIMIT_UNAVAILABLE',
+    );
+  }
 }
 
 /** UUID validator for path params (rejects cross-tenant id probing early). */

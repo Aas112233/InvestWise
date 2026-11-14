@@ -61,4 +61,22 @@ export async function assertFundInTenant(linkedFundId: string | null | undefined
   if (!fund) throw new ForbiddenError('Linked fund does not belong to this tenant');
 }
 
+/**
+ * `assertProjectMemberPercentFits` (the v9 save-time Σ guard) was REMOVED here on
+ * purpose — docs/PROJECT-TYPES_PLAN.md decision D8.
+ *
+ * It existed because a per-project Project Level Member percentage and the club
+ * category rules both carved the same member pool, so either screen could push
+ * the pair past 100% and leave the project undistributable. Project types
+ * (migration 0032) removed the overlap: a Club Level project cannot have Project
+ * Level Members at all, and an Extra Investor project splits its remainder by
+ * share number, so the two percentage sets are never added together. A check for
+ * an impossible state is worse than no check — it looks like a rule while quietly
+ * guarding a design that no longer exists.
+ *
+ * The roster/contract rules that DO still apply live in
+ * lib/distribution-rules::assertProjectTypeRoster, enforced by the capital engine
+ * on create and re-capitalise.
+ */
+
 export { ValidationError };

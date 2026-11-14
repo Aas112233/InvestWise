@@ -191,3 +191,79 @@ describe('computeDividendPlan — amount validation', () => {
     ).toThrow();
   });
 });
+
+describe('computeDividendPlan — member-category weights', () => {
+  const mixed = [
+    { id: 'a', memberId: 'MEM-0001', name: 'A', shares: 2, role: 'Board Member' },
+    { id: 'b', memberId: 'MEM-0002', name: 'B', shares: 1, role: 'Board Member' },
+    { id: 'c', memberId: 'MEM-0003', name: 'C', shares: 7, role: 'Member' },
+  ];
+
+  it('without rules behaves exactly like the historical pro-rata split', () => {
+    const plan = computeDividendPlan({ grossEarnings: '100.00', statutoryReservePercent: '0', members: mixed });
+    expect(plan.payouts.find((p) => p.id === 'a')!.payoutCents).toBe(2000);
+    expect(plan.payouts.find((p) => p.id === 'c')!.payoutCents).toBe(7000);
+    expect(plan.typeBlocks).toEqual([]);
+    expect(plan.remainderCents).toBe(10_000);
+  });
+
+  it('carves the category block, splits inside it, remainder stays pro-rata outside', () => {
+    const plan = computeDividendPlan({
+      grossEarnings: '1000.00',
+      statutoryReservePercent: '0',
+      members: mixed,
+      rulesBp: new Map([['Board Member', 1500]]),
+    });
+    // Board block 150.00 → A(2sh) 100.00 + B(1sh) 50.00; remainder 850.00 to C.
+    expect(plan.payouts.find((p) => p.id === 'a')!.grossAmount).toBe('100.00');
+    expect(plan.payouts.find((p) => p.id === 'b')!.grossAmount).toBe('50.00');
+    expect(plan.payouts.find((p) => p.id === 'c')!.grossAmount).toBe('850.00');
+    expect(plan.typeBlocks).toEqual([{ role: 'Board Member', bp: 1500, amountCents: 15_000, memberCount: 2 }]);
+    expect(plan.remainderCents).toBe(85_000);
+    expect(plan.totalDistributedCents).toBe(plan.netCents);
+  });
+
+  it('a 100%-configured category starves the others to zero exactly', () => {
+    const plan = computeDividendPlan({
+      grossEarnings: '500.00',
+      statutoryReservePercent: '0',
+      members: mixed,
+      rulesBp: new Map([['Board Member', 10_000]]),
+    });
+    const board = plan.payouts.filter((p) => p.role === 'Board Member').reduce((s, p) => s + p.payoutCents, 0);
+    expect(board).toBe(50_000);
+    expect(plan.payouts.find((p) => p.id === 'c')!.payoutCents).toBe(0);
+    expect(plan.remainderCents).toBe(0);
+  });
+
+  it('a category absent from the roster claims nothing', () => {
+    // The club-dividend case: a 'Project Member' rule row (which only ever
+    // applies to project returns) leaves its percent to the pro-rata remainder.
+    const plan = computeDividendPlan({
+      grossEarnings: '100.00',
+      statutoryReservePercent: '0',
+      members: mixed,
+      rulesBp: new Map([
+        ['Project Member', 4000],
+        ['Board Member', 1000],
+      ]),
+    });
+    expect(plan.payouts.find((p) => p.id === 'a')!.grossAmount).toBe('6.67');
+    expect(plan.payouts.find((p) => p.id === 'b')!.grossAmount).toBe('3.33');
+    expect(plan.payouts.find((p) => p.id === 'c')!.grossAmount).toBe('90.00');
+    expect(plan.typeBlocks.map((t) => t.role)).toEqual(['Board Member']);
+    expect(plan.totalDistributedCents).toBe(10_000);
+  });
+
+  it('a 100% reserve pays nobody even with weights configured', () => {
+    const plan = computeDividendPlan({
+      grossEarnings: '100.00',
+      statutoryReservePercent: '100',
+      members: mixed,
+      rulesBp: new Map([['Board Member', 5000]]),
+    });
+    expect(plan.netCents).toBe(0);
+    expect(plan.payouts.every((p) => p.payoutCents === 0)).toBe(true);
+    expect(plan.typeBlocks).toEqual([]);
+  });
+});

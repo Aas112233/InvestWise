@@ -32,6 +32,30 @@ const DEFAULT_PAYMENT_METHODS = [
   { name: 'Other', type: 'OTHER' },
 ];
 
+// Category vocabularies (canonical defaults + validation live in
+// lib/categories.ts; mirrored here as plain defaults because schema files must
+// not import app libs — same rule as DEFAULT_PAYMENT_METHODS above).
+const DEFAULT_EXPENSE_CATEGORIES = [
+  'Operations',
+  'Project Expense',
+  'Governance Fine',
+  'Marketing',
+  'Legal',
+  'Travel',
+  'Technology',
+  'Maintenance',
+  'Other',
+];
+
+const DEFAULT_PROJECT_CATEGORIES = [
+  'Real Estate',
+  'Agriculture',
+  'Technology',
+  'Retail',
+  'Manufacturing',
+  'Other',
+];
+
 export const systemSettings = pgTable('system_settings', {
   id: uuid('id').defaultRandom().primaryKey(),
   // One row per tenant (AGENTS.md §multi-tenancy).
@@ -129,6 +153,26 @@ export const systemSettings = pgTable('system_settings', {
   penaltyRules: jsonb('penalty_rules').$type<PenaltyRuleConfig[]>().default(DEFAULT_PENALTY_RULES),
   /** Tenant-configurable payment methods for deposit forms: name + channel type. */
   paymentMethods: jsonb('payment_methods').$type<{ name: string; type: string }[]>().default(DEFAULT_PAYMENT_METHODS),
+  /**
+   * Tenant-defined expense categories for the Expense module. Replaces the
+   * literal array that used to live in components/expenses/*. Validation and
+   * deletion semantics live in lib/categories.ts.
+   */
+  expenseCategories: jsonb('expense_categories').$type<string[]>().default(DEFAULT_EXPENSE_CATEGORIES),
+  /**
+   * Tenant-defined project sectors/categories. Replaces the literal array in
+   * components/projects/project-form-modal.tsx.
+   */
+  projectCategories: jsonb('project_categories').$type<string[]>().default(DEFAULT_PROJECT_CATEGORIES),
+  /**
+   * Per-member-category profit/loss distribution rules (migration 0027):
+   * each configured category takes its percent of the member pool of every
+   * returns/dividend leg; inside the category money splits pro-rata by shares.
+   * The canonical shape/validation lives in lib/distribution-rules.ts
+   * (schema files must not import app libs — same pattern as payment methods).
+   * null/[] = not configured = the historical pure pro-rata split.
+   */
+  distributionRules: jsonb('distribution_rules').$type<{ role: string; percent: number }[] | null>().default([]),
 
   lastUpdatedBy: uuid('last_updated_by').references(() => users.id),
   lastUpdatedAt: timestamp('last_updated_at', { withTimezone: true }).defaultNow(),

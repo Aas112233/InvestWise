@@ -42,7 +42,10 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError('Read permission required for: REPORTS');
     }
 
-    const body = await readJsonBody(request);
+    // This route legitimately carries 5000 rows of caller data; give it more
+    // headroom than the 1MB default cap (5MB) — still a hard bound, unlike the
+    // unbounded body read this used to have.
+    const body = await readJsonBody(request, { maxBytes: 5_000_000 });
     const { title = 'export', data = [] } = body;
 
     if (!Array.isArray(data) || data.length === 0) {

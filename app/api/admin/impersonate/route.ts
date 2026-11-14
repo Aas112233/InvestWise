@@ -15,6 +15,7 @@ import { tokenHash } from '@/lib/middleware/auth';
 import { getTokenExpiry } from '@/lib/token-expiry';
 import { getClientIp } from '@/lib/request-meta';
 import { COOKIE_NAMES } from '@/lib/utils/cookies';
+import { signStash, parseSignedStash } from '@/lib/impersonation-stash';
 
 // POST /api/admin/impersonate { userId } — platform-only.
 //
@@ -55,6 +56,14 @@ function stashAdminSession(response: NextResponse, request: NextRequest, target:
       refresh: refresh ?? null,
       targetSessionId: target.sessionId,
       targetUserId: target.targetUserId,
+      // Server-signed: the exit path trusts this cookie with no other auth, so
+      // its contents must be provably ours, not attacker-crafted.
+      sig: signStash({
+        access,
+        refresh: refresh ?? null,
+        targetSessionId: target.sessionId,
+        targetUserId: target.targetUserId,
+      }),
     }),
     {
     httpOnly: true,
@@ -162,29 +171,19 @@ export async function DELETE(request: NextRequest) {
     const token = body?.token;
 
     const stashRaw = request.cookies.get(STASH_COOKIE)?.value;
-    let stashed: StashedAdminSession | null = null;
-    if (stashRaw) {
-      try {
-        const parsed = JSON.parse(stashRaw) as Partial<StashedAdminSession>;
-        if (
-          typeof parsed.access === 'string' &&
-          typeof parsed.targetSessionId === 'string' &&
-          typeof parsed.targetUserId === 'string'
-        ) {
-          stashed = {
-            access: parsed.access,
-            refresh: typeof parsed.refresh === 'string' ? parsed.refresh : null,
-            targetSessionId: parsed.targetSessionId,
-            targetUserId: parsed.targetUserId,
-          };
-        }
-      } catch {
-        stashed = null;
-      }
-    }
+    // Unforgeable stash: a cookie that doesn't carry our HMAC (or whose
+    // contents were tampered) is treated as absent, so a forged stash can no
+    // longer name an arbitrary targetSessionId/targetUserId and kill that
+    // session from the unauthenticated exit path. Legit stashes carry `sig`
+    // from stashAdminSession, and the signature outlives the 30-minute access
+    // cookie, so the expired-cookie exit still works.
+    const stashed = parseSignedStash(stashRaw) as StashedAdminSession | null;
 
     // Exit path requires no body and no admin auth: the caller is the
     // IMPERSONATED session, which by definition is not a platform admin.
+    // Forge-protection lives in the stash signature (parseSignedStash above):
+    // an attacker-crafted stash is indistinguishable from absence here and
+    // falls through to the authenticated admin-revoke path below.
     if (!token && stashed) {
       const db = getDb();
       const current = request.cookies.get(COOKIE_NAMES.ACCESS_TOKEN)?.value;

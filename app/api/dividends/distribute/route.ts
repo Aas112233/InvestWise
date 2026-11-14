@@ -395,6 +395,18 @@ export async function POST(request: NextRequest) {
         memberCount: plan.recipientCount,
         distributableFund: { id: distributableFund.id, name: distributableFund.name },
         reserveFund: { id: reserveFund.id, name: reserveFund.name },
+        // Category carve-outs only exist when the run used rules; absent
+        // otherwise, so historical audit rows keep their exact old shape.
+        ...(plan.typeBlocks.length > 0
+          ? {
+              categoryAllocations: plan.typeBlocks.map((b) => ({
+                role: b.role,
+                percent: fromCents(b.bp),
+                amount: fromCents(b.amountCents),
+              })),
+              remainderAmount: fromCents(plan.remainderCents),
+            }
+          : {}),
       },
     });
 
@@ -412,6 +424,16 @@ export async function POST(request: NextRequest) {
         totalDistributed: fromCents(plan.totalDistributedCents),
         distributableFund: { id: distributableFund.id, name: distributableFund.name },
         reserveFund: { id: reserveFund.id, name: reserveFund.name },
+        ...(plan.typeBlocks.length > 0
+          ? {
+              categoryAllocations: plan.typeBlocks.map((b) => ({
+                role: b.role,
+                percent: fromCents(b.bp),
+                amount: fromCents(b.amountCents),
+              })),
+              remainderAmount: fromCents(plan.remainderCents),
+            }
+          : {}),
       },
       message: 'Dividend distribution completed successfully',
     });

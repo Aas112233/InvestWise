@@ -12,7 +12,7 @@ import { normalizeEmail } from '@/lib/utils/types';
 import { getTenantSubscriptionBlocked } from '@/lib/subscription-guard';
 import { normalizeRole } from '@/lib/roles';
 import { AuthError, NotFoundError, ConflictError, LockedError, AppError } from '@/lib/utils/errors';
-import { bucketKey, consumeBucket, type BucketOutcome } from '@/lib/rate-limit';
+import { bucketKey, consumeBucket, peekBucket, type BucketOutcome } from '@/lib/rate-limit';
 import { clampText, getAbuseClientIp, readCappedJson } from '@/lib/request-meta';
 import { readAccountLock, recordAuthFailure, clearAccountLock, type AccountLockState } from '@/lib/account-lock';
 import crypto from 'node:crypto';
@@ -28,6 +28,12 @@ const MAX_LOGIN_HISTORY = 50;
 // a small office behind one NAT address is never throttled by its own traffic.
 const MAX_BODY_BYTES = 4 * 1024;
 const LOGIN_IP_LIMIT = 30;
+// Platform-wide credential-failure alarm (password-spray backstop): the per-IP
+// throttle and per-account lockout are each bypassable by one guess per email
+// across thousands of rotating IPs. This aggregates EVERY genuine credential
+// failure platform-wide; tripping it pauses new logins until the window rolls.
+const LOGIN_SPRAY_FAIL_LIMIT = 1500;
+const LOGIN_SPRAY_KEY = 'login:platform-failures:global';
 const LOGIN_IP_WINDOW_SECS = 15 * 60;
 // Without an edge-stamped address every anonymous visitor shares one bucket.
 const LOGIN_UNKNOWN_IP_LIMIT = 60;
@@ -192,6 +198,28 @@ export async function POST(request: NextRequest) {
       return tooManyRequests(addressBudget);
     }
 
+    // Password-spray pre-check: an already-tripped platform failure alarm
+    // pauses all further login attempts without consuming anything (successes
+    // must not advance a failure counter). Fail-closed like the IP throttle —
+    // an unreadable alarm is a throttle that cannot be consulted.
+    let spray: BucketOutcome;
+    try {
+      spray = await peekBucket(LOGIN_SPRAY_KEY, LOGIN_SPRAY_FAIL_LIMIT, LOGIN_IP_WINDOW_SECS);
+    } catch {
+      console.error('[LOGIN] spray counter unavailable, denying request');
+      return NextResponse.json(
+        { success: false, message: 'Too many requests right now. Please try again later.', code: 'RATE_LIMIT_UNAVAILABLE' },
+        { status: 503 },
+      );
+    }
+    if (!spray.ok) {
+      console.error('[LOGIN] platform credential-failure alarm tripped — pausing logins');
+      return NextResponse.json(
+        { success: false, message: 'Too many requests right now. Please try again later.', code: 'RATE_LIMITED' },
+        { status: 429, headers: { 'Retry-After': String(spray.retryAfterSec) } },
+      );
+    }
+
     // A JSON body of `null` or a scalar must fail validation, not throw.
     if (typeof body !== 'object' || body === null) {
       return NextResponse.json(
@@ -292,6 +320,15 @@ export async function POST(request: NextRequest) {
       // is not an unlimited guessing target, and the client sees the same
       // response either way, so the counter must advance the same way too.
       const afterUnknown = await recordAuthFailure(normalizedEmail);
+      // Feed the platform spray alarm (fire-and-forget semantics: the
+      // per-account branch below already answered; this only advances the
+      // aggregate counter for the NEXT request's pre-check).
+      try {
+        const alarm = await consumeBucket(LOGIN_SPRAY_KEY, LOGIN_SPRAY_FAIL_LIMIT, LOGIN_IP_WINDOW_SECS);
+        if (!alarm.ok) console.error('[LOGIN] platform spray alarm tripped by failure burst');
+      } catch (alarmError) {
+        console.error('[LOGIN] spray counter write failed', alarmError);
+      }
       if (afterUnknown.locked) return accountLockedResponse(afterUnknown);
       throw new AuthError('Invalid email or password');
     }
@@ -313,6 +350,12 @@ export async function POST(request: NextRequest) {
       // returning a plain 401 and letting the user discover the lock on their
       // next attempt.
       const afterFailure = await recordAuthFailure(normalizedEmail);
+      try {
+        const alarm = await consumeBucket(LOGIN_SPRAY_KEY, LOGIN_SPRAY_FAIL_LIMIT, LOGIN_IP_WINDOW_SECS);
+        if (!alarm.ok) console.error('[LOGIN] platform spray alarm tripped by failure burst');
+      } catch (alarmError) {
+        console.error('[LOGIN] spray counter write failed', alarmError);
+      }
       if (afterFailure.locked) return accountLockedResponse(afterFailure);
       throw new AuthError('Invalid email or password');
     }

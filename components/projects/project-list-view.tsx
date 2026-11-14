@@ -149,10 +149,22 @@ export function ProjectListView({
       sortable: true,
       render: (p) => (
         <div className="flex flex-col py-1">
-          <span className="font-semibold text-slate-900 dark:text-slate-100">
+          <span className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
             {p.title}
+            {/* Project type (migration 0032). Only the minority case is badged:
+                a club project is what every other column already assumes, so
+                tagging it would be noise, while an Extra Investor deal changes
+                who is paid and must be visible from the list. */}
+            {p.projectType === "extra_investor" && (
+              <span className="px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/25 text-[10px] font-semibold text-primary whitespace-nowrap">
+                {t("projects.form.typeExtra", { defaultValue: "Extra Investor" })}
+              </span>
+            )}
           </span>
-          <span className="text-xs text-slate-500 dark:text-slate-400">
+          <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            {/* Human reference code (migration 0031) — same role MEM-XXXX
+                plays in the member list. */}
+            {p.projectCode ? <span className="font-mono">{p.projectCode}</span> : null}
             {projectSectorLabel(t, p.category)}
           </span>
         </div>

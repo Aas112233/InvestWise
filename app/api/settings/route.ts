@@ -4,12 +4,21 @@ import { fiscalPeriods, members, systemSettings, transactions, DEFAULT_MEETING_T
 import { MEMBER_STATUS_REASON } from '@/lib/governance/status-rules';
 import { DEPOSIT_SCHEDULE } from '@/lib/deposit-schedule/schedule';
 import { eq, and, count } from 'drizzle-orm';
+
 import { getAuthContext, type AuthenticatedUser } from '@/lib/middleware/auth';
 import { normalizeRole } from '@/lib/roles';
 import { AuthError, ForbiddenError, LockedError, ValidationError, readJsonBody } from '@/lib/utils/errors';
 import { updateSettingsSchema, UpdateSettingsInput } from '@/lib/utils/validation';
 import { fiscalYearEndForStart } from '@/lib/fiscal-periods';
 import { normalizePaymentMethods } from '@/lib/payment-methods';
+import {
+  DEFAULT_EXPENSE_CATEGORIES,
+  DEFAULT_PROJECT_CATEGORIES,
+  isReservedCategory,
+  normalizeCategories,
+} from '@/lib/categories';
+import { parseDistributionRules, sanitizeDistributionRules } from '@/lib/distribution-rules';
+import { MoneyError } from '@/lib/money';
 import { logAudit } from '@/lib/utils/audit';
 import { ensureShareValueLocked } from '@/lib/utils/share-value-lock';
 
@@ -44,6 +53,9 @@ function formatSettingsResponse(settings: any): Record<string, unknown> {
       maxWithdrawalPerRequest: Number(settings.maxWithdrawalPerRequest || 100000),
       statutoryReservePercent: Number(settings.statutoryReservePercent || 10),
       lastFiscalCloseDate: settings.lastFiscalCloseDate,
+      // Per-category returns rules; null/garbage jsonb reads as "not configured"
+      // (empty list) so the form can never load a split it cannot save back.
+      distributionRules: sanitizeDistributionRules(settings.distributionRules),
     },
     governance: {
       monthlyMeetingDay: settings.monthlyMeetingDay || 5,
@@ -65,6 +77,11 @@ function formatSettingsResponse(settings: any): Record<string, unknown> {
       // null/garbage jsonb to the platform defaults instead of shipping an
       // empty picker.
       paymentMethods: normalizePaymentMethods(settings.paymentMethods),
+      // Tenant-defined category vocabularies for the expense and project
+      // modules. Same normalisation contract as paymentMethods: garbage/null
+      // jsonb falls back to the platform defaults rather than an empty picker.
+      expenseCategories: normalizeCategories(settings.expenseCategories, DEFAULT_EXPENSE_CATEGORIES),
+      projectCategories: normalizeCategories(settings.projectCategories, DEFAULT_PROJECT_CATEGORIES),
     },
     system: {
       language: settings.language || 'English',
@@ -309,6 +326,30 @@ export async function PUT(request: NextRequest) {
       if (data.financial.fiscalYearEnd !== undefined) {
         updateData.fiscalYearEnd = data.financial.fiscalYearEnd;
       }
+      if (data.financial.distributionRules !== undefined) {
+        // Semantic gate (§11: never a masked error): the same parser the run
+        // engines use, so a payload the PUT accepts can never be a config a run
+        // later refuses. MoneyError -> ValidationError maps to its real 400.
+        let parsedRules: ReturnType<typeof parseDistributionRules>;
+        try {
+          parsedRules = parseDistributionRules(data.financial.distributionRules);
+        } catch (err) {
+          if (err instanceof MoneyError) {
+            throw new ValidationError(`[Field 'distributionRules', Code: ${err.code}] ${err.message}`);
+          }
+          throw err;
+        }
+        updateData.distributionRules = parsedRules;
+
+        // The v9 cross-entity gate (`PROJECT_OVERRIDE_CONFLICT`) that scanned
+        // every project's Project Level Member percentage for a Σ>100 clash with
+        // these club rules is REMOVED — docs/PROJECT-TYPES_PLAN.md D8. Project
+        // types (migration 0032) ended the overlap it guarded: a Club Level
+        // project has no Project Level Members, and an Extra Investor project
+        // splits its remainder by share number, so a club rule and a PM contract
+        // are never added together any more. The internal Σ≤100 check above
+        // still governs the club categories among themselves.
+      }
     }
 
     // Flatten system group
@@ -358,6 +399,29 @@ export async function PUT(request: NextRequest) {
       }
       if (data.governance.paymentMethods !== undefined) {
         updateData.paymentMethods = normalizePaymentMethods(data.governance.paymentMethods);
+      }
+      if (data.governance.expenseCategories !== undefined) {
+        updateData.expenseCategories = normalizeCategories(
+          data.governance.expenseCategories,
+          DEFAULT_EXPENSE_CATEGORIES,
+        );
+      }
+      if (data.governance.projectCategories !== undefined) {
+        const normalized = normalizeCategories(
+          data.governance.projectCategories,
+          DEFAULT_PROJECT_CATEGORIES,
+        );
+        // System-stamped ledger labels are not tenant vocabulary: the project
+        // write path inserts category 'Investment' regardless of this list, so
+        // letting an admin delete it would only make the UI inconsistent with
+        // the data. Reject rather than silently re-add.
+        const reserved = normalized.filter(isReservedCategory);
+        if (reserved.length > 0) {
+          throw new ValidationError(
+            `[Field 'projectCategories'] ${reserved.join(', ')} is a system category and cannot be included in the list.`,
+          );
+        }
+        updateData.projectCategories = normalized;
       }
       if (data.governance.penaltyRules !== undefined) {
         updateData.penaltyRules = data.governance.penaltyRules;

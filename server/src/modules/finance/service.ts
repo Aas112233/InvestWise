@@ -29,7 +29,7 @@ import {
 } from '@/lib/money';
 import { assertIntegralShares } from '@/lib/shares';
 import { isAllowedDepositMethod, normalizePaymentMethods } from '@/lib/payment-methods';
-import { decideReversal } from '@/lib/transaction-reversal';
+import { decideReversal, isPayoutLegType, projectBalanceUnwindCents } from '@/lib/transaction-reversal';
 import { DEPOSIT_CATEGORY, DEPOSIT_FUND_REQUIRED_MESSAGE, DEPOSIT_REQUEST_CATEGORY, isDepositFund } from '@/lib/deposit-fund';
 import { assertFiscalPeriodOpen } from '@/lib/fiscal-guard';
 import { calendarDayForInstant, dayRangeUtc, parseBusinessDate } from '@/lib/tenant-time';
@@ -200,6 +200,24 @@ function resolveTransferDate(date?: string | null, operationTime?: Date): Date {
     return parsed;
   }
   return operationTime ?? new Date();
+}
+
+/**
+ * Parse an optional caller-supplied ledger date, or reject it cleanly.
+ *
+ * `new Date('not-a-date')` produces an Invalid Date rather than throwing, which
+ * then passes straight through the closed-period guard (no fiscal period matches
+ * it) and only explodes when Drizzle binds it into the INSERT — an opaque 500 for
+ * what is really a bad form field. Validating here turns it into a 400 that names
+ * the field, before any row is locked or any balance is touched.
+ */
+function parseLedgerDate(value: string | null | undefined, field = 'date'): Date | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new AppError(`[Field '${field}', Code: invalid_date] Not a valid date`, 400, 'INVALID_DATE');
+  }
+  return parsed;
 }
 
 interface DepositInput {
@@ -490,6 +508,9 @@ export async function getTransactions(query: Record<string, string | undefined>,
         memberEmail: members.email,
         fundName: funds.name,
         projectName: projects.title,
+        // PRJ-XXXX reference for ledger rows (migration 0031) — the party cell
+        // shows it exactly where the member rows show MEM-XXXX.
+        projectCode: projects.projectCode,
         authorizedByName: authorizer.name,
         createdByName: creator.name,
         createdAt: transactions.createdAt,
@@ -526,6 +547,7 @@ export async function getTransactions(query: Record<string, string | undefined>,
     memberName: r.memberName || 'Unknown',
     fundName: r.fundName || 'N/A',
     projectName: r.projectName || '',
+    projectCode: r.projectCode || '',
     authorizedBy: r.authorizedByName || r.handlingOfficer || 'System',
     createdBy: r.createdByName || r.handlingOfficer || 'System',
     approvedBy: r.authorizedByName || r.handlingOfficer || 'System',
@@ -1336,7 +1358,7 @@ export async function addExpense(data: ExpenseInput, user: SessionUser) {
 
     // Parity with the native POST /api/expenses handler (:355): an expense is a
     // ledger write on the fund, so it cannot be booked into a closed period.
-    if (data.date) await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, new Date(data.date));
+    if (data.date) await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, parseLedgerDate(data.date)!);
 
     const projectId = data.projectId || null;
     const amountCents = parsePositiveAmount(data.amount);
@@ -1478,6 +1500,16 @@ export async function editExpense(id: string, data: ExpenseInput, user: SessionU
     const [existing] = await tx.select().from(transactions).where(and(eq(transactions.id, id), eq(transactions.tenantId, tenantId))).for('update').limit(1);
     if (!existing) throw new NotFoundError('Transaction');
     if (existing.type !== 'Expense') throw new AppError('Transaction is not an expense', 400, 'INVALID_TYPE');
+
+    // Two closed-period checks, not one. Reverting the old impact restates the
+    // period the expense was originally booked into (parity with editDeposit
+    // :706), and an edited `date` can move the expense into a different — and
+    // possibly closed — period (parity with addExpense :1339). Guarding only the
+    // new date would let an officer restate a signed-off month by editing an
+    // expense that stayed where it was; guarding only the old date would let a
+    // back-dated edit book money into a period that has been closed.
+    if (existing.date) await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, existing.date);
+    if (data.date) await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, parseLedgerDate(data.date)!);
 
     const oldAmountCents = toCents(existing.amount);
     const oldFundId = existing.fundId!;
@@ -1632,6 +1664,13 @@ export async function addEarning(data: EarningInput, user: SessionUser) {
     const [fund] = await tx.select().from(funds).where(and(eq(funds.id, data.fundId), eq(funds.tenantId, tenantId))).for('update').limit(1);
     if (!fund) throw new NotFoundError('Target Fund');
 
+    // Parity with addExpense :1339 and the native POST /api/expenses handler: an
+    // earning is a ledger write on the fund, so it cannot be booked into a
+    // closed period. No native /api/earnings route exists, which makes this the
+    // only earning write path — without it, back-dated earnings were the one
+    // way to restate a signed-off period.
+    if (data.date) await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, parseLedgerDate(data.date)!);
+
     const amountCents = parsePositiveAmount(data.amount);
     const projectId = data.projectId || null;
     let balanceBeforeCents = toCents(fund.balance ?? '0');
@@ -1759,7 +1798,16 @@ export async function deleteTransaction(
       user.role === 'Administrator' ||
       user.role === 'Manager' ||
       user.permissions?.['DEPOSITS'] === 'WRITE';
-    if (!isPrivileged && txn.type === 'Deposit' && txn.status === 'Pending') {
+    // Written as an allow-list, not as a carve-out from a ban. The route gate for
+    // this service accepts REQUEST_DEPOSIT WRITE so a member can withdraw their
+    // own request; previously ONLY the `Deposit`+`Pending` case was checked here
+    // and every other row fell through unconditionally, so a caller holding
+    // nothing but REQUEST_DEPOSIT WRITE could soft-delete settled Expenses,
+    // Earnings, Transfer legs or Dividends and drive the fund reversal below —
+    // while the native /api/transactions/[id] route, gated on TRANSACTIONS WRITE,
+    // was immune. Fixing it here rather than tightening the handler gate keeps the
+    // legitimate self-service cancel working.
+    if (!isPrivileged) {
       const [userMember] = await tx
         .select({ id: members.id, memberId: members.memberId })
         .from(members)
@@ -1768,7 +1816,14 @@ export async function deleteTransaction(
 
       const userMemberId = userMember?.id || user.memberId;
       const isOwner = (userMemberId && txn.memberId === userMemberId) || txn.createdBy === user.id;
-      if (!isOwner) throw new ForbiddenError('You can only cancel or delete your own deposit request');
+      const isOwnPendingRequest = txn.type === 'Deposit' && txn.status === 'Pending' && isOwner;
+      if (!isOwnPendingRequest) {
+        throw new ForbiddenError(
+          txn.type === 'Deposit' && txn.status === 'Pending'
+            ? 'You can only cancel or delete your own deposit request'
+            : 'Only an officer may delete this transaction — settled entries must be reverted, not deleted',
+        );
+      }
     }
 
     const txnCents = toCents(txn.amount);
@@ -1792,6 +1847,22 @@ export async function deleteTransaction(
       });
       if (reversal.requiresRevertPath) {
         throw new AppError(reversal.revertHint ?? 'Use the revert path for this transaction', 400, 'REVERT_REQUIRED');
+      }
+
+      // The payout family cannot be unwound one row at a time. A dividend run
+      // writes coordinated rows — the 'Statutory Reserve' and 'Transfer Out'
+      // sweep legs added for issue #97, the per-member 'Dividend' credits, and the
+      // members.totalContributed reduction that distribute-returns applies — so
+      // deleting one leg moves the fund while its siblings and the members' equity
+      // stay put, leaving equity with no ledger behind it. Half-reversing is worse
+      // than refusing, which is the same reasoning as REVERT_REQUIRED immediately
+      // above. Placed before any row is locked or written.
+      if (isPayoutLegType(txn.type)) {
+        throw new AppError(
+          `'${txn.type}' rows are legs of a payout and cannot be deleted individually: reversing one moves the fund without its sibling legs or the members' equity. Void the payout from its own screen, which unwinds the whole set.`,
+          409,
+          'PAYOUT_LEG_PROTECTED',
+        );
       }
       if (reversal.fundId && reversal.direction !== 0 && txnCents > 0) {
         // Lock the fund row, then apply the signed delta with atomic SQL — a
@@ -1855,21 +1926,43 @@ export async function deleteTransaction(
           .for('update')
           .limit(1);
         if (project) {
-          let balAdjCents = 0;
+          // The sign is DERIVED from the same canonical classifier that decided
+          // the fund reversal above, not re-listed per type name. The chain this
+          // replaces tested `txn.type === 'Investment'`, a value no
+          // project-bearing row has ever carried: project capital is written as
+          // 'Project Investment' (app/api/projects/route.ts:236), while the 124
+          // rows that do use bare 'Investment' all have project_id NULL and so
+          // never reach this block. The branch was therefore unreachable from
+          // both directions, deleting an investment leg debited the fund and left
+          // projects.currentFundBalance alone, and the project stopped
+          // reconciling against its own linked fund. Earning/Expense/Withdrawal
+          // resolve to exactly the signs they had before; 'Project Investment'
+          // now unwinds instead of silently corrupting.
           let earnAdjCents = 0;
           let expAdjCents = 0;
+          // Scoped to the types whose WRITE side is known to have moved
+          // projects.currentFundBalance. Applying the derived sign blindly to
+          // every project-attributed type would start adjusting Transfer legs,
+          // which no writer ever credited to the project balance — that would be
+          // the same class of invented unwind this fix is removing. Deliberately
+          // wider than CAPITAL_UNWIND_TYPES in the native route: this function
+          // folds balance, earnings and expenses into ONE update, so Earning and
+          // Expense must be listed here, whereas the native route refunds them in
+          // their own dedicated blocks and excludes them from its list. Net effect
+          // on the row is identical either way.
+          const PROJECT_BALANCE_TYPES = [
+            'Earning',
+            'Expense',
+            'Investment',
+            'Project Investment',
+            'Withdrawal',
+          ];
+          const balAdjCents = PROJECT_BALANCE_TYPES.includes(txn.type)
+            ? projectBalanceUnwindCents(txn, txnCents)
+            : 0;
 
-          if (txn.type === 'Earning') {
-            balAdjCents = -txnCents;
-            earnAdjCents = -txnCents;
-          } else if (txn.type === 'Expense') {
-            balAdjCents = txnCents;
-            expAdjCents = -txnCents;
-          } else if (txn.type === 'Investment') {
-            balAdjCents = -txnCents;
-          } else if (txn.type === 'Withdrawal') {
-            balAdjCents = txnCents;
-          }
+          if (txn.type === 'Earning') earnAdjCents = -txnCents;
+          if (txn.type === 'Expense') expAdjCents = -txnCents;
 
           await tx
             .update(projects)
@@ -1935,12 +2028,18 @@ export async function transferFunds(data: TransferInput, user: SessionUser) {
     throw new AppError('Source and target funds must be different', 400, 'SAME_FUND');
   }
 
-  return db.transaction(async (tx) => {
-    // Canonical sorted locking order prevents PostgreSQL deadlocks on
-    // concurrent bidirectional transfers. Written as an explicit tuple destructure
-    // rather than Array#sort so noUncheckedIndexedAccess does not widen both
-    // ids to `string | undefined`.
-    const { sourceFundId, targetFundId } = data;
+    return db.transaction(async (tx) => {
+      // A transfer is two ledger rows and two fund movements, so it is as capable
+      // of restating a closed period as a deposit or an expense — and it was the
+      // one remaining money path with no period check at all. Guarded before the
+      // deadlock-safe lock order below so a rejected date locks nothing.
+      if (data.date) await assertFiscalPeriodOpen(fiscalGuardTx(tx), tenantId, parseLedgerDate(data.date)!);
+
+      // Canonical sorted locking order prevents PostgreSQL deadlocks on
+      // concurrent bidirectional transfers. Written as an explicit tuple destructure
+      // rather than Array#sort so noUncheckedIndexedAccess does not widen both
+      // ids to `string | undefined`.
+      const { sourceFundId, targetFundId } = data;
     const [firstId, secondId]: [string, string] =
       sourceFundId < targetFundId ? [sourceFundId, targetFundId] : [targetFundId, sourceFundId];
     const [fundA] = await tx
@@ -2339,19 +2438,65 @@ export async function reconcileFund(fundId: string, user: SessionUser) {
   // informational row, while the real debit is the per-member 'Dividend' rows
   // plus the 'Transfer Out' reserve sweep. Statuses match the shared settled
   // set ('Completed', 'Success') used everywhere else in the ledger.
-  const txSummary = await rawSql<{ total_in: string; total_out: string }[]>`
+  const txSummary = await rawSql<
+    { total_in: string; total_out: string; source_out: string; legacy_fund_credits: string }[]
+  >`
     SELECT
-      COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment', 'Project Investment', 'Transfer In', 'Statutory Reserve') THEN amount::numeric ELSE 0 END), 0) as total_in,
-      COALESCE(SUM(CASE WHEN type IN ('Expense', 'Withdrawal', 'Dividend', 'Disbursement', 'Transfer Out') THEN amount::numeric ELSE 0 END), 0) as total_out
+      COALESCE(SUM(CASE WHEN type IN ('Deposit', 'Earning', 'Investment', 'Project Investment', 'Transfer In', 'Statutory Reserve') AND fund_id = ${fund.id} THEN amount::numeric ELSE 0 END), 0) as total_in,
+      COALESCE(SUM(CASE WHEN type IN ('Expense', 'Withdrawal', 'Dividend', 'Disbursement', 'Transfer Out') AND fund_id = ${fund.id} THEN amount::numeric ELSE 0 END), 0) as total_out,
+      -- A 'Project Investment' row moves money from source_fund_id INTO fund_id
+      -- but is journaled once, against the destination
+      -- (lib/project-capital.ts). The source fund's balance therefore fell with
+      -- no row attributed to it: reconcile put the General fund at 70,000 when
+      -- it held 0, and flagged a CORRECT fund as DISCREPANCY. A control that
+      -- cries wolf trains people to ignore DISCREPANCY, which is worse than the
+      -- drift it exists to catch. Scoped by fund_id inside each SUM above so
+      -- widening WHERE to the source leg cannot double-count.
+      COALESCE(SUM(CASE WHEN type = 'Project Investment' AND source_fund_id = ${fund.id} THEN amount::numeric ELSE 0 END), 0) as source_out,
+      -- Historical rows written by distribute-returns before it was corrected:
+      -- type 'Dividend' (an outflow classification) on a RECIPIENT fund, money
+      -- actually arriving. member_id IS NULL is the discriminator - a genuine
+      -- dividend payout always names a shareholder - with the category pinned for
+      -- the same reason. New rows are 'Transfer In' and take no special handling.
+      -- (No backticks are permitted in here: this is a JS template literal.)
+      COALESCE(SUM(CASE WHEN type = 'Dividend' AND member_id IS NULL AND category = 'Profit Distribution' AND fund_id = ${fund.id} THEN amount::numeric ELSE 0 END), 0) as legacy_fund_credits
     FROM transactions
-    WHERE fund_id = ${fund.id}
+    WHERE (fund_id = ${fund.id} OR source_fund_id = ${fund.id})
       AND tenant_id = ${tenantId}
       AND status IN ('Completed', 'Success')
       AND is_deleted = false
   `;
 
-  const stats = txSummary[0] || { total_in: '0', total_out: '0' };
-  const calculatedBalanceCents = toCents(stats.total_in) - toCents(stats.total_out);
+  // Mirror of the legacy gap above. The old writer credited a recipient fund
+  // without journaling ANY leg against the project's linked fund that paid for
+  // it, so there is no row on the source to count — but the source is recoverable
+  // through the row's project, because a project's capital lives in exactly one
+  // linked fund. Without this the recipient reads correct while the payer is short
+  // by the same amount (observed: INITIAL PROJECT Fund overstated by 3,000).
+  // Rows written after the writer fix are 'Transfer In' with a real 'Transfer Out'
+  // leg, so this filter matches nothing new and cannot double-count.
+  const legacySourceLegs = await rawSql<{ legacy_source_out: string }[]>`
+    SELECT COALESCE(SUM(x.amount::numeric), 0) as legacy_source_out
+      FROM transactions x
+      JOIN projects p ON p.id = x.project_id
+     WHERE p.linked_fund_id = ${fund.id}
+       AND x.tenant_id = ${tenantId}
+       AND x.type = 'Dividend'
+       AND x.member_id IS NULL
+       AND x.category = 'Profit Distribution'
+       AND x.status IN ('Completed', 'Success')
+       AND x.is_deleted = false
+  `;
+
+  const stats = txSummary[0] || { total_in: '0', total_out: '0', source_out: '0', legacy_fund_credits: '0' };
+  // The legacy receipts were subtracted as outflows above; adding twice converts
+  // a subtracted 3,000 into a credited 3,000, which is what happened to the fund.
+  const calculatedBalanceCents =
+    toCents(stats.total_in) -
+    toCents(stats.total_out) +
+    toCents(stats.legacy_fund_credits) * 2 -
+    toCents(stats.source_out) -
+    toCents(legacySourceLegs[0]?.legacy_source_out ?? '0');
   const actualBalanceCents = toCents(fund.balance ?? '0');
   let isMatched = Math.abs(calculatedBalanceCents - actualBalanceCents) < 1; // < 1 cent
   let projectMismatch = false;
